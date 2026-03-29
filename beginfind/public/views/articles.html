@@ -91,15 +91,15 @@
       <div class="form-group">
         <label class="form-label">Доступ для</label>
         <div class="roles-input-wrapper" style="max-width: 500px; position: relative;">
-          <input type="text" id="articleRolesInput" class="form-input" placeholder="Выберите роли..." style="width: 100%;">
+          <input type="text" id="articleRolesInput" class="form-input" placeholder="Нажмите чтобы выбрать роли..." readonly style="width: 100%; cursor: pointer;">
           <!-- Display area for selected roles inside the input wrapper -->
-          <div id="selectedRolesDisplay" class="selected-roles-tags" style="display: none; margin-top: 4px;"></div>
+          <div id="selectedRolesDisplay" class="selected-roles-tags" style="display: none; margin-top: 8px; min-height: 24px;"></div>
         </div>
         <!-- Hidden input to store selected roles as JSON -->
         <input type="hidden" id="articleRoles" value="[]">
         <!-- Dropdown container for role selection (as a contextual popup) -->
-        <div id="rolesContainer" class="roles-dropdown" style="display: none;">
-          <div id="rolesList" class="roles-list"></div>
+        <div id="rolesContainer" class="roles-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 300px; overflow-y: auto; background: var(--background-secondary); border: 1px solid var(--background-accent); border-radius: 4px; margin-top: 4px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+          <div id="rolesList" class="roles-list" style="padding: 8px;"></div>
         </div>
       </div>
 
