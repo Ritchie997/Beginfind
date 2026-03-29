@@ -1,3 +1,18 @@
-# Examples
-## Source files only - no build artifacts, dependencies, or temp files detected
-# Only editor-manager.js and global-styles.css were modified, which are source files
+```
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Original rules preserved
+*.log
+```

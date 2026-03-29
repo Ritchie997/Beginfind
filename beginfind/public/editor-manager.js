@@ -928,14 +928,22 @@ class EditorManager {
     this.hideAllImageControls();
     
     // Get current image properties
-    const currentWidth = imgElement.style.width || 'auto';
-    const currentMaxWidth = imgElement.style.maxWidth || '100%';
+    const currentWidth = imgElement.style.maxWidth || imgElement.style.width || 'auto';
     const currentAlign = imgElement.parentElement.style.textAlign || 
-                         imgElement.parentElement.style.justifyContent || 
-                         'center';
+                         (imgElement.parentElement.style.display === 'flex' ? 
+                          (imgElement.parentElement.style.justifyContent === 'flex-end' ? 'right' : 
+                           imgElement.parentElement.style.justifyContent === 'center' ? 'center' : 'left') : 
+                          'center');
     const currentAlt = imgElement.alt || '';
     const captionElement = imgElement.parentElement.querySelector('.image-caption');
     const currentCaption = captionElement ? captionElement.textContent : '';
+    
+    // Store references for later use
+    const wrapper = imgElement.parentElement;
+    let tempWidth = currentWidth;
+    let tempAlign = currentAlign;
+    let tempAlt = currentAlt;
+    let tempCaption = currentCaption;
     
     // Create modal overlay
     const modalOverlay = document.createElement('div');
@@ -1008,12 +1016,14 @@ class EditorManager {
       btn.style.padding = '8px 16px';
       btn.style.border = '1px solid var(--background-accent)';
       btn.style.borderRadius = '4px';
-      btn.style.backgroundColor = (currentMaxWidth === preset.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
-      btn.style.color = (currentMaxWidth === preset.value) ? '#fff' : 'var(--text-normal)';
+      btn.style.backgroundColor = (currentWidth === preset.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
+      btn.style.color = (currentWidth === preset.value) ? '#fff' : 'var(--text-normal)';
       btn.style.cursor = 'pointer';
       btn.style.transition = 'all 0.2s';
       
       btn.onclick = () => {
+        tempWidth = preset.value;
+        // Update preview
         imgElement.style.maxWidth = preset.value;
         imgElement.style.width = 'auto';
         // Update button states
@@ -1023,6 +1033,8 @@ class EditorManager {
         });
         btn.style.backgroundColor = 'var(--blurple)';
         btn.style.color = '#fff';
+        // Reset slider preset state
+        sliderValue.textContent = preset.value;
       };
       
       sizePresets.appendChild(btn);
@@ -1046,7 +1058,7 @@ class EditorManager {
     slider.type = 'range';
     slider.min = '100';
     slider.max = '1200';
-    slider.value = parseInt(currentMaxWidth) || 500;
+    slider.value = parseInt(currentWidth) || 500;
     slider.style.width = '100%';
     slider.style.cursor = 'pointer';
     
@@ -1059,8 +1071,11 @@ class EditorManager {
     sliderValue.style.marginTop = '5px';
     
     slider.oninput = () => {
-      sliderValue.textContent = `${slider.value}px`;
-      imgElement.style.maxWidth = `${slider.value}px`;
+      const val = `${slider.value}px`;
+      sliderValue.textContent = val;
+      tempWidth = val;
+      // Update preview
+      imgElement.style.maxWidth = val;
       imgElement.style.width = 'auto';
       // Reset preset buttons
       Array.from(sizePresets.children).forEach(child => {
@@ -1101,7 +1116,7 @@ class EditorManager {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'image-align-btn';
-      btn.innerHTML = option.icon;
+      btn.innerHTML = `<span>${option.icon}</span>`;
       btn.title = option.title;
       btn.style.padding = '10px 15px';
       btn.style.border = '1px solid var(--background-accent)';
@@ -1114,11 +1129,9 @@ class EditorManager {
       btn.style.flex = '1';
       
       btn.onclick = () => {
-        const wrapper = imgElement.parentElement;
-        wrapper.style.textAlign = option.value;
-        wrapper.style.display = 'block';
-        wrapper.style.justifyContent = option.value === 'center' ? 'center' : 
-                                       option.value === 'right' ? 'flex-end' : 'flex-start';
+        tempAlign = option.value;
+        // Update preview
+        this.applyAlignmentPreview(imgElement, wrapper, option.value);
         // Update button states
         Array.from(alignButtons.children).forEach(child => {
           child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1159,6 +1172,8 @@ class EditorManager {
     altInput.style.fontSize = '14px';
     
     altInput.oninput = () => {
+      tempAlt = altInput.value;
+      // Update preview
       imgElement.alt = altInput.value;
     };
     
@@ -1191,24 +1206,9 @@ class EditorManager {
     captionInput.style.minHeight = '60px';
     
     captionInput.oninput = () => {
-      let captionEl = imgElement.parentElement.querySelector('.image-caption');
-      if (captionInput.value.trim()) {
-        if (!captionEl) {
-          captionEl = document.createElement('div');
-          captionEl.className = 'image-caption';
-          captionEl.style.textAlign = 'center';
-          captionEl.style.marginTop = '8px';
-          captionEl.style.color = 'var(--text-muted)';
-          captionEl.style.fontSize = '13px';
-          captionEl.style.fontStyle = 'italic';
-          imgElement.parentElement.appendChild(captionEl);
-        }
-        captionEl.textContent = captionInput.value;
-      } else {
-        if (captionEl) {
-          captionEl.remove();
-        }
-      }
+      tempCaption = captionInput.value;
+      // Update preview
+      this.updateCaptionPreview(wrapper, captionInput.value);
     };
     
     captionSection.appendChild(captionInput);
@@ -1251,7 +1251,19 @@ class EditorManager {
     saveBtn.style.transition = 'background-color 0.2s';
     
     saveBtn.onclick = () => {
-      // Save is automatic, just close
+      // Finalize all changes
+      imgElement.style.maxWidth = tempWidth;
+      imgElement.style.width = 'auto';
+      imgElement.setAttribute('data-width', tempWidth);
+      imgElement.alt = tempAlt;
+      
+      // Apply final alignment
+      this.applyAlignmentFinal(imgElement, wrapper, tempAlign);
+      
+      // Finalize caption
+      this.updateCaptionFinal(wrapper, tempCaption);
+      
+      showMessage('Настройки изображения сохранены', 'success');
       closeModal();
     };
     
@@ -1284,7 +1296,103 @@ class EditorManager {
       modalContent.style.transform = 'scale(1)';
     }, 10);
   }
-
+  
+  // Helper: Apply alignment preview
+  applyAlignmentPreview(imgElement, wrapper, align) {
+    // Reset styles
+    wrapper.style.textAlign = '';
+    wrapper.style.display = '';
+    wrapper.style.justifyContent = '';
+    imgElement.style.float = '';
+    imgElement.style.marginLeft = '';
+    imgElement.style.marginRight = '';
+    imgElement.style.display = '';
+    
+    if (align === 'left') {
+      imgElement.style.float = 'left';
+      imgElement.style.marginRight = '15px';
+      imgElement.style.marginLeft = '0';
+    } else if (align === 'right') {
+      imgElement.style.float = 'right';
+      imgElement.style.marginLeft = '15px';
+      imgElement.style.marginRight = '0';
+    } else {
+      // Center
+      wrapper.style.textAlign = 'center';
+      wrapper.style.display = 'block';
+      imgElement.style.float = 'none';
+      imgElement.style.marginLeft = 'auto';
+      imgElement.style.marginRight = 'auto';
+      imgElement.style.display = 'block';
+    }
+  }
+  
+  // Helper: Apply final alignment
+  applyAlignmentFinal(imgElement, wrapper, align) {
+    // Reset all styles first
+    imgElement.style.cssText = '';
+    imgElement.style.maxWidth = imgElement.getAttribute('data-width') || imgElement.style.maxWidth;
+    
+    if (align === 'left') {
+      wrapper.style.textAlign = 'left';
+      wrapper.style.display = 'block';
+      imgElement.style.float = 'left';
+      imgElement.style.margin = '0 15px 10px 0';
+    } else if (align === 'right') {
+      wrapper.style.textAlign = 'right';
+      wrapper.style.display = 'block';
+      imgElement.style.float = 'right';
+      imgElement.style.margin = '0 0 10px 15px';
+    } else {
+      // Center
+      wrapper.style.textAlign = 'center';
+      wrapper.style.display = 'block';
+      imgElement.style.float = 'none';
+      imgElement.style.margin = '10px auto';
+      imgElement.style.display = 'block';
+    }
+  }
+  
+  // Helper: Update caption preview
+  updateCaptionPreview(wrapper, text) {
+    let capEl = wrapper.querySelector('.image-caption');
+    
+    if (text && text.trim()) {
+      if (!capEl) {
+        capEl = document.createElement('div');
+        capEl.className = 'image-caption';
+        capEl.style.textAlign = 'center';
+        capEl.style.marginTop = '8px';
+        capEl.style.color = 'var(--text-muted)';
+        capEl.style.fontSize = '13px';
+        capEl.style.fontStyle = 'italic';
+        wrapper.appendChild(capEl);
+      }
+      capEl.textContent = text;
+    } else {
+      if (capEl) capEl.remove();
+    }
+  }
+  
+  // Helper: Update caption final
+  updateCaptionFinal(wrapper, text) {
+    // Remove old caption
+    let oldCap = wrapper.querySelector('.image-caption');
+    if (oldCap) oldCap.remove();
+    
+    if (text && text.trim()) {
+      const newCap = document.createElement('div');
+      newCap.className = 'image-caption';
+      newCap.style.textAlign = 'center';
+      newCap.style.marginTop = '8px';
+      newCap.style.color = 'var(--text-muted)';
+      newCap.style.fontSize = '13px';
+      newCap.style.fontStyle = 'italic';
+      newCap.textContent = text;
+      wrapper.appendChild(newCap);
+    }
+  }
+    
   // Clean up editor when leaving the page
   cleanup() {
     // Remove all image wrappers from tracking
