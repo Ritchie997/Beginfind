@@ -90,16 +90,16 @@
       <!-- Доступ -->
       <div class="form-group">
         <label class="form-label">Доступ для</label>
-        <div class="roles-input-wrapper" style="max-width: 500px; position: relative;">
-          <input type="text" id="articleRolesInput" class="form-input" placeholder="Нажмите чтобы выбрать роли..." readonly style="width: 100%; cursor: pointer;">
+        <div class="roles-input-wrapper" style="max-width: 500px;">
+          <input type="text" id="articleRolesInput" class="form-input" placeholder="Нажмите чтобы выбрать роли..." readonly style="width: 100%; cursor: pointer; border-radius: 4px 4px 0 0;">
           <!-- Display area for selected roles inside the input wrapper -->
-          <div id="selectedRolesDisplay" class="selected-roles-tags" style="display: none; margin-top: 8px; min-height: 24px;"></div>
-        </div>
-        <!-- Hidden input to store selected roles as JSON -->
-        <input type="hidden" id="articleRoles" value="[]">
-        <!-- Dropdown container for role selection (as a contextual popup) -->
-        <div id="rolesContainer" class="roles-dropdown" style="display: none;" data-visible="false">
-          <div id="rolesList" class="roles-list"></div>
+          <div id="selectedRolesDisplay" class="selected-roles-tags" style="display: none;"></div>
+          <!-- Hidden input to store selected roles as JSON -->
+          <input type="hidden" id="articleRoles" value="[]">
+          <!-- Dropdown container for role selection (as a contextual popup) -->
+          <div id="rolesContainer" class="roles-dropdown" style="display: none;" data-visible="false">
+            <div id="rolesList" class="roles-list"></div>
+          </div>
         </div>
       </div>
 
