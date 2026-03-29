@@ -1,0 +1,898 @@
+<div class="form-container">
+  <h2 class="form-title">Создать новую статью</h2>
+
+  <div class="form-grid">
+    <!-- Первая колонка -->
+    <div class="column-wrapper first-column">
+
+      <!-- Заголовок -->
+      <div class="form-group">
+        <label class="form-label" for="articleTitle">Заголовок статьи</label>
+        <input type="text" id="articleTitle" class="form-input" placeholder="Введите заголовок">
+      </div>
+
+      <!-- Автор -->
+      <div class="form-group">
+        <label class="form-label" for="articleAuthor">Автор</label>
+        <input type="text" id="articleAuthor" class="form-input" placeholder="Имя автора">
+      </div>
+
+      <!-- Категория -->
+      <div class="form-group">
+          <label class="form-label">Категория</label>
+          <div class="input-action-wrapper">
+              <select id="articleCategory" class="form-select">
+                  <option value="">Выберите категорию</option>
+              </select>
+              <button type="button" class="btn-action-plus"
+                      onclick="window.spaRouter.createCategoryFromArticles()" title="Создать категорию">
+                  <i class="fas fa-plus"></i>
+              </button>
+          </div>
+      </div>
+
+      <!-- Теги -->
+      <div class="form-group full-width">
+        <label class="form-label" for="articleTags">Теги</label>
+        <div class="input-action-wrapper" style="max-width: 500px;">
+          <input type="text" id="articleTags" class="form-input" placeholder="Введите теги...">
+          <button type="button" class="btn-action-plus" id="add-tag-mobile-btn">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+        <div id="tagsContainer" class="tags-display" style="display: none; margin-top: 4px; padding: 4px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-accent); max-width: 500px; width: fit-content;"></div>
+      </div>
+
+      <!-- Обложка -->
+      <div class="form-group full-width">
+        <label class="form-label">Обложка статьи</label>
+        <div class="cover-buttons-container">
+          <button type="button" class="btn btn-secondary" onclick="window.spaRouter.selectCoverFromFile()">
+            📁 Выбрать файл
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="window.spaRouter.selectCoverFromUrl()">
+            🔗 Вставить URL
+          </button>
+          <div id="articleCoverPreview" style="display: none; flex: 1; align-items: center; gap: 10px; padding: 8px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-accent);">
+            <img id="articleCoverImagePreview" src="" alt="Предпросмотр обложки" style="max-width: 60px; max-height: 60px; border-radius: 4px;">
+            <div style="flex: 1; overflow: hidden;">
+              <div id="coverFileName" style="font-size: 12px; color: var(--header-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            </div>
+            <button type="button" class="btn btn-danger" onclick="window.spaRouter.removeArticleCover()">Удалить</button>
+          </div>
+          <input type="file" id="articleImageFileInput" class="form-input" accept="image/*" style="display: none;" onchange="window.spaRouter.handleCoverFileSelect(this)">
+          <input type="hidden" id="articleImageFile" value="">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Вторая колонка -->
+    <div class="column-wrapper second-column">
+
+      <!-- Статус статьи -->
+      <div class="form-group">
+        <label class="form-label" for="articleLocked">Статус статьи</label>
+        <select id="articleLocked" class="form-select">
+          <option value="false">🔓 Открытая</option>
+          <option value="true">🔒 Закрытая (только по ролям)</option>
+        </select>
+      </div>
+
+      <!-- Сервер -->
+      <div class="form-group">
+        <label class="form-label" for="articleServer">Сервер</label>
+        <select id="articleServer" class="form-select">
+          <option value="">Выберите сервер</option>
+        </select>
+      </div>
+
+      <!-- Доступ -->
+      <div class="form-group">
+        <label class="form-label">Доступ для</label>
+        <div class="input-action-wrapper" style="max-width: 500px;">
+          <input type="text" id="articleRolesInput" class="form-input" placeholder="Выберите роли...">
+        </div>
+        <!-- Hidden input to store selected roles as JSON -->
+        <input type="hidden" id="articleRoles" value="[]">
+        <!-- Display area for selected roles -->
+        <div id="selectedRolesDisplay" class="tags-display" style="display: none; margin-top: 4px; padding: 4px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-accent); max-width: 500px; width: fit-content;"></div>
+      </div>
+      <!-- Dropdown container for role selection (as a contextual popup) -->
+      <div id="rolesContainer" class="tags-display" style="display: none; position: absolute; z-index: 1000; padding: 8px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-accent); max-width: 300px; width: fit-content;">
+        <div id="rolesList" style="max-height: 200px; overflow-y: auto;"></div>
+      </div>
+
+      <!-- Кнопки управления -->
+      <div class="button-group">
+        <button id="saveDraftBtn" class="btn btn-secondary">Сохранить черновик</button>
+        <button id="loadDraftBtn" class="btn btn-secondary">Загрузить черновик</button>
+        <button id="resetArticleBtn" class="btn btn-warning">Сбросить</button>
+        <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
+      </div>
+
+      <!-- Контейнер для управления черновиками -->
+      <div id="draftsManager" class="tags-display" style="display: none; margin-top: 10px; padding: 8px; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 4px; max-width: 500px;">
+        <h4 style="margin: 0 0 10px 0; color: var(--text-normal);">Черновики</h4>
+        <div id="draftsList" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
+        <div style="display: flex; gap: 5px;">
+          <button id="closeDraftsManagerBtn" class="btn btn-secondary" style="flex: 1;">Закрыть</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Редактор -->
+  <div class="form-group full-width">
+    <label class="form-label">Содержание статьи</label>
+    <div class="editor-wrapper">
+      <div id="toolbar" class="editor-toolbar-sticky">
+        <button type="button" class="toolbar-button" data-command="bold" title="Жирный"><i class="fas fa-bold"></i></button>
+        <button type="button" class="toolbar-button" data-command="italic" title="Курсив"><i class="fas fa-italic"></i></button>
+        <button type="button" class="toolbar-button" data-command="underline" title="Подчеркнутый"><i class="fas fa-underline"></i></button>
+        <button type="button" class="toolbar-button" data-command="strikeThrough" title="Зачеркнутый"><i class="fas fa-strikethrough"></i></button>
+        <div class="toolbar-separator"></div>
+        <button type="button" class="toolbar-button" data-command="insertUnorderedList" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
+        <button type="button" class="toolbar-button" data-command="insertOrderedList" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
+        <div class="toolbar-separator"></div>
+        <button type="button" class="toolbar-button" data-command="formatBlock" data-value="blockquote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+        <button type="button" class="toolbar-button" id="editor-link-btn" title="Ссылка"><i class="fas fa-link"></i></button>
+        <button type="button" class="toolbar-button" id="btn-spoiler" title="Скрытый текст (Спойлер)"><i class="fas fa-eye-slash"></i></button>
+        <div class="toolbar-separator"></div>
+        <button type="button" class="toolbar-button" data-command="justifyLeft" title="Выравнивание по левому краю"><i class="fas fa-align-left"></i></button>
+        <button type="button" class="toolbar-button" data-command="justifyCenter" title="Выравнивание по центру"><i class="fas fa-align-center"></i></button>
+        <button type="button" class="toolbar-button" data-command="justifyRight" title="Выравнивание по правому краю"><i class="fas fa-align-right"></i></button>
+        <div class="toolbar-separator"></div>
+        <button type="button" class="toolbar-button" id="insert-image-file-btn" title="Изображение из файла"><i class="fas fa-image"></i></button>
+        <button type="button" class="toolbar-button" id="insert-image-url-btn" title="Изображение по URL"><i class="fas fa-link"></i></button>
+      </div>
+      <div
+        id="articleContent"
+        class="editor-content"
+        contenteditable="true"
+        data-placeholder="Начните писать содержание статьи..."
+      ></div>
+    </div>
+  </div>
+
+  <!-- Кнопки управления (оставлены для совместимости, но не показываются в схеме) -->
+  <div class="button-group" style="display: none;">
+    <button id="previewArticleBtn" class="btn btn-warning">Предпросмотр</button>
+    <button id="clearArticleFormBtn" class="btn btn-secondary">Очистить</button>
+  </div>
+</div>
+
+<!-- Управление статьями -->
+<div class="articles-section">
+  <div class="articles-header">
+    <h2 class="form-title">Управление статьями</h2>
+    <div class="search-bar">
+      <input type="text" id="searchText" class="form-input" placeholder="Поиск по заголовку...">
+      <div class="search-buttons">
+        <button class="btn btn-primary" id="searchArticlesBtn">Найти</button>
+        <button class="btn btn-secondary" id="resetSearchBtn">Сброс</button>
+      </div>
+    </div>
+  </div>
+  <div id="articlesListContainer"></div>
+</div>
+
+<!-- Превью -->
+<div id="articlePreview" class="preview-overlay" style="display: none;">
+  <div class="preview-window">
+    <div class="preview-header">
+      <h3>Предварительный просмотр</h3>
+      <button id="closePreviewBtn" class="btn-close">&times;</button>
+    </div>
+    <div id="previewContent" class="preview-body"></div>
+  </div>
+</div>
+
+<style>
+:root {
+  --background-primary: #36393f;
+  --background-secondary: #2f3136;
+  --background-tertiary: #202225;
+  --background-accent: #4f545c;
+  --blurple: #5865f2;
+  --text-normal: #dcddde;
+  --header-secondary: #b9bbbe;
+}
+
+/* === ОБЩИЕ СТИЛИ === */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.form-container,
+.articles-section {
+  padding: 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  /* УБРАНО: max-width и margin: 0 auto */
+  width: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.form-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  color: var(--text-normal);
+}
+
+/* === ФОРМА === */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 16px;
+  height: auto !important;
+  min-height: auto !important;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden; /* Обрезаем любые попытки расшириться */
+}
+
+.column-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.column-wrapper.first-column {
+    flex: 1;
+    min-width: 0; /* МАГИЧЕСКАЯ СТРОКА: разрешает колонке сжиматься/не расширяться */
+}
+
+.column-wrapper.second-column {
+    flex: 1;
+    min-width: 0; /* МАГИЧЕСКАЯ СТРОКА: разрешает колонке сжиматься/не расширяться */
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+  height: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  max-width: 100%; /* Ограничиваем ширину */
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--header-secondary);
+}
+
+.form-input,
+.form-select {
+  padding: 8px 10px;
+  border: 1px solid var(--background-accent);
+  border-radius: 4px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--blurple);
+}
+
+/* === ТЕГИ === */
+
+.input-action-wrapper {
+    display: flex !important;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+    max-width: 500px;
+}
+
+.input-action-wrapper .form-input,
+.input-action-wrapper .form-select {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+}
+
+.btn-action-plus {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 36px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    flex: 0 0 36px !important;
+    flex-shrink: 0 !important;
+    border-radius: 4px !important;
+    background: var(--background-tertiary) !important;
+    border: 1px solid var(--background-accent) !important;
+    color: var(--text-normal) !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+}
+
+.btn-action-plus:hover {
+    background: var(--blurple) !important;
+    border-color: var(--blurple) !important;
+    color: white !important;
+}
+
+#add-tag-mobile-btn {
+    display: none;
+}
+
+.tags-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+  padding: 4px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 4px;
+  align-items: center;
+  margin-top: 4px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.tag-item {
+  background: var(--blurple);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.tag-remove {
+  cursor: pointer;
+  font-weight: bold;
+  margin-left: 2px;
+  opacity: 0.8;
+}
+
+.tag-remove:hover {
+  opacity: 1;
+}
+
+/* === РЕДАКТОР === */
+
+/* 1. Главный контейнер формы теперь будет расти */
+.form-container {
+    background-color: var(--background-secondary);
+    border-radius: 8px;
+    padding: 20px;
+    height: auto !important; /* Разрешаем рост */
+    display: block; /* Чтобы внутренние блоки корректно толкали низ */
+}
+
+/* 2. Обёртка редактора */
+.editor-wrapper {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: auto !important;
+    width: 100% !important;
+    border: 1px solid var(--background-accent) !important;
+    border-radius: 4px !important;
+    background: var(--background-tertiary) !important;
+    overflow: visible !important; /* Критично для вертикального расширения */
+}
+
+/* 3. ТВОЯ ЗАДУМКА: Липкая панель инструментов */
+.editor-toolbar-sticky {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 60px; /* Высота заголовка сайта */
+    z-index: 1000;
+    background-color: var(--background-secondary);
+    padding: 10px;
+    border: 1px solid var(--background-accent);
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* Чтобы отделялась от текста при скролле */
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* 4. Поле с текстом (фон и расширение) */
+.editor-content {
+    min-height: 500px !important;
+    height: auto !important; /* Текст растягивает блок */
+    max-height: none !important; /* Убираем максимальную высоту */
+    overflow-y: visible !important; /* УБИРАЕМ внутренний скролл */
+    background-color: var(--background-tertiary); /* Тот самый темно-серый фон */
+    padding: 25px;
+    border: 1px solid var(--background-accent);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    color: #dcddde;
+    line-height: 1.6;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    /* ЭКСТРЕННЫЕ ПРАВКИ: */
+    max-width: 100%;           /* Не даем расширяться больше родителя */
+    overflow-x: hidden;        /* Прячем всё, что вылезло (на всякий случай) */
+    word-wrap: break-word;     /* Перенос длинных слов */
+    overflow-wrap: break-word; /* Современный стандарт переноса */
+    word-break: break-word;    /* Для старых браузеров */
+    white-space: pre-wrap;     /* Сохраняем пробелы, но разрешаем переносы */
+    box-sizing: border-box;    /* Чтобы padding не увеличивал ширину */
+}
+
+/* Ограничиваем ширину всех элементов внутри редактора */
+.editor-content *,
+.editor-content *:before,
+.editor-content *:after {
+    max-width: 100% !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    box-sizing: border-box !important;
+}
+
+
+.toolbar-button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-normal);
+  padding: 4px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.toolbar-button:hover {
+  background: var(--background-accent);
+}
+
+.toolbar-button.active {
+  background: var(--blurple);
+  color: white;
+}
+
+.toolbar-separator {
+  width: 1px;
+  background: var(--background-accent);
+  margin: 0 4px;
+  align-self: stretch;
+}
+
+.editor-content {
+  min-height: 200px;
+  max-height: 400px;
+  padding: 8px;
+  outline: none;
+  color: var(--text-normal);
+  line-height: 1.6;
+  overflow-y: auto;
+  font-size: 14px;
+  position: relative;
+}
+
+.editor-content:empty::before {
+  content: attr(data-placeholder);
+  color: var(--header-secondary);
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  pointer-events: none;
+}
+
+/* === КНОПКИ === */
+
+.button-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 30px;
+}
+
+.btn-primary {
+  background: var(--blurple);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #4752c4;
+}
+
+.btn-warning {
+  background: #f0b232;
+  color: #000;
+}
+
+.btn-warning:hover {
+  background: #d9a02b;
+}
+
+.btn-secondary {
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-accent);
+}
+
+.btn-secondary:hover {
+  background: var(--background-accent);
+}
+
+/* === УПРАВЛЕНИЕ СТАТЬЯМИ === */
+
+.articles-section {
+  margin-top: 24px;
+  overflow: visible !important;
+  display: block !important; /* Переопределяем возможный flex */
+  height: auto !important;
+  min-height: auto !important;
+  max-width: 100%; /* Ограничиваем ширину */
+}
+
+.articles-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-bar .form-input {
+  flex: 1;
+  min-width: 150px;
+}
+
+.search-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+/* === ПРЕДПРОСМОТР === */
+
+.preview-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.preview-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.preview-window {
+  background: var(--background-primary);
+  width: 90%;
+  max-width: 900px;
+  max-height: 85vh;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--background-accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-normal);
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--header-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.btn-close:hover {
+  color: #ff6666;
+}
+
+.preview-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  line-height: 1.7;
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+/* === ВЫРАВНИВАНИЕ ТЕКСТА === */
+
+#articleContent div[style*="text-align: center"],
+#articleContent p[style*="text-align: center"],
+#articleContent center {
+    text-align: center !important;
+    display: block;
+}
+
+#articleContent div[style*="text-align: right"],
+#articleContent p[style*="text-align: right"] {
+    text-align: right !important;
+    display: block;
+}
+
+#articleContent div[style*="text-align: left"],
+#articleContent p[style*="text-align: left"] {
+    text-align: left !important;
+    display: block;
+}
+
+/* === СТИЛИ ДЛЯ ПАРАГРАФОВ === */
+
+#articleContent p {
+    margin-top: 0;
+    margin-bottom: 1em;
+    min-height: 1em; /* Чтобы пустые строки были видны */
+}
+
+/* === АДАПТИВНОСТЬ === */
+
+@media (max-width: 768px) {
+  .editor-toolbar-sticky {
+    min-height: 32px;
+    padding: 4px !important;
+  }
+  .form-container,
+  .articles-section {
+    padding: 12px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .column-wrapper {
+    gap: 12px;
+  }
+
+  .button-group,
+  .search-bar {
+    flex-direction: column;
+  }
+
+  .search-buttons {
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .cover-buttons-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cover-buttons-container button {
+    width: 100%;
+  }
+
+  #add-tag-mobile-btn {
+      display: flex;
+  }
+
+  .btn-action-plus {
+      width: 40px !important;
+      height: 40px !important;
+      flex: 0 0 40px !important;
+  }
+  .form-input, .form-select {
+      height: 40px;
+  }
+
+  .btn-action-plus i {
+      font-size: 16px;
+  }
+
+  .input-action-wrapper {
+      max-width: 100%;
+  }
+
+  /* === АДАПТИВНОСТЬ ДЛЯ ПАНЕЛИ ИНСТРУМЕНТОВ РЕДАКТОРА === */
+
+  .editor-toolbar-sticky {
+    flex-wrap: wrap;
+    overflow-x: auto;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .editor-toolbar-sticky::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari, Opera*/
+  }
+
+  .toolbar-button {
+    padding: 4px 6px;
+    font-size: 12px;
+    min-width: 30px;
+  }
+
+  .toolbar-button i {
+    font-size: 12px;
+  }
+
+  .toolbar-separator {
+    align-self: stretch;
+    margin: 2px 2px;
+  }
+}
+
+/* Дополнительная адаптивность для очень узких экранов */
+@media (max-width: 480px) {
+  .toolbar-button {
+    padding: 3px 4px;
+    font-size: 10px;
+    min-width: 24px;
+  }
+
+  .toolbar-button i {
+    font-size: 10px;
+  }
+
+  .toolbar-separator {
+    margin: 2px 1px;
+  }
+}
+
+
+/* Специфичные переопределяющие стили для страницы статей */
+/* Убираем только ограничения высоты, но сохраняем ограничения ширины */
+.form-container {
+    overflow: visible !important;
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-width: 100%; /* Ограничиваем ширину */
+}
+
+.editor-wrapper {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important; /* Позволяем контенту расширяться вниз */
+    max-width: 100%; /* Ограничиваем ширину */
+}
+
+.editor-content {
+    overflow-y: visible !important; /* УБИРАЕМ внутренний скролл */
+    height: auto !important;
+    min-height: 500px; /* Минимальная высота, чтобы не схлопывалось */
+    max-width: 100%; /* Ограничиваем ширину */
+}
+
+/* Убираем ограничения только у высоты, но не у ширины */
+.form-group {
+    height: auto !important;
+    max-width: 100%; /* Ограничиваем ширину */
+}
+
+.form-grid {
+    height: auto !important;
+    max-width: 100%; /* Ограничиваем ширину */
+}
+
+/* Остальные стили (цитаты, списки, спойлеры и т.д.) — без изменений */
+blockquote {
+    border-left: 4px solid #5865F2;
+    background: rgba(88, 101, 242, 0.1);
+    padding: 8px 15px;
+    margin: 10px 0;
+    font-style: italic;
+    border-radius: 0 4px 4px 0;
+}
+
+mark[data-type="spoiler"] {
+    background-color: #1e1f22 !important;
+    color: transparent !important;
+    border: none !important;
+    border-radius: 3px;
+    padding: 0 3px;
+    cursor: pointer;
+}
+
+mark[data-type="spoiler"].revealed {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #dcddde !important;
+}
+
+#articleContent *:not(mark) {
+    background-color: transparent !important;
+    color: #dcddde !important;
+}
+
+#articleContent, #articleContent * {
+    outline: none !important;
+    caret-color: #dcddde;
+}
+
+#articleContent span:empty {
+    display: none !important;
+}
+
+#articleContent ol { list-style: decimal; padding-left: 20px; }
+#articleContent ul { list-style: disc; padding-left: 20px; }
+#articleContent ol ol { list-style: lower-alpha; }
+#articleContent ol ol ol { list-style: lower-roman; }
+
+.preview-body ol { list-style: decimal; padding-left: 20px; }
+.preview-body ul { list-style: disc; padding-left: 20px; }
+.preview-body ol ol { list-style: lower-alpha; }
+.preview-body ol ol ol { list-style: lower-roman; }
+
+#articleContent s, #articleContent strike, #articleContent del,
+.preview-body s, .preview-body strike, .preview-body del {
+    text-decoration: line-through !important;
+    display: inline;
+}
+
+#articleContent [style*="line-through"] {
+    text-decoration: line-through !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const spoilers = document.querySelectorAll('mark[data-type="spoiler"]');
+    spoilers.forEach(spoiler => {
+        spoiler.addEventListener('click', function(e) {
+            e.stopPropagation();
+            this.classList.toggle('revealed');
+        });
+    });
+});
+</script>

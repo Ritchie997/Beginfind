@@ -1,0 +1,23 @@
+<div class="form-container">
+    <h2 class="form-title">Создать новую категорию</h2>
+
+    <div class="form-group full-width">
+        <label class="form-label" for="newCategoryName">Название категории</label>
+        <div class="input-action-wrapper" style="max-width: 500px;">
+            <input type="text" id="newCategoryName" class="form-input" placeholder="Введите название категории">
+            <button class="btn-action-plus" id="create-new-category-btn" title="Создать категорию">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="categories-list">
+    <h2 class="form-title">Существующие категории</h2>
+    <div id="categoriesContainer"></div>
+</div>
+
+<!-- Card layout for mobile (will be shown instead of table on mobile) -->
+<div class="card-layout-mobile" id="categories-card-layout" style="display: none;">
+    <!-- Cards will be loaded here on mobile -->
+</div>

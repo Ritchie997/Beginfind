@@ -1,0 +1,62 @@
+<div class="btn-group" style="margin-bottom: 20px;">
+    <button class="btn btn-primary" id="create-server-btn">Создать сервер</button>
+</div>
+
+<!-- Table layout for desktop -->
+<div class="table-container table-layout-mobile-hidden">
+    <table id="servers-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Владелец</th>
+                <th>Дата создания</th>
+                <th>Участников</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody id="servers-tbody">
+            <!-- Servers will be loaded here -->
+        </tbody>
+    </table>
+</div>
+
+<!-- Card layout for mobile -->
+<div class="card-layout-mobile" id="servers-card-layout">
+    <!-- Cards will be loaded here on mobile -->
+</div>
+
+<!-- Modal for creating server -->
+<div id="create-server-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="
+        background: var(--background-secondary);
+        padding: 25px;
+        border-radius: 8px;
+        width: 500px;
+        max-width: 90%;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        border: 1px solid var(--background-accent);
+    ">
+        <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Создать сервер</h2>
+
+        <div class="form-group">
+            <label for="server-name">Название (обязательно)</label>
+            <input type="text" id="server-name" placeholder="Введите название сервера">
+        </div>
+
+        <div class="form-group">
+            <label for="server-description">Описание (опционально)</label>
+            <textarea id="server-description" placeholder="Введите описание сервера" rows="3"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="server-icon">Иконка (опционально)</label>
+            <input type="text" id="server-icon" placeholder="Ссылка на иконку или символ">
+        </div>
+
+        <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+            <button class="btn btn-primary" id="create-server-confirm-btn">Создать</button>
+            <button class="btn btn-danger" id="cancel-create-server-btn">Отмена</button>
+        </div>
+    </div>
+</div>
