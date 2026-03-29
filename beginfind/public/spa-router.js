@@ -836,6 +836,7 @@ class SPARouter {
   async initServersPage() {
     await this.loadServersList();
     this.setupServerFormEvents();
+    this.setupServerPageResizeListener();
   }
 
   // Set up server form events
@@ -2568,7 +2569,7 @@ class SPARouter {
       const result = await apiClient.makeAuthenticatedRequest('/api/servers');
 
       if (result.success) {
-        // Update table view
+        // Update table view (desktop)
         const tbody = document.getElementById('servers-tbody');
         if (tbody) {
           tbody.innerHTML = '';
@@ -2597,45 +2598,72 @@ class SPARouter {
           }
         }
 
-        // Update card layout for mobile
-        const cardLayout = document.getElementById('servers-card-layout');
-        if (cardLayout) {
-          cardLayout.innerHTML = '';
-
-          if (result.data.length === 0) {
-            cardLayout.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</div>';
-          } else {
-            result.data.forEach(server => {
-              const card = document.createElement('div');
-              card.className = 'card-item-mobile';
-              const userCount = server.user_count || 0;
-
-              card.innerHTML = `
-                <div class="card-header">
-                  <div class="card-title">${this.escapeHtml(server.name)}</div>
-                  <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
-                </div>
-                <div class="card-content">
-                  <div class="meta-item"><strong>ID:</strong> ${server.id}</div>
-                  <div class="meta-item"><strong>Владелец:</strong> ${server.owner_username || 'N/A'}</div>
-                  <div class="meta-item"><strong>Участников:</strong> ${userCount}</div>
-                  <div class="meta-item"><strong>Дата создания:</strong> ${new Date(server.created_at).toLocaleDateString()}</div>
-                </div>
-                <div class="card-actions" style="margin-top: 10px; text-align: right;">
-                  <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})">Удалить</button>
-                </div>
-              `;
-
-              cardLayout.appendChild(card);
-            });
-          }
-        }
+        // Update card layout for mobile ONLY
+        this.updateMobileCardLayout(result.data);
       } else {
         showMessage(`Ошибка загрузки серверов: ${result.error}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка при загрузке серверов: ${error.message}`, 'error');
     }
+  }
+
+  // Update mobile card layout based on screen size
+  updateMobileCardLayout(servers) {
+    const cardLayout = document.getElementById('servers-card-layout');
+    if (!cardLayout) return;
+
+    // Only populate card layout on mobile
+    if (window.innerWidth <= 768) {
+      cardLayout.innerHTML = '';
+
+      if (servers.length === 0) {
+        cardLayout.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</div>';
+      } else {
+        servers.forEach(server => {
+          const card = document.createElement('div');
+          card.className = 'card-item-mobile';
+          const userCount = server.user_count || 0;
+
+          card.innerHTML = `
+            <div class="card-header">
+              <div class="card-title">${this.escapeHtml(server.name)}</div>
+              <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
+            </div>
+            <div class="card-content">
+              <div class="meta-item"><strong>ID:</strong> ${server.id}</div>
+              <div class="meta-item"><strong>Владелец:</strong> ${server.owner_username || 'N/A'}</div>
+              <div class="meta-item"><strong>Участников:</strong> ${userCount}</div>
+              <div class="meta-item"><strong>Дата создания:</strong> ${new Date(server.created_at).toLocaleDateString()}</div>
+            </div>
+            <div class="card-actions" style="margin-top: 10px; text-align: right;">
+              <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})">Удалить</button>
+            </div>
+          `;
+
+          cardLayout.appendChild(card);
+        });
+      }
+    } else {
+      // Clear card layout on desktop to prevent duplicates
+      cardLayout.innerHTML = '';
+    }
+  }
+
+  // Set up resize listener for mobile/desktop switching
+  setupServerPageResizeListener() {
+    if (this.serverResizeListenerAttached) return;
+    
+    window.addEventListener('resize', () => {
+      // Re-render the appropriate layout when crossing the breakpoint
+      const currentPath = window.location.pathname;
+      if (currentPath === '/servers' || currentPath === '/') {
+        // Reload the server list to update layouts
+        this.loadServersList();
+      }
+    });
+    
+    this.serverResizeListenerAttached = true;
   }
 
   // View server details in modal
