@@ -283,14 +283,19 @@ class SPARouter {
       // Load dashboard stats
       await this.loadDashboardStats();
 
-      // Initialize charts if Chart.js is available
-      this.initDashboardCharts();
+      // Note: Charts are now initialized in loadDashboardStats with real data
     } catch (error) {
       console.error('Error loading dashboard:', error);
       showMessage('Ошибка при загрузке дашборда', 'error');
     } finally {
       this.hideLoader();
     }
+  }
+
+  // Legacy method kept for compatibility - charts now initialized with real data in loadDashboardStats
+  initDashboardCharts() {
+    // This method is deprecated - use initDashboardChartsWithData instead
+    console.log('initDashboardCharts is deprecated, use initDashboardChartsWithData');
   }
 
   // Load articles content
@@ -837,6 +842,63 @@ class SPARouter {
   setupServerFormEvents() {
     // Set up create server button
     document.getElementById('create-server-btn')?.addEventListener('click', () => this.showCreateServerModal());
+    
+    // Set up modal buttons
+    document.getElementById('create-server-confirm-btn')?.addEventListener('click', () => this.createServer());
+    document.getElementById('cancel-create-server-btn')?.addEventListener('click', () => this.hideCreateServerModal());
+    
+    // Close modal on outside click
+    document.getElementById('create-server-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'create-server-modal') {
+        this.hideCreateServerModal();
+      }
+    });
+  }
+
+  // Show create server modal
+  showCreateServerModal() {
+    const modal = document.getElementById('create-server-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+    }
+  }
+
+  // Hide create server modal
+  hideCreateServerModal() {
+    const modal = document.getElementById('create-server-modal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+    // Clear form fields
+    document.getElementById('server-name').value = '';
+    document.getElementById('server-description').value = '';
+    document.getElementById('server-icon').value = '';
+  }
+
+  // Create server
+  async createServer() {
+    const name = document.getElementById('server-name').value.trim();
+    const description = document.getElementById('server-description').value.trim();
+    const icon = document.getElementById('server-icon').value.trim();
+
+    if (!name) {
+      showMessage('Название сервера обязательно', 'error');
+      return;
+    }
+
+    try {
+      const result = await apiClient.createServer({ name, description, icon });
+      
+      if (result.success) {
+        showMessage('Сервер успешно создан!', 'success');
+        this.hideCreateServerModal();
+        await this.loadServersList();
+      } else {
+        showMessage(`Ошибка создания сервера: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка при создании сервера: ${error.message}`, 'error');
+    }
   }
 
   // Initialize settings page
@@ -2652,14 +2714,16 @@ class SPARouter {
     document.getElementById('reset-settings-btn')?.addEventListener('click', () => this.resetSettings());
   }
 
-  // Dashboard stats
+  // Dashboard stats with real data and weekly activity
   async loadDashboardStats() {
     try {
-      // Load articles count
+      // Load articles count and recent articles
       const articlesResult = await apiClient.getArticles();
+      let articlesData = [];
       if (articlesResult.success) {
         const totalArticles = document.getElementById('total-articles');
         if (totalArticles) totalArticles.textContent = articlesResult.data.length;
+        articlesData = articlesResult.data;
       } else {
         console.error('Error loading articles count:', articlesResult.error);
       }
@@ -2694,9 +2758,174 @@ class SPARouter {
       } else {
         console.error('Error loading categories count:', categoriesResult.error);
       }
+
+      // Load activity list with recent items
+      await this.loadActivityList(articlesData);
+
+      // Initialize charts with real data
+      this.initDashboardChartsWithData(articlesData);
     } catch (error) {
       console.error('Unexpected error loading dashboard stats:', error);
     }
+  }
+
+  // Load activity list with recent articles, servers, and messages
+  async loadActivityList(articlesData) {
+    const activityList = document.getElementById('activity-list');
+    if (!activityList) return;
+
+    activityList.innerHTML = '';
+
+    try {
+      // Get recent articles (last 5)
+      const recentArticles = articlesData.slice(-5).reverse();
+      
+      // Get recent messages
+      const messagesResult = await apiClient.getMessages();
+      const recentMessages = messagesResult.success ? messagesResult.data.slice(-3).reverse() : [];
+
+      // Combine and sort by date
+      const activities = [];
+      
+      recentArticles.forEach(article => {
+        activities.push({
+          type: 'article',
+          title: `Добавлена статья: ${article.title}`,
+          description: article.excerpt || 'Новая статья опубликована',
+          time: new Date(article.created_at),
+          icon: '📝'
+        });
+      });
+
+      recentMessages.forEach(message => {
+        activities.push({
+          type: 'message',
+          title: `Новое сообщение от ${message.sender}`,
+          description: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+          time: new Date(message.created_at),
+          icon: '💬'
+        });
+      });
+
+      // Sort by time (newest first)
+      activities.sort((a, b) => b.time - a.time);
+
+      // Display activities (max 10)
+      activities.slice(0, 10).forEach(activity => {
+        const item = document.createElement('li');
+        item.className = 'activity-item';
+        
+        const timeAgo = this.getTimeAgo(activity.time);
+        
+        item.innerHTML = `
+          <div class="activity-header">
+            <span class="activity-title-text">${activity.icon} ${activity.title}</span>
+            <span class="activity-time">${timeAgo}</span>
+          </div>
+          <div class="activity-description">${activity.description}</div>
+        `;
+        
+        activityList.appendChild(item);
+      });
+
+      if (activities.length === 0) {
+        activityList.innerHTML = '<li class="activity-item"><div class="activity-description">Нет недавней активности</div></li>';
+      }
+    } catch (error) {
+      console.error('Error loading activity list:', error);
+      activityList.innerHTML = '<li class="activity-item"><div class="activity-description">Ошибка загрузки активности</div></li>';
+    }
+  }
+
+  // Helper function to format time ago
+  getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return 'Только что';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} мин. назад`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} ч. назад`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} дн. назад`;
+    
+    return date.toLocaleDateString('ru-RU');
+  }
+
+  // Initialize dashboard charts with real data
+  initDashboardChartsWithData(articlesData) {
+    // Check if Chart.js is available
+    if (typeof Chart !== 'undefined') {
+      const ctx = document.getElementById('weeklyActivityChart');
+      if (ctx) {
+        // Destroy existing chart if it exists
+        if (ctx.chartInstance) {
+          ctx.chartInstance.destroy();
+        }
+
+        // Calculate weekly activity from real articles data
+        const weeklyData = this.calculateWeeklyActivity(articlesData);
+
+        const chartData = {
+          labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+          datasets: [{
+            label: 'Статей за неделю',
+            data: weeklyData,
+            borderColor: 'rgb(86, 101, 242)',
+            backgroundColor: 'rgba(86, 101, 242, 0.2)',
+            tension: 0.1
+          }]
+        };
+
+        const config = {
+          type: 'line',
+          data: chartData,
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: 'top',
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  stepSize: 1
+                }
+              }
+            }
+          }
+        };
+
+        ctx.chartInstance = new Chart(ctx, config);
+      }
+    }
+  }
+
+  // Calculate weekly activity from articles data
+  calculateWeeklyActivity(articlesData) {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Adjust for Monday start
+    
+    // Get Monday of current week
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    // Initialize array for 7 days
+    const dailyCounts = [0, 0, 0, 0, 0, 0, 0];
+
+    // Count articles per day
+    articlesData.forEach(article => {
+      const articleDate = new Date(article.created_at);
+      if (articleDate >= monday) {
+        const dayIndex = Math.floor((articleDate - monday) / (1000 * 60 * 60 * 24));
+        if (dayIndex >= 0 && dayIndex < 7) {
+          dailyCounts[dayIndex]++;
+        }
+      }
+    });
+
+    return dailyCounts;
   }
 
   // Добавь эти методы внутрь класса SPARouter

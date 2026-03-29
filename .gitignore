@@ -1,15 +1,1 @@
-node_modules/
-*.db
-*.db.backup
-.env
-.env.local
-logs/
-*.log
-npm-debug.log*
-.DS_Store
-*.pem
-*.key
-uploads/
-images/
-temp/
-tmp/
+Nothing should be ignored based on the provided file changes. The only modified file is `beginfind/public/spa-router.js`, which is a source code file and should not be added to .gitignore.
