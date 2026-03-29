@@ -1084,6 +1084,73 @@ body {
     background: var(--background-accent);
 }
 
+/* Image Editor Modal Styles */
+.image-editor-modal-overlay {
+    backdrop-filter: blur(4px);
+}
+
+.image-editor-modal {
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.image-size-presets {
+    margin-bottom: 15px;
+}
+
+.image-size-preset-btn {
+    min-width: 100px;
+}
+
+.image-size-preset-btn:hover {
+    background-color: var(--background-accent) !important;
+    transform: translateY(-2px);
+}
+
+.image-align-btn:hover {
+    background-color: var(--background-accent) !important;
+    transform: translateY(-2px);
+}
+
+.image-caption {
+    text-align: center;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-style: italic;
+}
+
+/* Mobile responsiveness for image editor */
+@media (max-width: 768px) {
+    .image-editor-modal {
+        width: 95% !important;
+        padding: 15px !important;
+    }
+    
+    .image-size-presets {
+        flex-direction: column;
+    }
+    
+    .image-size-preset-btn {
+        width: 100%;
+    }
+    
+    .image-align-btn {
+        padding: 12px !important;
+        font-size: 18px !important;
+    }
+}
+
 /* Table styles */
 .table-container {
     background-color: var(--background-secondary);
