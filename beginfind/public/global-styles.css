@@ -745,6 +745,25 @@ body {
     background-color: var(--background-accent);
 }
 
+/* Small button variant */
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 4px;
+}
+
+/* Role tag styles */
+.role-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    color: white;
+}
+
 /* Action button with plus icon */
 .btn-action-plus {
     display: flex !important;
