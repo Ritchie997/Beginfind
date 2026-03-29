@@ -318,8 +318,11 @@ class SPARouter {
           titleElement.textContent = 'Статьи';
         }
 
-        // Add specific class to body for article page to allow editor expansion
+        // Add specific class to body for article page styles
         document.body.classList.add('articles-page');
+        
+        // Force reflow to ensure styles are applied
+        void appContent.offsetWidth;
       }
 
       // Initialize articles page functionality
