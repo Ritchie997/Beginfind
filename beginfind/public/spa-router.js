@@ -1098,16 +1098,17 @@ class SPARouter {
             const result = JSON.parse(text); // Пытаемся превратить в JSON
             if (response.ok && result.url) {
                 document.getElementById('articleImagePreview').src = result.url;
-                alert('Обложка загружена!');
+                showMessage('Обложка загружена!', 'success');
             } else {
-                alert('Ошибка сервера: ' + (result.error || 'Неизвестно'));
+                showMessage('Ошибка сервера: ' + (result.error || 'Неизвестно'), 'error');
             }
         } catch (jsonErr) {
             console.error("Сервер ответил HTML-кодом вместо JSON. Вот ответ:", text);
-            alert("Критическая ошибка: сервер прислал HTML. Возможно, путь /api/upload-image не существует.");
+            showMessage("Критическая ошибка: сервер прислал HTML. Возможно, путь /api/upload-image не существует.", 'error');
         }
     } catch (error) {
         console.error('Upload catch:', error);
+        showMessage('Ошибка загрузки: ' + error.message, 'error');
     }
   }
 
@@ -1156,17 +1157,17 @@ class SPARouter {
 
         const result = await response.json();
         if (response.ok) {
-            alert(articleId ? 'Статья успешно обновлена!' : 'Статья создана!');
+            showMessage(articleId ? 'Статья успешно обновлена!' : 'Статья создана!', 'success');
             // Clear all drafts from localStorage after successful save
             localStorage.removeItem('articleDrafts');
             this.currentDraftId = null; // Clear current draft ID after successful save
             this.navigateTo('/articles');
         } else {
-            alert(`Ошибка: ${result.error || 'Неизвестная ошибка'}`);
+            showMessage(`Ошибка: ${result.error || 'Неизвестная ошибка'}`, 'error');
         }
     } catch (error) {
         console.error('Save error:', error);
-        alert('Ошибка при сохранении: ' + error.message);
+        showMessage('Ошибка при сохранении: ' + error.message, 'error');
     }
   }
 
@@ -1264,12 +1265,10 @@ class SPARouter {
       this.currentDraftId = articleData.id;
 
       // Show success message
-      alert('Черновик сохранен!');
       showMessage('Черновик успешно сохранен в локальное хранилище', 'success');
     } catch (error) {
       console.error('Error saving draft:', error);
-      alert('Ошибка при сохранении черновика: ' + error.message);
-      showMessage('Ошибка при сохранении черновика', 'error');
+      showMessage('Ошибка при сохранении черновика: ' + error.message, 'error');
     }
   }
 
@@ -2100,51 +2099,31 @@ class SPARouter {
     if (rolesInput) {
       rolesInput.addEventListener('click', (e) => {
         e.preventDefault();
-        // Show the roles container
-        rolesContainer.style.display = 'block';
+        // Toggle the roles container
+        const isHidden = rolesContainer.style.display === 'none' || rolesContainer.style.display === '';
+        
+        if (isHidden) {
+          // Show the roles container
+          rolesContainer.style.display = 'block';
 
-        // Position the container near the input field
-        const inputRect = rolesInput.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+          // Load roles for the selected server
+          const serverSelect = document.getElementById('articleServer');
+          if (serverSelect && serverSelect.value) {
+            this.loadRolesForMultiSelection(serverSelect.value).catch(error => {
+              console.error('Error loading roles for multi-selection:', error);
+            });
+          } else {
+            // If no server is selected, show a message
+            document.getElementById('rolesList').innerHTML = '<div style="color: var(--header-secondary); font-size: 14px; padding: 8px;">Сначала выберите сервер</div>';
+          }
 
-        rolesContainer.style.top = (inputRect.bottom + scrollTop + 5) + 'px';
-        rolesContainer.style.left = (inputRect.left + scrollLeft) + 'px';
-
-        // Adjust position if dropdown goes off screen (mobile optimization)
-        const containerRect = rolesContainer.getBoundingClientRect();
-        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-
-        // Adjust horizontal position if dropdown goes off-screen
-        if (containerRect.right > viewportWidth) {
-            const adjustment = containerRect.right - viewportWidth + 10;
-            rolesContainer.style.left = (inputRect.left + scrollLeft - adjustment) + 'px';
-        }
-
-        // Adjust vertical position if dropdown goes off-screen
-        if (containerRect.bottom > viewportHeight) {
-            // Position above the input if there's more space above
-            if (inputRect.top > viewportHeight / 2) {
-                rolesContainer.style.top = (inputRect.top + scrollTop - rolesContainer.offsetHeight - 5) + 'px';
-            }
-        }
-
-        // Load roles for the selected server
-        const serverSelect = document.getElementById('articleServer');
-        if (serverSelect && serverSelect.value) {
-          this.loadRolesForMultiSelection(serverSelect.value).catch(error => {
-            console.error('Error loading roles for multi-selection:', error);
-          });
+          // Ensure checkboxes are synchronized with selected roles
+          setTimeout(() => {
+            this.syncCheckboxesWithSelectedRoles();
+          }, 10); // Small delay to ensure the list is populated
         } else {
-          // If no server is selected, show a message
-          document.getElementById('rolesList').innerHTML = '<div style="color: var(--header-secondary); font-size: 14px; padding: 8px;">Сначала выберите сервер</div>';
+          rolesContainer.style.display = 'none';
         }
-
-        // Ensure checkboxes are synchronized with selected roles
-        setTimeout(() => {
-          this.syncCheckboxesWithSelectedRoles();
-        }, 10); // Small delay to ensure the list is populated
       });
 
       // Clear the search input when clicking outside and closing the container
@@ -2332,28 +2311,17 @@ class SPARouter {
     displayContainer.style.display = 'flex';
     displayContainer.style.flexWrap = 'wrap';
     displayContainer.style.gap = '4px';
-    displayContainer.style.marginTop = '4px';
+    displayContainer.style.marginTop = '0';
 
     // Add each role as a tag-like element
     roleNames.forEach((roleName, index) => {
       const roleId = selectedRoles[index];
 
       const roleElement = document.createElement('span');
-      roleElement.className = 'tag-item';
-      roleElement.style = `
-        background: var(--blurple);
-        color: white;
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 12px;
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-      `;
+      roleElement.className = 'role-tag-item';
       roleElement.innerHTML = `
         ${roleName}
-        <span class="tag-remove" style="cursor: pointer; margin-left: 4px; font-weight: bold; opacity: 0.8;">×</span>
+        <span class="tag-remove">×</span>
       `;
 
       // Add event listener to the remove button

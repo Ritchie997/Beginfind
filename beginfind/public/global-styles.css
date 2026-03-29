@@ -1648,3 +1648,106 @@ body.articles-page .content-body {
         overflow-y: visible;
     }
 }
+
+/* Roles input wrapper styles */
+.roles-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.roles-input-wrapper .form-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Selected roles tags display */
+.selected-roles-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    border: 1px solid var(--background-accent);
+    min-height: 20px;
+}
+
+.selected-roles-tags .role-tag-item {
+    background: var(--blurple);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: all 0.2s;
+}
+
+.selected-roles-tags .role-tag-item:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.selected-roles-tags .role-tag-item .tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    opacity: 0.8;
+    margin-left: 2px;
+}
+
+.selected-roles-tags .role-tag-item .tag-remove:hover {
+    opacity: 1;
+    color: #ff6b6b;
+}
+
+/* Roles dropdown container */
+.roles-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    margin-top: 4px;
+    padding: 8px;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    border: 1px solid var(--background-accent);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.roles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.role-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.role-checkbox-item:hover {
+    background: var(--background-accent);
+}
+
+.role-checkbox-item input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.role-checkbox-item label {
+    margin: 0;
+    flex: 1;
+    color: var(--text-normal);
+    cursor: pointer;
+    user-select: none;
+}
