@@ -1023,9 +1023,14 @@ class EditorManager {
       
       btn.onclick = () => {
         tempWidth = preset.value;
-        // Update preview
-        imgElement.style.maxWidth = preset.value;
-        imgElement.style.width = 'auto';
+        // Update preview - force exact width regardless of original size
+        if (preset.value === '100%') {
+          imgElement.style.width = '100%';
+          imgElement.style.maxWidth = 'none';
+        } else {
+          imgElement.style.width = preset.value;
+          imgElement.style.maxWidth = preset.value;
+        }
         // Update button states
         Array.from(sizePresets.children).forEach(child => {
           child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1074,9 +1079,9 @@ class EditorManager {
       const val = `${slider.value}px`;
       sliderValue.textContent = val;
       tempWidth = val;
-      // Update preview
+      // Update preview - force exact width regardless of original size
+      imgElement.style.width = val;
       imgElement.style.maxWidth = val;
-      imgElement.style.width = 'auto';
       // Reset preset buttons
       Array.from(sizePresets.children).forEach(child => {
         child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1251,9 +1256,14 @@ class EditorManager {
     saveBtn.style.transition = 'background-color 0.2s';
     
     saveBtn.onclick = () => {
-      // Finalize all changes
-      imgElement.style.maxWidth = tempWidth;
-      imgElement.style.width = 'auto';
+      // Finalize all changes - force exact width regardless of original size
+      if (tempWidth === '100%') {
+        imgElement.style.width = '100%';
+        imgElement.style.maxWidth = 'none';
+      } else {
+        imgElement.style.width = tempWidth;
+        imgElement.style.maxWidth = tempWidth;
+      }
       imgElement.setAttribute('data-width', tempWidth);
       imgElement.alt = tempAlt;
       
