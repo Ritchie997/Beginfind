@@ -1238,12 +1238,27 @@ app.get('/api/profile/observer-status', auth.authenticateToken, async (req, res)
 
         // Маршрут для загрузки изображений
         app.post('/api/upload-image', auth.authenticateToken, upload.single('image'), (req, res) => {
-          if (!req.file) {
-            return res.status(400).json({ error: 'Файл не загружен' });
+          try {
+            if (!req.file) {
+              return res.status(400).json({ error: 'Файл не загружен' });
+            }
+            
+            // Проверяем, что файл действительно существует
+            const fs = require('fs');
+            const filePath = path.join(__dirname, 'public', 'uploads', req.file.filename);
+            
+            if (!fs.existsSync(filePath)) {
+              console.error('Uploaded file not found:', filePath);
+              return res.status(500).json({ error: 'Ошибка сохранения файла' });
+            }
+            
+            // Возвращаем путь к загруженному файлу (без домена), чтобы сервер мог его нормализовать
+            res.setHeader('Content-Type', 'application/json');
+            res.json({ url: `/uploads/${req.file.filename}` });
+          } catch (error) {
+            console.error('Upload error:', error);
+            res.status(500).json({ error: 'Внутренняя ошибка сервера при загрузке' });
           }
-          
-          // Возвращаем путь к загруженному файлу (без домена), чтобы сервер мог его нормализовать
-          res.json({ url: `/uploads/${req.file.filename}` });
         });
 
 // Функция для проверки, является ли пользователь администратором
