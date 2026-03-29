@@ -98,8 +98,8 @@
         <!-- Hidden input to store selected roles as JSON -->
         <input type="hidden" id="articleRoles" value="[]">
         <!-- Dropdown container for role selection (as a contextual popup) -->
-        <div id="rolesContainer" class="roles-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 300px; overflow-y: auto; background: var(--background-secondary); border: 1px solid var(--background-accent); border-radius: 4px; margin-top: 4px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-          <div id="rolesList" class="roles-list" style="padding: 8px;"></div>
+        <div id="rolesContainer" class="roles-dropdown" style="display: none;" data-visible="false">
+          <div id="rolesList" class="roles-list"></div>
         </div>
       </div>
 

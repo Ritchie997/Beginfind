@@ -1015,6 +1015,14 @@ class SPARouter {
             body: formData
         });
 
+        // Проверяем Content-Type ответа
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const textResponse = await response.text();
+            console.error('Server returned non-JSON response:', textResponse.substring(0, 500));
+            throw new Error('Сервер вернул некорректный ответ (не JSON). Проверьте логи сервера.');
+        }
+
         const result = await response.json();
         if (response.ok) {
             // Update the hidden input field with the uploaded URL
@@ -1029,7 +1037,7 @@ class SPARouter {
         }
     } catch (error) {
         console.error('Upload error:', error);
-        showMessage('Критическая ошибка при загрузке: ' + error.message, 'error');
+        showMessage('Ошибка при загрузке изображения: ' + error.message, 'error');
     }
   }
 
@@ -2100,10 +2108,11 @@ class SPARouter {
       rolesInput.addEventListener('click', (e) => {
         e.preventDefault();
         // Toggle the roles container
-        const isHidden = rolesContainer.style.display === 'none' || rolesContainer.style.display === '';
+        const isVisible = rolesContainer.classList.contains('show');
         
-        if (isHidden) {
-          // Show the roles container
+        if (!isVisible) {
+          // Show the roles container with animation
+          rolesContainer.classList.add('show');
           rolesContainer.style.display = 'block';
 
           // Load roles for the selected server
@@ -2120,16 +2129,21 @@ class SPARouter {
           // Ensure checkboxes are synchronized with selected roles
           setTimeout(() => {
             this.syncCheckboxesWithSelectedRoles();
-          }, 10); // Small delay to ensure the list is populated
+          }, 50); // Small delay to ensure the list is populated and animation starts
         } else {
-          rolesContainer.style.display = 'none';
+          // Hide with animation
+          rolesContainer.classList.remove('show');
+          setTimeout(() => {
+            rolesContainer.style.display = 'none';
+          }, 200); // Match transition duration
         }
       });
 
       // Clear the search input when clicking outside and closing the container
       rolesInput.addEventListener('blur', (e) => {
         setTimeout(() => {
-          if (rolesContainer.style.display === 'none') {
+          const isVisible = rolesContainer.classList.contains('show');
+          if (!isVisible) {
             rolesInput.value = '';
           }
         }, 150); // Small delay to allow click events to process
@@ -2139,7 +2153,13 @@ class SPARouter {
     // Close the roles container when clicking outside
     document.addEventListener('click', (e) => {
       if (!rolesContainer.contains(e.target) && e.target !== rolesInput) {
-        rolesContainer.style.display = 'none';
+        const isVisible = rolesContainer.classList.contains('show');
+        if (isVisible) {
+          rolesContainer.classList.remove('show');
+          setTimeout(() => {
+            rolesContainer.style.display = 'none';
+          }, 200);
+        }
         // Clear the search input when closing
         if (rolesInput) {
           rolesInput.value = '';
