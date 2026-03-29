@@ -2562,7 +2562,7 @@ class SPARouter {
     }
   }
 
-  // Server management methods
+  // Server management methods - Complete rewrite with full functionality
   async loadServersList() {
     try {
       const result = await apiClient.makeAuthenticatedRequest('/api/servers');
@@ -2573,26 +2573,28 @@ class SPARouter {
         if (tbody) {
           tbody.innerHTML = '';
 
-          result.data.forEach(server => {
-            const row = document.createElement('tr');
+          if (result.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</td></tr>';
+          } else {
+            result.data.forEach(server => {
+              const row = document.createElement('tr');
+              const userCount = server.user_count || 0;
 
-            // Get user count from user_count property
-            const userCount = server.user_count || 0;
+              row.innerHTML = `
+                <td>${server.id}</td>
+                <td><strong>${this.escapeHtml(server.name)}</strong></td>
+                <td>${server.owner_username || 'N/A'}</td>
+                <td>${new Date(server.created_at).toLocaleDateString()}</td>
+                <td>${userCount}</td>
+                <td>
+                  <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
+                  <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})" style="margin-left: 5px;">Удалить</button>
+                </td>
+              `;
 
-            row.innerHTML = `
-              <td>${server.id}</td>
-              <td>${server.name}</td>
-              <td>${server.owner_username || 'N/A'}</td>
-              <td>${new Date(server.created_at).toLocaleString()}</td>
-              <td>${userCount}</td>
-              <td>
-                <button class="btn btn-primary" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
-                <button class="btn btn-danger" onclick="spaRouter.deleteServer(${server.id})" style="margin-left: 5px;">Удалить</button>
-              </td>
-            `;
-
-            tbody.appendChild(row);
-          });
+              tbody.appendChild(row);
+            });
+          }
         }
 
         // Update card layout for mobile
@@ -2600,30 +2602,33 @@ class SPARouter {
         if (cardLayout) {
           cardLayout.innerHTML = '';
 
-          result.data.forEach(server => {
-            const card = document.createElement('div');
-            card.className = 'card-item-mobile';
+          if (result.data.length === 0) {
+            cardLayout.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</div>';
+          } else {
+            result.data.forEach(server => {
+              const card = document.createElement('div');
+              card.className = 'card-item-mobile';
+              const userCount = server.user_count || 0;
 
-            const userCount = server.user_count || 0;
+              card.innerHTML = `
+                <div class="card-header">
+                  <div class="card-title">${this.escapeHtml(server.name)}</div>
+                  <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
+                </div>
+                <div class="card-content">
+                  <div class="meta-item"><strong>ID:</strong> ${server.id}</div>
+                  <div class="meta-item"><strong>Владелец:</strong> ${server.owner_username || 'N/A'}</div>
+                  <div class="meta-item"><strong>Участников:</strong> ${userCount}</div>
+                  <div class="meta-item"><strong>Дата создания:</strong> ${new Date(server.created_at).toLocaleDateString()}</div>
+                </div>
+                <div class="card-actions" style="margin-top: 10px; text-align: right;">
+                  <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})">Удалить</button>
+                </div>
+              `;
 
-            card.innerHTML = `
-              <div class="card-header">
-                <div class="card-title">${server.name}</div>
-                <button class="btn btn-primary" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
-              </div>
-              <div class="card-content">
-                <div class="meta-item"><strong>ID:</strong> ${server.id}</div>
-                <div class="meta-item"><strong>Владелец:</strong> ${server.owner_username || 'N/A'}</div>
-                <div class="meta-item"><strong>Участников:</strong> ${userCount}</div>
-                <div class="meta-item"><strong>Дата создания:</strong> ${new Date(server.created_at).toLocaleString()}</div>
-              </div>
-              <div class="card-actions" style="margin-top: 10px; text-align: right;">
-                <button class="btn btn-danger" onclick="spaRouter.deleteServer(${server.id})">Удалить</button>
-              </div>
-            `;
-
-            cardLayout.appendChild(card);
-          });
+              cardLayout.appendChild(card);
+            });
+          }
         }
       } else {
         showMessage(`Ошибка загрузки серверов: ${result.error}`, 'error');
@@ -2631,6 +2636,376 @@ class SPARouter {
     } catch (error) {
       showMessage(`Ошибка при загрузке серверов: ${error.message}`, 'error');
     }
+  }
+
+  // View server details in modal
+  async viewServerDetails(serverId) {
+    try {
+      // Load server details
+      const serverResult = await apiClient.getServer(serverId);
+      if (!serverResult.success) {
+        showMessage('Ошибка загрузки информации о сервере', 'error');
+        return;
+      }
+
+      const server = serverResult.data;
+
+      // Load members and roles
+      const membersResult = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/users`);
+      const rolesResult = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
+
+      const members = membersResult.success ? membersResult.data : [];
+      const roles = rolesResult.success ? rolesResult.data : [];
+
+      // Create modal HTML
+      const modalHtml = `
+        <div id="server-details-modal" class="modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
+          <div style="background: var(--background-secondary); padding: 0; border-radius: 8px; width: 900px; max-width: 95%; max-height: 90vh; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent); display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div style="padding: 20px; border-bottom: 1px solid var(--background-accent); display: flex; justify-content: space-between; align-items: center; background: var(--background-tertiary);">
+              <div>
+                <h2 style="margin: 0; color: var(--header-primary);">${this.escapeHtml(server.name)}</h2>
+                <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 14px;">${server.description || 'Описание отсутствует'}</p>
+              </div>
+              <button class="btn btn-danger btn-sm" onclick="spaRouter.closeServerDetailsModal()">✕</button>
+            </div>
+
+            <!-- Tabs -->
+            <div style="display: flex; border-bottom: 1px solid var(--background-accent); background: var(--background-secondary);">
+              <button class="tab-button active" onclick="spaRouter.switchServerTab('members')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-members">
+                <strong>Участники (${members.length})</strong>
+              </button>
+              <button class="tab-button" onclick="spaRouter.switchServerTab('roles')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-roles">
+                <strong>Роли (${roles.length})</strong>
+              </button>
+              <button class="tab-button" onclick="spaRouter.switchServerTab('settings')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-settings">
+                <strong>Настройки</strong>
+              </button>
+            </div>
+
+            <!-- Content -->
+            <div style="flex: 1; overflow-y: auto; padding: 20px;" id="server-tab-content">
+              <!-- Members Tab -->
+              <div id="tab-members" class="server-tab-content">
+                <div style="margin-bottom: 15px;">
+                  <button class="btn btn-primary btn-sm" onclick="spaRouter.showAddMemberModal(${serverId})">Добавить участника</button>
+                </div>
+                <div class="table-container" style="background: var(--background-tertiary); border-radius: 4px;">
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                      <tr style="border-bottom: 1px solid var(--background-accent);">
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">ID</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Пользователь</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Роли</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Дата вступления</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${members.length === 0 ? '<tr><td colspan="5" style="padding: 30px; text-align: center; color: var(--text-muted);">Нет участников</td></tr>' : 
+                        members.map(member => `
+                          <tr style="border-bottom: 1px solid var(--background-accent);">
+                            <td style="padding: 12px;">${member.id}</td>
+                            <td style="padding: 12px;"><strong>${this.escapeHtml(member.username)}</strong></td>
+                            <td style="padding: 12px;">
+                              ${member.roles && member.roles.length > 0 ? 
+                                member.roles.map(role => `<span class="role-tag" style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; background: ${role.role_type === 'system' ? '#5865f2' : '#eb459e'}; color: white;">${this.escapeHtml(role.name)}</span>`).join('') : 
+                                '<span style="color: var(--text-muted);">Нет ролей</span>'}
+                            </td>
+                            <td style="padding: 12px;">${new Date(member.joined_at).toLocaleDateString()}</td>
+                            <td style="padding: 12px;">
+                              ${member.id !== server.owner_id ? 
+                                `<button class="btn btn-danger btn-sm" onclick="spaRouter.removeMember(${serverId}, ${member.id})">Удалить</button>` : 
+                                '<span style="color: var(--text-muted); font-size: 12px;">Владелец</span>'}
+                            </td>
+                          </tr>
+                        `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Roles Tab -->
+              <div id="tab-roles" class="server-tab-content" style="display: none;">
+                <div style="margin-bottom: 15px;">
+                  <button class="btn btn-primary btn-sm" onclick="spaRouter.showCreateRoleModal(${serverId})">Создать роль</button>
+                </div>
+                <div class="table-container" style="background: var(--background-tertiary); border-radius: 4px;">
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                      <tr style="border-bottom: 1px solid var(--background-accent);">
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Название</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Тип</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Код</th>
+                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${roles.length === 0 ? '<tr><td colspan="4" style="padding: 30px; text-align: center; color: var(--text-muted);">Нет ролей</td></tr>' : 
+                        roles.map(role => `
+                          <tr style="border-bottom: 1px solid var(--background-accent);">
+                            <td style="padding: 12px;"><strong>${this.escapeHtml(role.name)}</strong></td>
+                            <td style="padding: 12px;"><span class="role-tag" style="background: ${role.role_type === 'system' ? '#5865f2' : '#eb459e'}; color: white;">${role.role_type === 'system' ? 'Системная' : 'Пользовательская'}</span></td>
+                            <td style="padding: 12px; font-family: monospace; color: var(--text-muted);">${role.code}</td>
+                            <td style="padding: 12px;">
+                              ${role.role_type !== 'system' ? 
+                                `<button class="btn btn-danger btn-sm" onclick="spaRouter.deleteRole(${serverId}, ${role.id})">Удалить</button>` : 
+                                '<span style="color: var(--text-muted); font-size: 12px;">Нельзя удалить</span>'}
+                            </td>
+                          </tr>
+                        `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Settings Tab -->
+              <div id="tab-settings" class="server-tab-content" style="display: none;">
+                <div class="form-group" style="margin-bottom: 20px;">
+                  <label style="display: block; margin-bottom: 8px; color: var(--header-primary); font-weight: 500;">Название сервера</label>
+                  <input type="text" id="edit-server-name" value="${this.escapeHtml(server.name)}" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                  <label style="display: block; margin-bottom: 8px; color: var(--header-primary); font-weight: 500;">Описание</label>
+                  <textarea id="edit-server-description" rows="3" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">${server.description || ''}</textarea>
+                </div>
+                <div class="btn-group">
+                  <button class="btn btn-primary" onclick="spaRouter.updateServer(${serverId})">Сохранить изменения</button>
+                  <button class="btn btn-danger" onclick="spaRouter.deleteServer(${serverId}, true)">Удалить сервер</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Add modal to body
+      const existingModal = document.getElementById('server-details-modal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      // Store current server ID
+      this.currentViewingServerId = serverId;
+
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Close server details modal
+  closeServerDetailsModal() {
+    const modal = document.getElementById('server-details-modal');
+    if (modal) {
+      modal.remove();
+    }
+    this.currentViewingServerId = null;
+  }
+
+  // Switch server tab
+  switchServerTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.server-tab-content').forEach(tab => {
+      tab.style.display = 'none';
+    });
+    
+    // Remove active class from all buttons
+    document.querySelectorAll('[id^="tab-btn-"]').forEach(btn => {
+      btn.classList.remove('active');
+      btn.style.borderBottomColor = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+    });
+
+    // Show selected tab
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+      selectedTab.style.display = 'block';
+    }
+
+    // Add active class to selected button
+    const selectedBtn = document.getElementById(`tab-btn-${tabName}`);
+    if (selectedBtn) {
+      selectedBtn.classList.add('active');
+      selectedBtn.style.borderBottomColor = 'var(--blurple)';
+      selectedBtn.style.color = 'var(--header-primary)';
+    }
+  }
+
+  // Show add member modal
+  showAddMemberModal(serverId) {
+    const modalHtml = `
+      <div id="add-member-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: var(--background-secondary); padding: 25px; border-radius: 8px; width: 500px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent);">
+          <h3 style="margin-top: 0; color: var(--header-primary);">Добавить участника</h3>
+          <div class="form-group" style="margin: 20px 0;">
+            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">ID пользователя</label>
+            <input type="number" id="new-member-id" placeholder="Введите ID пользователя" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
+          </div>
+          <div class="btn-group" style="justify-content: flex-end;">
+            <button class="btn btn-primary" onclick="spaRouter.addMember(${serverId})">Добавить</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('add-member-modal').remove()" style="background: var(--background-accent); color: var(--text-normal);">Отмена</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  }
+
+  // Add member to server
+  async addMember(serverId) {
+    const userId = document.getElementById('new-member-id').value.trim();
+    if (!userId) {
+      showMessage('Введите ID пользователя', 'error');
+      return;
+    }
+
+    try {
+      const result = await apiClient.addServerUser(serverId, userId);
+      if (result.success) {
+        showMessage('Пользователь добавлен', 'success');
+        document.getElementById('add-member-modal').remove();
+        await this.viewServerDetails(serverId); // Refresh
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Remove member from server
+  async removeMember(serverId, userId) {
+    if (!confirm('Удалить участника из сервера?')) return;
+
+    try {
+      const result = await apiClient.removeServerUser(serverId, userId);
+      if (result.success) {
+        showMessage('Участник удален', 'success');
+        await this.viewServerDetails(serverId); // Refresh
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Show create role modal
+  showCreateRoleModal(serverId) {
+    const modalHtml = `
+      <div id="create-role-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: var(--background-secondary); padding: 25px; border-radius: 8px; width: 500px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent);">
+          <h3 style="margin-top: 0; color: var(--header-primary);">Создать роль</h3>
+          <div class="form-group" style="margin: 20px 0;">
+            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">Название роли</label>
+            <input type="text" id="new-role-name" placeholder="Например: Модератор" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
+          </div>
+          <div class="form-group" style="margin: 20px 0;">
+            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">Код роли (латиницей)</label>
+            <input type="text" id="new-role-code" placeholder="Например: moderator" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
+          </div>
+          <div class="btn-group" style="justify-content: flex-end;">
+            <button class="btn btn-primary" onclick="spaRouter.createRole(${serverId})">Создать</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('create-role-modal').remove()" style="background: var(--background-accent); color: var(--text-normal);">Отмена</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  }
+
+  // Create role on server
+  async createRole(serverId) {
+    const name = document.getElementById('new-role-name').value.trim();
+    const code = document.getElementById('new-role-code').value.trim();
+
+    if (!name || !code) {
+      showMessage('Заполните все поля', 'error');
+      return;
+    }
+
+    try {
+      const result = await apiClient.createServerRole(serverId, { name, code });
+      if (result.success) {
+        showMessage('Роль создана', 'success');
+        document.getElementById('create-role-modal').remove();
+        await this.viewServerDetails(serverId); // Refresh
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Delete role from server
+  async deleteRole(serverId, roleId) {
+    if (!confirm('Удалить эту роль?')) return;
+
+    try {
+      const result = await apiClient.deleteServerRole(serverId, roleId);
+      if (result.success) {
+        showMessage('Роль удалена', 'success');
+        await this.viewServerDetails(serverId); // Refresh
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Update server settings
+  async updateServer(serverId) {
+    const name = document.getElementById('edit-server-name').value.trim();
+    const description = document.getElementById('edit-server-description').value.trim();
+
+    if (!name) {
+      showMessage('Название сервера обязательно', 'error');
+      return;
+    }
+
+    try {
+      const result = await apiClient.updateServer(serverId, { name, description });
+      if (result.success) {
+        showMessage('Сервер обновлен', 'success');
+        await this.viewServerDetails(serverId); // Refresh
+        await this.loadServersList(); // Refresh main list
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Delete server
+  async deleteServer(serverId, fromDetails = false) {
+    if (!confirm('Вы уверены, что хотите удалить этот сервер? Это действие нельзя отменить!')) return;
+
+    try {
+      const result = await apiClient.deleteServer(serverId);
+      if (result.success) {
+        showMessage('Сервер удален', 'success');
+        if (fromDetails) {
+          this.closeServerDetailsModal();
+        }
+        await this.loadServersList(); // Refresh main list
+      } else {
+        showMessage(`Ошибка: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Helper method to escape HTML
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // Settings methods
@@ -2926,19 +3301,6 @@ class SPARouter {
     });
 
     return dailyCounts;
-  }
-
-  // Добавь эти методы внутрь класса SPARouter
-  viewServerDetails(id) {
-    console.log("Просмотр сервера:", id);
-    // Здесь должна быть логика открытия деталей сервера
-  }
-
-  deleteServer(id) {
-    if(confirm('Удалить сервер?')) {
-        console.log("Удаление сервера:", id);
-        // Здесь вызов fetch('/api/servers/' + id, { method: 'DELETE' })
-    }
   }
 
   // Метод для получения тегов из формы
