@@ -1653,23 +1653,29 @@ body.articles-page .content-body {
 .roles-input-wrapper {
     position: relative;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 
 .roles-input-wrapper .form-input {
     width: 100%;
     box-sizing: border-box;
+    margin-bottom: 0;
 }
 
-/* Selected roles tags display */
+/* Selected roles tags display - integrated into the input area */
 .selected-roles-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     padding: 8px;
     background: var(--background-secondary);
-    border-radius: 4px;
+    border-radius: 0 0 4px 4px;
     border: 1px solid var(--background-accent);
+    border-top: none;
     min-height: 20px;
+    margin-top: -1px; /* Connect visually with input above */
 }
 
 .selected-roles-tags .role-tag-item {
@@ -1705,10 +1711,9 @@ body.articles-page .content-body {
 /* Roles dropdown container */
 .roles-dropdown {
     position: absolute;
-    top: calc(100% + 8px);
+    top: 100%;
     left: 0;
     width: 100%;
-    max-width: 500px;
     z-index: 1000;
     padding: 12px;
     background: var(--background-secondary);
@@ -1721,6 +1726,7 @@ body.articles-page .content-body {
     visibility: hidden;
     transform: translateY(-10px);
     transition: all 0.2s ease;
+    margin-top: 4px;
 }
 
 .roles-dropdown.show {

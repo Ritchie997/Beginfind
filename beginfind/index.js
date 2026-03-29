@@ -1257,8 +1257,23 @@ app.get('/api/profile/observer-status', auth.authenticateToken, async (req, res)
             res.json({ url: `/uploads/${req.file.filename}` });
           } catch (error) {
             console.error('Upload error:', error);
-            res.status(500).json({ error: 'Внутренняя ошибка сервера при загрузке' });
+            res.status(500).json({ error: 'Внутренняя ошибка сервера при загрузке: ' + error.message });
           }
+        });
+        
+        // Обработка ошибок multer для загрузки изображений
+        app.use((err, req, res, next) => {
+          if (err instanceof multer.MulterError) {
+            console.error('Multer error:', err);
+            if (err.code === 'LIMIT_FILE_SIZE') {
+              return res.status(400).json({ error: 'Файл слишком большой. Максимальный размер: 5MB' });
+            }
+            return res.status(400).json({ error: 'Ошибка загрузки файла: ' + err.message });
+          } else if (err) {
+            console.error('General upload error:', err);
+            return res.status(500).json({ error: 'Внутренняя ошибка сервера: ' + err.message });
+          }
+          next();
         });
 
 // Функция для проверки, является ли пользователь администратором
