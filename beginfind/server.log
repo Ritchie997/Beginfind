@@ -1,0 +1,11 @@
+nohup: ignoring input
+[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[2026-03-29T16:51:08.187Z] Scheduled cleanup service started
+Connected to users database
+Connected to messenger SQLite database
+Connected to articles SQLite database
+Connected to servers SQLite database
+Server is running on http://localhost:3002
+Access locally: http://localhost:3002
+Access from network: http://[YOUR_LOCAL_IP]:3002 (replace [YOUR_LOCAL_IP] with your actual IP)
+Test interface available at http://localhost:3002/test.html or http://[YOUR_LOCAL_IP]:3002/test.html

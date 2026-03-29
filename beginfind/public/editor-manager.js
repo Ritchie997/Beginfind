@@ -703,6 +703,17 @@ class EditorManager {
     controlPanel.style.opacity = '0';
     controlPanel.style.transition = 'opacity 0.2s ease';
 
+    // Settings button - opens modal editor
+    const settingsButton = document.createElement('button');
+    settingsButton.type = 'button';
+    settingsButton.className = 'image-control-button';
+    settingsButton.innerHTML = '⚙️';
+    settingsButton.title = 'Настройки изображения';
+    settingsButton.onclick = (e) => {
+      e.stopPropagation();
+      this.openImageEditorModal(imgElement);
+    };
+
     // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
@@ -718,43 +729,8 @@ class EditorManager {
       }
     };
 
-    // Size button
-    const sizeButton = document.createElement('button');
-    sizeButton.type = 'button';
-    sizeButton.className = 'image-control-button';
-    sizeButton.innerHTML = '↔️';
-    sizeButton.title = 'Изменить размер';
-    sizeButton.onclick = (e) => {
-      e.stopPropagation();
-      // Leave empty - size will be changed through popup menu
-    };
-
+    controlPanel.appendChild(settingsButton);
     controlPanel.appendChild(deleteButton);
-    controlPanel.appendChild(sizeButton);
-
-    // Add popup menu for size changes
-    const sizeMenu = this.createImageSizeMenu(imgElement);
-    sizeMenu.style.display = 'none';
-    sizeMenu.style.position = 'absolute';
-    sizeMenu.style.top = '30px';
-    sizeMenu.style.right = '0';
-    sizeMenu.style.zIndex = '1001';
-    sizeMenu.style.backgroundColor = 'var(--background-secondary)';
-    sizeMenu.style.border = '1px solid var(--background-accent)';
-    sizeMenu.style.borderRadius = '4px';
-    controlPanel.appendChild(sizeMenu);
-
-    // Add handler for the size button
-    sizeButton.onclick = (e) => {
-      e.stopPropagation();
-      const isVisible = sizeMenu.style.display === 'block';
-      document.querySelectorAll('.image-size-menu').forEach(menu => {
-        menu.style.display = 'none';
-      });
-      if (!isVisible) {
-        sizeMenu.style.display = 'block';
-      }
-    };
 
     return controlPanel;
   }
@@ -944,6 +920,369 @@ class EditorManager {
   // Handle window resize to adjust controls
   handleResize() {
     this.hideAllImageControls();
+  }
+
+  // Open image editor modal
+  openImageEditorModal(imgElement) {
+    // Hide all controls first
+    this.hideAllImageControls();
+    
+    // Get current image properties
+    const currentWidth = imgElement.style.width || 'auto';
+    const currentMaxWidth = imgElement.style.maxWidth || '100%';
+    const currentAlign = imgElement.parentElement.style.textAlign || 
+                         imgElement.parentElement.style.justifyContent || 
+                         'center';
+    const currentAlt = imgElement.alt || '';
+    const captionElement = imgElement.parentElement.querySelector('.image-caption');
+    const currentCaption = captionElement ? captionElement.textContent : '';
+    
+    // Create modal overlay
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'image-editor-modal-overlay';
+    modalOverlay.style.position = 'fixed';
+    modalOverlay.style.top = '0';
+    modalOverlay.style.left = '0';
+    modalOverlay.style.width = '100%';
+    modalOverlay.style.height = '100%';
+    modalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    modalOverlay.style.zIndex = '9999';
+    modalOverlay.style.display = 'flex';
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.justifyContent = 'center';
+    modalOverlay.style.opacity = '0';
+    modalOverlay.style.transition = 'opacity 0.3s ease';
+    
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.className = 'image-editor-modal';
+    modalContent.style.backgroundColor = 'var(--background-secondary)';
+    modalContent.style.borderRadius = '8px';
+    modalContent.style.padding = '20px';
+    modalContent.style.width = '90%';
+    modalContent.style.maxWidth = '500px';
+    modalContent.style.maxHeight = '90vh';
+    modalContent.style.overflowY = 'auto';
+    modalContent.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.5)';
+    modalContent.style.transform = 'scale(0.9)';
+    modalContent.style.transition = 'transform 0.3s ease';
+    
+    // Modal header
+    const modalHeader = document.createElement('h3');
+    modalHeader.textContent = 'Настройки изображения';
+    modalHeader.style.marginBottom = '20px';
+    modalHeader.style.color = 'var(--header-primary)';
+    modalHeader.style.fontSize = '18px';
+    modalContent.appendChild(modalHeader);
+    
+    // Size section
+    const sizeSection = document.createElement('div');
+    sizeSection.style.marginBottom = '20px';
+    
+    const sizeLabel = document.createElement('label');
+    sizeLabel.textContent = 'Размер';
+    sizeLabel.style.display = 'block';
+    sizeLabel.style.marginBottom = '10px';
+    sizeLabel.style.color = 'var(--text-normal)';
+    sizeLabel.style.fontWeight = 'bold';
+    sizeSection.appendChild(sizeLabel);
+    
+    const sizePresets = document.createElement('div');
+    sizePresets.className = 'image-size-presets';
+    sizePresets.style.display = 'flex';
+    sizePresets.style.gap = '10px';
+    sizePresets.style.flexWrap = 'wrap';
+    
+    const presets = [
+      { name: 'Маленький', value: '300px' },
+      { name: 'Средний', value: '500px' },
+      { name: 'Большой', value: '800px' },
+      { name: 'На всю ширину', value: '100%' }
+    ];
+    
+    presets.forEach(preset => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'image-size-preset-btn';
+      btn.textContent = preset.name;
+      btn.style.padding = '8px 16px';
+      btn.style.border = '1px solid var(--background-accent)';
+      btn.style.borderRadius = '4px';
+      btn.style.backgroundColor = (currentMaxWidth === preset.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
+      btn.style.color = (currentMaxWidth === preset.value) ? '#fff' : 'var(--text-normal)';
+      btn.style.cursor = 'pointer';
+      btn.style.transition = 'all 0.2s';
+      
+      btn.onclick = () => {
+        imgElement.style.maxWidth = preset.value;
+        imgElement.style.width = 'auto';
+        // Update button states
+        Array.from(sizePresets.children).forEach(child => {
+          child.style.backgroundColor = 'var(--background-tertiary)';
+          child.style.color = 'var(--text-normal)';
+        });
+        btn.style.backgroundColor = 'var(--blurple)';
+        btn.style.color = '#fff';
+      };
+      
+      sizePresets.appendChild(btn);
+    });
+    
+    sizeSection.appendChild(sizePresets);
+    
+    // Custom width slider
+    const sliderContainer = document.createElement('div');
+    sliderContainer.style.marginTop = '15px';
+    
+    const sliderLabel = document.createElement('label');
+    sliderLabel.textContent = 'Точная настройка ширины';
+    sliderLabel.style.display = 'block';
+    sliderLabel.style.marginBottom = '8px';
+    sliderLabel.style.color = 'var(--text-muted)';
+    sliderLabel.style.fontSize = '13px';
+    sliderContainer.appendChild(sliderLabel);
+    
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '100';
+    slider.max = '1200';
+    slider.value = parseInt(currentMaxWidth) || 500;
+    slider.style.width = '100%';
+    slider.style.cursor = 'pointer';
+    
+    const sliderValue = document.createElement('span');
+    sliderValue.textContent = `${slider.value}px`;
+    sliderValue.style.display = 'block';
+    sliderValue.style.textAlign = 'right';
+    sliderValue.style.color = 'var(--text-muted)';
+    sliderValue.style.fontSize = '12px';
+    sliderValue.style.marginTop = '5px';
+    
+    slider.oninput = () => {
+      sliderValue.textContent = `${slider.value}px`;
+      imgElement.style.maxWidth = `${slider.value}px`;
+      imgElement.style.width = 'auto';
+      // Reset preset buttons
+      Array.from(sizePresets.children).forEach(child => {
+        child.style.backgroundColor = 'var(--background-tertiary)';
+        child.style.color = 'var(--text-normal)';
+      });
+    };
+    
+    sliderContainer.appendChild(slider);
+    sliderContainer.appendChild(sliderValue);
+    sizeSection.appendChild(sliderContainer);
+    
+    modalContent.appendChild(sizeSection);
+    
+    // Alignment section
+    const alignSection = document.createElement('div');
+    alignSection.style.marginBottom = '20px';
+    
+    const alignLabel = document.createElement('label');
+    alignLabel.textContent = 'Выравнивание';
+    alignLabel.style.display = 'block';
+    alignLabel.style.marginBottom = '10px';
+    alignLabel.style.color = 'var(--text-normal)';
+    alignLabel.style.fontWeight = 'bold';
+    alignSection.appendChild(alignLabel);
+    
+    const alignButtons = document.createElement('div');
+    alignButtons.style.display = 'flex';
+    alignButtons.style.gap = '10px';
+    
+    const alignOptions = [
+      { icon: '⬅️', value: 'left', title: 'По левому краю' },
+      { icon: '↕️', value: 'center', title: 'По центру' },
+      { icon: '➡️', value: 'right', title: 'По правому краю' }
+    ];
+    
+    alignOptions.forEach(option => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'image-align-btn';
+      btn.innerHTML = option.icon;
+      btn.title = option.title;
+      btn.style.padding = '10px 15px';
+      btn.style.border = '1px solid var(--background-accent)';
+      btn.style.borderRadius = '4px';
+      btn.style.backgroundColor = (currentAlign === option.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
+      btn.style.color = (currentAlign === option.value) ? '#fff' : 'var(--text-normal)';
+      btn.style.cursor = 'pointer';
+      btn.style.fontSize = '16px';
+      btn.style.transition = 'all 0.2s';
+      btn.style.flex = '1';
+      
+      btn.onclick = () => {
+        const wrapper = imgElement.parentElement;
+        wrapper.style.textAlign = option.value;
+        wrapper.style.display = 'block';
+        wrapper.style.justifyContent = option.value === 'center' ? 'center' : 
+                                       option.value === 'right' ? 'flex-end' : 'flex-start';
+        // Update button states
+        Array.from(alignButtons.children).forEach(child => {
+          child.style.backgroundColor = 'var(--background-tertiary)';
+          child.style.color = 'var(--text-normal)';
+        });
+        btn.style.backgroundColor = 'var(--blurple)';
+        btn.style.color = '#fff';
+      };
+      
+      alignButtons.appendChild(btn);
+    });
+    
+    alignSection.appendChild(alignButtons);
+    modalContent.appendChild(alignSection);
+    
+    // Alt text section
+    const altSection = document.createElement('div');
+    altSection.style.marginBottom = '20px';
+    
+    const altLabel = document.createElement('label');
+    altLabel.textContent = 'Альтернативный текст';
+    altLabel.style.display = 'block';
+    altLabel.style.marginBottom = '8px';
+    altLabel.style.color = 'var(--text-normal)';
+    altLabel.style.fontWeight = 'bold';
+    altSection.appendChild(altLabel);
+    
+    const altInput = document.createElement('input');
+    altInput.type = 'text';
+    altInput.value = currentAlt;
+    altInput.placeholder = 'Описание изображения для доступности';
+    altInput.style.width = '100%';
+    altInput.style.padding = '10px';
+    altInput.style.border = '1px solid var(--background-accent)';
+    altInput.style.borderRadius = '4px';
+    altInput.style.backgroundColor = 'var(--background-tertiary)';
+    altInput.style.color = 'var(--text-normal)';
+    altInput.style.fontSize = '14px';
+    
+    altInput.oninput = () => {
+      imgElement.alt = altInput.value;
+    };
+    
+    altSection.appendChild(altInput);
+    modalContent.appendChild(altSection);
+    
+    // Caption section
+    const captionSection = document.createElement('div');
+    captionSection.style.marginBottom = '20px';
+    
+    const captionLabel = document.createElement('label');
+    captionLabel.textContent = 'Подпись';
+    captionLabel.style.display = 'block';
+    captionLabel.style.marginBottom = '8px';
+    captionLabel.style.color = 'var(--text-normal)';
+    captionLabel.style.fontWeight = 'bold';
+    captionSection.appendChild(captionLabel);
+    
+    const captionInput = document.createElement('textarea');
+    captionInput.value = currentCaption;
+    captionInput.placeholder = 'Подпись под изображением';
+    captionInput.style.width = '100%';
+    captionInput.style.padding = '10px';
+    captionInput.style.border = '1px solid var(--background-accent)';
+    captionInput.style.borderRadius = '4px';
+    captionInput.style.backgroundColor = 'var(--background-tertiary)';
+    captionInput.style.color = 'var(--text-normal)';
+    captionInput.style.fontSize = '14px';
+    captionInput.style.resize = 'vertical';
+    captionInput.style.minHeight = '60px';
+    
+    captionInput.oninput = () => {
+      let captionEl = imgElement.parentElement.querySelector('.image-caption');
+      if (captionInput.value.trim()) {
+        if (!captionEl) {
+          captionEl = document.createElement('div');
+          captionEl.className = 'image-caption';
+          captionEl.style.textAlign = 'center';
+          captionEl.style.marginTop = '8px';
+          captionEl.style.color = 'var(--text-muted)';
+          captionEl.style.fontSize = '13px';
+          captionEl.style.fontStyle = 'italic';
+          imgElement.parentElement.appendChild(captionEl);
+        }
+        captionEl.textContent = captionInput.value;
+      } else {
+        if (captionEl) {
+          captionEl.remove();
+        }
+      }
+    };
+    
+    captionSection.appendChild(captionInput);
+    modalContent.appendChild(captionSection);
+    
+    // Action buttons
+    const actionButtons = document.createElement('div');
+    actionButtons.style.display = 'flex';
+    actionButtons.style.gap = '10px';
+    actionButtons.style.justifyContent = 'flex-end';
+    actionButtons.style.marginTop = '20px';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = 'Закрыть';
+    closeBtn.style.padding = '10px 20px';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '4px';
+    closeBtn.style.backgroundColor = 'var(--background-accent)';
+    closeBtn.style.color = 'var(--text-normal)';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontSize = '14px';
+    closeBtn.style.transition = 'background-color 0.2s';
+    
+    closeBtn.onclick = () => {
+      closeModal();
+    };
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Сохранить';
+    saveBtn.style.padding = '10px 20px';
+    saveBtn.style.border = 'none';
+    saveBtn.style.borderRadius = '4px';
+    saveBtn.style.backgroundColor = 'var(--blurple)';
+    saveBtn.style.color = '#fff';
+    saveBtn.style.cursor = 'pointer';
+    saveBtn.style.fontSize = '14px';
+    saveBtn.style.fontWeight = 'bold';
+    saveBtn.style.transition = 'background-color 0.2s';
+    
+    saveBtn.onclick = () => {
+      // Save is automatic, just close
+      closeModal();
+    };
+    
+    actionButtons.appendChild(closeBtn);
+    actionButtons.appendChild(saveBtn);
+    modalContent.appendChild(actionButtons);
+    
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+    
+    // Close function
+    const closeModal = () => {
+      modalOverlay.style.opacity = '0';
+      modalContent.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        modalOverlay.remove();
+      }, 300);
+    };
+    
+    // Close on overlay click
+    modalOverlay.onclick = (e) => {
+      if (e.target === modalOverlay) {
+        closeModal();
+      }
+    };
+    
+    // Show modal with animation
+    setTimeout(() => {
+      modalOverlay.style.opacity = '1';
+      modalContent.style.transform = 'scale(1)';
+    }, 10);
   }
 
   // Clean up editor when leaving the page
