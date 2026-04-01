@@ -1312,12 +1312,6 @@ class EditorManager {
       modalContent.style.transform = 'scale(1)';
     }, 10);
   }
-    // Show modal with animation
-    setTimeout(() => {
-      modalOverlay.style.opacity = '1';
-      modalContent.style.transform = 'scale(1)';
-    }, 10);
-  }
   
   // Helper: Apply alignment preview
   applyAlignmentPreview(imgElement, wrapper, align) {
