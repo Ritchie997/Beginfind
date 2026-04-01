@@ -948,40 +948,50 @@ class EditorManager {
     // Create modal overlay
     const modalOverlay = document.createElement('div');
     modalOverlay.className = 'image-editor-modal-overlay';
-    modalOverlay.style.position = 'fixed';
-    modalOverlay.style.top = '0';
-    modalOverlay.style.left = '0';
-    modalOverlay.style.width = '100%';
-    modalOverlay.style.height = '100%';
-    modalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    modalOverlay.style.zIndex = '9999';
-    modalOverlay.style.display = 'flex';
-    modalOverlay.style.alignItems = 'center';
-    modalOverlay.style.justifyContent = 'center';
-    modalOverlay.style.opacity = '0';
-    modalOverlay.style.transition = 'opacity 0.3s ease';
+    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.3s ease;backdrop-filter:blur(4px);';
     
-    // Create modal content
+    // Create modal content - more compact design with preview
     const modalContent = document.createElement('div');
     modalContent.className = 'image-editor-modal';
-    modalContent.style.backgroundColor = 'var(--background-secondary)';
-    modalContent.style.borderRadius = '8px';
-    modalContent.style.padding = '20px';
-    modalContent.style.width = '90%';
-    modalContent.style.maxWidth = '500px';
-    modalContent.style.maxHeight = '90vh';
-    modalContent.style.overflowY = 'auto';
-    modalContent.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.5)';
-    modalContent.style.transform = 'scale(0.9)';
-    modalContent.style.transition = 'transform 0.3s ease';
+    modalContent.style.cssText = 'background-color:var(--background-secondary);border-radius:12px;padding:0;width:95%;max-width:800px;max-height:85vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.6);transform:scale(0.9);transition:transform 0.3s ease;display:grid;grid-template-columns:1fr 320px;';
     
-    // Modal header
-    const modalHeader = document.createElement('h3');
-    modalHeader.textContent = 'Настройки изображения';
-    modalHeader.style.marginBottom = '20px';
-    modalHeader.style.color = 'var(--header-primary)';
-    modalHeader.style.fontSize = '18px';
-    modalContent.appendChild(modalHeader);
+    // Left side - Preview area
+    const previewArea = document.createElement('div');
+    previewArea.className = 'image-preview-area';
+    previewArea.style.cssText = 'background-color:var(--background-tertiary);padding:20px;display:flex;align-items:center;justify-content:center;min-height:400px;position:relative;overflow:auto;';
+    
+    // Clone image for preview
+    const previewImg = imgElement.cloneNode(true);
+    previewImg.style.cssText = 'max-width:100%;height:auto;transition:all 0.3s ease;';
+    previewImg.style.maxWidth = currentWidth;
+    if (currentWidth !== '100%' && currentWidth !== 'auto') {
+      previewImg.style.width = currentWidth;
+    }
+    previewArea.appendChild(previewImg);
+    
+    // Right side - Controls panel
+    const controlsPanel = document.createElement('div');
+    controlsPanel.className = 'image-controls-panel';
+    controlsPanel.style.cssText = 'padding:20px;overflow-y:auto;max-height:85vh;background:var(--background-secondary);border-left:1px solid var(--background-accent);';
+    
+    // Modal header in controls panel
+    const modalHeader = document.createElement('div');
+    modalHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:1px solid var(--background-accent);';
+    
+    const headerTitle = document.createElement('h3');
+    headerTitle.textContent = 'Настройки изображения';
+    headerTitle.style.cssText = 'color:var(--header-primary);font-size:16px;font-weight:600;margin:0;';
+    modalHeader.appendChild(headerTitle);
+    
+    const closeBtnSmall = document.createElement('button');
+    closeBtnSmall.innerHTML = '✕';
+    closeBtnSmall.style.cssText = 'background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:5px;border-radius:4px;transition:all 0.2s;';
+    closeBtnSmall.onmouseover = () => { closeBtnSmall.style.backgroundColor = 'var(--background-accent)'; closeBtnSmall.style.color = 'var(--text-normal)'; };
+    closeBtnSmall.onmouseout = () => { closeBtnSmall.style.backgroundColor = 'transparent'; closeBtnSmall.style.color = 'var(--text-muted)'; };
+    closeBtnSmall.onclick = closeModal;
+    modalHeader.appendChild(closeBtnSmall);
+    
+    controlsPanel.appendChild(modalHeader);
     
     // Size section
     const sizeSection = document.createElement('div');
@@ -1023,7 +1033,15 @@ class EditorManager {
       
       btn.onclick = () => {
         tempWidth = preset.value;
-        // Update preview - force exact width regardless of original size
+        // Update preview in modal
+        if (preset.value === '100%') {
+          previewImg.style.width = '100%';
+          previewImg.style.maxWidth = 'none';
+        } else {
+          previewImg.style.width = preset.value;
+          previewImg.style.maxWidth = preset.value;
+        }
+        // Also update original image for live preview
         if (preset.value === '100%') {
           imgElement.style.width = '100%';
           imgElement.style.maxWidth = 'none';
@@ -1079,7 +1097,10 @@ class EditorManager {
       const val = `${slider.value}px`;
       sliderValue.textContent = val;
       tempWidth = val;
-      // Update preview - force exact width regardless of original size
+      // Update preview in modal
+      previewImg.style.width = val;
+      previewImg.style.maxWidth = val;
+      // Also update original image for live preview
       imgElement.style.width = val;
       imgElement.style.maxWidth = val;
       // Reset preset buttons
@@ -1215,48 +1236,30 @@ class EditorManager {
       // Update preview
       this.updateCaptionPreview(wrapper, captionInput.value);
     };
-    
+
     captionSection.appendChild(captionInput);
-    modalContent.appendChild(captionSection);
-    
-    // Action buttons
+    controlsPanel.appendChild(captionSection);
+
+    // Action buttons - compact design
     const actionButtons = document.createElement('div');
-    actionButtons.style.display = 'flex';
-    actionButtons.style.gap = '10px';
-    actionButtons.style.justifyContent = 'flex-end';
-    actionButtons.style.marginTop = '20px';
-    
+    actionButtons.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;margin-top:25px;padding-top:15px;border-top:1px solid var(--background-accent);';
+
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.textContent = 'Закрыть';
-    closeBtn.style.padding = '10px 20px';
-    closeBtn.style.border = 'none';
-    closeBtn.style.borderRadius = '4px';
-    closeBtn.style.backgroundColor = 'var(--background-accent)';
-    closeBtn.style.color = 'var(--text-normal)';
-    closeBtn.style.cursor = 'pointer';
-    closeBtn.style.fontSize = '14px';
-    closeBtn.style.transition = 'background-color 0.2s';
-    
-    closeBtn.onclick = () => {
-      closeModal();
-    };
-    
+    closeBtn.textContent = 'Отмена';
+    closeBtn.style.cssText = 'padding:10px 20px;border:none;border-radius:6px;background-color:var(--background-accent);color:var(--text-normal);cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;';
+    closeBtn.onmouseover = () => { closeBtn.style.backgroundColor = 'var(--background-modifier-selected)'; };
+    closeBtn.onmouseout = () => { closeBtn.style.backgroundColor = 'var(--background-accent)'; };
+    closeBtn.onclick = closeModal;
+
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.textContent = 'Сохранить';
-    saveBtn.style.padding = '10px 20px';
-    saveBtn.style.border = 'none';
-    saveBtn.style.borderRadius = '4px';
-    saveBtn.style.backgroundColor = 'var(--blurple)';
-    saveBtn.style.color = '#fff';
-    saveBtn.style.cursor = 'pointer';
-    saveBtn.style.fontSize = '14px';
-    saveBtn.style.fontWeight = 'bold';
-    saveBtn.style.transition = 'background-color 0.2s';
-    
+    saveBtn.style.cssText = 'padding:10px 24px;border:none;border-radius:6px;background-color:var(--blurple);color:#fff;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;box-shadow:0 2px 8px rgba(88,101,242,0.3);';
+    saveBtn.onmouseover = () => { saveBtn.style.backgroundColor = '#7289da'; saveBtn.style.boxShadow = '0 4px 12px rgba(88,101,242,0.4)'; };
+    saveBtn.onmouseout = () => { saveBtn.style.backgroundColor = 'var(--blurple)'; saveBtn.style.boxShadow = '0 2px 8px rgba(88,101,242,0.3)'; };
     saveBtn.onclick = () => {
-      // Finalize all changes - force exact width regardless of original size
+      // Finalize all changes - preserve width settings
       if (tempWidth === '100%') {
         imgElement.style.width = '100%';
         imgElement.style.maxWidth = 'none';
@@ -1266,24 +1269,27 @@ class EditorManager {
       }
       imgElement.setAttribute('data-width', tempWidth);
       imgElement.alt = tempAlt;
-      
+
       // Apply final alignment
       this.applyAlignmentFinal(imgElement, wrapper, tempAlign);
-      
+
       // Finalize caption
       this.updateCaptionFinal(wrapper, tempCaption);
-      
+
       showMessage('Настройки изображения сохранены', 'success');
       closeModal();
     };
-    
+
     actionButtons.appendChild(closeBtn);
     actionButtons.appendChild(saveBtn);
-    modalContent.appendChild(actionButtons);
-    
+    controlsPanel.appendChild(actionButtons);
+
+    // Assemble modal
+    modalContent.appendChild(previewArea);
+    modalContent.appendChild(controlsPanel);
     modalOverlay.appendChild(modalContent);
     document.body.appendChild(modalOverlay);
-    
+
     // Close function
     const closeModal = () => {
       modalOverlay.style.opacity = '0';
@@ -1292,14 +1298,20 @@ class EditorManager {
         modalOverlay.remove();
       }, 300);
     };
-    
+
     // Close on overlay click
     modalOverlay.onclick = (e) => {
       if (e.target === modalOverlay) {
         closeModal();
       }
     };
-    
+
+    // Show modal with animation
+    setTimeout(() => {
+      modalOverlay.style.opacity = '1';
+      modalContent.style.transform = 'scale(1)';
+    }, 10);
+  }
     // Show modal with animation
     setTimeout(() => {
       modalOverlay.style.opacity = '1';
@@ -1339,9 +1351,18 @@ class EditorManager {
   
   // Helper: Apply final alignment
   applyAlignmentFinal(imgElement, wrapper, align) {
+    // Preserve width and max-width before resetting
+    const savedWidth = imgElement.style.width;
+    const savedMaxWidth = imgElement.style.maxWidth;
+    const savedDataWidth = imgElement.getAttribute('data-width');
+    
     // Reset all styles first
     imgElement.style.cssText = '';
-    imgElement.style.maxWidth = imgElement.getAttribute('data-width') || imgElement.style.maxWidth;
+    
+    // Restore width properties
+    if (savedWidth) imgElement.style.width = savedWidth;
+    if (savedMaxWidth) imgElement.style.maxWidth = savedMaxWidth;
+    if (savedDataWidth) imgElement.setAttribute('data-width', savedDataWidth);
     
     if (align === 'left') {
       wrapper.style.textAlign = 'left';
