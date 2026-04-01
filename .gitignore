@@ -1,1 +1,16 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a JavaScript source file (`beginfind/public/editor-manager.js`), which should not be added to .gitignore.
+# Examples 1:
+# Project with only source/config files - no build artifacts, dependencies, or temp files
+# Output should be empty
+
+# Example 2:
+# Project with artifacts like .pyc, dist/, .env.local, .vscode/
+# Should include appropriate ignore patterns
+
+# In this case, the modified files are just editor-manager.js and global-styles.css
+# These are regular source files (.js and .css), not build artifacts
+# No build artifacts, dependencies, or temp files detected in changes
+# Therefore, output nothing
+
+```javascript
+
+```
