@@ -1328,16 +1328,16 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Полностью удаляем все inline-стили выравнивания без !important
-    wrapper.style.marginLeft = '';
-    wrapper.style.marginRight = '';
-    wrapper.style.margin = '';
-    wrapper.style.display = '';
-    wrapper.style.verticalAlign = '';
-    wrapper.style.maxWidth = '';
-    wrapper.style.marginBottom = '';
-    wrapper.style.justifyContent = '';
-    imgElement.style.float = '';
+    // Полностью удаляем все inline-стили выравнивания через removeAttribute
+    wrapper.style.removeProperty('margin-left');
+    wrapper.style.removeProperty('margin-right');
+    wrapper.style.removeProperty('margin');
+    wrapper.style.removeProperty('display');
+    wrapper.style.removeProperty('vertical-align');
+    wrapper.style.removeProperty('max-width');
+    wrapper.style.removeProperty('margin-bottom');
+    wrapper.style.removeProperty('justify-content');
+    imgElement.style.removeProperty('float');
     
     // Принудительно устанавливаем display: inline-block для wrapper
     // Это критически важно - wrapper должен быть inline-block чтобы работать как барьер
@@ -1362,6 +1362,12 @@ class EditorManager {
     // Обновляем выравнивание подписи - всегда по центру относительно картинки
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
+      caption.style.removeProperty('display');
+      caption.style.removeProperty('margin-left');
+      caption.style.removeProperty('margin-right');
+      caption.style.removeProperty('text-align');
+      caption.style.removeProperty('width');
+      
       caption.style.display = 'block';
       caption.style.marginLeft = 'auto';
       caption.style.marginRight = 'auto';
