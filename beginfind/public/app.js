@@ -362,3 +362,77 @@ window.debounce = function(func, wait) {
     timeout = setTimeout(later, wait);
   };
 };
+
+// Ripple effect for buttons
+window.initRippleEffect = function() {
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.btn')) {
+      const button = e.target.closest('.btn');
+      
+      // Don't create ripple if button is too small
+      if (button.offsetWidth < 40 || button.offsetHeight < 40) return;
+      
+      const circle = document.createElement('span');
+      const diameter = Math.max(button.clientWidth, button.clientHeight);
+      const radius = diameter / 2;
+
+      const rect = button.getBoundingClientRect();
+
+      circle.style.width = circle.style.height = `${diameter}px`;
+      circle.style.left = `${e.clientX - rect.left - radius}px`;
+      circle.style.top = `${e.clientY - rect.top - radius}px`;
+      circle.classList.add('ripple');
+
+      const existingRipple = button.querySelector('.ripple');
+      if (existingRipple) {
+        existingRipple.remove();
+      }
+
+      button.appendChild(circle);
+
+      setTimeout(() => {
+        circle.remove();
+      }, 600);
+    }
+  });
+};
+
+// Initialize animations on page load
+window.initPageAnimations = function() {
+  // Add page-content class to main content areas
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) {
+    mainContent.classList.add('page-content');
+  }
+
+  // Add stagger animation to list items
+  const lists = document.querySelectorAll('.article-item, .category-item, .server-card-item, .activity-item');
+  lists.forEach((item, index) => {
+    item.style.animationDelay = `${index * 0.05}s`;
+    item.classList.add('stagger-item');
+  });
+
+  // Initialize ripple effect
+  window.initRippleEffect();
+};
+
+// Add tooltip functionality
+window.initTooltips = function() {
+  document.addEventListener('mouseover', function(e) {
+    const tooltip = e.target.closest('[data-tooltip]');
+    if (tooltip) {
+      // Tooltip styles are handled by CSS
+    }
+  });
+};
+
+// Initialize everything when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    window.initPageAnimations();
+    window.initTooltips();
+  });
+} else {
+  window.initPageAnimations();
+  window.initTooltips();
+}
