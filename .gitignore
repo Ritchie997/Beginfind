@@ -1,47 +1,70 @@
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-dist/
-build/
-target/
+```
+# Editor/IDE files
+.vscode/
+*.swp
+*.swo
+*.tmp
 
-# Dependencies
-node_modules/
-venv/
-.venv/
+# Logs
+*.log
+
+# Environment files
 .env
 .env.local
 *.env.*
 
-# Logs and temp files
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
-*.tmp
-*.swp
+.git/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# System files
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+dist/
+build/
+.nyc_output/
+coverage/
+*.lcov
+.npm
+.yarn-integrity
+.yarn/
+package-lock.json
+npm-shrinkwrap.json
 .DS_Store
 Thumbs.db
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python specific
-.mypy_cache/
-.pytest_cache/
-
-# Java/Gradle
-.gradle/
-*.class
+# Build outputs
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
 
 # Compressed files
 *.zip
@@ -66,3 +89,84 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Gradle
+.gradle/
+build/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+target/
+!target/README
+
+# C/C++
+*.i
+*.ii
+*.s
+*.mod
+*.ilk
+*.manifest
+*.res
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+vendor/
+
+# Ruby
+*.gem
+*.rbc
+.bundle/
+vendor/bundle/
+.rbenv-gemsets
+.rbenv-version
+.gem/
+.Gemfile.lock
+.rake
+.rbc
+
+# Rust
+Cargo.lock
+target/
+**/*.rs.bk
+*.lock
+
+# Swift
+*.xcodeproj/
+*.xcworkspace/
+*.swiftpm/
+.build/
+
+# Web
+public/dist/
+public/build/
+assets/css/
+assets/js/
+*.min.css
+*.min.js
+
+# Temporary files
+*~
+*.bak
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```
