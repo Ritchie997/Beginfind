@@ -166,12 +166,34 @@ class EditorManager {
   executeAlignmentCommandSmart(command) {
     this.editor.focus();
 
-    // 1. Try to use the standard command
+    // Check if an image is currently selected
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      let element = range.commonAncestorContainer;
+      
+      // If the selection is a text node, get its parent element
+      if (element.nodeType === Node.TEXT_NODE) {
+        element = element.parentElement;
+      }
+      
+      // Check if we're inside an image wrapper
+      const imageWrapper = element.closest('.image-wrapper');
+      if (imageWrapper) {
+        // Apply alignment to the image wrapper
+        const imgElement = imageWrapper.querySelector('img.article-inline-image');
+        const alignValue = command.replace('justify', '').toLowerCase();
+        this.applyAlignment(imgElement, imageWrapper, alignValue);
+        this.updateToolbarActiveStates();
+        return;
+      }
+    }
+
+    // 1. Try to use the standard command for text
     document.execCommand('styleWithCSS', false, true);
     document.execCommand(command, false, null);
 
     // 2. Fix on the fly: find the current container and force the style
-    const selection = window.getSelection();
     if (selection.rangeCount > 0) {
         let container = selection.getRangeAt(0).commonAncestorContainer;
 
@@ -408,6 +430,14 @@ class EditorManager {
       element = element.parentElement;
     }
 
+    // First check if we're inside an image wrapper
+    const imageWrapper = element.closest('.image-wrapper');
+    if (imageWrapper) {
+      // We're editing an image - check wrapper's alignment via margins
+      this.updateAlignmentButtonsForImage(imageWrapper);
+      return;
+    }
+
     // Walk up the DOM tree to find the nearest block element
     while (element && element !== this.editor) {
       if (element.nodeType === Node.ELEMENT_NODE &&
@@ -416,20 +446,6 @@ class EditorManager {
       }
       element = element.parentElement;
     }
-
-    // Reset all alignment buttons
-    const alignButtons = [
-      { cmd: 'justifyLeft', selector: '[data-command="justifyLeft"]' },
-      { cmd: 'justifyCenter', selector: '[data-command="justifyCenter"]' },
-      { cmd: 'justifyRight', selector: '[data-command="justifyRight"]' }
-    ];
-
-    alignButtons.forEach(item => {
-      const button = this.toolbar.querySelector(item.selector);
-      if (button) {
-        button.classList.remove('active');
-      }
-    });
 
     // If we found a block element, check its text-align style
     if (element && element !== this.editor) {
@@ -456,9 +472,68 @@ class EditorManager {
           break;
         default:
           // If no specific alignment or it's 'start'/'justify', don't activate any button
-          return;
+          activeButtonSelector = null;
       }
 
+      // Reset all alignment buttons first
+      this.resetAlignmentButtons();
+
+      if (activeButtonSelector) {
+        const activeButton = this.toolbar.querySelector(activeButtonSelector);
+        if (activeButton) {
+          activeButton.classList.add('active');
+        }
+      }
+    } else {
+      // No block element found, reset all buttons
+      this.resetAlignmentButtons();
+    }
+  }
+
+  // Reset all alignment buttons
+  resetAlignmentButtons() {
+    if (!this.toolbar) return;
+    
+    const alignButtons = [
+      '[data-command="justifyLeft"]',
+      '[data-command="justifyCenter"]',
+      '[data-command="justifyRight"]'
+    ];
+    
+    alignButtons.forEach(selector => {
+      const button = this.toolbar.querySelector(selector);
+      if (button) {
+        button.classList.remove('active');
+      }
+    });
+  }
+
+  // Update alignment buttons when an image is selected
+  updateAlignmentButtonsForImage(wrapper) {
+    // Reset all alignment buttons first
+    this.resetAlignmentButtons();
+    
+    // Determine alignment from wrapper's margin values
+    const marginLeft = wrapper.style.marginLeft || window.getComputedStyle(wrapper).marginLeft;
+    const marginRight = wrapper.style.marginRight || window.getComputedStyle(wrapper).marginRight;
+    
+    let activeButtonSelector;
+    
+    if (marginLeft === '0px' || marginLeft === '0') {
+      // Left aligned: margin-left: 0, margin-right: auto
+      activeButtonSelector = '[data-command="justifyLeft"]';
+    } else if (marginRight === '0px' || marginRight === '0') {
+      // Right aligned: margin-left: auto, margin-right: 0
+      activeButtonSelector = '[data-command="justifyRight"]';
+    } else if (marginLeft === 'auto' && marginRight === 'auto') {
+      // Center aligned: both margins auto
+      activeButtonSelector = '[data-command="justifyCenter"]';
+    } else {
+      // Default/unknown alignment
+      activeButtonSelector = null;
+    }
+    
+    if (activeButtonSelector) {
       const activeButton = this.toolbar.querySelector(activeButtonSelector);
       if (activeButton) {
         activeButton.classList.add('active');
@@ -677,6 +752,9 @@ class EditorManager {
           this.adjustControlPanelPosition(wrapper, controlPanel);
           controlPanel.style.opacity = '1';
         }, 0);
+        
+        // Update alignment button states to reflect current image alignment
+        this.updateAlignmentButtonStates();
       }
     }
     // If click was outside image and its controls
