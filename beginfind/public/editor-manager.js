@@ -513,24 +513,39 @@ class EditorManager {
     // Reset all alignment buttons first
     this.resetAlignmentButtons();
     
-    // Determine alignment from wrapper's margin values
-    const marginLeft = wrapper.style.marginLeft || window.getComputedStyle(wrapper).marginLeft;
-    const marginRight = wrapper.style.marginRight || window.getComputedStyle(wrapper).marginRight;
+    // Determine alignment from wrapper's margin values - use inline styles first
+    const marginLeft = wrapper.style.marginLeft;
+    const marginRight = wrapper.style.marginRight;
     
     let activeButtonSelector;
     
-    if (marginLeft === '0px' || marginLeft === '0') {
+    // Check inline styles first (most reliable)
+    if (marginLeft === '0' && marginRight === 'auto') {
       // Left aligned: margin-left: 0, margin-right: auto
       activeButtonSelector = '[data-command="justifyLeft"]';
-    } else if (marginRight === '0px' || marginRight === '0') {
+    } else if (marginLeft === 'auto' && marginRight === '0') {
       // Right aligned: margin-left: auto, margin-right: 0
       activeButtonSelector = '[data-command="justifyRight"]';
     } else if (marginLeft === 'auto' && marginRight === 'auto') {
       // Center aligned: both margins auto
       activeButtonSelector = '[data-command="justifyCenter"]';
     } else {
-      // Default/unknown alignment
-      activeButtonSelector = null;
+      // Fallback to computed styles if inline styles are not set
+      const computedML = window.getComputedStyle(wrapper).marginLeft;
+      const computedMR = window.getComputedStyle(wrapper).marginRight;
+      
+      if (computedML === '0px' && computedMR !== '0px') {
+        activeButtonSelector = '[data-command="justifyLeft"]';
+      } else if (computedMR === '0px' && computedML !== '0px') {
+        activeButtonSelector = '[data-command="justifyRight"]';
+      } else if (computedML === '0px' && computedMR === '0px') {
+        // Both 0 could mean center with auto margins that computed to 0
+        // Check if wrapper has text-align center or is in a centered context
+        activeButtonSelector = '[data-command="justifyCenter"]';
+      } else {
+        // Default/unknown alignment
+        activeButtonSelector = null;
+      }
     }
     
     if (activeButtonSelector) {
