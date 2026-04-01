@@ -944,24 +944,29 @@ class EditorManager {
     popup.className = 'image-editor-popup';
     popup.style.cssText = 'position:absolute;background:var(--background-secondary);border:1px solid var(--background-accent);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1001;min-width:280px;max-width:320px;';
     
-    // Position popup near the settings button
+    // Position popup directly under the settings button
     const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
     if (settingsBtn) {
       const btnRect = settingsBtn.getBoundingClientRect();
-      const popupRect = popup.getBoundingClientRect(); // Will be calculated after append
       
       // Append temporarily to get dimensions
       popup.style.visibility = 'hidden';
       document.body.appendChild(popup);
       
       const actualPopupRect = popup.getBoundingClientRect();
-      let top = btnRect.bottom + 5;
-      let left = btnRect.right - actualPopupRect.width;
       
-      // Adjust if goes off screen
-      if (left < 10) left = 10;
-      if (top + actualPopupRect.height > window.innerHeight) {
-        top = btnRect.top - actualPopupRect.height - 5;
+      // Position exactly under the button, aligned to the right edge of the button
+      let top = btnRect.bottom + window.scrollY + 5;
+      let left = btnRect.right + window.scrollX - actualPopupRect.width;
+      
+      // Adjust if goes off screen horizontally
+      if (left < 10) {
+        left = btnRect.left + window.scrollX;
+      }
+      
+      // Adjust if goes off screen vertically (show above instead)
+      if (top + actualPopupRect.height > window.innerHeight + window.scrollY) {
+        top = btnRect.top + window.scrollY - actualPopupRect.height - 5;
       }
       
       popup.style.top = top + 'px';
@@ -1213,40 +1218,62 @@ class EditorManager {
     if (size === '100%') {
       imgElement.style.width = '100%';
       imgElement.style.maxWidth = 'none';
+      wrapper.style.width = '100%';
     } else {
       imgElement.style.width = size;
       imgElement.style.maxWidth = size;
+      wrapper.style.width = size;
     }
     imgElement.setAttribute('data-width', size);
+    
+    // Update caption max-width to match image barrier
+    const caption = wrapper.querySelector('.image-caption');
+    if (caption) {
+      caption.style.maxWidth = wrapper.style.width || '100%';
+    }
   }
   
-  // Apply alignment
+  // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Reset styles
+    // Reset all styles first
     wrapper.style.textAlign = '';
-    wrapper.style.display = '';
+    wrapper.style.display = 'inline-block';
     wrapper.style.justifyContent = '';
+    wrapper.style.marginLeft = '';
+    wrapper.style.marginRight = '';
     imgElement.style.float = '';
     imgElement.style.margin = '';
-    imgElement.style.display = '';
+    imgElement.style.display = 'block';
+    
+    // Wrapper is always inline-block to contain text underneath
+    wrapper.style.display = 'inline-block';
+    wrapper.style.verticalAlign = 'top';
+    wrapper.style.maxWidth = '100%';
+    wrapper.style.marginBottom = '10px';
     
     if (align === 'left') {
       wrapper.style.textAlign = 'left';
-      imgElement.style.float = 'left';
-      imgElement.style.margin = '0 15px 10px 0';
+      wrapper.style.marginLeft = '0';
+      wrapper.style.marginRight = 'auto';
     } else if (align === 'right') {
       wrapper.style.textAlign = 'right';
-      imgElement.style.float = 'right';
-      imgElement.style.margin = '0 0 10px 15px';
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = '0';
     } else {
-      // Center
+      // Center - wrapper becomes block and centers itself
       wrapper.style.textAlign = 'center';
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = 'auto';
       wrapper.style.display = 'block';
-      imgElement.style.float = 'none';
-      imgElement.style.margin = '10px auto';
-      imgElement.style.display = 'block';
+    }
+    
+    // Update caption alignment to match
+    const caption = wrapper.querySelector('.image-caption');
+    if (caption) {
+      caption.style.textAlign = align;
     }
   }
+
   
   // Update caption
   updateCaption(wrapper, text) {
@@ -1257,7 +1284,7 @@ class EditorManager {
     if (text && text.trim()) {
       const newCap = document.createElement('div');
       newCap.className = 'image-caption';
-      newCap.style.cssText = 'text-align:center;margin-top:8px;color:var(--text-muted);font-size:13px;font-style:italic;';
+      newCap.style.cssText = 'text-align:center;margin-top:8px;color:var(--text-muted);font-size:13px;font-style:italic;max-width:100%;';
       newCap.textContent = text;
       wrapper.appendChild(newCap);
     }

@@ -2119,17 +2119,20 @@ html {
 /* Стили для контейнера изображения */
 .image-wrapper {
     position: relative;
-    display: block;
+    display: inline-block; /* Changed to inline-block to act as barrier */
     max-width: 100%;
     overflow: visible;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    margin: 0 auto; /* Центрируем элемент */
+    margin: 0 auto;
+    vertical-align: top;
+    margin-bottom: 10px;
 }
 
 .article-inline-image {
     max-width: 100%;
     height: auto;
+    display: block;
 }
 
 /* Стили для панели управления изображением */
@@ -2244,11 +2247,15 @@ html {
 }
 
 .image-caption {
+    display: block;
     text-align: center;
     margin-top: 8px;
     color: var(--text-muted);
     font-size: 13px;
     font-style: italic;
+    max-width: 100%; /* Constrained by wrapper width */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 /* Mobile responsiveness for image editor */
