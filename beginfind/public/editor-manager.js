@@ -1235,43 +1235,37 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Reset all styles first
-    wrapper.style.textAlign = '';
-    wrapper.style.display = '';
-    wrapper.style.justifyContent = '';
+    // Сбрасываем только margins, сохраняя display: inline-block
     wrapper.style.marginLeft = '';
     wrapper.style.marginRight = '';
     imgElement.style.float = '';
-    imgElement.style.margin = '';
-    imgElement.style.display = 'block';
     
-    // Wrapper is always inline-block to contain text underneath
+    // Wrapper всегда inline-block для ограничения текста
+    wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'top';
     wrapper.style.maxWidth = '100%';
     wrapper.style.marginBottom = '10px';
     
     if (align === 'left') {
-      wrapper.style.textAlign = 'left';
-      wrapper.style.display = 'inline-block';
       wrapper.style.marginLeft = '0';
       wrapper.style.marginRight = 'auto';
     } else if (align === 'right') {
-      wrapper.style.textAlign = 'center'; // Caption always centered relative to image
-      wrapper.style.display = 'inline-block';
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = '0';
     } else {
-      // Center - wrapper becomes inline-block and centers itself via parent text-align
-      wrapper.style.textAlign = 'center'; // Caption always centered relative to image
-      wrapper.style.display = 'inline-block';
+      // Center
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = 'auto';
     }
     
-    // Update caption alignment to always be centered relative to the image
+    // Обновляем выравнивание подписи - всегда по центру относительно картинки
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
+      caption.style.display = 'block';
+      caption.style.marginLeft = 'auto';
+      caption.style.marginRight = 'auto';
       caption.style.textAlign = 'center';
+      caption.style.width = '100%';
     }
   }
 
