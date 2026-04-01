@@ -779,13 +779,23 @@ class EditorManager {
     const controlPanel = document.createElement('div');
     controlPanel.className = 'image-control-panel';
     controlPanel.style.position = 'absolute';
-    controlPanel.style.top = '5px';
-    controlPanel.style.right = '5px';
     controlPanel.style.display = 'flex';
     controlPanel.style.gap = '5px';
     controlPanel.style.zIndex = '1000';
     controlPanel.style.opacity = '0';
     controlPanel.style.transition = 'opacity 0.2s ease';
+    controlPanel.style.cursor = 'move';
+    controlPanel.setAttribute('data-draggable', 'true');
+    
+    // Add drag handle area
+    const dragHandle = document.createElement('div');
+    dragHandle.style.position = 'absolute';
+    dragHandle.style.top = '-8px';
+    dragHandle.style.left = '0';
+    dragHandle.style.right = '0';
+    dragHandle.style.height = '8px';
+    dragHandle.style.cursor = 'move';
+    controlPanel.appendChild(dragHandle);
 
     // Settings button - opens modal editor
     const settingsButton = document.createElement('button');
@@ -815,8 +825,77 @@ class EditorManager {
 
     controlPanel.appendChild(settingsButton);
     controlPanel.appendChild(deleteButton);
+    
+    // Make panel draggable
+    this.makePanelDraggable(controlPanel);
 
     return controlPanel;
+  }
+  
+  // Make panel draggable
+  makePanelDraggable(panel) {
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+    
+    const onMouseDown = (e) => {
+      // Only start dragging if clicking on the panel itself or drag handle
+      if (e.target.closest('button')) return;
+      
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      // Get current position
+      const rect = panel.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+      
+      // Switch to fixed positioning when dragging starts
+      panel.style.position = 'fixed';
+      panel.style.left = initialLeft + 'px';
+      panel.style.top = initialTop + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      
+      e.preventDefault();
+    };
+    
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      
+      let newLeft = initialLeft + dx;
+      let newTop = initialTop + dy;
+      
+      // Keep panel within viewport
+      const panelRect = panel.getBoundingClientRect();
+      const maxX = window.innerWidth - panelRect.width;
+      const maxY = window.innerHeight - panelRect.height;
+      
+      newLeft = Math.max(0, Math.min(newLeft, maxX));
+      newTop = Math.max(0, Math.min(newTop, maxY));
+      
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+    };
+    
+    const onMouseUp = () => {
+      isDragging = false;
+    };
+    
+    panel.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    
+    // Clean up listeners when panel is removed
+    const originalRemove = panel.remove;
+    panel.remove = function() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      return originalRemove.call(this);
+    };
   }
 
   // Create image size menu
@@ -903,6 +982,12 @@ class EditorManager {
   hideAllImageControls() {
     document.querySelectorAll('.image-control-panel').forEach(panel => {
       panel.style.opacity = '0';
+      // Reset position to absolute when hiding, so next time it appears it will be positioned relative to image
+      if (panel.getAttribute('data-draggable') === 'true') {
+        panel.style.position = 'absolute';
+        panel.style.left = '';
+        panel.style.top = '';
+      }
     });
     document.querySelectorAll('.image-size-menu').forEach(menu => {
       menu.style.display = 'none';
@@ -951,6 +1036,11 @@ class EditorManager {
 
   // Function to adjust controls panel position to prevent going off screen
   adjustControlPanelPosition(wrapper, controlPanel) {
+    // Don't reposition if user has already dragged the panel (it will be in fixed position)
+    if (controlPanel.style.position === 'fixed') {
+      return;
+    }
+    
     // Ensure controls panel is displayed to measure its dimensions
     controlPanel.style.visibility = 'hidden';
     controlPanel.style.opacity = '1';
@@ -960,35 +1050,34 @@ class EditorManager {
     const panelRect = controlPanel.getBoundingClientRect();
     const wrapperRect = wrapper.getBoundingClientRect();
 
-    // Calculate position in document coordinates
-    let top = 5; // top margin
-    let right = 5; // right margin
-
-    // Check if panel would go off the right edge of the window
-    if (wrapperRect.right - right - panelRect.width < 0) {
-      right = wrapperRect.right - 5; // Set margin so panel stays inside
-      controlPanel.style.right = right + 'px';
-      controlPanel.style.left = 'auto';
-    } else {
-      controlPanel.style.right = right + 'px';
-      controlPanel.style.left = 'auto';
+    // Calculate position - center horizontally above the image
+    const panelWidth = panelRect.width;
+    const wrapperWidth = wrapperRect.width;
+    
+    // Center the panel above the image
+    let leftPos = (wrapperWidth / 2) - (panelWidth / 2);
+    
+    // Ensure panel doesn't go off left edge
+    if (leftPos < 5) {
+      leftPos = 5;
+    }
+    
+    // Ensure panel doesn't go off right edge
+    if (leftPos + panelWidth > window.innerWidth - 5) {
+      leftPos = window.innerWidth - panelWidth - 5;
+    }
+    
+    // Position above the image
+    let topPos = -panelRect.height - 10; // 10px gap above image
+    
+    // If panel would go off top of viewport, position below instead
+    if (wrapperRect.top + topPos < 0) {
+      topPos = wrapperRect.height + 10;
     }
 
-    // Check if panel would go off the left edge of the window
-    if (wrapperRect.left + right + panelRect.width > window.innerWidth) {
-      // If controls panel goes off edges, move it to the left of the image
-      const newRight = -(panelRect.width + 5);
-      controlPanel.style.right = newRight + 'px';
-      controlPanel.style.left = 'auto';
-    }
-
-    // Check if panel would go off the top edge
-    if (wrapperRect.top + top < 0) {
-      top = -wrapperRect.top + 5; // Correct position
-      controlPanel.style.top = Math.max(5, top) + 'px';
-    } else {
-      controlPanel.style.top = top + 'px';
-    }
+    controlPanel.style.left = leftPos + 'px';
+    controlPanel.style.top = topPos + 'px';
+    controlPanel.style.right = 'auto';
 
     // Restore visibility
     controlPanel.style.visibility = 'visible';
