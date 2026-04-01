@@ -1119,7 +1119,13 @@ class EditorManager {
     // Create compact popup menu
     const popup = document.createElement('div');
     popup.className = 'image-editor-popup';
-    popup.style.cssText = 'position:absolute;background:var(--background-secondary);border:1px solid var(--background-accent);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1001;min-width:280px;max-width:320px;';
+    popup.style.cssText = 'position:fixed;background:var(--background-secondary);border:1px solid var(--background-accent);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1001;min-width:280px;max-width:320px;cursor:move;user-select:none;';
+    
+    // Add drag handle area at the top
+    const dragHandle = document.createElement('div');
+    dragHandle.style.cssText = 'height:16px;margin-bottom:8px;cursor:grab;opacity:0.5;';
+    dragHandle.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:10px;">⋮⋮</div>';
+    popup.appendChild(dragHandle);
     
     // Position popup directly under the settings button
     const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
@@ -1133,22 +1139,66 @@ class EditorManager {
       const actualPopupRect = popup.getBoundingClientRect();
       
       // Position exactly under the button, aligned to the right edge of the button
-      let top = btnRect.bottom + window.scrollY + 5;
-      let left = btnRect.right + window.scrollX - actualPopupRect.width;
+      let top = btnRect.bottom + 5;
+      let left = btnRect.right - actualPopupRect.width;
       
       // Adjust if goes off screen horizontally
       if (left < 10) {
-        left = btnRect.left + window.scrollX;
+        left = btnRect.left;
       }
       
       // Adjust if goes off screen vertically (show above instead)
-      if (top + actualPopupRect.height > window.innerHeight + window.scrollY) {
-        top = btnRect.top + window.scrollY - actualPopupRect.height - 5;
+      if (top + actualPopupRect.height > window.innerHeight) {
+        top = btnRect.top - actualPopupRect.height - 5;
       }
       
       popup.style.top = top + 'px';
       popup.style.left = left + 'px';
       popup.style.visibility = 'visible';
+      
+      // Make draggable
+      let isDragging = false;
+      let startX, startY, startTop, startLeft;
+      
+      dragHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        dragHandle.style.cursor = 'grabbing';
+        startX = e.clientX;
+        startY = e.clientY;
+        startTop = popup.offsetTop;
+        startLeft = popup.offsetLeft;
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+      
+      const onMouseMove = (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        
+        let newTop = startTop + dy;
+        let newLeft = startLeft + dx;
+        
+        // Keep within viewport
+        const popupRect = popup.getBoundingClientRect();
+        const maxTop = window.innerHeight - popupRect.height;
+        const maxLeft = window.innerWidth - popupRect.width;
+        
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        
+        popup.style.top = newTop + 'px';
+        popup.style.left = newLeft + 'px';
+      };
+      
+      const onMouseUp = () => {
+        isDragging = false;
+        dragHandle.style.cursor = 'grab';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
     }
     
     // Store temp values
