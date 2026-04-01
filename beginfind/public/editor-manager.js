@@ -513,39 +513,30 @@ class EditorManager {
     // Reset all alignment buttons first
     this.resetAlignmentButtons();
     
-    // Determine alignment from wrapper's margin values - use inline styles first
-    const marginLeft = wrapper.style.marginLeft;
-    const marginRight = wrapper.style.marginRight;
+    // Получаем вычисленные стили для определения текущего выравнивания
+    const computedStyle = window.getComputedStyle(wrapper);
+    const marginLeft = computedStyle.marginLeft;
+    const marginRight = computedStyle.marginRight;
     
     let activeButtonSelector;
     
-    // Check inline styles first (most reliable)
-    if (marginLeft === '0' && marginRight === 'auto') {
-      // Left aligned: margin-left: 0, margin-right: auto
+    // Определяем выравнивание по вычисленным значениям margin
+    // При margin: '0 auto 10px 0' (left) -> marginLeft='0px', marginRight='auto' или числовое значение
+    // При margin: '0 0 10px auto' (right) -> marginLeft='auto' или числовое, marginRight='0px'
+    // При margin: '0 auto 10px auto' (center) -> оба margins не '0px'
+    
+    if (marginLeft === '0px' && marginRight !== '0px') {
+      // Left aligned
       activeButtonSelector = '[data-command="justifyLeft"]';
-    } else if (marginLeft === 'auto' && marginRight === '0') {
-      // Right aligned: margin-left: auto, margin-right: 0
+    } else if (marginRight === '0px' && marginLeft !== '0px') {
+      // Right aligned
       activeButtonSelector = '[data-command="justifyRight"]';
-    } else if (marginLeft === 'auto' && marginRight === 'auto') {
-      // Center aligned: both margins auto
+    } else if (marginLeft !== '0px' && marginRight !== '0px') {
+      // Center aligned - оба margins не нулевые
       activeButtonSelector = '[data-command="justifyCenter"]';
     } else {
-      // Fallback to computed styles if inline styles are not set
-      const computedML = window.getComputedStyle(wrapper).marginLeft;
-      const computedMR = window.getComputedStyle(wrapper).marginRight;
-      
-      if (computedML === '0px' && computedMR !== '0px') {
-        activeButtonSelector = '[data-command="justifyLeft"]';
-      } else if (computedMR === '0px' && computedML !== '0px') {
-        activeButtonSelector = '[data-command="justifyRight"]';
-      } else if (computedML === '0px' && computedMR === '0px') {
-        // Both 0 could mean center with auto margins that computed to 0
-        // Check if wrapper has text-align center or is in a centered context
-        activeButtonSelector = '[data-command="justifyCenter"]';
-      } else {
-        // Default/unknown alignment
-        activeButtonSelector = null;
-      }
+      // По умолчанию считаем что это center
+      activeButtonSelector = '[data-command="justifyCenter"]';
     }
     
     if (activeButtonSelector) {
@@ -1328,51 +1319,46 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Полностью удаляем все inline-стили выравнивания через removeAttribute
-    wrapper.style.removeProperty('margin-left');
-    wrapper.style.removeProperty('margin-right');
-    wrapper.style.removeProperty('margin');
-    wrapper.style.removeProperty('display');
-    wrapper.style.removeProperty('vertical-align');
-    wrapper.style.removeProperty('max-width');
-    wrapper.style.removeProperty('margin-bottom');
-    wrapper.style.removeProperty('justify-content');
-    imgElement.style.removeProperty('float');
+    // Сбрасываем ВСЕ возможные стили выравнивания через cssText
+    // Это гарантирует полную очистку перед применением новых стилей
+    const currentDisplay = wrapper.style.display;
+    const currentMaxWidth = wrapper.style.maxWidth;
+    const currentMarginBottom = wrapper.style.marginBottom;
+    const currentVerticalAlign = wrapper.style.verticalAlign;
     
-    // Принудительно устанавливаем display: inline-block для wrapper
-    // Это критически важно - wrapper должен быть inline-block чтобы работать как барьер
+    wrapper.style.cssText = '';
+    
+    // Восстанавливаем базовые стили которые не относятся к выравниванию
     wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'top';
     wrapper.style.maxWidth = '100%';
     wrapper.style.marginBottom = '10px';
     
-    // Применяем выравнивание через margins
+    // Очищаем стили изображения
+    imgElement.style.cssText = '';
+    imgElement.style.maxWidth = '100%';
+    imgElement.style.height = 'auto';
+    imgElement.style.display = 'block';
+    
+    // Применяем выравнивание через margins - только ОДНО конкретное значение
     if (align === 'left') {
-      wrapper.style.marginLeft = '0';
-      wrapper.style.marginRight = 'auto';
+      wrapper.style.margin = '0 auto 10px 0';
     } else if (align === 'right') {
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = '0';
+      wrapper.style.margin = '0 0 10px auto';
     } else {
-      // Center
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = 'auto';
+      // Center - по умолчанию и при любом другом значении
+      wrapper.style.margin = '0 auto 10px auto';
     }
     
-    // Обновляем выравнивание подписи - всегда по центру относительно картинки
+    // Обновляем выравнивание подписи
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
-      caption.style.removeProperty('display');
-      caption.style.removeProperty('margin-left');
-      caption.style.removeProperty('margin-right');
-      caption.style.removeProperty('text-align');
-      caption.style.removeProperty('width');
-      
+      caption.style.cssText = '';
       caption.style.display = 'block';
-      caption.style.marginLeft = 'auto';
-      caption.style.marginRight = 'auto';
+      caption.style.margin = '0 auto';
       caption.style.textAlign = 'center';
       caption.style.width = '100%';
+      caption.style.maxWidth = wrapper.style.maxWidth;
     }
     
     // Принудительно перерисовываем элемент
