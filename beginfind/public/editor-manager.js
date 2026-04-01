@@ -988,7 +988,7 @@ class EditorManager {
     closeBtnSmall.style.cssText = 'background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:5px;border-radius:4px;transition:all 0.2s;';
     closeBtnSmall.onmouseover = () => { closeBtnSmall.style.backgroundColor = 'var(--background-accent)'; closeBtnSmall.style.color = 'var(--text-normal)'; };
     closeBtnSmall.onmouseout = () => { closeBtnSmall.style.backgroundColor = 'transparent'; closeBtnSmall.style.color = 'var(--text-muted)'; };
-    closeBtnSmall.onclick = closeModal;
+    // closeModal будет назначен позже, после объявления функции
     modalHeader.appendChild(closeBtnSmall);
     
     controlsPanel.appendChild(modalHeader);
@@ -1250,7 +1250,7 @@ class EditorManager {
     closeBtn.style.cssText = 'padding:10px 20px;border:none;border-radius:6px;background-color:var(--background-accent);color:var(--text-normal);cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;';
     closeBtn.onmouseover = () => { closeBtn.style.backgroundColor = 'var(--background-modifier-selected)'; };
     closeBtn.onmouseout = () => { closeBtn.style.backgroundColor = 'var(--background-accent)'; };
-    closeBtn.onclick = closeModal;
+    // onclick будет назначен после объявления closeModal
 
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
@@ -1298,6 +1298,10 @@ class EditorManager {
         modalOverlay.remove();
       }, 300);
     };
+    
+    // Назначаем обработчики на кнопки закрытия после объявления функции
+    closeBtnSmall.onclick = closeModal;
+    closeBtn.onclick = closeModal;
 
     // Close on overlay click
     modalOverlay.onclick = (e) => {
