@@ -1328,7 +1328,16 @@ class EditorManager {
     wrapper.style.marginRight = '';
     wrapper.style.marginTop = '';
     wrapper.style.marginBottom = '';
-    wrapper.style.display = 'inline-block';
+    wrapper.style.float = '';
+    
+    // Для центрирования и выравнивания по правому краю нужен display: block
+    // Для левого края можно использовать float или margin
+    if (align === 'center' || align === 'right') {
+      wrapper.style.display = 'block';
+    } else {
+      wrapper.style.display = 'inline-block';
+    }
+    
     wrapper.style.verticalAlign = 'top';
     
     // Очищаем только стили изображения связанные с отображением
@@ -1344,13 +1353,16 @@ class EditorManager {
       wrapper.style.width = currentWrapperWidth;
     }
     
-    // Применяем выравнивание через margins - только ОДНО конкретное значение
+    // Применяем выравнивание
     if (align === 'left') {
+      // Левое выравнивание через float
+      wrapper.style.float = 'left';
       wrapper.style.marginLeft = '0';
-      wrapper.style.marginRight = 'auto';
+      wrapper.style.marginRight = '10px';
       wrapper.style.marginTop = '0';
       wrapper.style.marginBottom = '10px';
     } else if (align === 'right') {
+      // Правое выравнивание через margin auto
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = '0';
       wrapper.style.marginTop = '0';
