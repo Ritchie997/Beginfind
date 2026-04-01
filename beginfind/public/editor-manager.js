@@ -922,133 +922,104 @@ class EditorManager {
     this.hideAllImageControls();
   }
 
-  // Open image editor modal
+  // Open compact image editor popup (no modal)
   openImageEditorModal(imgElement) {
     // Hide all controls first
     this.hideAllImageControls();
     
     // Get current image properties
-    const currentWidth = imgElement.style.maxWidth || imgElement.style.width || 'auto';
-    const currentAlign = imgElement.parentElement.style.textAlign || 
-                         (imgElement.parentElement.style.display === 'flex' ? 
-                          (imgElement.parentElement.style.justifyContent === 'flex-end' ? 'right' : 
-                           imgElement.parentElement.style.justifyContent === 'center' ? 'center' : 'left') : 
+    const currentWidth = imgElement.getAttribute('data-width') || imgElement.style.maxWidth || imgElement.style.width || '100%';
+    const wrapper = imgElement.parentElement;
+    const currentAlign = wrapper.style.textAlign || 
+                         (wrapper.style.display === 'flex' ? 
+                          (wrapper.style.justifyContent === 'flex-end' ? 'right' : 
+                           wrapper.style.justifyContent === 'center' ? 'center' : 'left') : 
                           'center');
     const currentAlt = imgElement.alt || '';
-    const captionElement = imgElement.parentElement.querySelector('.image-caption');
+    const captionElement = wrapper.querySelector('.image-caption');
     const currentCaption = captionElement ? captionElement.textContent : '';
     
-    // Store references for later use
-    const wrapper = imgElement.parentElement;
+    // Create compact popup menu
+    const popup = document.createElement('div');
+    popup.className = 'image-editor-popup';
+    popup.style.cssText = 'position:absolute;background:var(--background-secondary);border:1px solid var(--background-accent);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1001;min-width:280px;max-width:320px;';
+    
+    // Position popup near the settings button
+    const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
+    if (settingsBtn) {
+      const btnRect = settingsBtn.getBoundingClientRect();
+      const popupRect = popup.getBoundingClientRect(); // Will be calculated after append
+      
+      // Append temporarily to get dimensions
+      popup.style.visibility = 'hidden';
+      document.body.appendChild(popup);
+      
+      const actualPopupRect = popup.getBoundingClientRect();
+      let top = btnRect.bottom + 5;
+      let left = btnRect.right - actualPopupRect.width;
+      
+      // Adjust if goes off screen
+      if (left < 10) left = 10;
+      if (top + actualPopupRect.height > window.innerHeight) {
+        top = btnRect.top - actualPopupRect.height - 5;
+      }
+      
+      popup.style.top = top + 'px';
+      popup.style.left = left + 'px';
+      popup.style.visibility = 'visible';
+    }
+    
+    // Store temp values
     let tempWidth = currentWidth;
     let tempAlign = currentAlign;
     let tempAlt = currentAlt;
     let tempCaption = currentCaption;
     
-    // Create modal overlay
-    const modalOverlay = document.createElement('div');
-    modalOverlay.className = 'image-editor-modal-overlay';
-    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.3s ease;backdrop-filter:blur(4px);';
-    
-    // Create modal content - more compact design with preview
-    const modalContent = document.createElement('div');
-    modalContent.className = 'image-editor-modal';
-    modalContent.style.cssText = 'background-color:var(--background-secondary);border-radius:12px;padding:0;width:95%;max-width:800px;max-height:85vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.6);transform:scale(0.9);transition:transform 0.3s ease;display:grid;grid-template-columns:1fr 320px;';
-    
-    // Left side - Preview area
-    const previewArea = document.createElement('div');
-    previewArea.className = 'image-preview-area';
-    previewArea.style.cssText = 'background-color:var(--background-tertiary);padding:20px;display:flex;align-items:center;justify-content:center;min-height:400px;position:relative;overflow:auto;';
-    
-    // Clone image for preview
-    const previewImg = imgElement.cloneNode(true);
-    previewImg.style.cssText = 'max-width:100%;height:auto;transition:all 0.3s ease;';
-    previewImg.style.maxWidth = currentWidth;
-    if (currentWidth !== '100%' && currentWidth !== 'auto') {
-      previewImg.style.width = currentWidth;
-    }
-    previewArea.appendChild(previewImg);
-    
-    // Right side - Controls panel
-    const controlsPanel = document.createElement('div');
-    controlsPanel.className = 'image-controls-panel';
-    controlsPanel.style.cssText = 'padding:20px;overflow-y:auto;max-height:85vh;background:var(--background-secondary);border-left:1px solid var(--background-accent);';
-    
-    // Modal header in controls panel
-    const modalHeader = document.createElement('div');
-    modalHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:1px solid var(--background-accent);';
-    
-    const headerTitle = document.createElement('h3');
-    headerTitle.textContent = 'Настройки изображения';
-    headerTitle.style.cssText = 'color:var(--header-primary);font-size:16px;font-weight:600;margin:0;';
-    modalHeader.appendChild(headerTitle);
-    
-    const closeBtnSmall = document.createElement('button');
-    closeBtnSmall.innerHTML = '✕';
-    closeBtnSmall.style.cssText = 'background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:5px;border-radius:4px;transition:all 0.2s;';
-    closeBtnSmall.onmouseover = () => { closeBtnSmall.style.backgroundColor = 'var(--background-accent)'; closeBtnSmall.style.color = 'var(--text-normal)'; };
-    closeBtnSmall.onmouseout = () => { closeBtnSmall.style.backgroundColor = 'transparent'; closeBtnSmall.style.color = 'var(--text-muted)'; };
-    // closeModal будет назначен позже, после объявления функции
-    modalHeader.appendChild(closeBtnSmall);
-    
-    controlsPanel.appendChild(modalHeader);
-    
     // Size section
     const sizeSection = document.createElement('div');
-    sizeSection.style.marginBottom = '20px';
+    sizeSection.style.marginBottom = '12px';
     
-    const sizeLabel = document.createElement('label');
+    const sizeLabel = document.createElement('div');
     sizeLabel.textContent = 'Размер';
-    sizeLabel.style.display = 'block';
-    sizeLabel.style.marginBottom = '10px';
-    sizeLabel.style.color = 'var(--text-normal)';
-    sizeLabel.style.fontWeight = 'bold';
+    sizeLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
     sizeSection.appendChild(sizeLabel);
     
     const sizePresets = document.createElement('div');
-    sizePresets.className = 'image-size-presets';
-    sizePresets.style.display = 'flex';
-    sizePresets.style.gap = '10px';
-    sizePresets.style.flexWrap = 'wrap';
+    sizePresets.style.display = 'grid';
+    sizePresets.style.gridTemplateColumns = '1fr 1fr';
+    sizePresets.style.gap = '6px';
     
     const presets = [
-      { name: 'Маленький', value: '300px' },
-      { name: 'Средний', value: '500px' },
-      { name: 'Большой', value: '800px' },
-      { name: 'На всю ширину', value: '100%' }
+      { name: 'Мал.', value: '300px' },
+      { name: 'Сред.', value: '500px' },
+      { name: 'Бол.', value: '800px' },
+      { name: '100%', value: '100%' }
     ];
     
     presets.forEach(preset => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'image-size-preset-btn';
       btn.textContent = preset.name;
-      btn.style.padding = '8px 16px';
-      btn.style.border = '1px solid var(--background-accent)';
-      btn.style.borderRadius = '4px';
+      btn.style.cssText = 'padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:(tempWidth === preset.value) ? var(--blurple) : var(--background-tertiary);color:(tempWidth === preset.value) ? #fff : var(--text-normal);cursor:pointer;font-size:12px;transition:all 0.2s;';
       btn.style.backgroundColor = (currentWidth === preset.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
       btn.style.color = (currentWidth === preset.value) ? '#fff' : 'var(--text-normal)';
-      btn.style.cursor = 'pointer';
-      btn.style.transition = 'all 0.2s';
       
-      btn.onclick = () => {
+      btn.onmouseover = () => {
+        if (tempWidth !== preset.value) {
+          btn.style.backgroundColor = 'var(--background-modifier-selected)';
+        }
+      };
+      btn.onmouseout = () => {
+        if (tempWidth !== preset.value) {
+          btn.style.backgroundColor = 'var(--background-tertiary)';
+        }
+      };
+      
+      btn.onclick = (e) => {
+        e.stopPropagation();
         tempWidth = preset.value;
-        // Update preview in modal
-        if (preset.value === '100%') {
-          previewImg.style.width = '100%';
-          previewImg.style.maxWidth = 'none';
-        } else {
-          previewImg.style.width = preset.value;
-          previewImg.style.maxWidth = preset.value;
-        }
-        // Also update original image for live preview
-        if (preset.value === '100%') {
-          imgElement.style.width = '100%';
-          imgElement.style.maxWidth = 'none';
-        } else {
-          imgElement.style.width = preset.value;
-          imgElement.style.maxWidth = preset.value;
-        }
+        // Apply immediately
+        this.applyImageSize(imgElement, wrapper, preset.value);
         // Update button states
         Array.from(sizePresets.children).forEach(child => {
           child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1056,8 +1027,6 @@ class EditorManager {
         });
         btn.style.backgroundColor = 'var(--blurple)';
         btn.style.color = '#fff';
-        // Reset slider preset state
-        sliderValue.textContent = preset.value;
       };
       
       sizePresets.appendChild(btn);
@@ -1067,42 +1036,25 @@ class EditorManager {
     
     // Custom width slider
     const sliderContainer = document.createElement('div');
-    sliderContainer.style.marginTop = '15px';
-    
-    const sliderLabel = document.createElement('label');
-    sliderLabel.textContent = 'Точная настройка ширины';
-    sliderLabel.style.display = 'block';
-    sliderLabel.style.marginBottom = '8px';
-    sliderLabel.style.color = 'var(--text-muted)';
-    sliderLabel.style.fontSize = '13px';
-    sliderContainer.appendChild(sliderLabel);
+    sliderContainer.style.marginTop = '10px';
     
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '100';
     slider.max = '1200';
     slider.value = parseInt(currentWidth) || 500;
-    slider.style.width = '100%';
-    slider.style.cursor = 'pointer';
+    slider.style.cssText = 'width:100%;cursor:pointer;';
     
-    const sliderValue = document.createElement('span');
+    const sliderValue = document.createElement('div');
     sliderValue.textContent = `${slider.value}px`;
-    sliderValue.style.display = 'block';
-    sliderValue.style.textAlign = 'right';
-    sliderValue.style.color = 'var(--text-muted)';
-    sliderValue.style.fontSize = '12px';
-    sliderValue.style.marginTop = '5px';
+    sliderValue.style.cssText = 'text-align:right;color:var(--text-muted);font-size:11px;margin-top:4px;';
     
-    slider.oninput = () => {
+    slider.oninput = (e) => {
+      e.stopPropagation();
       const val = `${slider.value}px`;
       sliderValue.textContent = val;
       tempWidth = val;
-      // Update preview in modal
-      previewImg.style.width = val;
-      previewImg.style.maxWidth = val;
-      // Also update original image for live preview
-      imgElement.style.width = val;
-      imgElement.style.maxWidth = val;
+      this.applyImageSize(imgElement, wrapper, val);
       // Reset preset buttons
       Array.from(sizePresets.children).forEach(child => {
         child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1113,51 +1065,51 @@ class EditorManager {
     sliderContainer.appendChild(slider);
     sliderContainer.appendChild(sliderValue);
     sizeSection.appendChild(sliderContainer);
-    
-    modalContent.appendChild(sizeSection);
+    popup.appendChild(sizeSection);
     
     // Alignment section
     const alignSection = document.createElement('div');
-    alignSection.style.marginBottom = '20px';
+    alignSection.style.marginBottom = '12px';
     
-    const alignLabel = document.createElement('label');
+    const alignLabel = document.createElement('div');
     alignLabel.textContent = 'Выравнивание';
-    alignLabel.style.display = 'block';
-    alignLabel.style.marginBottom = '10px';
-    alignLabel.style.color = 'var(--text-normal)';
-    alignLabel.style.fontWeight = 'bold';
+    alignLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
     alignSection.appendChild(alignLabel);
     
     const alignButtons = document.createElement('div');
     alignButtons.style.display = 'flex';
-    alignButtons.style.gap = '10px';
+    alignButtons.style.gap = '6px';
     
     const alignOptions = [
-      { icon: '⬅️', value: 'left', title: 'По левому краю' },
+      { icon: '⬅️', value: 'left', title: 'Слева' },
       { icon: '↕️', value: 'center', title: 'По центру' },
-      { icon: '➡️', value: 'right', title: 'По правому краю' }
+      { icon: '➡️', value: 'right', title: 'Справа' }
     ];
     
     alignOptions.forEach(option => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'image-align-btn';
-      btn.innerHTML = `<span>${option.icon}</span>`;
+      btn.innerHTML = option.icon;
       btn.title = option.title;
-      btn.style.padding = '10px 15px';
-      btn.style.border = '1px solid var(--background-accent)';
-      btn.style.borderRadius = '4px';
+      btn.style.cssText = 'flex:1;padding:8px;border:1px solid var(--background-accent);border-radius:4px;background:(tempAlign === option.value) ? var(--blurple) : var(--background-tertiary);color:(tempAlign === option.value) ? #fff : var(--text-normal);cursor:pointer;font-size:14px;transition:all 0.2s;';
       btn.style.backgroundColor = (currentAlign === option.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
       btn.style.color = (currentAlign === option.value) ? '#fff' : 'var(--text-normal)';
-      btn.style.cursor = 'pointer';
-      btn.style.fontSize = '16px';
-      btn.style.transition = 'all 0.2s';
-      btn.style.flex = '1';
       
-      btn.onclick = () => {
+      btn.onmouseover = () => {
+        if (tempAlign !== option.value) {
+          btn.style.backgroundColor = 'var(--background-modifier-selected)';
+        }
+      };
+      btn.onmouseout = () => {
+        if (tempAlign !== option.value) {
+          btn.style.backgroundColor = 'var(--background-tertiary)';
+        }
+      };
+      
+      btn.onclick = (e) => {
+        e.stopPropagation();
         tempAlign = option.value;
-        // Update preview
-        this.applyAlignmentPreview(imgElement, wrapper, option.value);
+        this.applyAlignment(imgElement, wrapper, option.value);
         // Update button states
         Array.from(alignButtons.children).forEach(child => {
           child.style.backgroundColor = 'var(--background-tertiary)';
@@ -1171,205 +1123,119 @@ class EditorManager {
     });
     
     alignSection.appendChild(alignButtons);
-    modalContent.appendChild(alignSection);
+    popup.appendChild(alignSection);
     
     // Alt text section
     const altSection = document.createElement('div');
-    altSection.style.marginBottom = '20px';
+    altSection.style.marginBottom = '12px';
     
-    const altLabel = document.createElement('label');
-    altLabel.textContent = 'Альтернативный текст';
-    altLabel.style.display = 'block';
-    altLabel.style.marginBottom = '8px';
-    altLabel.style.color = 'var(--text-normal)';
-    altLabel.style.fontWeight = 'bold';
+    const altLabel = document.createElement('div');
+    altLabel.textContent = 'ALT текст';
+    altLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:6px;';
     altSection.appendChild(altLabel);
     
     const altInput = document.createElement('input');
     altInput.type = 'text';
     altInput.value = currentAlt;
-    altInput.placeholder = 'Описание изображения для доступности';
-    altInput.style.width = '100%';
-    altInput.style.padding = '10px';
-    altInput.style.border = '1px solid var(--background-accent)';
-    altInput.style.borderRadius = '4px';
-    altInput.style.backgroundColor = 'var(--background-tertiary)';
-    altInput.style.color = 'var(--text-normal)';
-    altInput.style.fontSize = '14px';
+    altInput.placeholder = 'Описание изображения';
+    altInput.style.cssText = 'width:100%;padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:var(--background-tertiary);color:var(--text-normal);font-size:12px;box-sizing:border-box;';
     
-    altInput.oninput = () => {
+    altInput.oninput = (e) => {
+      e.stopPropagation();
       tempAlt = altInput.value;
-      // Update preview
       imgElement.alt = altInput.value;
     };
     
     altSection.appendChild(altInput);
-    modalContent.appendChild(altSection);
+    popup.appendChild(altSection);
     
     // Caption section
     const captionSection = document.createElement('div');
-    captionSection.style.marginBottom = '20px';
+    captionSection.style.marginBottom = '12px';
     
-    const captionLabel = document.createElement('label');
+    const captionLabel = document.createElement('div');
     captionLabel.textContent = 'Подпись';
-    captionLabel.style.display = 'block';
-    captionLabel.style.marginBottom = '8px';
-    captionLabel.style.color = 'var(--text-normal)';
-    captionLabel.style.fontWeight = 'bold';
+    captionLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:6px;';
     captionSection.appendChild(captionLabel);
     
     const captionInput = document.createElement('textarea');
     captionInput.value = currentCaption;
     captionInput.placeholder = 'Подпись под изображением';
-    captionInput.style.width = '100%';
-    captionInput.style.padding = '10px';
-    captionInput.style.border = '1px solid var(--background-accent)';
-    captionInput.style.borderRadius = '4px';
-    captionInput.style.backgroundColor = 'var(--background-tertiary)';
-    captionInput.style.color = 'var(--text-normal)';
-    captionInput.style.fontSize = '14px';
-    captionInput.style.resize = 'vertical';
-    captionInput.style.minHeight = '60px';
+    captionInput.style.cssText = 'width:100%;padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:var(--background-tertiary);color:var(--text-normal);font-size:12px;resize:vertical;min-height:50px;box-sizing:border-box;';
     
-    captionInput.oninput = () => {
+    captionInput.oninput = (e) => {
+      e.stopPropagation();
       tempCaption = captionInput.value;
-      // Update preview
-      this.updateCaptionPreview(wrapper, captionInput.value);
+      this.updateCaption(wrapper, captionInput.value);
     };
-
+    
     captionSection.appendChild(captionInput);
-    controlsPanel.appendChild(captionSection);
-
-    // Action buttons - compact design
-    const actionButtons = document.createElement('div');
-    actionButtons.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;margin-top:25px;padding-top:15px;border-top:1px solid var(--background-accent);';
-
+    popup.appendChild(captionSection);
+    
+    // Close button
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.textContent = 'Отмена';
-    closeBtn.style.cssText = 'padding:10px 20px;border:none;border-radius:6px;background-color:var(--background-accent);color:var(--text-normal);cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s;';
-    closeBtn.onmouseover = () => { closeBtn.style.backgroundColor = 'var(--background-modifier-selected)'; };
-    closeBtn.onmouseout = () => { closeBtn.style.backgroundColor = 'var(--background-accent)'; };
-    // onclick будет назначен после объявления closeModal
-
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.textContent = 'Сохранить';
-    saveBtn.style.cssText = 'padding:10px 24px;border:none;border-radius:6px;background-color:var(--blurple);color:#fff;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;box-shadow:0 2px 8px rgba(88,101,242,0.3);';
-    saveBtn.onmouseover = () => { saveBtn.style.backgroundColor = '#7289da'; saveBtn.style.boxShadow = '0 4px 12px rgba(88,101,242,0.4)'; };
-    saveBtn.onmouseout = () => { saveBtn.style.backgroundColor = 'var(--blurple)'; saveBtn.style.boxShadow = '0 2px 8px rgba(88,101,242,0.3)'; };
-    saveBtn.onclick = () => {
-      // Finalize all changes - preserve width settings
-      if (tempWidth === '100%') {
-        imgElement.style.width = '100%';
-        imgElement.style.maxWidth = 'none';
-      } else {
-        imgElement.style.width = tempWidth;
-        imgElement.style.maxWidth = tempWidth;
-      }
-      imgElement.setAttribute('data-width', tempWidth);
-      imgElement.alt = tempAlt;
-
-      // Apply final alignment
-      this.applyAlignmentFinal(imgElement, wrapper, tempAlign);
-
-      // Finalize caption
-      this.updateCaptionFinal(wrapper, tempCaption);
-
-      showMessage('Настройки изображения сохранены', 'success');
-      closeModal();
+    closeBtn.textContent = 'Закрыть';
+    closeBtn.style.cssText = 'width:100%;padding:8px;border:none;border-radius:4px;background:var(--background-accent);color:var(--text-normal);cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s;';
+    
+    closeBtn.onmouseover = () => {
+      closeBtn.style.backgroundColor = 'var(--background-modifier-selected)';
     };
-
-    actionButtons.appendChild(closeBtn);
-    actionButtons.appendChild(saveBtn);
-    controlsPanel.appendChild(actionButtons);
-
-    // Assemble modal
-    modalContent.appendChild(previewArea);
-    modalContent.appendChild(controlsPanel);
-    modalOverlay.appendChild(modalContent);
-    document.body.appendChild(modalOverlay);
-
-    // Close function
-    const closeModal = () => {
-      modalOverlay.style.opacity = '0';
-      modalContent.style.transform = 'scale(0.9)';
-      setTimeout(() => {
-        modalOverlay.remove();
-      }, 300);
+    closeBtn.onmouseout = () => {
+      closeBtn.style.backgroundColor = 'var(--background-accent)';
     };
     
-    // Назначаем обработчики на кнопки закрытия после объявления функции
-    closeBtnSmall.onclick = closeModal;
-    closeBtn.onclick = closeModal;
-
-    // Close on overlay click
-    modalOverlay.onclick = (e) => {
-      if (e.target === modalOverlay) {
-        closeModal();
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      popup.remove();
+    };
+    
+    popup.appendChild(closeBtn);
+    
+    // Add click outside to close
+    const closeOnClickOutside = (e) => {
+      if (!popup.contains(e.target)) {
+        popup.remove();
+        document.removeEventListener('click', closeOnClickOutside);
       }
     };
-
-    // Show modal with animation
+    
+    // Delay adding the listener so the current click doesn't trigger it
     setTimeout(() => {
-      modalOverlay.style.opacity = '1';
-      modalContent.style.transform = 'scale(1)';
+      document.addEventListener('click', closeOnClickOutside);
     }, 10);
+    
+    document.body.appendChild(popup);
   }
   
-  // Helper: Apply alignment preview
-  applyAlignmentPreview(imgElement, wrapper, align) {
+  // Apply image size
+  applyImageSize(imgElement, wrapper, size) {
+    if (size === '100%') {
+      imgElement.style.width = '100%';
+      imgElement.style.maxWidth = 'none';
+    } else {
+      imgElement.style.width = size;
+      imgElement.style.maxWidth = size;
+    }
+    imgElement.setAttribute('data-width', size);
+  }
+  
+  // Apply alignment
+  applyAlignment(imgElement, wrapper, align) {
     // Reset styles
     wrapper.style.textAlign = '';
     wrapper.style.display = '';
     wrapper.style.justifyContent = '';
     imgElement.style.float = '';
-    imgElement.style.marginLeft = '';
-    imgElement.style.marginRight = '';
+    imgElement.style.margin = '';
     imgElement.style.display = '';
     
     if (align === 'left') {
-      imgElement.style.float = 'left';
-      imgElement.style.marginRight = '15px';
-      imgElement.style.marginLeft = '0';
-    } else if (align === 'right') {
-      imgElement.style.float = 'right';
-      imgElement.style.marginLeft = '15px';
-      imgElement.style.marginRight = '0';
-    } else {
-      // Center
-      wrapper.style.textAlign = 'center';
-      wrapper.style.display = 'block';
-      imgElement.style.float = 'none';
-      imgElement.style.marginLeft = 'auto';
-      imgElement.style.marginRight = 'auto';
-      imgElement.style.display = 'block';
-    }
-  }
-  
-  // Helper: Apply final alignment
-  applyAlignmentFinal(imgElement, wrapper, align) {
-    // Preserve width and max-width before resetting
-    const savedWidth = imgElement.style.width;
-    const savedMaxWidth = imgElement.style.maxWidth;
-    const savedDataWidth = imgElement.getAttribute('data-width');
-    
-    // Reset all styles first
-    imgElement.style.cssText = '';
-    
-    // Restore width properties
-    if (savedWidth) imgElement.style.width = savedWidth;
-    if (savedMaxWidth) imgElement.style.maxWidth = savedMaxWidth;
-    if (savedDataWidth) imgElement.setAttribute('data-width', savedDataWidth);
-    
-    if (align === 'left') {
       wrapper.style.textAlign = 'left';
-      wrapper.style.display = 'block';
       imgElement.style.float = 'left';
       imgElement.style.margin = '0 15px 10px 0';
     } else if (align === 'right') {
       wrapper.style.textAlign = 'right';
-      wrapper.style.display = 'block';
       imgElement.style.float = 'right';
       imgElement.style.margin = '0 0 10px 15px';
     } else {
@@ -1382,29 +1248,8 @@ class EditorManager {
     }
   }
   
-  // Helper: Update caption preview
-  updateCaptionPreview(wrapper, text) {
-    let capEl = wrapper.querySelector('.image-caption');
-    
-    if (text && text.trim()) {
-      if (!capEl) {
-        capEl = document.createElement('div');
-        capEl.className = 'image-caption';
-        capEl.style.textAlign = 'center';
-        capEl.style.marginTop = '8px';
-        capEl.style.color = 'var(--text-muted)';
-        capEl.style.fontSize = '13px';
-        capEl.style.fontStyle = 'italic';
-        wrapper.appendChild(capEl);
-      }
-      capEl.textContent = text;
-    } else {
-      if (capEl) capEl.remove();
-    }
-  }
-  
-  // Helper: Update caption final
-  updateCaptionFinal(wrapper, text) {
+  // Update caption
+  updateCaption(wrapper, text) {
     // Remove old caption
     let oldCap = wrapper.querySelector('.image-caption');
     if (oldCap) oldCap.remove();
@@ -1412,11 +1257,7 @@ class EditorManager {
     if (text && text.trim()) {
       const newCap = document.createElement('div');
       newCap.className = 'image-caption';
-      newCap.style.textAlign = 'center';
-      newCap.style.marginTop = '8px';
-      newCap.style.color = 'var(--text-muted)';
-      newCap.style.fontSize = '13px';
-      newCap.style.fontStyle = 'italic';
+      newCap.style.cssText = 'text-align:center;margin-top:8px;color:var(--text-muted);font-size:13px;font-style:italic;';
       newCap.textContent = text;
       wrapper.appendChild(newCap);
     }
