@@ -845,7 +845,7 @@ class EditorManager {
       startX = e.clientX;
       startY = e.clientY;
       
-      // Get current position
+      // Get current position in viewport coordinates
       const rect = panel.getBoundingClientRect();
       initialLeft = rect.left;
       initialTop = rect.top;
@@ -856,8 +856,10 @@ class EditorManager {
       panel.style.top = initialTop + 'px';
       panel.style.right = 'auto';
       panel.style.bottom = 'auto';
+      panel.style.margin = '0';
       
       e.preventDefault();
+      e.stopPropagation();
     };
     
     const onMouseMove = (e) => {
@@ -885,7 +887,8 @@ class EditorManager {
       isDragging = false;
     };
     
-    panel.addEventListener('mousedown', onMouseDown);
+    // Use capture phase to ensure we get the event before it bubbles
+    panel.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
     
@@ -1054,8 +1057,8 @@ class EditorManager {
     const panelWidth = panelRect.width;
     const wrapperWidth = wrapperRect.width;
     
-    // Center the panel above the image
-    let leftPos = (wrapperWidth / 2) - (panelWidth / 2);
+    // Center the panel above the image (using viewport coordinates)
+    let leftPos = wrapperRect.left + (wrapperWidth / 2) - (panelWidth / 2);
     
     // Ensure panel doesn't go off left edge
     if (leftPos < 5) {
@@ -1067,16 +1070,17 @@ class EditorManager {
       leftPos = window.innerWidth - panelWidth - 5;
     }
     
-    // Position above the image
-    let topPos = -panelRect.height - 10; // 10px gap above image
+    // Position above the image (using viewport coordinates)
+    let topPos = wrapperRect.top - panelRect.height - 10; // 10px gap above image
     
     // If panel would go off top of viewport, position below instead
-    if (wrapperRect.top + topPos < 0) {
-      topPos = wrapperRect.height + 10;
+    if (topPos < 5) {
+      topPos = wrapperRect.bottom + 10;
     }
 
-    controlPanel.style.left = leftPos + 'px';
-    controlPanel.style.top = topPos + 'px';
+    // Apply positions as absolute values relative to wrapper
+    controlPanel.style.left = (leftPos - wrapperRect.left) + 'px';
+    controlPanel.style.top = (topPos - wrapperRect.top) + 'px';
     controlPanel.style.right = 'auto';
 
     // Restore visibility
