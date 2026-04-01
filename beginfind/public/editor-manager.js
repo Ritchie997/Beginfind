@@ -1237,7 +1237,7 @@ class EditorManager {
   applyAlignment(imgElement, wrapper, align) {
     // Reset all styles first
     wrapper.style.textAlign = '';
-    wrapper.style.display = 'inline-block';
+    wrapper.style.display = '';
     wrapper.style.justifyContent = '';
     wrapper.style.marginLeft = '';
     wrapper.style.marginRight = '';
@@ -1246,25 +1246,26 @@ class EditorManager {
     imgElement.style.display = 'block';
     
     // Wrapper is always inline-block to contain text underneath
-    wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'top';
     wrapper.style.maxWidth = '100%';
     wrapper.style.marginBottom = '10px';
     
     if (align === 'left') {
       wrapper.style.textAlign = 'left';
+      wrapper.style.display = 'inline-block';
       wrapper.style.marginLeft = '0';
       wrapper.style.marginRight = 'auto';
     } else if (align === 'right') {
       wrapper.style.textAlign = 'right';
+      wrapper.style.display = 'block';
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = '0';
     } else {
       // Center - wrapper becomes block and centers itself
       wrapper.style.textAlign = 'center';
+      wrapper.style.display = 'block';
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = 'auto';
-      wrapper.style.display = 'block';
     }
     
     // Update caption alignment to match
