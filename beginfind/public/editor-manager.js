@@ -1235,45 +1235,45 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Полностью удаляем все inline-стили выравнивания
-    wrapper.style.removeProperty('margin-left');
-    wrapper.style.removeProperty('margin-right');
-    wrapper.style.removeProperty('margin');
-    wrapper.style.removeProperty('display');
-    wrapper.style.removeProperty('vertical-align');
-    wrapper.style.removeProperty('max-width');
-    wrapper.style.removeProperty('margin-bottom');
-    wrapper.style.removeProperty('justify-content');
-    imgElement.style.removeProperty('float');
+    // Полностью удаляем все inline-стили выравнивания без !important
+    wrapper.style.marginLeft = '';
+    wrapper.style.marginRight = '';
+    wrapper.style.margin = '';
+    wrapper.style.display = '';
+    wrapper.style.verticalAlign = '';
+    wrapper.style.maxWidth = '';
+    wrapper.style.marginBottom = '';
+    wrapper.style.justifyContent = '';
+    imgElement.style.float = '';
     
     // Принудительно устанавливаем display: inline-block для wrapper
     // Это критически важно - wrapper должен быть inline-block чтобы работать как барьер
-    wrapper.style.setProperty('display', 'inline-block', 'important');
-    wrapper.style.setProperty('vertical-align', 'top', 'important');
-    wrapper.style.setProperty('max-width', '100%', 'important');
-    wrapper.style.setProperty('margin-bottom', '10px', 'important');
+    wrapper.style.display = 'inline-block';
+    wrapper.style.verticalAlign = 'top';
+    wrapper.style.maxWidth = '100%';
+    wrapper.style.marginBottom = '10px';
     
     // Применяем выравнивание через margins
     if (align === 'left') {
-      wrapper.style.setProperty('margin-left', '0', 'important');
-      wrapper.style.setProperty('margin-right', 'auto', 'important');
+      wrapper.style.marginLeft = '0';
+      wrapper.style.marginRight = 'auto';
     } else if (align === 'right') {
-      wrapper.style.setProperty('margin-left', 'auto', 'important');
-      wrapper.style.setProperty('margin-right', '0', 'important');
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = '0';
     } else {
       // Center
-      wrapper.style.setProperty('margin-left', 'auto', 'important');
-      wrapper.style.setProperty('margin-right', 'auto', 'important');
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = 'auto';
     }
     
     // Обновляем выравнивание подписи - всегда по центру относительно картинки
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
-      caption.style.setProperty('display', 'block', 'important');
-      caption.style.setProperty('margin-left', 'auto', 'important');
-      caption.style.setProperty('margin-right', 'auto', 'important');
-      caption.style.setProperty('text-align', 'center', 'important');
-      caption.style.setProperty('width', '100%', 'important');
+      caption.style.display = 'block';
+      caption.style.marginLeft = 'auto';
+      caption.style.marginRight = 'auto';
+      caption.style.textAlign = 'center';
+      caption.style.width = '100%';
     }
     
     // Принудительно перерисовываем элемент
