@@ -1059,12 +1059,14 @@ class EditorManager {
     
     if (settingsBtn) {
       const btnRect = settingsBtn.getBoundingClientRect();
+      // Position directly below the button
       topPos = btnRect.bottom + 5;
+      // Align to the right edge of the button
       leftPos = btnRect.right - panelRect.width;
       
       // Adjust if goes off left edge
       if (leftPos < 5) {
-        leftPos = btnRect.left;
+        leftPos = Math.max(5, btnRect.left);
       }
     } else {
       // Fallback: center above image
@@ -1093,6 +1095,7 @@ class EditorManager {
     controlPanel.style.left = leftPos + 'px';
     controlPanel.style.top = topPos + 'px';
     controlPanel.style.right = 'auto';
+    controlPanel.style.bottom = 'auto';
 
     // Restore visibility
     controlPanel.style.visibility = 'visible';
@@ -1140,77 +1143,88 @@ class EditorManager {
     
     // Position popup directly under the settings button
     const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
+    
+    // Append temporarily to get dimensions
+    popup.style.visibility = 'hidden';
+    document.body.appendChild(popup);
+    
+    const actualPopupRect = popup.getBoundingClientRect();
+    
+    let top, left;
+    
     if (settingsBtn) {
       const btnRect = settingsBtn.getBoundingClientRect();
       
-      // Append temporarily to get dimensions
-      popup.style.visibility = 'hidden';
-      document.body.appendChild(popup);
-      
-      const actualPopupRect = popup.getBoundingClientRect();
-      
       // Position exactly under the button, aligned to the right edge of the button
-      let top = btnRect.bottom + 5;
-      let left = btnRect.right - actualPopupRect.width;
+      top = btnRect.bottom + 5;
+      left = btnRect.right - actualPopupRect.width;
       
       // Adjust if goes off screen horizontally
       if (left < 10) {
-        left = btnRect.left;
+        left = Math.max(10, btnRect.left);
       }
       
       // Adjust if goes off screen vertically (show above instead)
       if (top + actualPopupRect.height > window.innerHeight) {
         top = btnRect.top - actualPopupRect.height - 5;
       }
-      
-      popup.style.top = top + 'px';
-      popup.style.left = left + 'px';
-      popup.style.visibility = 'visible';
-      
-      // Make draggable
-      let isDragging = false;
-      let startX, startY, startTop, startLeft;
-      
-      dragHandle.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        isDragging = true;
-        dragHandle.style.cursor = 'grabbing';
-        startX = e.clientX;
-        startY = e.clientY;
-        startTop = popup.offsetTop;
-        startLeft = popup.offsetLeft;
-        
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-      });
-      
-      const onMouseMove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        
-        let newTop = startTop + dy;
-        let newLeft = startLeft + dx;
-        
-        // Keep within viewport
-        const popupRect = popup.getBoundingClientRect();
-        const maxTop = window.innerHeight - popupRect.height;
-        const maxLeft = window.innerWidth - popupRect.width;
-        
-        newTop = Math.max(0, Math.min(newTop, maxTop));
-        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-        
-        popup.style.top = newTop + 'px';
-        popup.style.left = newLeft + 'px';
-      };
-      
-      const onMouseUp = () => {
-        isDragging = false;
-        dragHandle.style.cursor = 'grab';
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      };
+    } else {
+      // Fallback: center on screen
+      top = (window.innerHeight - actualPopupRect.height) / 2;
+      left = (window.innerWidth - actualPopupRect.width) / 2;
     }
+    
+    // Final boundary checks
+    left = Math.max(10, Math.min(left, window.innerWidth - actualPopupRect.width - 10));
+    top = Math.max(10, Math.min(top, window.innerHeight - actualPopupRect.height - 10));
+    
+    popup.style.top = top + 'px';
+    popup.style.left = left + 'px';
+    popup.style.visibility = 'visible';
+    
+    // Make draggable
+    let isDragging = false;
+    let startX, startY, startTop, startLeft;
+    
+    dragHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isDragging = true;
+      dragHandle.style.cursor = 'grabbing';
+      startX = e.clientX;
+      startY = e.clientY;
+      startTop = popup.offsetTop;
+      startLeft = popup.offsetLeft;
+      
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+    
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      
+      let newTop = startTop + dy;
+      let newLeft = startLeft + dx;
+      
+      // Keep within viewport
+      const popupRect = popup.getBoundingClientRect();
+      const maxTop = window.innerHeight - popupRect.height;
+      const maxLeft = window.innerWidth - popupRect.width;
+      
+      newTop = Math.max(0, Math.min(newTop, maxTop));
+      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      
+      popup.style.top = newTop + 'px';
+      popup.style.left = newLeft + 'px';
+    };
+    
+    const onMouseUp = () => {
+      isDragging = false;
+      dragHandle.style.cursor = 'grab';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
     
     // Store temp values
     let tempWidth = currentWidth;
