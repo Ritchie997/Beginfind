@@ -1039,48 +1039,59 @@ class EditorManager {
 
   // Function to adjust controls panel position to prevent going off screen
   adjustControlPanelPosition(wrapper, controlPanel) {
-    // Don't reposition if user has already dragged the panel (it will be in fixed position)
-    if (controlPanel.style.position === 'fixed') {
-      return;
-    }
+    // Get image wrapper and button positions
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
     
     // Ensure controls panel is displayed to measure its dimensions
     controlPanel.style.visibility = 'hidden';
     controlPanel.style.opacity = '1';
     controlPanel.style.display = 'flex';
-
+    
+    // Use fixed positioning for consistent behavior with centered images
+    controlPanel.style.position = 'fixed';
+    
     // Measure dimensions
     const panelRect = controlPanel.getBoundingClientRect();
-    const wrapperRect = wrapper.getBoundingClientRect();
-
-    // Calculate position - center horizontally above the image
-    const panelWidth = panelRect.width;
-    const wrapperWidth = wrapperRect.width;
     
-    // Center the panel above the image (using viewport coordinates)
-    let leftPos = wrapperRect.left + (wrapperWidth / 2) - (panelWidth / 2);
+    // Position directly under the settings button
+    let topPos, leftPos;
     
-    // Ensure panel doesn't go off left edge
-    if (leftPos < 5) {
-      leftPos = 5;
+    if (settingsBtn) {
+      const btnRect = settingsBtn.getBoundingClientRect();
+      topPos = btnRect.bottom + 5;
+      leftPos = btnRect.right - panelRect.width;
+      
+      // Adjust if goes off left edge
+      if (leftPos < 5) {
+        leftPos = btnRect.left;
+      }
+    } else {
+      // Fallback: center above image
+      const panelWidth = panelRect.width;
+      const wrapperWidth = wrapperRect.width;
+      leftPos = wrapperRect.left + (wrapperWidth / 2) - (panelWidth / 2);
+      topPos = wrapperRect.top - panelRect.height - 10;
     }
     
-    // Ensure panel doesn't go off right edge
-    if (leftPos + panelWidth > window.innerWidth - 5) {
-      leftPos = window.innerWidth - panelWidth - 5;
+    // Adjust if goes off right edge
+    if (leftPos + panelRect.width > window.innerWidth - 5) {
+      leftPos = window.innerWidth - panelRect.width - 5;
     }
     
-    // Position above the image (using viewport coordinates)
-    let topPos = wrapperRect.top - panelRect.height - 10; // 10px gap above image
-    
-    // If panel would go off top of viewport, position below instead
+    // Adjust if goes off top (show below instead)
     if (topPos < 5) {
       topPos = wrapperRect.bottom + 10;
     }
-
-    // Apply positions as absolute values relative to wrapper
-    controlPanel.style.left = (leftPos - wrapperRect.left) + 'px';
-    controlPanel.style.top = (topPos - wrapperRect.top) + 'px';
+    
+    // Adjust if goes off bottom (show above instead)
+    if (topPos + panelRect.height > window.innerHeight - 5) {
+      topPos = wrapperRect.top - panelRect.height - 10;
+    }
+    
+    // Apply positions using fixed coordinates
+    controlPanel.style.left = leftPos + 'px';
+    controlPanel.style.top = topPos + 'px';
     controlPanel.style.right = 'auto';
 
     // Restore visibility
