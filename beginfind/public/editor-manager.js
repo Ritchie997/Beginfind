@@ -1235,38 +1235,46 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Сбрасываем только margins, сохраняя display: inline-block
+    // Полностью сбрасываем все стили выравнивания перед применением новых
     wrapper.style.marginLeft = '';
     wrapper.style.marginRight = '';
+    wrapper.style.margin = '';
     imgElement.style.float = '';
+    wrapper.style.justifyContent = '';
+    wrapper.style.display = '';
     
-    // Wrapper всегда inline-block для ограничения текста
-    wrapper.style.display = 'inline-block';
+    // Принудительно устанавливаем display: inline-block для wrapper
+    // Это критически важно - wrapper должен быть inline-block чтобы работать как барьер
+    wrapper.style.setProperty('display', 'inline-block', 'important');
     wrapper.style.verticalAlign = 'top';
     wrapper.style.maxWidth = '100%';
     wrapper.style.marginBottom = '10px';
     
+    // Применяем выравнивание через margins
     if (align === 'left') {
-      wrapper.style.marginLeft = '0';
-      wrapper.style.marginRight = 'auto';
+      wrapper.style.setProperty('margin-left', '0', 'important');
+      wrapper.style.setProperty('margin-right', 'auto', 'important');
     } else if (align === 'right') {
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = '0';
+      wrapper.style.setProperty('margin-left', 'auto', 'important');
+      wrapper.style.setProperty('margin-right', '0', 'important');
     } else {
       // Center
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = 'auto';
+      wrapper.style.setProperty('margin-left', 'auto', 'important');
+      wrapper.style.setProperty('margin-right', 'auto', 'important');
     }
     
     // Обновляем выравнивание подписи - всегда по центру относительно картинки
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
-      caption.style.display = 'block';
+      caption.style.setProperty('display', 'block', 'important');
       caption.style.marginLeft = 'auto';
       caption.style.marginRight = 'auto';
-      caption.style.textAlign = 'center';
-      caption.style.width = '100%';
+      caption.style.setProperty('text-align', 'center', 'important');
+      caption.style.setProperty('width', '100%', 'important');
     }
+    
+    // Принудительно перерисовываем элемент
+    void wrapper.offsetWidth;
   }
 
   
