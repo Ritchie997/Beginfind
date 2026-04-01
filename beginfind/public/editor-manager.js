@@ -521,18 +521,18 @@ class EditorManager {
     let activeButtonSelector;
     
     // Определяем выравнивание по вычисленным значениям margin
-    // При margin: '0 auto 10px 0' (left) -> marginLeft='0px', marginRight='auto' или числовое значение
-    // При margin: '0 0 10px auto' (right) -> marginLeft='auto' или числовое, marginRight='0px'
-    // При margin: '0 auto 10px auto' (center) -> оба margins не '0px'
+    // При marginLeft='0px', marginRight='auto' -> left aligned
+    // При marginLeft='auto', marginRight='0px' -> right aligned
+    // При marginLeft='auto', marginRight='auto' -> center aligned
     
-    if (marginLeft === '0px' && marginRight !== '0px') {
+    if (marginLeft === '0px' && marginRight === 'auto') {
       // Left aligned
       activeButtonSelector = '[data-command="justifyLeft"]';
-    } else if (marginRight === '0px' && marginLeft !== '0px') {
+    } else if (marginLeft === 'auto' && marginRight === '0px') {
       // Right aligned
       activeButtonSelector = '[data-command="justifyRight"]';
-    } else if (marginLeft !== '0px' && marginRight !== '0px') {
-      // Center aligned - оба margins не нулевые
+    } else if (marginLeft === 'auto' && marginRight === 'auto') {
+      // Center aligned
       activeButtonSelector = '[data-command="justifyCenter"]';
     } else {
       // По умолчанию считаем что это center
@@ -1319,46 +1319,61 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Сбрасываем ВСЕ возможные стили выравнивания через cssText
-    // Это гарантирует полную очистку перед применением новых стилей
-    const currentDisplay = wrapper.style.display;
-    const currentMaxWidth = wrapper.style.maxWidth;
-    const currentMarginBottom = wrapper.style.marginBottom;
-    const currentVerticalAlign = wrapper.style.verticalAlign;
+    // Сохраняем текущую ширину изображения перед сбросом стилей
+    const currentImgWidth = imgElement.style.width || imgElement.getAttribute('width') || '';
+    const currentWrapperWidth = wrapper.style.width || '';
     
-    wrapper.style.cssText = '';
-    
-    // Восстанавливаем базовые стили которые не относятся к выравниванию
+    // Сбрасываем только стили выравнивания, не трогая размеры
+    wrapper.style.marginLeft = '';
+    wrapper.style.marginRight = '';
+    wrapper.style.marginTop = '';
+    wrapper.style.marginBottom = '';
     wrapper.style.display = 'inline-block';
     wrapper.style.verticalAlign = 'top';
-    wrapper.style.maxWidth = '100%';
-    wrapper.style.marginBottom = '10px';
     
-    // Очищаем стили изображения
-    imgElement.style.cssText = '';
+    // Очищаем только стили изображения связанные с отображением
+    imgElement.style.display = 'block';
     imgElement.style.maxWidth = '100%';
     imgElement.style.height = 'auto';
-    imgElement.style.display = 'block';
+    
+    // Восстанавливаем ширину если она была установлена
+    if (currentImgWidth) {
+      imgElement.style.width = currentImgWidth;
+    }
+    if (currentWrapperWidth) {
+      wrapper.style.width = currentWrapperWidth;
+    }
     
     // Применяем выравнивание через margins - только ОДНО конкретное значение
     if (align === 'left') {
-      wrapper.style.margin = '0 auto 10px 0';
+      wrapper.style.marginLeft = '0';
+      wrapper.style.marginRight = 'auto';
+      wrapper.style.marginTop = '0';
+      wrapper.style.marginBottom = '10px';
     } else if (align === 'right') {
-      wrapper.style.margin = '0 0 10px auto';
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = '0';
+      wrapper.style.marginTop = '0';
+      wrapper.style.marginBottom = '10px';
     } else {
-      // Center - по умолчанию и при любом другом значении
-      wrapper.style.margin = '0 auto 10px auto';
+      // Center
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.marginRight = 'auto';
+      wrapper.style.marginTop = '0';
+      wrapper.style.marginBottom = '10px';
     }
     
     // Обновляем выравнивание подписи
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
-      caption.style.cssText = '';
       caption.style.display = 'block';
-      caption.style.margin = '0 auto';
+      caption.style.marginLeft = 'auto';
+      caption.style.marginRight = 'auto';
       caption.style.textAlign = 'center';
       caption.style.width = '100%';
-      caption.style.maxWidth = wrapper.style.maxWidth;
+      if (currentWrapperWidth) {
+        caption.style.maxWidth = currentWrapperWidth;
+      }
     }
     
     // Принудительно перерисовываем элемент
