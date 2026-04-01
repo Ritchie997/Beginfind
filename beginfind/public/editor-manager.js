@@ -1235,20 +1235,23 @@ class EditorManager {
   
   // Apply alignment - wrapper acts as barrier for text
   applyAlignment(imgElement, wrapper, align) {
-    // Полностью сбрасываем все стили выравнивания перед применением новых
-    wrapper.style.marginLeft = '';
-    wrapper.style.marginRight = '';
-    wrapper.style.margin = '';
-    imgElement.style.float = '';
-    wrapper.style.justifyContent = '';
-    wrapper.style.display = '';
+    // Полностью удаляем все inline-стили выравнивания
+    wrapper.style.removeProperty('margin-left');
+    wrapper.style.removeProperty('margin-right');
+    wrapper.style.removeProperty('margin');
+    wrapper.style.removeProperty('display');
+    wrapper.style.removeProperty('vertical-align');
+    wrapper.style.removeProperty('max-width');
+    wrapper.style.removeProperty('margin-bottom');
+    wrapper.style.removeProperty('justify-content');
+    imgElement.style.removeProperty('float');
     
     // Принудительно устанавливаем display: inline-block для wrapper
     // Это критически важно - wrapper должен быть inline-block чтобы работать как барьер
     wrapper.style.setProperty('display', 'inline-block', 'important');
-    wrapper.style.verticalAlign = 'top';
-    wrapper.style.maxWidth = '100%';
-    wrapper.style.marginBottom = '10px';
+    wrapper.style.setProperty('vertical-align', 'top', 'important');
+    wrapper.style.setProperty('max-width', '100%', 'important');
+    wrapper.style.setProperty('margin-bottom', '10px', 'important');
     
     // Применяем выравнивание через margins
     if (align === 'left') {
@@ -1267,8 +1270,8 @@ class EditorManager {
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
       caption.style.setProperty('display', 'block', 'important');
-      caption.style.marginLeft = 'auto';
-      caption.style.marginRight = 'auto';
+      caption.style.setProperty('margin-left', 'auto', 'important');
+      caption.style.setProperty('margin-right', 'auto', 'important');
       caption.style.setProperty('text-align', 'center', 'important');
       caption.style.setProperty('width', '100%', 'important');
     }
