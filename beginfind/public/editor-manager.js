@@ -1256,22 +1256,22 @@ class EditorManager {
       wrapper.style.marginLeft = '0';
       wrapper.style.marginRight = 'auto';
     } else if (align === 'right') {
-      wrapper.style.textAlign = 'right';
-      wrapper.style.display = 'block';
+      wrapper.style.textAlign = 'center'; // Caption always centered relative to image
+      wrapper.style.display = 'inline-block';
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = '0';
     } else {
-      // Center - wrapper becomes block and centers itself
-      wrapper.style.textAlign = 'center';
-      wrapper.style.display = 'block';
+      // Center - wrapper becomes inline-block and centers itself via parent text-align
+      wrapper.style.textAlign = 'center'; // Caption always centered relative to image
+      wrapper.style.display = 'inline-block';
       wrapper.style.marginLeft = 'auto';
       wrapper.style.marginRight = 'auto';
     }
     
-    // Update caption alignment to match
+    // Update caption alignment to always be centered relative to the image
     const caption = wrapper.querySelector('.image-caption');
     if (caption) {
-      caption.style.textAlign = align;
+      caption.style.textAlign = 'center';
     }
   }
 
