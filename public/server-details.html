@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Детали сервера - Админ-панель BeginFind</title>
+    <style>
+        :root {
+            /* Discord-like dark theme colors */
+            --background-primary: #36393f;
+            --background-secondary: #2f3136;
+            --background-tertiary: #202225;
+            --background-accent: #4f545c;
+            --background-floating: #18191c;
+            --header-primary: #fff;
+            --header-secondary: #b9bbbe;
+            --text-normal: #dcddde;
+            --text-muted: #72767d;
+            --text-link: #00b0f4;
+            --interactive-normal: #b9bbbe;
+            --interactive-hover: #dcddde;
+            --interactive-active: #fff;
+            --interactive-muted: #4f545c;
+            --blurple: #5865f2;
+            --blurple-hover: #4752c4;
+            --green: #3ba55d;
+            --green-hover: #30854a;
+            --red: #ed4245;
+            --red-hover: #c03537;
+            --yellow: #faa81a;
+            --yellow-hover: #d9900a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-primary);
+            color: var(--text-normal);
+            line-height: 1.4;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header styles */
+        .header {
+            background-color: var(--background-tertiary);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--background-accent);
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--header-primary);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .user-info:hover {
+            opacity: 0.9;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: var(--blurple);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Dropdown menu styles */
+        .dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: var(--background-secondary);
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            min-width: 180px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .dropdown.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 8px 10px;
+            color: var(--text-normal);
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        .dropdown-item:hover {
+            background-color: var(--background-accent);
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background-color: var(--background-accent);
+            margin: 4px 0;
+        }
+
+        /* Main layout */
+        .container {
+            display: flex;
+            height: calc(100vh - 60px);
+        }
+
+        /* Sidebar styles */
+        .sidebar {
+            width: 240px;
+            background-color: var(--background-secondary);
+            padding: 10px 0;
+            border-right: 1px solid var(--background-accent);
+            overflow-y: auto;
+        }
+
+        .sidebar-item {
+            padding: 10px 20px;
+            margin: 2px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background-color 0.15s ease;
+        }
+
+        .sidebar-item:hover {
+            background-color: var(--background-accent);
+        }
+
+        .sidebar-item.active {
+            background-color: var(--background-accent);
+        }
+
+        .sidebar-item i {
+            font-size: 18px;
+        }
+
+        /* Main content styles */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--background-accent);
+        }
+
+        .content-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 10px 0;
+        }
+        
+        .server-info {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--background-accent);
+        }
+
+        .content-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: var(--background-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin: 10px 0;
+            color: var(--blurple);
+        }
+
+        .stat-label {
+            font-size: 16px;
+            color: var(--text-muted);
+        }
+
+        /* Table styles */
+        .table-container {
+            background-color: var(--background-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            color: var(--text-normal);
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--background-accent);
+        }
+
+        th {
+            background-color: var(--background-tertiary);
+            font-weight: 600;
+            color: var(--header-secondary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: var(--background-tertiary);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 16px;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.15s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background-color: var(--blurple);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--blurple-hover);
+        }
+
+        .btn-success {
+            background-color: var(--green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: var(--green-hover);
+        }
+
+        .btn-danger {
+            background-color: var(--red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: var(--red-hover);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Form styles */
+        .form-container {
+            background-color: var(--background-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-normal);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: var(--background-tertiary);
+            color: var(--text-normal);
+            border: 1px solid var(--background-accent);
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--blurple);
+        }
+
+        /* Tab styles */
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid var(--background-accent);
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-button.active {
+            color: var(--header-primary);
+            border-bottom: 2px solid var(--blurple);
+        }
+
+        .tab-content {
+            display: none;
+            flex: 1;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Role tag styles */
+        .role-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .role-tag.system {
+            background-color: #5865f2;
+        }
+        
+        .role-tag.custom {
+            background-color: #eb459e;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--background-accent);
+            }
+
+            .sidebar-item {
+                display: inline-block;
+                margin: 5px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--background-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--background-accent);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--interactive-muted);
+        }
+        
+        /* Message styles */
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .message.success {
+            background-color: #3ba55d;
+            color: white;
+        }
+        
+        .message.error {
+            background-color: #ed4245;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">BeginFind Admin</div>
+        <div class="user-info" id="user-info">
+            <div class="user-avatar">А</div>
+            <div class="username-display">Пользователь</div>
+            <div class="dropdown" id="user-dropdown">
+                <div class="dropdown-item" id="logout-btn">Выход</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-item" onclick="navigateTo('/dashboard.html')">
+                <i>📊</i>
+                <span>Дашборд</span>
+            </div>
+            <div class="sidebar-item" onclick="navigateTo('/articles.html')">
+                <i>📝</i>
+                <span>Статьи</span>
+            </div>
+            <div class="sidebar-item" onclick="navigateTo('/categories.html')">
+                <i>📂</i>
+                <span>Категории</span>
+            </div>
+
+            <div class="sidebar-item active" onclick="navigateTo('/servers.html')">
+                <i>🌐</i>
+                <span>Серверы</span>
+            </div>
+            <div class="sidebar-item" onclick="navigateTo('/settings.html')">
+                <i>⚙️</i>
+                <span>Настройки</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="content-header">
+                <h1>Детали сервера</h1>
+                <div class="server-info" id="server-info">
+                    <!-- Информация о сервере будет загружена здесь -->
+                </div>
+                
+                <!-- Сообщение об ошибке аутентификации -->
+                <div id="auth-message" class="message error">
+                    Сессия истекла. Пожалуйста, перезагрузите страницу или войдите снова.
+                </div>
+            </div>
+
+            <div class="content-body">
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-button active" onclick="switchTab('members')">Участники</button>
+                        <button class="tab-button" onclick="switchTab('roles')">Роли</button>
+                    </div>
+                    
+                    <div id="members-tab" class="tab-content active">
+                        <div class="btn-group" style="margin-bottom: 20px;">
+                            <button class="btn btn-primary" onclick="showAddUserModal()">Добавить пользователя</button>
+                        </div>
+
+                        <div class="table-container">
+                            <table id="members-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Имя пользователя</th>
+                                        <th>Роли</th>
+                                        <th>Дата присоединения</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="members-tbody">
+                                    <!-- Сюда будут загружены участники -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Модальное окно для добавления пользователя -->
+                        <div id="add-user-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                            <div style="
+                                background: var(--background-secondary); 
+                                padding: 25px; 
+                                border-radius: 8px; 
+                                width: 500px; 
+                                max-width: 90%; 
+                                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+                                border: 1px solid var(--background-accent);
+                            ">
+                                <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Добавить пользователя к серверу</h2>
+                                
+                                <div class="form-group">
+                                    <label for="user-id-input">ID пользователя</label>
+                                    <input type="number" id="user-id-input" placeholder="Введите ID пользователя">
+                                </div>
+                                
+                                <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+                                    <button class="btn btn-primary" onclick="addUserToServer()">Добавить</button>
+                                    <button class="btn btn-danger" onclick="hideAddUserModal()">Отмена</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Модальное окно для назначения роли -->
+                        <div id="assign-role-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                            <div style="
+                                background: var(--background-secondary); 
+                                padding: 25px; 
+                                border-radius: 8px; 
+                                width: 500px; 
+                                max-width: 90%; 
+                                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+                                border: 1px solid var(--background-accent);
+                            ">
+                                <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Назначить роль пользователю</h2>
+                                
+                                <div class="form-group">
+                                    <label for="assign-user-id">ID пользователя</label>
+                                    <input type="number" id="assign-user-id" readonly style="background-color: var(--background-tertiary); cursor: not-allowed;">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="assign-role-id">Роль</label>
+                                    <select id="assign-role-id">
+                                        <!-- Роли будут загружены динамически -->
+                                    </select>
+                                </div>
+                                
+                                <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+                                    <button class="btn btn-primary" onclick="assignRoleToUser()">Назначить</button>
+                                    <button class="btn btn-danger" onclick="hideAssignRoleModal()">Отмена</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="roles-tab" class="tab-content">
+                        <div class="btn-group" style="margin-bottom: 20px;">
+                            <button class="btn btn-primary" onclick="showCreateRoleModal()">Создать роль</button>
+                        </div>
+
+                        <div class="table-container">
+                            <table id="roles-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Название</th>
+                                        <th>Тип</th>
+                                        <th>Уровень иерархии</th>
+                                        <th>Права</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="roles-tbody">
+                                    <!-- Сюда будут загружены роли -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Модальное окно для создания роли -->
+                        <div id="create-role-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                            <div style="
+                                background: var(--background-secondary); 
+                                padding: 25px; 
+                                border-radius: 8px; 
+                                width: 600px; 
+                                max-width: 90%; 
+                                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+                                border: 1px solid var(--background-accent);
+                            ">
+                                <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Создать роль</h2>
+                                
+                                <div class="form-group">
+                                    <label for="role-name">Название роли</label>
+                                    <input type="text" id="role-name" placeholder="Введите название роли">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="role-hierarchy">Уровень иерархии</label>
+                                    <input type="number" id="role-hierarchy" placeholder="Введите уровень иерархии (по умолчанию 0)" min="0" value="0">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Права:</label>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px;">
+                                        <label><input type="checkbox" id="perm-send-messages"> Отправка сообщений</label>
+                                        <label><input type="checkbox" id="perm-manage-roles"> Управление ролями</label>
+                                        <label><input type="checkbox" id="perm-ban-users"> Блокировка пользователей</label>
+                                        <label><input type="checkbox" id="perm-manage-channels"> Управление каналами</label>
+                                        <label><input type="checkbox" id="perm-read-messages"> Чтение сообщений</label>
+                                    </div>
+                                </div>
+                                
+                                <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+                                    <button class="btn btn-primary" onclick="createRole()">Создать</button>
+                                    <button class="btn btn-danger" onclick="hideCreateRoleModal()">Отмена</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Модальное окно для редактирования роли -->
+                        <div id="edit-role-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                            <div style="
+                                background: var(--background-secondary); 
+                                padding: 25px; 
+                                border-radius: 8px; 
+                                width: 600px; 
+                                max-width: 90%; 
+                                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+                                border: 1px solid var(--background-accent);
+                            ">
+                                <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Редактировать роль</h2>
+                                
+                                <div class="form-group">
+                                    <label for="edit-role-id">ID роли (для идентификации)</label>
+                                    <input type="number" id="edit-role-id" readonly style="background-color: var(--background-tertiary); cursor: not-allowed;">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="edit-role-name">Название роли</label>
+                                    <input type="text" id="edit-role-name" placeholder="Введите название роли">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="edit-role-hierarchy">Уровень иерархии</label>
+                                    <input type="number" id="edit-role-hierarchy" placeholder="Введите уровень иерархии" min="0">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Права:</label>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px;">
+                                        <label><input type="checkbox" id="edit-perm-send-messages"> Отправка сообщений</label>
+                                        <label><input type="checkbox" id="edit-perm-manage-roles"> Управление ролями</label>
+                                        <label><input type="checkbox" id="edit-perm-ban-users"> Блокировка пользователей</label>
+                                        <label><input type="checkbox" id="edit-perm-manage-channels"> Управление каналами</label>
+                                        <label><input type="checkbox" id="edit-perm-read-messages"> Чтение сообщений</label>
+                                    </div>
+                                </div>
+                                
+                                <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+                                    <button class="btn btn-primary" onclick="updateRole()">Сохранить</button>
+                                    <button class="btn btn-danger" onclick="hideEditRoleModal()">Отмена</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/auth-system.js"></script>
+    <script src="/app.js"></script>
+    <script src="/sidebar-manager.js"></script>
+    <script>
+        let currentServerId = null;
+        
+        // Улучшенная проверка аутентификации с обновлением состояния
+        function checkAuthAndInitialize() {
+            if (!authManager.isAuthenticated()) {
+                document.getElementById('auth-message').style.display = 'block';
+                setTimeout(() => {
+                    window.location.href = '/admin-panel.html';
+                }, 3000);
+                return false;
+            }
+            return true;
+        }
+        
+        // Навигация с сохранением контекста аутентификации
+        function navigateTo(url) {
+            if (!checkAuthAndInitialize()) return;
+            window.location.href = url;
+        }
+        
+        // Инициализация страницы
+        window.onload = async function() {
+            // Проверяем аутентификацию
+            if (!checkAuthAndInitialize()) {
+                return;
+            }
+            
+            // Получаем ID сервера из URL параметров
+            const urlParams = new URLSearchParams(window.location.search);
+            currentServerId = parseInt(urlParams.get('id'));
+            
+            if (!currentServerId) {
+                showMessage('ID сервера не указан', 'error');
+                return;
+            }
+            
+            // Загружаем информацию о сервере
+            await loadServerDetails();
+            
+            // Инициализация функций пользователя
+            initUserDropdown();
+            
+            // Загружаем участников и роли
+            await loadMembers();
+            await loadRoles();
+        };
+        
+        // Загрузка информации о сервере
+        async function loadServerDetails() {
+            try {
+                // Проверяем аутентификацию перед запросом
+                if (!checkAuthAndInitialize()) return;
+                
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}`);
+                
+                if (result.success) {
+                    const serverInfo = document.getElementById('server-info');
+                    serverInfo.innerHTML = `
+                        <h2>${result.data.name}</h2>
+                        <p><strong>ID:</strong> ${result.data.id}</p>
+                        <p><strong>Владелец:</strong> ${result.data.owner_username || 'N/A'}</p>
+                        <!-- Форма для изменения владельца сервера (только для администраторов) -->
+                        <div id="change-owner-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--background-accent);">
+                            <button class="btn btn-primary" onclick="showChangeOwnerModal(${result.data.id})" id="change-owner-btn" style="display: none;">Изменить владельца</button>
+                            <button class="btn btn-danger" onclick="showDeleteServerConfirmation(${result.data.id})" id="delete-server-btn" style="display: none; margin-left: 10px;">Удалить сервер</button>
+                        </div>
+                        <p><strong>Описание:</strong> ${result.data.description || 'Нет описания'}</p>
+                        <p><strong>Дата создания:</strong> ${new Date(result.data.created_at).toLocaleString()}</p>
+                    `;
+                    
+                    // Проверяем, является ли текущий пользователь администратором
+                    checkAdminStatusAndShowOwnerButton();
+                } else {
+                    showMessage(`Ошибка загрузки информации о сервере: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке информации о сервере:', error);
+                showMessage(`Ошибка при загрузке информации о сервере: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Проверка статуса администратора и отображение кнопки изменения владельца
+        async function checkAdminStatusAndShowOwnerButton() {
+            try {
+                // Получаем информацию о текущем пользователе
+                if (!checkAuthAndInitialize()) return;
+                
+                const profileResult = await apiClient.makeAuthenticatedRequest('/api/profile');
+                
+                if (profileResult.user && (profileResult.user.role_id === 1 || profileResult.user.role_id === 2)) {
+                    // Пользователь является администратором, показываем кнопки
+                    const changeOwnerBtn = document.getElementById('change-owner-btn');
+                    const deleteServerBtn = document.getElementById('delete-server-btn');
+                    if (changeOwnerBtn) {
+                        changeOwnerBtn.style.display = 'inline-block';
+                    }
+                    if (deleteServerBtn) {
+                        deleteServerBtn.style.display = 'inline-block';
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка при проверке статуса администратора:', error);
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Удаление сервера
+        async function deleteServer(serverId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            if (!confirm('Вы уверены, что хотите удалить этот сервер и все связанные с ним данные? Это действие нельзя отменить.')) {
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}`, 'DELETE');
+                
+                if (result.success) {
+                    showMessage('Сервер успешно удален', 'success');
+                    // Перенаправляем на страницу списка серверов через 2 секунды
+                    setTimeout(() => {
+                        window.location.href = '/servers.html';
+                    }, 2000);
+                } else {
+                    showMessage(`Ошибка удаления сервера: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при удалении сервера:', error);
+                showMessage(`Ошибка при удалении сервера: ${error.message}`, 'error');
+            }
+        }
+        
+        // Показать подтверждение удаления сервера
+        function showDeleteServerConfirmation(serverId) {
+            if (confirm('Вы уверены, что хотите удалить этот сервер и все связанные с ним данные? Это действие нельзя отменить.')) {
+                deleteServer(serverId);
+            }
+        }
+        
+        // Загрузка участников сервера
+        async function loadMembers() {
+            try {
+                if (!checkAuthAndInitialize()) return;
+                
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/users`);
+                
+                if (result.success) {
+                    const tbody = document.getElementById('members-tbody');
+                    tbody.innerHTML = '';
+                    
+                    result.data.forEach(member => {
+                        // Формируем теги для ролей
+                        let rolesHtml = '';
+                        if (member.roles && member.roles.length > 0) {
+                            member.roles.forEach(role => {
+                                const roleType = role.type === 'system' ? 'system' : 'custom';
+                                rolesHtml += `<span class="role-tag ${roleType}">${role.name}</span>`;
+                            });
+                        } else {
+                            rolesHtml = 'Нет ролей';
+                        }
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${member.id}</td>
+                            <td>${member.username}</td>
+                            <td>${rolesHtml}</td>
+                            <td>N/A</td>
+                            <td>
+                                <button class="btn btn-primary" onclick="showAssignRoleModal(${member.id})">Назначить роль</button>
+                                <button class="btn btn-danger" onclick="removeUserFromServer(${member.id})">Удалить</button>
+                            </td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    showMessage(`Ошибка загрузки участников: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке участников:', error);
+                showMessage(`Ошибка при загрузке участников: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Загрузка ролей сервера
+        async function loadRoles() {
+            try {
+                if (!checkAuthAndInitialize()) return;
+                
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles`);
+                
+                if (result.success) {
+                    const tbody = document.getElementById('roles-tbody');
+                    tbody.innerHTML = '';
+                    
+                    result.data.forEach(role => {
+                        // Формируем список прав
+                        let permissionsList = '';
+                        if (role.permissions) {
+                            const perms = role.permissions;
+                            const permNames = [];
+                            
+                            if (perms.send_messages) permNames.push('Отправка сообщений');
+                            if (perms.manage_roles) permNames.push('Управление ролями');
+                            if (perms.ban_users) permNames.push('Блокировка пользователей');
+                            if (perms.manage_channels) permNames.push('Управление каналами');
+                            if (perms.read_messages) permNames.push('Чтение сообщений');
+                            
+                            permissionsList = permNames.join(', ');
+                        } else {
+                            permissionsList = 'Нет прав';
+                        }
+                        
+                        const typeText = role.role_type === 'system' ? 'Системная' : 'Пользовательская';
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${role.id}</td>
+                            <td>${role.name}</td>
+                            <td>${typeText}</td>
+                            <td>${role.hierarchy_level}</td>
+                            <td>${permissionsList}</td>
+                            <td>
+                                ${role.role_type === 'custom' ? 
+                                    `<button class="btn btn-primary" onclick="showEditRoleModal(${role.id})">Редактировать</button>
+                                     <button class="btn btn-danger" onclick="deleteRole(${role.id})">Удалить</button>` 
+                                    : 
+                                    '<span>Нельзя редактировать</span>'}
+                            </td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    showMessage(`Ошибка загрузки ролей: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке ролей:', error);
+                showMessage(`Ошибка при загрузке ролей: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Показать модальное окно добавления пользователя
+        function showAddUserModal() {
+            document.getElementById('add-user-modal').style.display = 'flex';
+            document.getElementById('user-id-input').value = '';
+        }
+        
+        // Скрыть модальное окно добавления пользователя
+        function hideAddUserModal() {
+            document.getElementById('add-user-modal').style.display = 'none';
+        }
+        
+        // Показать модальное окно назначения роли
+        async function showAssignRoleModal(userId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            // Загружаем список ролей для выпадающего списка
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles`);
+                
+                if (result.success) {
+                    const roleSelect = document.getElementById('assign-role-id');
+                    roleSelect.innerHTML = '';
+                    
+                    // Добавляем только пользовательские роли для назначения
+                    result.data.forEach(role => {
+                        if (role.role_type === 'custom') {
+                            const option = document.createElement('option');
+                            option.value = role.id;
+                            option.textContent = `${role.name} (уровень ${role.hierarchy_level})`;
+                            roleSelect.appendChild(option);
+                        }
+                    });
+                    
+                    // Устанавливаем ID пользователя
+                    document.getElementById('assign-user-id').value = userId;
+                    
+                    // Показываем модальное окно
+                    document.getElementById('assign-role-modal').style.display = 'flex';
+                } else {
+                    showMessage(`Ошибка загрузки ролей для назначения: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке ролей для назначения:', error);
+                showMessage(`Ошибка при загрузке ролей для назначения: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Скрыть модальное окно назначения роли
+        function hideAssignRoleModal() {
+            document.getElementById('assign-role-modal').style.display = 'none';
+        }
+        
+        // Добавить пользователя к серверу
+        async function addUserToServer() {
+            if (!checkAuthAndInitialize()) return;
+            
+            const userId = document.getElementById('user-id-input').value.trim();
+            
+            if (!userId) {
+                showMessage('ID пользователя обязателен', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/users/${userId}`, 'POST', {});
+                
+                if (result.success) {
+                    showMessage('Пользователь успешно добавлен к серверу', 'success');
+                    hideAddUserModal();
+                    await loadMembers(); // Обновляем список участников
+                } else {
+                    showMessage(`Ошибка добавления пользователя: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при добавлении пользователя:', error);
+                showMessage(`Ошибка при добавлении пользователя: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Назначить роль пользователю
+        async function assignRoleToUser() {
+            if (!checkAuthAndInitialize()) return;
+            
+            const userId = document.getElementById('assign-user-id').value;
+            const roleId = document.getElementById('assign-role-id').value;
+            
+            if (!userId || !roleId) {
+                showMessage('Необходимо выбрать пользователя и роль', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/users/${userId}/roles/${roleId}`, 'POST', {});
+                
+                if (result.success) {
+                    showMessage('Роль успешно назначена пользователю', 'success');
+                    hideAssignRoleModal();
+                    await loadMembers(); // Обновляем список участников
+                } else {
+                    showMessage(`Ошибка назначения роли: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при назначении роли:', error);
+                showMessage(`Ошибка при назначении роли: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Удалить пользователя с сервера
+        async function removeUserFromServer(userId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            if (!confirm('Вы уверены, что хотите удалить пользователя с сервера?')) {
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/users/${userId}`, 'DELETE');
+                
+                if (result.success) {
+                    showMessage('Пользователь успешно удален с сервера', 'success');
+                    await loadMembers(); // Обновляем список участников
+                } else {
+                    showMessage(`Ошибка удаления пользователя: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при удалении пользователя:', error);
+                showMessage(`Ошибка при удалении пользователя: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Показать модальное окно создания роли
+        function showCreateRoleModal() {
+            document.getElementById('create-role-modal').style.display = 'flex';
+            // Очищаем поля формы
+            document.getElementById('role-name').value = '';
+            document.getElementById('role-hierarchy').value = '0';
+            // Сбрасываем чекбоксы
+            document.querySelectorAll('#create-role-modal input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+        
+        // Скрыть модальное окно создания роли
+        function hideCreateRoleModal() {
+            document.getElementById('create-role-modal').style.display = 'none';
+        }
+        
+        // Создать роль
+        async function createRole() {
+            if (!checkAuthAndInitialize()) return;
+            
+            const name = document.getElementById('role-name').value.trim();
+            const hierarchyLevel = parseInt(document.getElementById('role-hierarchy').value) || 0;
+            
+            // Собираем права
+            const permissions = {
+                send_messages: document.getElementById('perm-send-messages').checked,
+                manage_roles: document.getElementById('perm-manage-roles').checked,
+                ban_users: document.getElementById('perm-ban-users').checked,
+                manage_channels: document.getElementById('perm-manage-channels').checked,
+                read_messages: document.getElementById('perm-read-messages').checked
+            };
+            
+            if (!name) {
+                showMessage('Название роли обязательно', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles`, 'POST', {
+                    name,
+                    hierarchy_level: hierarchyLevel,
+                    permissions
+                });
+                
+                if (result.success) {
+                    showMessage('Роль успешно создана', 'success');
+                    hideCreateRoleModal();
+                    await loadRoles(); // Обновляем список ролей
+                } else {
+                    showMessage(`Ошибка создания роли: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при создании роли:', error);
+                showMessage(`Ошибка при создании роли: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Показать модальное окно редактирования роли
+        async function showEditRoleModal(roleId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            try {
+                const rolesResult = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles`);
+                
+                if (rolesResult.success) {
+                    const role = rolesResult.data.find(r => r.id == roleId);
+                    
+                    if (role) {
+                        document.getElementById('edit-role-id').value = role.id;
+                        document.getElementById('edit-role-name').value = role.name;
+                        document.getElementById('edit-role-hierarchy').value = role.hierarchy_level;
+                        
+                        // Устанавливаем чекбоксы для разрешений
+                        const perms = role.permissions || {};
+                        document.getElementById('edit-perm-send-messages').checked = perms.send_messages || false;
+                        document.getElementById('edit-perm-manage-roles').checked = perms.manage_roles || false;
+                        document.getElementById('edit-perm-ban-users').checked = perms.ban_users || false;
+                        document.getElementById('edit-perm-manage-channels').checked = perms.manage_channels || false;
+                        document.getElementById('edit-perm-read-messages').checked = perms.read_messages || false;
+                        
+                        document.getElementById('edit-role-modal').style.display = 'flex';
+                    } else {
+                        showMessage('Роль не найдена', 'error');
+                    }
+                } else {
+                    showMessage(`Ошибка загрузки роли: ${rolesResult.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке роли для редактирования:', error);
+                showMessage(`Ошибка при загрузке роли: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Скрыть модальное окно редактирования роли
+        function hideEditRoleModal() {
+            document.getElementById('edit-role-modal').style.display = 'none';
+        }
+        
+        // Обновить роль
+        async function updateRole() {
+            if (!checkAuthAndInitialize()) return;
+            
+            const roleId = document.getElementById('edit-role-id').value;
+            const name = document.getElementById('edit-role-name').value.trim();
+            const hierarchyLevel = parseInt(document.getElementById('edit-role-hierarchy').value) || 0;
+            
+            // Собираем права
+            const permissions = {
+                send_messages: document.getElementById('edit-perm-send-messages').checked,
+                manage_roles: document.getElementById('edit-perm-manage-roles').checked,
+                ban_users: document.getElementById('edit-perm-ban-users').checked,
+                manage_channels: document.getElementById('edit-perm-manage-channels').checked,
+                read_messages: document.getElementById('edit-perm-read-messages').checked
+            };
+            
+            if (!name) {
+                showMessage('Название роли обязательно', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles/${roleId}`, 'PUT', {
+                    name,
+                    hierarchy_level: hierarchyLevel,
+                    permissions
+                });
+                
+                if (result.success) {
+                    showMessage('Роль успешно обновлена', 'success');
+                    hideEditRoleModal();
+                    await loadRoles(); // Обновляем список ролей
+                } else {
+                    showMessage(`Ошибка обновления роли: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при обновлении роли:', error);
+                showMessage(`Ошибка при обновлении роли: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Удалить роль
+        async function deleteRole(roleId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            if (!confirm('Вы уверены, что хотите удалить эту роль?')) {
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${currentServerId}/roles/${roleId}`, 'DELETE');
+                
+                if (result.success) {
+                    showMessage('Роль успешно удалена', 'success');
+                    await loadRoles(); // Обновляем список ролей
+                } else {
+                    showMessage(`Ошибка удаления роли: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при удалении роли:', error);
+                showMessage(`Ошибка при удалении роли: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Переключение вкладок
+        function switchTab(tabName) {
+            // Скрываем все вкладки
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Убираем активный класс со всех кнопок
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Показываем выбранную вкладку
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Делаем активной соответствующую кнопку
+            event.target.classList.add('active');
+        }
+        
+        // Инициализация выпадающего меню пользователя
+        function initUserDropdown() {
+            const userInfo = document.getElementById('user-info');
+            const userDropdown = document.getElementById('user-dropdown');
+            const logoutBtn = document.getElementById('logout-btn');
+            
+            // Обновляем информацию о пользователе
+            updateUserInfo();
+            
+            // Показываем/скрываем выпадающее меню при клике на аватар/имя
+            userInfo.addEventListener('click', function(e) {
+                e.stopPropagation(); // Предотвращаем всплытие события
+                userDropdown.classList.toggle('show');
+            });
+            
+            // Обработчик для кнопки выхода
+            logoutBtn.addEventListener('click', function(e) {
+                e.stopPropagation(); // Предотвращаем всплытие события
+                authManager.logout(); // Выходим из системы
+                window.location.href = '/admin-panel.html'; // Перенаправляем на главную страницу
+            });
+            
+            // Закрываем меню при клике вне его области
+            document.addEventListener('click', function(e) {
+                if (!userInfo.contains(e.target)) {
+                    userDropdown.classList.remove('show');
+                }
+            });
+            
+            // Обновляем меню при открытии
+            updateSidebar();
+            
+            // Проверяем статус администратора и отображаем кнопку изменения владельца
+            checkAdminStatusAndShowOwnerButton();
+        }
+        
+        // Показать модальное окно изменения владельца сервера
+        function showChangeOwnerModal(serverId) {
+            if (!checkAuthAndInitialize()) return;
+            
+            // Загружаем список пользователей для выбора нового владельца
+            apiClient.makeAuthenticatedRequest('/api/users').then(result => {
+                if (result.success) {
+                    const userList = document.getElementById('new-owner-list');
+                    userList.innerHTML = '';
+                    
+                    // Добавляем пользователей в выпадающий список
+                    result.data.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = `${user.username} (ID: ${user.id})`;
+                        userList.appendChild(option);
+                    });
+                    
+                    // Устанавливаем ID сервера
+                    document.getElementById('change-owner-server-id').value = serverId;
+                    
+                    // Показываем модальное окно
+                    document.getElementById('change-owner-modal').style.display = 'flex';
+                } else {
+                    showMessage(`Ошибка загрузки списка пользователей: ${result.error}`, 'error');
+                }
+            }).catch(error => {
+                console.error('Ошибка при загрузке списка пользователей:', error);
+                showMessage(`Ошибка при загрузке списка пользователей: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            });
+        }
+        
+        // Скрыть модальное окно изменения владельца сервера
+        function hideChangeOwnerModal() {
+            document.getElementById('change-owner-modal').style.display = 'none';
+        }
+        
+        // Изменить владельца сервера
+        async function changeServerOwner() {
+            if (!checkAuthAndInitialize()) return;
+            
+            const serverId = document.getElementById('change-owner-server-id').value;
+            const newOwnerId = document.getElementById('new-owner-list').value;
+            
+            if (!serverId || !newOwnerId) {
+                showMessage('Необходимо выбрать сервер и нового владельца', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/owner`, 'PUT', {
+                    newOwnerId: parseInt(newOwnerId)
+                });
+                
+                if (result.success) {
+                    showMessage('Владелец сервера успешно изменен', 'success');
+                    hideChangeOwnerModal();
+                    // Обновляем информацию о сервере
+                    await loadServerDetails();
+                } else {
+                    showMessage(`Ошибка изменения владельца: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при изменении владельца сервера:', error);
+                showMessage(`Ошибка при изменении владельца: ${error.message}`, 'error');
+                
+                // Проверяем, возможно сессия истекла
+                if (error.message.includes('403') || error.message.includes('401')) {
+                    document.getElementById('auth-message').style.display = 'block';
+                }
+            }
+        }
+        
+        // Показать сообщение пользователю
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            messageDiv.style.display = 'block';
+            
+            // Вставляем перед content-header
+            document.querySelector('.content-header').insertBefore(messageDiv, document.querySelector('.server-info'));
+            
+            // Удаляем сообщение через 5 секунд
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 5000);
+        }
+    </script>
+    
+    <!-- Модальное окно для изменения владельца сервера -->
+    <div id="change-owner-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="
+            background: var(--background-secondary); 
+            padding: 25px; 
+            border-radius: 8px; 
+            width: 500px; 
+            max-width: 90%; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            border: 1px solid var(--background-accent);
+        ">
+            <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Изменить владельца сервера</h2>
+            
+            <input type="hidden" id="change-owner-server-id">
+            
+            <div class="form-group">
+                <label for="new-owner-list">Новый владелец:</label>
+                <select id="new-owner-list" class="form-select" style="width: 100%; padding: 10px; border-radius: 4px; background-color: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
+                    <!-- Список пользователей будет загружен динамически -->
+                </select>
+            </div>
+            
+            <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
+                <button class="btn btn-primary" onclick="changeServerOwner()">Изменить владельца</button>
+                <button class="btn btn-danger" onclick="hideChangeOwnerModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

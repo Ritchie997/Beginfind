@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель BeginFind</title>
+    <link rel="stylesheet" href="/global-styles.css">
+    <link rel="stylesheet" href="/mobile-menu.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="header">
+        <button class="hamburger-menu" id="hamburger-menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <div class="logo">BeginFind Admin</div>
+        <div class="user-info" id="user-info">
+            <div class="user-avatar">А</div>
+            <div class="username-display">Пользователь</div>
+            <div class="dropdown" id="user-dropdown">
+                <div class="dropdown-item" id="logout-btn">Выход</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Оверлей для затемнения фона при открытом меню -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-item" data-nav="/dashboard">
+                <i>📊</i>
+                <span>Дашборд</span>
+            </div>
+            <div class="sidebar-item" data-nav="/articles">
+                <i>📝</i>
+                <span>Статьи</span>
+            </div>
+            <div class="sidebar-item" data-nav="/categories">
+                <i>📂</i>
+                <span>Категории</span>
+            </div>
+            <div class="sidebar-item" data-nav="/servers">
+                <i>🌐</i>
+                <span>Серверы</span>
+            </div>
+            <div class="sidebar-item" data-nav="/settings">
+                <i>⚙️</i>
+                <span>Настройки</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="content-header">
+                <h1 id="page-title">Загрузка...</h1>
+            </div>
+            <div id="app-content" class="content-body">
+                <!-- Content will be loaded here by the router -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/auth-system.js"></script>
+    <script src="/app.js"></script>
+    <script src="/spa-router.js"></script>
+    <script src="/sidebar-manager.js"></script>
+    <script src="/editor-manager.js"></script>
+</body>
+</html>

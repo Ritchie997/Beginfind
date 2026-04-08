@@ -1,0 +1,15 @@
+node_modules/
+*.db
+*.db.backup
+.env
+.env.local
+logs/
+*.log
+npm-debug.log*
+.DS_Store
+*.pem
+*.key
+uploads/
+images/
+temp/
+tmp/
