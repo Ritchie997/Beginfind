@@ -1,5 +1,1 @@
-```
-# Logs and temp files
-*.log
-server.log
-```
+(public/index.html, public/spa-router.js, public/auth-system.js)

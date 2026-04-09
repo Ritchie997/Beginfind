@@ -12,8 +12,15 @@
         .app-container {
             display: none;
         }
-        .app-container.loaded {
+        .app-container.loaded,
+        #app-container.loaded,
+        #main-container.loaded {
             display: block;
+        }
+        /* Для flex контейнеров нужно display: flex */
+        #app-container.loaded.header,
+        #main-container.loaded.container {
+            display: flex;
         }
         /* Стили для оверлея загрузки */
         .auth-overlay {

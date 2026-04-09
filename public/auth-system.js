@@ -465,10 +465,14 @@ function showModalLogin() {
           authOverlay.classList.add('hidden');
         }
         
-        // Показываем основной контейнер приложения
+        // Показываем основной контейнер приложения - оба элемента
         const appContainer = document.getElementById('app-container');
         if (appContainer) {
           appContainer.classList.add('loaded');
+        }
+        const mainContainer = document.getElementById('main-container');
+        if (mainContainer) {
+          mainContainer.classList.add('loaded');
         }
         
         // Обновляем информацию о пользователе в UI
