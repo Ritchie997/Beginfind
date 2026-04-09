@@ -35,12 +35,30 @@ class SPARouter {
     if (!authManager || !authManager.isAuthenticated()) {
       // If user is not authenticated, show login form
       // and don't continue router initialization
+      
+      // Set up event listener for the login button in the overlay
+      this.setupOverlayLoginButton();
+      
       showModalLogin();
       return;
     }
 
     // If authenticated, continue initialization
     this.completeInit();
+  }
+  
+  // Set up event listener for the login button in the auth overlay
+  setupOverlayLoginButton() {
+    const loginBtn = document.getElementById('login-btn-from-overlay');
+    if (loginBtn) {
+      // Remove any existing listeners to avoid duplicates
+      loginBtn.replaceWith(loginBtn.cloneNode(true));
+      // Re-get the button after replacement
+      const newLoginBtn = document.getElementById('login-btn-from-overlay');
+      newLoginBtn.addEventListener('click', () => {
+        showModalLogin();
+      });
+    }
   }
 
   completeInit() {
@@ -3401,13 +3419,8 @@ let spaRouter = null;
 
 // Initialize router after DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-  // Create router instance only if authenticated
-  if (authManager && authManager.isAuthenticated()) {
-    spaRouter = new SPARouter();
-  } else {
-    // If not authenticated, show login form
-    showModalLogin();
-  }
+  // Always create router instance - it will handle authentication internally
+  spaRouter = new SPARouter();
 });
 
 // Check on auth status change
