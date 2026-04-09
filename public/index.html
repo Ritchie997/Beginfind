@@ -7,9 +7,54 @@
     <link rel="stylesheet" href="/global-styles.css">
     <link rel="stylesheet" href="/mobile-menu.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Скрываем контент до проверки авторизации */
+        .app-container {
+            display: none;
+        }
+        .app-container.loaded {
+            display: block;
+        }
+        /* Стили для оверлея загрузки */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(5px);
+        }
+        .auth-overlay.hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <div class="header">
+    <!-- Оверлей авторизации -->
+    <div class="auth-overlay" id="auth-overlay">
+        <div style="text-align: center; color: white; font-family: 'Segoe UI', sans-serif;">
+            <h2 style="margin-bottom: 20px;">Требуется авторизация</h2>
+            <p style="margin-bottom: 30px;">Для доступа к админ-панели необходимо войти в систему</p>
+            <button id="login-btn-from-overlay" style="
+                background: #5865f2;
+                color: white;
+                padding: 15px 30px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 500;
+                transition: background-color 0.2s ease;
+            ">Войти в систему</button>
+        </div>
+    </div>
+
+    <div class="header app-container" id="app-container">
         <button class="hamburger-menu" id="hamburger-menu">
             <span></span>
             <span></span>
@@ -17,18 +62,18 @@
         </button>
         <div class="logo">BeginFind Admin</div>
         <div class="user-info" id="user-info">
-            <div class="user-avatar">А</div>
-            <div class="username-display">Пользователь</div>
+            <div class="user-avatar" id="user-avatar">А</div>
+            <div class="username-display" id="username-display">Пользователь</div>
             <div class="dropdown" id="user-dropdown">
                 <div class="dropdown-item" id="logout-btn">Выход</div>
             </div>
         </div>
     </div>
-
+    
     <!-- Оверлей для затемнения фона при открытом меню -->
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-    <div class="container">
+    <div class="container app-container" id="main-container">
         <div class="sidebar">
             <div class="sidebar-item" data-nav="/dashboard">
                 <i>📊</i>

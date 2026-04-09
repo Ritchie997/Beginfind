@@ -124,3 +124,21 @@ if (typeof window !== 'undefined') {
     window.toggleMobileMenu = toggleMobileMenu;
     window.closeMobileMenu = closeMobileMenu;
 }
+// Добавляем обработчик для кнопки выхода
+document.addEventListener('DOMContentLoaded', function() {
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Закрываем мобильное меню если открыто
+      closeMobileMenu();
+      
+      // Выполняем выход
+      if (window.authManager) {
+        authManager.logout();
+      }
+    });
+  }
+});
