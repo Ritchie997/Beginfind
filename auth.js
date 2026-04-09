@@ -2,7 +2,59 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const { assignObserverRoleIfNeeded } = require('./server-membership-check');
+
+/**
+ * Проверяет участие пользователя в серверах и назначает роль "наблюдатель" если нужно
+ * (встроена из удалённого server-membership-check.js)
+ */
+async function assignObserverRoleIfNeeded(userId) {
+  return new Promise((resolve) => {
+    const serversDb = new sqlite3.Database(path.join(__dirname, 'servers.db'));
+    const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
+
+    serversDb.get(`
+      SELECT COUNT(*) as server_count
+      FROM user_server_memberships
+      WHERE user_id = ?
+    `, [userId], (err, row) => {
+      if (err || !row || row.server_count > 0) {
+        serversDb.close();
+        usersDb.close();
+        resolve(null);
+        return;
+      }
+
+      // Пользователь не состоит ни в одном сервере — назначаем роль наблюдателя
+      usersDb.get('SELECT role_id FROM users WHERE id = ?', [userId], (err, userRow) => {
+        if (err || !userRow) {
+          serversDb.close();
+          usersDb.close();
+          resolve(null);
+          return;
+        }
+
+        serversDb.get('SELECT id FROM server_roles WHERE name = ?', ['наблюдатель'], (err, roleRow) => {
+          if (err || !roleRow) {
+            serversDb.close();
+            usersDb.close();
+            resolve(null);
+            return;
+          }
+
+          usersDb.run('UPDATE users SET role_id = ? WHERE id = ?', [roleRow.id, userId], function(err) {
+            serversDb.close();
+            usersDb.close();
+            if (err) {
+              resolve(null);
+            } else {
+              resolve({ assigned: true, roleId: roleRow.id });
+            }
+          });
+        });
+      });
+    });
+  });
+}
 
 // Подключение к базе данных пользователей
 const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {

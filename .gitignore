@@ -13,3 +13,6 @@ uploads/
 images/
 temp/
 tmp/
+.qwen
+backups/
+backup-settings.json
