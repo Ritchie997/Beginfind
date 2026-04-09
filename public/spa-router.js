@@ -31,6 +31,9 @@ class SPARouter {
 
   // Check authentication before initialization
   async checkAuthBeforeInit() {
+    // Небольшая задержка чтобы authManager успел инициализироваться
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // Check authentication immediately, but with protection against circular redirects
     if (!authManager || !authManager.isAuthenticated()) {
       // If user is not authenticated, show login form
@@ -44,6 +47,23 @@ class SPARouter {
     }
 
     // If authenticated, continue initialization
+    // Скрываем оверлей авторизации если пользователь уже аутентифицирован
+    const authOverlay = document.getElementById('auth-overlay');
+    if (authOverlay) {
+      authOverlay.classList.add('hidden');
+    }
+    
+    // Показываем основной контейнер приложения
+    const appContainer = document.getElementById('app-container');
+    if (appContainer) {
+      appContainer.classList.add('loaded');
+    }
+    
+    // Обновляем информацию о пользователе в UI
+    if (typeof updateUserInfo === 'function') {
+      updateUserInfo();
+    }
+    
     this.completeInit();
   }
   

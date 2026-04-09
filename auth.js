@@ -204,6 +204,7 @@ async function generateToken(user) {
       id: user.id, 
       username: user.username, 
       role_id: user.role_id,
+      is_root: user.is_root || 0,
       is_observer: observerCheck.assigned,
       observer_role: observerCheck.assigned ? observerCheck.role : null
     },

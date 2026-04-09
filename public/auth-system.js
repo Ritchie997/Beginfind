@@ -471,19 +471,28 @@ function showModalLogin() {
           appContainer.classList.add('loaded');
         }
         
-        // Инициализируем роутер если он еще не создан
-        if (typeof window.SPARouter !== 'undefined' && !window.spaRouter) {
-          window.spaRouter = new window.SPARouter();
-        } else if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
-          // Если роутер уже существует, перенаправляем на дашборд
-          window.spaRouter.navigateTo('/dashboard');
-        } else {
-          // Фолбэк: простая переадресация через history.pushState
-          setTimeout(() => {
-            window.history.pushState({ path: '/dashboard' }, '', '/dashboard');
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }, 500);
+        // Обновляем информацию о пользователе в UI
+        if (typeof updateUserInfo === 'function') {
+          updateUserInfo();
         }
+        
+        // Инициализируем роутер и перенаправляем на дашборд
+        setTimeout(() => {
+          if (typeof window.SPARouter !== 'undefined') {
+            // Если роутер еще не создан, создаем его
+            if (!window.spaRouter) {
+              window.spaRouter = new window.SPARouter();
+            } else if (typeof window.spaRouter.navigateTo === 'function') {
+              // Если роутер уже существует, перенаправляем на дашборд
+              window.spaRouter.navigateTo('/dashboard');
+              return;
+            }
+          }
+          
+          // Фолбэк: простая переадресация через history.pushState
+          window.history.pushState({ path: '/dashboard' }, '', '/dashboard');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 300);
       } else {
         showMessage(result.error, 'error');
       }
