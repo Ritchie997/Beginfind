@@ -3414,13 +3414,21 @@ class SPARouter {
   }
 }
 
+// Export SPARouter class to window for external access
+window.SPARouter = SPARouter;
+
 // Global router instance
 let spaRouter = null;
 
 // Initialize router after DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-  // Always create router instance - it will handle authentication internally
-  spaRouter = new SPARouter();
+  // Only create router if user is already authenticated
+  if (authManager && authManager.isAuthenticated()) {
+    spaRouter = new SPARouter();
+  } else {
+    // User not authenticated - router will be created after login
+    console.log('User not authenticated, waiting for login...');
+  }
 });
 
 // Check on auth status change
@@ -3436,7 +3444,12 @@ window.addEventListener('authChanged', async () => {
 
     if (authManager && authManager.isAuthenticated() && !spaRouter) {
       // If user logged in and router not created yet
+      console.log('User logged in, initializing router...');
       spaRouter = new SPARouter();
+      // Trigger navigation to dashboard
+      if (spaRouter && typeof spaRouter.navigateTo === 'function') {
+        spaRouter.navigateTo('/dashboard');
+      }
     } else if (authManager && !authManager.isAuthenticated() && spaRouter) {
       // If user logged out, remove router
       spaRouter = null;

@@ -454,13 +454,35 @@ function showModalLogin() {
         // Показываем сообщение об успехе
         showMessage(result.message, 'success');
         
-        // Если находимся на главной странице, переадресуем
-        if (window.location.pathname === '/' || 
-            window.location.pathname === '/index.html' || 
-            window.location.pathname === '/admin-panel.html') {
+        // Обновляем UI с информацией о пользователе
+        if (typeof updateUserInfo === 'function') {
+          updateUserInfo();
+        }
+        
+        // Скрываем оверлей авторизации если он есть
+        const authOverlay = document.getElementById('auth-overlay');
+        if (authOverlay) {
+          authOverlay.classList.add('hidden');
+        }
+        
+        // Показываем основной контейнер приложения
+        const appContainer = document.getElementById('app-container');
+        if (appContainer) {
+          appContainer.classList.add('loaded');
+        }
+        
+        // Инициализируем роутер если он еще не создан
+        if (typeof window.SPARouter !== 'undefined' && !window.spaRouter) {
+          window.spaRouter = new window.SPARouter();
+        } else if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+          // Если роутер уже существует, перенаправляем на дашборд
+          window.spaRouter.navigateTo('/dashboard');
+        } else {
+          // Фолбэк: простая переадресация через history.pushState
           setTimeout(() => {
-            window.location.href = '/dashboard.html';
-          }, 1000);
+            window.history.pushState({ path: '/dashboard' }, '', '/dashboard');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }, 500);
         }
       } else {
         showMessage(result.error, 'error');
