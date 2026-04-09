@@ -8,6 +8,7 @@ class SPARouter {
       '/articles': this.loadArticles,
       '/categories': this.loadCategories,
       '/servers': this.loadServers,
+      '/pending-users': this.loadPendingUsers,
       '/settings': this.loadSettings
     };
 
@@ -50,6 +51,9 @@ class SPARouter {
 
     // Load current route
     this.navigateTo(window.location.pathname);
+
+    // Update user info display
+    if (typeof updateUserInfo === 'function') updateUserInfo();
   }
 
   // Set up navigation handlers
@@ -244,11 +248,11 @@ class SPARouter {
   // Update page title
   updatePageTitle(path) {
     const titles = {
-      '/': 'Дашборд - Админ-панель BeginFind',
-      '/dashboard': 'Дашборд - Админ-панель BeginFind',
-      '/articles': 'Статьи - Админ-панель BeginFind',
+      '/': 'Аналитика - Админ-панель BeginFind',
+      '/dashboard': 'Аналитика - Админ-панель BeginFind',
+      '/articles': 'Редактор - Админ-панель BeginFind',
       '/categories': 'Категории - Админ-панель BeginFind',
-      '/servers': 'Серверы - Админ-панель BeginFind',
+      '/servers': 'Сервера - Админ-панель BeginFind',
       '/settings': 'Настройки - Админ-панель BeginFind'
     };
 
@@ -315,7 +319,7 @@ class SPARouter {
         // Update page title
         const titleElement = document.getElementById('page-title');
         if (titleElement) {
-          titleElement.textContent = 'Статьи';
+          titleElement.textContent = 'Редактор';
         }
 
         // Add specific class to body for article page styles
@@ -383,7 +387,7 @@ class SPARouter {
         // Update page title
         const titleElement = document.getElementById('page-title');
         if (titleElement) {
-          titleElement.textContent = 'Серверы';
+          titleElement.textContent = 'Сервера';
         }
       }
 
@@ -3563,4 +3567,194 @@ window.spaRouter = {
       await spaRouter.deleteArticle(articleId);
     }
   }
+};
+
+// ========================================
+// ЗАЯВКИ НА ДОСТУП (root-only)
+// ========================================
+
+SPARouter.prototype.loadPendingUsers = async function() {
+  this.showLoader();
+
+  try {
+    const response = await fetch('/views/pending-users.html');
+    const html = await response.text();
+
+    const appContent = document.getElementById('app-content');
+    if (appContent) {
+      appContent.innerHTML = html;
+      const titleElement = document.getElementById('page-title');
+      if (titleElement) titleElement.textContent = 'Заявки на доступ';
+    }
+
+    await this.renderPendingUsers();
+  } catch (error) {
+    console.error('Error loading pending users:', error);
+    showMessage('Ошибка при загрузке заявок', 'error');
+  } finally {
+    this.hideLoader();
+  }
+};
+
+SPARouter.prototype.renderPendingUsers = async function() {
+  const loadingEl = document.getElementById('pending-loading');
+  const emptyEl = document.getElementById('pending-empty');
+  const tableEl = document.getElementById('pending-table');
+  const tbodyEl = document.getElementById('pending-tbody');
+  const statsEl = document.getElementById('pending-stats');
+  const countEl = document.getElementById('pending-count');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (tableEl) tableEl.style.display = 'none';
+  if (statsEl) statsEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/pending-users');
+    if (!res.ok) {
+      throw new Error('Не удалось загрузить заявки');
+    }
+    const data = await res.json();
+    const users = data.users || [];
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    if (users.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+    } else {
+      if (statsEl) statsEl.style.display = 'block';
+      if (countEl) countEl.textContent = users.length;
+      if (tableEl) tableEl.style.display = 'block';
+
+      tbodyEl.innerHTML = '';
+      users.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom: 1px solid var(--background-accent, #4f545c); transition: background 0.15s;';
+        tr.onmouseenter = () => tr.style.background = 'rgba(255,255,255,0.03)';
+        tr.onmouseleave = () => tr.style.background = 'transparent';
+
+        const date = user.created_at ? new Date(user.created_at).toLocaleString('ru-RU') : '—';
+
+        tr.innerHTML = `
+          <td style="padding: 12px; color: var(--text-normal, #dcddde);">${user.display_name || user.username}</td>
+          <td style="padding: 12px; color: var(--text-muted, #b9bbbe); font-family: monospace;">${user.username}</td>
+          <td style="padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 13px;">${date}</td>
+          <td style="padding: 12px; text-align: right;">
+            <button class="btn-approve" data-id="${user.id}" data-name="${user.display_name || user.username}" style="
+              background: #28a745; color: white; padding: 6px 14px; border: none; border-radius: 4px;
+              cursor: pointer; font-size: 13px; font-weight: 500; margin-right: 6px;
+            ">✓ Подтвердить</button>
+            <button class="btn-reject" data-id="${user.id}" data-name="${user.display_name || user.username}" style="
+              background: #dc3545; color: white; padding: 6px 14px; border: none; border-radius: 4px;
+              cursor: pointer; font-size: 13px; font-weight: 500;
+            ">✗ Отклонить</button>
+          </td>
+        `;
+        tbodyEl.appendChild(tr);
+      });
+
+      // Обработчики кнопок
+      tbodyEl.querySelectorAll('.btn-approve').forEach(btn => {
+        btn.addEventListener('click', () => this.showApproveModal(btn.dataset.id, btn.dataset.name));
+      });
+      tbodyEl.querySelectorAll('.btn-reject').forEach(btn => {
+        btn.addEventListener('click', () => this.showRejectModal(btn.dataset.id, btn.dataset.name));
+      });
+    }
+  } catch (error) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    showMessage(error.message || 'Ошибка загрузки заявок', 'error');
+  }
+};
+
+SPARouter.prototype.showApproveModal = function(userId, userName) {
+  const modal = document.getElementById('approve-modal');
+  const textEl = document.getElementById('approve-modal-text');
+  if (textEl) textEl.textContent = `Пользователь «${userName}» получит полный доступ к админ-панели.`;
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('approve-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('approve-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+
+    try {
+      const res = await fetch(`/api/pending-users/${userId}/approve`, { method: 'PUT' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Ошибка подтверждения');
+      }
+      modal.style.display = 'none';
+      this.showPendingToast(`Пользователь «${userName}» одобрен`, 'success');
+      await this.renderPendingUsers();
+    } catch (error) {
+      this.showPendingToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Подтвердить';
+    }
+  };
+
+  document.getElementById('approve-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.showRejectModal = function(userId, userName) {
+  const modal = document.getElementById('reject-modal');
+  const reasonInput = document.getElementById('reject-reason');
+  if (reasonInput) reasonInput.value = '';
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('reject-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('reject-confirm-btn');
+    const reason = document.getElementById('reject-reason').value;
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+
+    try {
+      const res = await fetch(`/api/pending-users/${userId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || undefined })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Ошибка отклонения');
+      }
+      modal.style.display = 'none';
+      this.showPendingToast(`Заявка «${userName}» отклонена`, 'success');
+      await this.renderPendingUsers();
+    } catch (error) {
+      this.showPendingToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Отклонить';
+    }
+  };
+
+  document.getElementById('reject-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.showPendingToast = function(message, type = 'success') {
+  const container = document.getElementById('pending-toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    padding: 12px 20px; border-radius: 6px; color: white; margin-bottom: 8px;
+    background: ${type === 'error' ? '#dc3545' : '#28a745'};
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
+    animation: slideIn 0.3s ease;
+  `;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
 };

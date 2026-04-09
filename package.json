@@ -7,7 +7,11 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "start-with-updater": "node index.js & node duckdns-updater.js",
-    "cleanup": "node cleanup.js"
+    "cleanup": "node cleanup.js",
+    "db:init": "node init-users-db.js",
+    "db:migrate": "node migrate-users-auth.js",
+    "db:root": "node create-root-account.js",
+    "db:setup": "node init-users-db.js && node migrate-users-auth.js && node create-root-account.js"
   },
   "keywords": [],
   "author": "",

@@ -9,7 +9,11 @@
       "Bash(git remote *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(node *)",
+      "Bash(timeout *)",
+      "Bash(curl *)",
+      "Bash(taskkill *)"
     ]
   },
   "$version": 3

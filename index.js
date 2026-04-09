@@ -135,62 +135,138 @@ app.use('/api/*', express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/*', cors(corsOptions));
 
 // Маршруты аутентификации
-app.post('/api/register', async (req, res) => {
+
+// POST /api/register — Регистрация (статус pending, без авто-логина)
+app.post('/api/register', auth.rateLimitLimiter('registration'), async (req, res) => {
   try {
-    const { username, password, roleId } = req.body;
-    
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    const { display_name, password, username } = req.body;
+
+    if (!display_name || !password) {
+      return res.status(400).json({ error: 'Имя и пароль обязательны' });
     }
-    
-    console.log('Registration attempt for username:', username); // Логируем попытку регистрации
-    
-    const user = await auth.register(username, password, roleId);
-    const token = await auth.generateToken(user);
-    
-    console.log('Registration successful for user:', user.username); // Логируем успешную регистрацию
-    
-    res.json({ 
-      user, 
-      token,
-      message: 'User registered successfully'
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль должен быть минимум 6 символов' });
+    }
+
+    if (password !== req.body.password_confirm) {
+      return res.status(400).json({ error: 'Пароли не совпадают' });
+    }
+
+    console.log('Registration attempt for:', display_name);
+
+    const user = await auth.register(display_name, password, username);
+
+    console.log('Registration pending for user:', user.username);
+
+    res.status(201).json({
+      user: {
+        id: user.id,
+        username: user.username,
+        display_name: user.display_name,
+        status: user.status
+      },
+      message: 'Заявка отправлена. Ожидает подтверждения'
     });
   } catch (error) {
-    console.error('Registration error:', error.message); // Логируем ошибку регистрации
+    console.error('Registration error:', error.message);
     res.status(400).json({ error: error.message });
   }
 });
 
-app.post('/api/login', async (req, res) => {
+// POST /api/login — Вход
+app.post('/api/login', auth.rateLimitLimiter('login'), async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+      return res.status(400).json({ error: 'Имя пользователя и пароль обязательны' });
     }
-    
-    console.log('Login attempt for username:', username); // Логируем попытку входа
-    
+
+    console.log('Login attempt for username:', username);
+
     const user = await auth.login(username, password);
     const token = await auth.generateToken(user);
-    
-    console.log('Login successful for user:', user.username); // Логируем успешный вход
-    
-    res.json({ 
-      user, 
+
+    console.log('Login successful for user:', user.username);
+
+    res.json({
+      user,
       token,
-      message: 'Login successful'
+      message: 'Вход выполнен успешно'
     });
   } catch (error) {
-    console.error('Login error:', error.message); // Логируем ошибку входа
+    console.error('Login error:', error.message);
+    // Специфичная обработка для pending статуса
+    if (error.message === 'Аккаунт ожидает подтверждения администратором') {
+      return res.status(403).json({
+        error: error.message,
+        status: 'pending'
+      });
+    }
+    // Специфичная обработка для rejected статуса
+    if (error.message.startsWith('Доступ отклонён')) {
+      return res.status(403).json({
+        error: error.message,
+        status: 'rejected'
+      });
+    }
     res.status(401).json({ error: error.message });
   }
 });
 
+// GET /api/profile — Профиль текущего пользователя
 app.get('/api/profile', auth.authenticateToken, async (req, res) => {
   try {
     const user = await auth.getUserById(req.user.id);
     res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// МАРШРУТЫ УПРАВЛЕНИЯ ЗАЯВКАМИ (root only)
+// ========================================
+
+// GET /api/pending-users — Список ожидающих подтверждения
+app.get('/api/pending-users', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const pendingUsers = await auth.getPendingUsers();
+    res.json({ users: pendingUsers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/pending-users/:id/approve — Одобрить пользователя
+app.put('/api/pending-users/:id/approve', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await auth.approveUser(id, req.user.username);
+    res.json({ message: 'Пользователь одобрен', ...result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/pending-users/:id/reject — Отклонить пользователя
+app.put('/api/pending-users/:id/reject', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const result = await auth.rejectUser(id, reason, req.user.username);
+    res.json({ message: 'Заявка отклонена', ...result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// GET /api/all-users — Все пользователи (root only)
+app.get('/api/all-users', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const users = await auth.getAllUsers();
+    res.json({ users });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

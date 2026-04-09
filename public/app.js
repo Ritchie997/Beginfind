@@ -42,17 +42,18 @@ window.showMessage = function(text, type = 'info') {
 window.updateUserInfo = function() {
   try {
     const currentUser = authManager.getCurrentUser();
-    if (currentUser && currentUser.username) {
-      // Update displayed username
+    if (currentUser && (currentUser.username || currentUser.display_name)) {
+      // Update displayed username (prefer display_name)
       const usernameDisplay = document.querySelector('.username-display');
       if (usernameDisplay) {
-        usernameDisplay.textContent = currentUser.username;
+        usernameDisplay.textContent = currentUser.display_name || currentUser.username;
       }
 
-      // Update avatar (using first letter of username)
+      // Update avatar (using first letter of display_name)
       const userAvatar = document.querySelector('.user-avatar');
       if (userAvatar) {
-        userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+        const name = currentUser.display_name || currentUser.username;
+        userAvatar.textContent = name.charAt(0).toUpperCase();
       }
     }
   } catch (error) {
@@ -431,8 +432,75 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     window.initPageAnimations();
     window.initTooltips();
+    window.initRootSidebarVisibility();
+    window.initLogoutHandler();
+    window.checkApprovedStatus();
+    window.updateUserInfo();
   });
 } else {
   window.initPageAnimations();
   window.initTooltips();
+  window.initRootSidebarVisibility();
+  window.initLogoutHandler();
+  window.checkApprovedStatus();
+  window.updateUserInfo();
 }
+
+// Показать пункт «Заявки» только для root-пользователей
+window.initRootSidebarVisibility = function() {
+  try {
+    const user = authManager.getUser();
+    if (user && user.is_root) {
+      const sidebarItem = document.getElementById('sidebar-pending-users');
+      if (sidebarItem) sidebarItem.style.display = '';
+    }
+  } catch (e) {
+    console.error('Error in initRootSidebarVisibility:', e);
+  }
+};
+
+// Обработчик кнопки «Выход» и dropdown меню пользователя
+window.initLogoutHandler = function() {
+  const userInfo = document.getElementById('user-info');
+  const userDropdown = document.getElementById('user-dropdown');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  // Показываем/скрываем dropdown при клике на аватар/имя
+  if (userInfo && userDropdown) {
+    userInfo.addEventListener('click', function(e) {
+      e.stopPropagation();
+      userDropdown.classList.toggle('show');
+    });
+
+    // Закрываем dropdown при клике вне его
+    document.addEventListener('click', function(e) {
+      if (!userInfo.contains(e.target)) {
+        userDropdown.classList.remove('show');
+      }
+    });
+  }
+
+  // Обработчик для кнопки выхода
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      authManager.logout();
+      if (userDropdown) userDropdown.classList.remove('show');
+      window.location.href = '/';
+    });
+  }
+};
+
+// Проверка статуса approved — блокировка для pending/rejected
+window.checkApprovedStatus = function() {
+  try {
+    const user = authManager.getUser();
+    if (!user) return;
+
+    if (user.status && user.status !== 'approved') {
+      showStatusBlocker(user.status, user.rejection_reason);
+    }
+  } catch (e) {
+    console.error('Error in checkApprovedStatus:', e);
+  }
+};

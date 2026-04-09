@@ -4,7 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { assignObserverRoleIfNeeded } = require('./server-membership-check');
 
-// Подключение к новой базе данных пользователей
+// Подключение к базе данных пользователей
 const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
   if (err) {
     console.error('Error opening users database', err);
@@ -15,179 +15,410 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
 
 // Настройки JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-// Регистрация пользователя
-async function register(username, password, roleId = 4) { // По умолчанию используем роль 4 как у существующих пользователей
-  // Хешируем пароль
-  const hashedPassword = await bcrypt.hash(password, 10);
-  
+// ========================================
+// РЕГИСТРАЦИЯ
+// ========================================
+
+/**
+ * Регистрация нового пользователя
+ * @param {string} display_name - Отображаемое имя
+ * @param {string} password - Пароль (открытый текст)
+ * @param {string} username - Уникальный логин (опционально, по умолчанию = display_name)
+ * @returns {Promise<{id, username, display_name, status}>}
+ */
+async function register(display_name, password, username = null) {
+  const hashedPassword = await bcrypt.hash(password, 12);
+  const loginName = username || display_name;
+
   return new Promise((resolve, reject) => {
     // Проверяем, существует ли пользователь
-    db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
+    db.get('SELECT * FROM users WHERE username = ?', [loginName], (err, row) => {
       if (err) {
         reject(err);
         return;
       }
-      
+
       if (row) {
-        reject(new Error('Username already exists'));
+        reject(new Error('Имя пользователя уже занято'));
         return;
       }
-      
-      // Вставляем нового пользователя
+
+      // Вставляем нового пользователя со статусом pending
       db.run(
-        'INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)', 
-        [username, hashedPassword, roleId], 
-        function(err) {
+        `INSERT INTO users (username, display_name, password, role_id, status, is_root)
+         VALUES (?, ?, ?, 4, 'pending', 0)`,
+        [loginName, display_name, hashedPassword],
+        function (err) {
           if (err) {
             reject(err);
             return;
           }
-          
-          // Возвращаем нового пользователя
-          const newUser = {
+
+          resolve({
             id: this.lastID,
-            username,
-            role_id: roleId
-          };
-          
-          resolve(newUser);
+            username: loginName,
+            display_name: display_name,
+            status: 'pending',
+            is_root: false
+          });
         }
       );
     });
   });
 }
 
-// Вход пользователя
+// ========================================
+// ВХОД
+// ========================================
+
+/**
+ * Вход пользователя с проверкой статуса
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<{id, username, display_name, status, is_root, role_id}>}
+ */
 async function login(username, password) {
   return new Promise((resolve, reject) => {
-    // Получаем пользователя из базы
     db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
       if (err) {
         reject(err);
         return;
       }
-      
+
       if (!row) {
-        reject(new Error('Invalid username or password'));
+        reject(new Error('Неверное имя пользователя или пароль'));
         return;
       }
-      
-      // Проверяем, есть ли хешированный пароль в базе
+
+      // Проверяем пароль
+      let isValid = false;
+
       if (!row.password) {
-        // Если пароль отсутствует (NULL), используем "admin" как пароль по умолчанию
-        if (password !== 'admin') {
-          reject(new Error('Invalid username or password'));
-          return;
+        // Пароль отсутствует — используем «admin» как fallback для старых аккаунтов
+        if (password === 'admin') {
+          isValid = true;
         }
-      } else if (row.password.length < 30) { // bcrypt хэши обычно длиннее 30 символов
-        // Если пароль не хеширован (старый формат), сравниваем как обычную строку
-        if (password !== row.password) {
-          reject(new Error('Invalid username or password'));
-          return;
+      } else if (row.password.length < 30) {
+        // Не-хешированный пароль (legacy)
+        if (password === row.password) {
+          isValid = true;
         }
       } else {
-        // Если пароль хеширован, используем bcrypt
-        const isValid = await bcrypt.compare(password, row.password);
-        if (!isValid) {
-          reject(new Error('Invalid username or password'));
-          return;
-        }
+        // bcrypt хеш
+        isValid = await bcrypt.compare(password, row.password);
       }
-      
-      // Проверяем, состоит ли пользователь в каком-либо сервере
-      // Если нет, назначаем ему роль "наблюдатель" (только при первом входе)
-      const serversDb = new sqlite3.Database(path.join(__dirname, 'servers.db'));
-      serversDb.get(`
-        SELECT COUNT(*) as server_count 
-        FROM user_server_memberships 
-        WHERE user_id = ?
-      `, [row.id], (err, countRow) => {
-        if (err) {
-          console.error('Error checking user server membership:', err);
-        } else {
-          // Если пользователь не состоит ни в одном сервере, он считается наблюдателем
-          // Эта логика будет обрабатываться на клиентской стороне
-        }
-        
-        // Возвращаем пользователя без пароля
-        const user = {
-          id: row.id,
-          username: row.username,
-          role_id: row.role_id
-        };
-        
-        serversDb.close();
-        resolve(user);
-      });
+
+      if (!isValid) {
+        reject(new Error('Неверное имя пользователя или пароль'));
+        return;
+      }
+
+      // Проверяем статус аккаунта
+      const status = row.status || 'pending';
+
+      if (status === 'rejected') {
+        const reason = row.rejection_reason || 'Ваша заявка была отклонена.';
+        reject(new Error(`Доступ отклонён. Причина: ${reason}`));
+        return;
+      }
+
+      if (status === 'pending') {
+        reject(new Error('Аккаунт ожидает подтверждения администратором'));
+        return;
+      }
+
+      // status === 'approved' — всё в порядке
+
+      // Проверяем, нужно ли назначить роль наблюдателя
+      const observerCheck = await assignObserverRoleIfNeeded(row.id);
+
+      const user = {
+        id: row.id,
+        username: row.username,
+        display_name: row.display_name || row.username,
+        role_id: row.role_id,
+        status: status,
+        is_root: !!row.is_root,
+        is_observer: observerCheck?.assigned || false
+      };
+
+      resolve(user);
     });
   });
 }
 
-// Генерация токена
+// ========================================
+// JWT ТОКЕНЫ
+// ========================================
+
+/**
+ * Генерация access токена
+ */
 async function generateToken(user) {
-  // Проверяем, нужно ли назначить роль наблюдателя
-  const observerCheck = await assignObserverRoleIfNeeded(user.id);
-  
   return jwt.sign(
-    { 
-      id: user.id, 
-      username: user.username, 
+    {
+      id: user.id,
+      username: user.username,
+      display_name: user.display_name,
       role_id: user.role_id,
-      is_observer: observerCheck.assigned,
-      observer_role: observerCheck.assigned ? observerCheck.role : null
+      status: user.status,
+      is_root: user.is_root,
+      is_observer: user.is_observer || false
     },
     JWT_SECRET,
-    { expiresIn: '24h' }
+    { expiresIn: JWT_EXPIRES_IN }
   );
 }
 
-// Аутентификация токена
+/**
+ * Генерация refresh токена
+ */
+function generateRefreshToken(user) {
+  return jwt.sign(
+    { id: user.id, type: 'refresh' },
+    JWT_SECRET,
+    { expiresIn: JWT_REFRESH_EXPIRES_IN }
+  );
+}
+
+/**
+ * Аутентификация токена
+ */
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
+    return res.status(401).json({ error: 'Требуется токен доступа' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+      return res.status(403).json({ error: 'Неверный или просроченный токен' });
     }
-    
+
     req.user = user;
     next();
   });
 }
 
-// Получение пользователя по ID
+// ========================================
+// MIDDLEWARE — ПРОВЕРКА СТАТУСА
+// ========================================
+
+/**
+ * Middleware: допускает только пользователей со статусом approved
+ */
+function checkApproved(req, res, next) {
+  if (req.user.status !== 'approved') {
+    return res.status(403).json({
+      error: 'Доступ запрещён: аккаунт не подтверждён',
+      status: req.user.status
+    });
+  }
+  next();
+}
+
+/**
+ * Middleware: допускает только root-пользователей
+ */
+function checkRoot(req, res, next) {
+  if (!req.user.is_root) {
+    return res.status(403).json({ error: 'Доступно только root-пользователю' });
+  }
+  next();
+}
+
+// ========================================
+// УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
+// ========================================
+
+/**
+ * Получить пользователя по ID
+ */
 function getUserById(id) {
   return new Promise((resolve, reject) => {
-    db.get('SELECT id, username, role_id FROM users WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT id, username, display_name, role_id, status, is_root FROM users WHERE id = ?', [id], (err, row) => {
       if (err) {
         reject(err);
         return;
       }
-      
+
       if (!row) {
-        reject(new Error('User not found'));
+        reject(new Error('Пользователь не найден'));
         return;
       }
-      
+
       resolve({
         id: row.id,
         username: row.username,
-        role_id: row.role_id
+        display_name: row.display_name || row.username,
+        role_id: row.role_id,
+        status: row.status || 'pending',
+        is_root: !!row.is_root
       });
     });
   });
 }
 
+/**
+ * Получить всех пользователей со статусом pending
+ */
+function getPendingUsers() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      'SELECT id, username, display_name, role_id, status, created_at FROM users WHERE status = ? ORDER BY created_at DESC',
+      ['pending'],
+      (err, rows) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(rows);
+      }
+    );
+  });
+}
+
+/**
+ * Одобрить пользователя
+ */
+function approveUser(userId, approvedBy) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE users SET status = ? WHERE id = ?',
+      ['approved', userId],
+      function (err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (this.changes === 0) {
+          reject(new Error('Пользователь не найден'));
+          return;
+        }
+        console.log(`Пользователь ${userId} одобрен пользователем ${approvedBy}`);
+        resolve({ success: true, userId });
+      }
+    );
+  });
+}
+
+/**
+ * Отклонить пользователя
+ */
+function rejectUser(userId, reason, rejectedBy) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE users SET status = ?, rejection_reason = ? WHERE id = ?',
+      ['rejected', reason || 'Заявка отклонена администратором', userId],
+      function (err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (this.changes === 0) {
+          reject(new Error('Пользователь не найден'));
+          return;
+        }
+        console.log(`Пользователь ${userId} отклонён пользователем ${rejectedBy}. Причина: ${reason}`);
+        resolve({ success: true, userId });
+      }
+    );
+  });
+}
+
+/**
+ * Получить всех пользователей (для root-админки)
+ */
+function getAllUsers() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      'SELECT id, username, display_name, role_id, status, is_root, created_at FROM users ORDER BY created_at DESC',
+      [],
+      (err, rows) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(rows);
+      }
+    );
+  });
+}
+
+// ========================================
+// RATE-LIMIT ХЕЛПЕР
+// ========================================
+
+const loginAttempts = new Map();
+const registrationAttempts = new Map();
+
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 минут
+const MAX_LOGIN_ATTEMPTS = 10;
+const MAX_REGISTRATION_ATTEMPTS = 5;
+
+/**
+ * Rate-limit middleware для login/register
+ */
+function rateLimitLimiter(type) {
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const attemptsMap = type === 'login' ? loginAttempts : registrationAttempts;
+    const maxAttempts = type === 'login' ? MAX_LOGIN_ATTEMPTS : MAX_REGISTRATION_ATTEMPTS;
+
+    const key = `${ip}:${type}`;
+    const now = Date.now();
+    const record = attemptsMap.get(key);
+
+    if (record && now - record.startTime < RATE_LIMIT_WINDOW) {
+      record.count++;
+      if (record.count > maxAttempts) {
+        const retryAfter = Math.ceil((record.startTime + RATE_LIMIT_WINDOW - now) / 1000);
+        return res.status(429).json({
+          error: `Слишком много попыток. Попробуйте через ${retryAfter} сек.`
+        });
+      }
+    } else {
+      attemptsMap.set(key, { count: 1, startTime: now });
+    }
+
+    next();
+  };
+}
+
+// Сбрасываем старые записи каждый час
+setInterval(() => {
+  const now = Date.now();
+  [loginAttempts, registrationAttempts].forEach(map => {
+    for (const [key, record] of map.entries()) {
+      if (now - record.startTime > RATE_LIMIT_WINDOW) {
+        map.delete(key);
+      }
+    }
+  });
+}, 3600000);
+
+// ========================================
+// ЭКСПОРТ
+// ========================================
+
 module.exports = {
   register,
   login,
   generateToken,
+  generateRefreshToken,
   authenticateToken,
-  getUserById
+  checkApproved,
+  checkRoot,
+  getUserById,
+  getPendingUsers,
+  approveUser,
+  rejectUser,
+  getAllUsers,
+  rateLimitLimiter,
+  JWT_SECRET
 };
