@@ -240,27 +240,29 @@ class AuthManager {
   }
 
   // Регистрация
-  async register(username, password, roleId = null) {
+  async register(username, password, confirmPassword) {
     try {
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password, roleId })
+        body: JSON.stringify({ username, password, confirmPassword })
       });
 
       const data = await response.json();
 
-      if (response.ok && data.token) {
-        // Устанавливаем токен и информацию о пользователе
-        this.setToken(data.token);
-        this.setUser(data.user || { username: username });
+      if (response.ok) {
+        // Сохраняем информацию о pending регистрации
+        localStorage.setItem(this.pendingRegistrationKey, JSON.stringify({
+          username,
+          timestamp: Date.now()
+        }));
         
         // Вызываем событие успешной регистрации
-        this.dispatchAuthEvent('register', { user: data.user || { username: username } });
+        this.dispatchAuthEvent('register', { user: data.user });
         
-        return { success: true, message: data.message || 'Registration successful' };
+        return { success: true, message: data.message || 'Заявка отправлена', user: data.user };
       } else {
         return { success: false, error: data.error || 'Registration failed' };
       }
@@ -268,6 +270,24 @@ class AuthManager {
       console.error('Registration error:', error);
       return { success: false, error: 'Network error occurred' };
     }
+  }
+  
+  // Проверка наличия pending регистрации
+  hasPendingRegistration() {
+    const pending = localStorage.getItem(this.pendingRegistrationKey);
+    if (pending) {
+      try {
+        return JSON.parse(pending);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+  
+  // Очистка pending регистрации
+  clearPendingRegistration() {
+    localStorage.removeItem(this.pendingRegistrationKey);
   }
 
   // Вызов события аутентификации
@@ -287,6 +307,12 @@ class AuthManager {
       return null;
     }
     return this.getUser();
+  }
+  
+  // Проверка, является ли пользователь root
+  isRoot() {
+    const user = this.getUser();
+    return user && user.is_root === 1;
   }
 }
 

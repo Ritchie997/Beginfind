@@ -18,6 +18,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role_id INTEGER DEFAULT 4,
+      status TEXT DEFAULT 'pending',
+      is_root INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -40,6 +42,25 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
       console.error('Error creating tables in users database:', err);
     } else {
       console.log('Users database tables created successfully');
+      
+      // Добавляем колонки status и is_root если их нет (для существующих БД)
+      db.exec(`
+        ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'pending';
+      `, (err) => {
+        // Игнорируем ошибку, если колонка уже существует
+        if (err && !err.message.includes('duplicate')) {
+          console.error('Error adding status column:', err);
+        }
+      });
+      
+      db.exec(`
+        ALTER TABLE users ADD COLUMN is_root INTEGER DEFAULT 0;
+      `, (err) => {
+        // Игнорируем ошибку, если колонка уже существует
+        if (err && !err.message.includes('duplicate')) {
+          console.error('Error adding is_root column:', err);
+        }
+      });
     }
     
     // Закрываем соединение
