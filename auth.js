@@ -10,6 +10,24 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
     console.error('Error opening users database', err);
   } else {
     console.log('Connected to users database');
+    // Создаем таблицу пользователей, если она не существует
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT,
+      role_id INTEGER DEFAULT 4,
+      status TEXT DEFAULT 'pending',
+      is_root INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+      if (err) {
+        console.error('Error creating users table:', err);
+      } else {
+        console.log('Users table ready');
+        // Инициализируем root-пользователя после создания таблицы
+        ensureRootUser().catch(err => console.error('Error creating root user:', err));
+      }
+    });
   }
 });
 
@@ -53,9 +71,6 @@ async function ensureRootUser() {
     });
   });
 }
-
-// Инициализируем root-пользователя при загрузке модуля
-ensureRootUser().catch(err => console.error('Error creating root user:', err));
 
 // Регистрация пользователя
 async function register(username, password, roleId = 4) { // По умолчанию используем роль 4 как у существующих пользователей
