@@ -912,6 +912,15 @@ class SPARouter {
   // Initialize settings page
   async initSettingsPage() {
     this.setupSettingsFormEvents();
+    // Initialize backup page after DOM update
+    setTimeout(() => {
+      if (typeof initBackupPage === 'function') {
+        console.log('[SPA] Вызов initBackupPage');
+        initBackupPage();
+      } else {
+        console.warn('[SPA] initBackupPage не найден');
+      }
+    }, 100);
   }
 
   // Set up settings form events

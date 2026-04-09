@@ -40,7 +40,7 @@
 
         <div class="form-group">
             <label class="form-label">Количество статей на странице</label>
-            <select id="articlesPerPage" class="form-select">
+            <select id="articlesPerPage" class="form-input">
                 <option value="10">10</option>
                 <option value="20" selected>20</option>
                 <option value="50">50</option>
@@ -57,8 +57,78 @@
         </div>
     </fieldset>
 
+    <fieldset class="fieldset-group">
+        <legend>Резервное копирование</legend>
+        <div class="setting-description">Управление бэкапами баз данных</div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin-bottom: 10px; color: var(--header-primary);">Автоматический бэкап</h4>
+
+            <div class="form-group">
+                <label class="form-label">Включить автоматический бэкап</label>
+                <label class="switch">
+                    <input type="checkbox" id="autoBackupEnabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Интервал бэкапа (часы)</label>
+                <input type="number" id="autoBackupInterval" class="form-input" value="12" min="1" max="168">
+                <div class="form-hint">Бэкап будет создаваться автоматически каждые N часов</div>
+            </div>
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px;">
+            <h4 style="margin-bottom: 10px; color: var(--header-primary);">Список бэкапов</h4>
+
+            <div class="button-group" style="margin-bottom: 15px;">
+                <button class="btn btn-success btn-sm" id="create-backup-btn">
+                    <i class="fas fa-plus"></i> Создать бэкап
+                </button>
+                <button class="btn btn-primary btn-sm" id="upload-backup-btn">
+                    <i class="fas fa-upload"></i> Загрузить бэкап
+                </button>
+                <button class="btn btn-secondary btn-sm" id="refresh-backups-btn">
+                    <i class="fas fa-sync-alt"></i> Обновить
+                </button>
+            </div>
+
+            <input type="file" id="backup-file-input" accept=".zip" style="display: none;">
+
+            <div id="backups-list">
+                <div class="loading-pulse">Загрузка списка бэкапов...</div>
+            </div>
+        </div>
+    </fieldset>
+
     <div class="button-group">
         <button class="btn btn-primary" id="save-settings-btn">Сохранить настройки</button>
         <button class="btn btn-secondary" id="reset-settings-btn">Сбросить настройки</button>
     </div>
+
+    <div id="backup-notification" class="notification" style="display: none; position: fixed; top: 20px; right: 20px; padding: 15px 20px; border-radius: 8px; background: var(--background-secondary); border: 1px solid var(--background-accent); box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10000; max-width: 400px;">
+        <div id="backup-notification-message"></div>
+    </div>
 </div>
+
+<style>
+.backup-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.backup-table th, .backup-table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--background-accent); font-size: 14px; }
+.backup-table th { background-color: var(--background-secondary); color: var(--header-primary); font-weight: 600; }
+.backup-table tr:hover { background-color: var(--background-secondary); }
+.backup-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.backup-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; margin-top: 8px; }
+.backup-info-label { color: var(--text-muted); font-weight: 500; }
+.backup-info-value { color: var(--text-normal); }
+.status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.status-badge.enabled { background-color: rgba(59, 165, 93, 0.2); color: var(--green); }
+.status-badge.disabled { background-color: rgba(237, 66, 69, 0.2); color: var(--red); }
+.empty-state { text-align: center; padding: 30px 20px; color: var(--text-muted); }
+.empty-state i { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
+@media (max-width: 768px) {
+    .backup-table { display: block; overflow-x: auto; }
+    .backup-actions { flex-direction: column; }
+    .backup-actions .btn { width: 100%; }
+}
+</style>

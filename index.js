@@ -4,8 +4,11 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer');
 const os = require('os');
+const fs = require('fs');
+const cron = require('node-cron');
 require('dotenv').config();
 const auth = require('./auth');
+const backup = require('./backup');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -1294,7 +1297,78 @@ app.listen(PORT, HOST, () => {
   console.log(`Access locally: http://localhost:${PORT}`);
   console.log(`Access from network: http://[YOUR_LOCAL_IP]:${PORT} (replace [YOUR_LOCAL_IP] with your actual IP)`);
   console.log(`Test interface available at http://localhost:${PORT}/test.html or http://[YOUR_LOCAL_IP]:${PORT}/test.html`);
+  
+  // Инициализация автоматического бэкапа
+  initializeAutoBackup();
 });
+
+/**
+ * Инициализация автоматического бэкапа
+ */
+function initializeAutoBackup() {
+  const settingsPath = path.join(__dirname, 'backup-settings.json');
+  const backupDir = path.join(__dirname, 'backups');
+  const uploadsDir = path.join(__dirname, 'public', 'uploads');
+
+  // Создаем директорию для бэкапов, если не существует
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+    console.log('[Auto Backup] Директория backups создана');
+  }
+
+  // Создаем директорию для загрузок, если не существует
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log('[Uploads] Директория uploads создана');
+  }
+
+  // Создаем файл настроек, если не существует
+  if (!fs.existsSync(settingsPath)) {
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      enabled: false,
+      intervalHours: 12,
+      lastBackup: null
+    }, null, 2));
+  }
+  
+  // Проверяем настройки каждые 5 минут
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      
+      if (settings.enabled) {
+        const lastBackup = settings.lastBackup ? new Date(settings.lastBackup) : null;
+        const now = new Date();
+        
+        // Проверяем, нужно ли создать бэкап
+        if (!lastBackup || backup.shouldRunAutoBackup(lastBackup, settings.intervalHours)) {
+          console.log('[Auto Backup] Создаю автоматический бэкап...');
+          const result = await backup.createBackup();
+          
+          // Обновляем время последнего бэкапа
+          settings.lastBackup = new Date().toISOString();
+          fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+          
+          console.log(`[Auto Backup] Бэкап создан: ${result.fileName} (${formatFileSize(result.size)})`);
+        }
+      }
+    } catch (error) {
+      console.error('[Auto Backup] Ошибка:', error.message);
+    }
+  });
+  
+  console.log('[Auto Backup] Система автоматического бэкапа инициализирована');
+}
+
+/**
+ * Форматирование размера файла
+ */
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Б';
+  const units = ['Б', 'КБ', 'МБ', 'ГБ'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+}
 
 // === Примечание о роли "наблюдатель" ===
 // Роль "наблюдатель" добавляется на клиентской стороне в интерфейсе создания/редактирования статей
@@ -1474,6 +1548,209 @@ app.get('/api/users', auth.authenticateToken, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================
+// МАРШРУТЫ УПРАВЛЕНИЯ БЭКАПАМИ (root only)
+// ========================================
+
+// Создание бэкапа баз данных
+app.post('/api/backups/create', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const result = await backup.createBackup(name);
+    
+    res.json({
+      success: true,
+      message: 'Бэкап успешно создан',
+      data: {
+        fileName: result.fileName,
+        size: result.size,
+        filesCount: result.filesCount,
+        timestamp: result.timestamp
+      }
+    });
+  } catch (error) {
+    console.error('Backup create error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Восстановление из бэкапа
+app.post('/api/backups/restore/:fileName', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const { fileName } = req.params;
+    const filePath = backup.getBackupFilePath(fileName);
+    const result = await backup.restoreBackup(filePath);
+    
+    res.json({
+      success: true,
+      message: `Восстановлено ${result.count} файл(ов)`,
+      data: {
+        restored: result.restored,
+        errors: result.errors
+      }
+    });
+  } catch (error) {
+    console.error('Backup restore error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Загрузка бэкапа из файла
+app.post('/api/backups/upload', auth.authenticateToken, auth.checkApproved, auth.checkRoot, upload.single('backup'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Файл бэкапа не загружен' });
+    }
+
+    // Проверяем расширение файла
+    if (!req.file.originalname.endsWith('.zip')) {
+      return res.status(400).json({ success: false, error: 'Разрешены только ZIP файлы' });
+    }
+
+    // Создаем директорию для бэкапов, если не существует
+    if (!fs.existsSync(backup.BACKUP_DIR)) {
+      fs.mkdirSync(backup.BACKUP_DIR, { recursive: true });
+    }
+
+    // Перемещаем файл в директорию бэкапов
+    const destPath = path.join(backup.BACKUP_DIR, req.file.originalname);
+    fs.renameSync(req.file.path, destPath);
+
+    res.json({
+      success: true,
+      message: 'Бэкап успешно загружен',
+      data: {
+        fileName: req.file.originalname,
+        size: req.file.size
+      }
+    });
+  } catch (error) {
+    console.error('Backup upload error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Получение списка всех бэкапов
+app.get('/api/backups', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
+  try {
+    const backups = backup.getBackupList();
+    res.json({ success: true, data: backups });
+  } catch (error) {
+    console.error('Get backups list error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Удаление бэкапа
+app.delete('/api/backups/:fileName', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
+  try {
+    const { fileName } = req.params;
+    backup.deleteBackup(fileName);
+    
+    res.json({
+      success: true,
+      message: 'Бэкап успешно удален'
+    });
+  } catch (error) {
+    console.error('Backup delete error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Скачивание бэкапа
+app.get('/api/backups/download/:fileName', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
+  try {
+    const { fileName } = req.params;
+    const filePath = backup.getBackupFilePath(fileName);
+    
+    res.download(filePath, fileName);
+  } catch (error) {
+    console.error('Backup download error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Получение настроек автоматического бэкапа
+app.get('/api/backups/auto/settings', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
+  try {
+    // Загружаем настройки из файла
+    const settingsPath = path.join(__dirname, 'backup-settings.json');
+    let settings = {
+      enabled: false,
+      intervalHours: 12,
+      lastBackup: null
+    };
+
+    if (fs.existsSync(settingsPath)) {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    }
+
+    res.json({ success: true, data: settings });
+  } catch (error) {
+    console.error('Get auto backup settings error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Обновление настроек автоматического бэкапа
+app.put('/api/backups/auto/settings', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
+  try {
+    const { enabled, intervalHours } = req.body;
+    
+    const settings = {
+      enabled: enabled || false,
+      intervalHours: intervalHours || 12,
+      lastBackup: null
+    };
+
+    const settingsPath = path.join(__dirname, 'backup-settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    res.json({
+      success: true,
+      message: 'Настройки автоматического бэкапа сохранены',
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update auto backup settings error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Запуск автоматического бэкапа
+app.post('/api/backups/auto/run', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const result = await backup.createBackup();
+    
+    // Обновляем время последнего бэкапа
+    const settingsPath = path.join(__dirname, 'backup-settings.json');
+    let settings = {
+      enabled: false,
+      intervalHours: 12,
+      lastBackup: null
+    };
+
+    if (fs.existsSync(settingsPath)) {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    }
+
+    settings.lastBackup = new Date().toISOString();
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    res.json({
+      success: true,
+      message: 'Автоматический бэкап создан',
+      data: {
+        fileName: result.fileName,
+        timestamp: result.timestamp
+      }
+    });
+  } catch (error) {
+    console.error('Auto backup run error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
