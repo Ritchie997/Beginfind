@@ -16,6 +16,47 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
 // Настройки JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 
+// Создание root-пользователя при инициализации модуля
+async function ensureRootUser() {
+  const rootUsername = process.env.ROOT_USERNAME || 'root';
+  const rootPassword = process.env.ROOT_PASSWORD || 'admin';
+  
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM users WHERE username = ? AND is_root = 1', [rootUsername], async (err, row) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      
+      if (row) {
+        console.log('Root user already exists');
+        resolve(row);
+        return;
+      }
+      
+      // Создаем root-пользователя
+      const hashedPassword = await bcrypt.hash(rootPassword, 10);
+      
+      db.run(
+        'INSERT INTO users (username, password, role_id, status, is_root) VALUES (?, ?, ?, ?, ?)',
+        [rootUsername, hashedPassword, 1, 'approved', 1],
+        function(err) {
+          if (err) {
+            reject(err);
+            return;
+          }
+          
+          console.log('Root user created successfully with ID:', this.lastID);
+          resolve({ id: this.lastID, username: rootUsername, is_root: 1, status: 'approved' });
+        }
+      );
+    });
+  });
+}
+
+// Инициализируем root-пользователя при загрузке модуля
+ensureRootUser().catch(err => console.error('Error creating root user:', err));
+
 // Регистрация пользователя
 async function register(username, password, roleId = 4) { // По умолчанию используем роль 4 как у существующих пользователей
   // Хешируем пароль
@@ -34,10 +75,10 @@ async function register(username, password, roleId = 4) { // По умолчан
         return;
       }
       
-      // Вставляем нового пользователя
+      // Вставляем нового пользователя со статусом pending
       db.run(
-        'INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)', 
-        [username, hashedPassword, roleId], 
+        'INSERT INTO users (username, password, role_id, status) VALUES (?, ?, ?, ?)', 
+        [username, hashedPassword, roleId, 'pending'], 
         function(err) {
           if (err) {
             reject(err);
@@ -48,7 +89,8 @@ async function register(username, password, roleId = 4) { // По умолчан
           const newUser = {
             id: this.lastID,
             username,
-            role_id: roleId
+            role_id: roleId,
+            status: 'pending'
           };
           
           resolve(newUser);
@@ -70,6 +112,17 @@ async function login(username, password) {
       
       if (!row) {
         reject(new Error('Invalid username or password'));
+        return;
+      }
+      
+      // Проверяем статус пользователя
+      if (row.status === 'pending') {
+        reject(new Error('Аккаунт ожидает подтверждения администратором'));
+        return;
+      }
+      
+      if (row.status === 'rejected') {
+        reject(new Error('В доступе отказано. Ваша заявка была отклонена.'));
         return;
       }
       
@@ -114,7 +167,9 @@ async function login(username, password) {
         const user = {
           id: row.id,
           username: row.username,
-          role_id: row.role_id
+          role_id: row.role_id,
+          status: row.status,
+          is_root: row.is_root || 0
         };
         
         serversDb.close();
@@ -164,7 +219,7 @@ function authenticateToken(req, res, next) {
 // Получение пользователя по ID
 function getUserById(id) {
   return new Promise((resolve, reject) => {
-    db.get('SELECT id, username, role_id FROM users WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT id, username, role_id, status, is_root FROM users WHERE id = ?', [id], (err, row) => {
       if (err) {
         reject(err);
         return;
@@ -178,8 +233,41 @@ function getUserById(id) {
       resolve({
         id: row.id,
         username: row.username,
-        role_id: row.role_id
+        role_id: row.role_id,
+        status: row.status,
+        is_root: row.is_root || 0
       });
+    });
+  });
+}
+
+// Получение всех пользователей со статусом pending (для root-пользователя)
+function getPendingUsers() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT id, username, role_id, created_at FROM users WHERE status = ? ORDER BY created_at DESC', ['pending'], (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows);
+    });
+  });
+}
+
+// Обновление статуса пользователя (для root-пользователя)
+function updateUserStatus(userId, newStatus) {
+  return new Promise((resolve, reject) => {
+    if (!['approved', 'rejected'].includes(newStatus)) {
+      reject(new Error('Invalid status. Must be "approved" or "rejected"'));
+      return;
+    }
+    
+    db.run('UPDATE users SET status = ? WHERE id = ?', [newStatus, userId], function(err) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ id: userId, status: newStatus });
     });
   });
 }
@@ -189,5 +277,7 @@ module.exports = {
   login,
   generateToken,
   authenticateToken,
-  getUserById
+  getUserById,
+  getPendingUsers,
+  updateUserStatus
 };

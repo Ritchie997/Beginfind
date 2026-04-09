@@ -135,54 +135,92 @@ app.use('/api/*', express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/*', cors(corsOptions));
 
 // Маршруты аутентификации
-app.post('/api/register', async (req, res) => {
+
+// Rate limiting для регистрации и логина
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 минут
+const RATE_LIMIT_MAX = 10; // максимум 10 попыток
+
+function rateLimitMiddleware(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!rateLimitStore.has(ip)) {
+    rateLimitStore.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return next();
+  }
+  
+  const record = rateLimitStore.get(ip);
+  
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + RATE_LIMIT_WINDOW;
+    return next();
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Слишком много попыток. Попробуйте позже.' });
+  }
+  
+  record.count++;
+  next();
+}
+
+app.post('/api/register', rateLimitMiddleware, async (req, res) => {
   try {
-    const { username, password, roleId } = req.body;
+    const { username, password, confirmPassword } = req.body;
     
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+      return res.status(400).json({ error: 'Имя пользователя и пароль обязательны' });
     }
     
-    console.log('Registration attempt for username:', username); // Логируем попытку регистрации
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Пароли не совпадают' });
+    }
     
-    const user = await auth.register(username, password, roleId);
-    const token = await auth.generateToken(user);
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль должен быть не менее 6 символов' });
+    }
     
-    console.log('Registration successful for user:', user.username); // Логируем успешную регистрацию
+    console.log('Registration attempt for username:', username);
     
+    const user = await auth.register(username, password);
+    
+    console.log('Registration successful for user:', user.username);
+    
+    // Не выдаем токен при регистрации со статусом pending
     res.json({ 
-      user, 
-      token,
-      message: 'User registered successfully'
+      user: { id: user.id, username: user.username, status: user.status },
+      message: 'Заявка отправлена. Ожидает подтверждения'
     });
   } catch (error) {
-    console.error('Registration error:', error.message); // Логируем ошибку регистрации
+    console.error('Registration error:', error.message);
     res.status(400).json({ error: error.message });
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', rateLimitMiddleware, async (req, res) => {
   try {
     const { username, password } = req.body;
     
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+      return res.status(400).json({ error: 'Имя пользователя и пароль обязательны' });
     }
     
-    console.log('Login attempt for username:', username); // Логируем попытку входа
+    console.log('Login attempt for username:', username);
     
     const user = await auth.login(username, password);
     const token = await auth.generateToken(user);
     
-    console.log('Login successful for user:', user.username); // Логируем успешный вход
+    console.log('Login successful for user:', user.username);
     
     res.json({ 
       user, 
       token,
-      message: 'Login successful'
+      message: 'Вход выполнен успешно'
     });
   } catch (error) {
-    console.error('Login error:', error.message); // Логируем ошибку входа
+    console.error('Login error:', error.message);
     res.status(401).json({ error: error.message });
   }
 });
@@ -191,6 +229,46 @@ app.get('/api/profile', auth.authenticateToken, async (req, res) => {
   try {
     const user = await auth.getUserById(req.user.id);
     res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API для получения заявок на подтверждение (только для root)
+app.get('/api/admin/pending-users', auth.authenticateToken, async (req, res) => {
+  try {
+    // Проверяем, является ли пользователь root
+    const user = await auth.getUserById(req.user.id);
+    
+    if (!user.is_root) {
+      return res.status(403).json({ error: 'Доступ запрещен. Требуются права root.' });
+    }
+    
+    const pendingUsers = await auth.getPendingUsers();
+    res.json({ users: pendingUsers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API для подтверждения/отклонения заявок (только для root)
+app.post('/api/admin/user-status', auth.authenticateToken, async (req, res) => {
+  try {
+    const { userId, status } = req.body;
+    
+    // Проверяем, является ли пользователь root
+    const currentUser = await auth.getUserById(req.user.id);
+    
+    if (!currentUser.is_root) {
+      return res.status(403).json({ error: 'Доступ запрещен. Требуются права root.' });
+    }
+    
+    if (!userId || !status) {
+      return res.status(400).json({ error: 'Необходимо указать userId и status' });
+    }
+    
+    const result = await auth.updateUserStatus(userId, status);
+    res.json({ success: true, user: result });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
