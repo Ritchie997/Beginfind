@@ -1,1 +1,5 @@
-Nothing needs to be added to the .gitignore file since the modified files (public/index.html, public/spa-router.js) are standard web development files that should be tracked in version control. There are no build artifacts, dependency directories, or temporary files in the provided changes that would require ignoring.
+```
+# Environment variables
+.env
+.env.*
+```
