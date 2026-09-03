@@ -66,7 +66,16 @@ const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
 });
 
 // Настройки JWT
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+// Раньше при отсутствии JWT_SECRET в окружении тихо подставлялся предсказуемый
+// 'default_secret' — с ним любой мог подделать токен (в т.ч. root/is_root).
+// Теперь сервер лучше не запустить вовсе, чем запустить с предсказуемым секретом.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET не задан в переменных окружения. Задайте его в .env ' +
+    '(node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))") перед запуском сервера.'
+  );
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
@@ -145,21 +154,15 @@ async function login(username, password) {
         return;
       }
 
-      // Проверяем пароль
+      // Проверяем пароль. Раньше здесь был fallback на пароль "admin" для
+      // аккаунтов без хеша и сравнение в открытом виде для нехешированных
+      // паролей короче 30 символов — это фактически бэкдор (любой аккаунт с
+      // пустым/повреждённым полем password пускал по паролю "admin"). Все
+      // текущие аккаунты хранят полноценный bcrypt-хеш, поэтому легаси-ветки
+      // убраны: пароль всегда проверяется через bcrypt.
       let isValid = false;
 
-      if (!row.password) {
-        // Пароль отсутствует — используем «admin» как fallback для старых аккаунтов
-        if (password === 'admin') {
-          isValid = true;
-        }
-      } else if (row.password.length < 30) {
-        // Не-хешированный пароль (legacy)
-        if (password === row.password) {
-          isValid = true;
-        }
-      } else {
-        // bcrypt хеш
+      if (row.password) {
         isValid = await bcrypt.compare(password, row.password);
       }
 

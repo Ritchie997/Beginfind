@@ -14,6 +14,24 @@ const DATABASE_FILES = [
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
 /**
+ * Проверяет имя файла бэкапа и возвращает безопасный абсолютный путь внутри BACKUP_DIR.
+ * Защита от directory traversal (например fileName = "../../.env").
+ * @throws {Error} если имя файла некорректно или выходит за пределы BACKUP_DIR
+ */
+function resolveBackupPath(fileName) {
+  if (!fileName || typeof fileName !== 'string') {
+    throw new Error('Некорректное имя файла бэкапа');
+  }
+  // Отбрасываем любые директории из имени — работаем только с "голым" именем файла
+  const safeName = path.basename(fileName);
+  const resolved = path.resolve(BACKUP_DIR, safeName);
+  if (safeName !== fileName || !resolved.startsWith(path.resolve(BACKUP_DIR) + path.sep)) {
+    throw new Error('Недопустимое имя файла бэкапа');
+  }
+  return resolved;
+}
+
+/**
  * Создание бэкапа всех баз данных
  * @param {string} customName - Custom имя файла бэкапа (опционально)
  * @returns {Promise<{success: boolean, filePath: string, size: number}>}
@@ -106,11 +124,14 @@ async function restoreBackup(backupPath) {
 
     for (const entry of zipEntries) {
       const entryName = entry.entryName;
-      
-      // Проверяем, что это файл базы данных
-      if (entryName.endsWith('.db')) {
+
+      // Восстанавливаем только известные файлы баз данных из белого списка —
+      // раньше проверялось лишь "заканчивается на .db", а путь строился из
+      // entryName напрямую, что позволяло записи вида "../../public/x.db"
+      // (zip slip) перезаписать произвольный файл на сервере.
+      if (DATABASE_FILES.includes(path.basename(entryName)) && path.basename(entryName) === entryName) {
         const targetPath = path.join(__dirname, entryName);
-        
+
         try {
           // Закрываем активные подключения перед восстановлением
           await closeDatabaseConnection(entryName);
@@ -197,8 +218,8 @@ function getBackupList() {
  */
 function deleteBackup(fileName) {
   try {
-    const filePath = path.join(BACKUP_DIR, fileName);
-    
+    const filePath = resolveBackupPath(fileName);
+
     if (!fs.existsSync(filePath)) {
       throw new Error('Файл бэкапа не найден');
     }
@@ -219,8 +240,8 @@ function deleteBackup(fileName) {
  * @returns {string} - Путь к файлу
  */
 function getBackupFilePath(fileName) {
-  const filePath = path.join(BACKUP_DIR, fileName);
-  
+  const filePath = resolveBackupPath(fileName);
+
   if (!fs.existsSync(filePath)) {
     throw new Error('Файл бэкапа не найден');
   }

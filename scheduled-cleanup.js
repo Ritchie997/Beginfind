@@ -74,15 +74,19 @@ async function cleanUnusedFiles() {
   const messengerDb = new sqlite3.Database(path.join(__dirname, 'messenger.db'));
   
   try {
-    // Получаем все используемые файлы из статей
+    // Получаем все используемые файлы из статей: как обложку (image), так и
+    // картинки, вставленные прямо в тело статьи (content). Раньше сканировалась
+    // только обложка — из-за этого демон считал "неиспользуемыми" и удалял
+    // картинки, которые на самом деле показывались внутри статьи.
     const usedFilesFromArticles = await new Promise((resolve, reject) => {
-      articlesDb.all('SELECT image FROM articles WHERE image IS NOT NULL', (err, rows) => {
+      articlesDb.all('SELECT image, content FROM articles', (err, rows) => {
         if (err) {
           reject(err);
         } else {
-          const filenames = rows
-            .map(row => extractFilenameFromUrl(row.image))
-            .filter(filename => filename !== null);
+          const filenames = rows.flatMap(row => [
+            extractFilenameFromUrl(row.image),
+            ...extractFilenamesFromContent(row.content)
+          ]).filter(filename => filename !== null);
           resolve(filenames);
         }
       });
@@ -138,17 +142,19 @@ async function cleanUnusedFiles() {
 }
 
 // Запускаем очистку при старте сервера
-console.log(`[${new Date().toISOString()}] Scheduled cleanup service started`);
+console.log(`[${new Date().toISOString()}] Scheduled cleanup service started (auto-run disabled, see below)`);
 // cleanUnusedFiles(); // Запускаем сразу при старте - отключено, т.к. может удалить используемые файлы
 
-// Планируем выполнение очистки каждый день в 3:00 ночи
-// Выражение cron: минуты часы день_месяца месяц день_недели
-// 0 3 * * * означает каждый день в 3:00
-cron.schedule('0 3 * * *', () => {
-  cleanUnusedFiles();
-}, {
-  scheduled: true,
-  timezone: "Europe/Moscow" // Установите ваш часовой пояс
-});
+// ВРЕМЕННО ОТКЛЮЧЕНО: cleanUnusedFiles() не учитывает картинки, вставленные
+// внутрь тела статьи (articles.content) — только article.image (обложку) и
+// сообщения мессенджера. Из-за этого ежедневный запуск реально удалял файлы,
+// которые используются в теле статей. Включать обратно только после того,
+// как extractFilenamesFromContent() будет применяться и к articles.content.
+// cron.schedule('0 3 * * *', () => {
+//   cleanUnusedFiles();
+// }, {
+//   scheduled: true,
+//   timezone: "Europe/Moscow" // Установите ваш часовой пояс
+// });
 
 module.exports = { cleanUnusedFiles };

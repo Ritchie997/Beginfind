@@ -9,6 +9,7 @@ const cron = require('node-cron');
 require('dotenv').config();
 const auth = require('./auth');
 const backup = require('./backup');
+const { isAdminOnServer } = require('./server-permissions');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -219,7 +220,7 @@ app.post('/api/login', auth.rateLimitLimiter('login'), async (req, res) => {
 });
 
 // GET /api/profile — Профиль текущего пользователя
-app.get('/api/profile', auth.authenticateToken, async (req, res) => {
+app.get('/api/profile', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const user = await auth.getUserById(req.user.id);
     res.json({ user });
@@ -316,7 +317,7 @@ const serversDb = new sqlite3.Database(path.join(__dirname, 'servers.db'), (err)
 });
 
 // API маршруты для мессенджера
-app.get('/api/messages', auth.authenticateToken, (req, res) => {
+app.get('/api/messages', auth.authenticateToken, auth.checkApproved, (req, res) => {
   messengerDb.all('SELECT * FROM messages ORDER BY timestamp DESC', (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
@@ -334,7 +335,7 @@ app.get('/api/messages', auth.authenticateToken, (req, res) => {
   });
 });
 
-app.post('/api/messages', auth.authenticateToken, (req, res) => {
+app.post('/api/messages', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { sender, content } = req.body;
   messengerDb.run('INSERT INTO messages (sender, content) VALUES (?, ?)', [sender, content], function(err) {
     if (err) {
@@ -383,8 +384,58 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
           });
         }
 
+        // Возвращает id ролей сервера, назначенных пользователю на этом сервере
+        function getUserRoleIdsOnServer(userId, serverId) {
+          return new Promise((resolve) => {
+            serversDb.all(
+              'SELECT role_id FROM user_server_role_assignments WHERE user_id = ? AND server_id = ?',
+              [userId, serverId],
+              (err, rows) => resolve(err || !rows ? [] : rows.map(r => r.role_id))
+            );
+          });
+        }
+
+        // Разбирает поле articles.role (JSON-массив id ролей сервера, одиночная роль
+        // или пусто) в массив числовых id ролей сервера
+        function parseArticleRoleIds(roleField) {
+          if (!roleField) return [];
+          let values;
+          try {
+            values = (roleField.startsWith('[') && roleField.endsWith(']'))
+              ? JSON.parse(roleField)
+              : [roleField];
+          } catch (e) {
+            values = [roleField];
+          }
+          return values.map(v => parseInt(v)).filter(v => !isNaN(v));
+        }
+
+        // Проверяет, может ли пользователь просматривать/редактировать/удалять статью
+        // с учётом её флага "locked" и списка разрешённых ролей сервера.
+        // root и админ сервера статьи могут всё; остальным при locked=true нужна
+        // одна из ролей, перечисленных в article.role.
+        async function canAccessArticle(user, article) {
+          if (!article.locked) return true;
+          if (user.is_root) return true;
+
+          const serverId = parseInt(article.server);
+          if (!serverId || isNaN(serverId)) {
+            // Статья не привязана к валидному серверу — проверить роли невозможно,
+            // по умолчанию запрещаем доступ к закрытой статье кроме root
+            return false;
+          }
+
+          if (await isAdminOnServer(user.id, serverId)) return true;
+
+          const allowedRoleIds = parseArticleRoleIds(article.role);
+          if (allowedRoleIds.length === 0) return true; // ограничение не задано корректно — не блокируем
+
+          const userRoleIds = await getUserRoleIdsOnServer(user.id, serverId);
+          return userRoleIds.some(r => allowedRoleIds.includes(r));
+        }
+
         // API маршруты для статей
-        app.get('/api/articles', auth.authenticateToken, async (req, res) => {
+        app.get('/api/articles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
           const { since, server: serverFilter } = req.query; // Добавляем возможность фильтрации по серверу
           
           let query = 'SELECT * FROM articles'; // Включаем content в выборку
@@ -419,10 +470,13 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
             // Преобразование кодировки для кириллических символов и парсинг JSON полей
             const encodedRows = [];
             for (const row of rows) {
-              console.log('Original image path from DB:', row.image); // Отладка
+              // Закрытые статьи показываем только тем, у кого есть доступ по роли/правам
+              if (!(await canAccessArticle(req.user, row))) {
+                continue;
+              }
+
               const formattedImage = formatImageUrl(row.image, req);
-              console.log('Formatted image URL:', formattedImage); // Отладка
-              
+
               // Проверяем, является ли значение server числовым ID
               let serverName = row.server;
               if (row.server && !isNaN(row.server) && parseInt(row.server) > 0) {
@@ -454,7 +508,7 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
           });
         });
 
-        app.get('/api/articles/:id', auth.authenticateToken, async (req, res) => {
+        app.get('/api/articles/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
           const { id } = req.params;
           articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, row) => {
             if (err) {
@@ -465,10 +519,12 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
               res.status(404).json({ error: 'Article not found' });
               return;
             }
-            console.log('Original image path from DB for single article:', row.image); // Отладка
+            if (!(await canAccessArticle(req.user, row))) {
+              res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+              return;
+            }
             const formattedImage = formatImageUrl(row.image, req);
-            console.log('Formatted image URL for single article:', formattedImage); // Отладка
-            
+
             // Проверяем, является ли значение server числовым ID
             let serverName = row.server;
             if (row.server && !isNaN(row.server) && parseInt(row.server) > 0) {
@@ -529,68 +585,15 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
           return imagePath;
         }
 
-        app.post('/api/articles', auth.authenticateToken, (req, res) => {
+        app.post('/api/articles', auth.authenticateToken, auth.checkApproved, (req, res) => {
           const { title, content, views, locked, role, roles, category, tags, author, image, attachments, server } = req.body;
-          // Используем сервер из тела запроса, если он указан, иначе определяем на основе хоста запроса
-          const articleServer = server || req.get('Host') || 'localhost';
-          
-          // Находим наименьший свободный ID
-          articlesDb.get(`
-            SELECT COALESCE(
-              (SELECT MIN(t1.id + 1) 
-               FROM articles t1 
-               LEFT JOIN articles t2 ON t1.id + 1 = t2.id 
-               WHERE t2.id IS NULL), 
-              1
-            ) AS next_id
-          `, (err, row) => {
-            if (err) {
-              res.status(500).json({ error: err.message });
-              return;
-            }
-            
-            const nextId = row.next_id;
-            
-            // Подготавливаем данные для вставки
-            const tagsJson = tags ? JSON.stringify(tags) : '[]';
-            const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
-            const lockedInt = locked ? 1 : 0;
+          // Сервер статьи берём только из тела запроса. Раньше сюда подставлялся
+          // req.get('Host'), из-за чего статья без явного сервера получала в
+          // качестве "сервера" хост запроса (например "localhost:3002") — это
+          // ломало и отображение имени сервера, и проверку прав по ролям.
+          const articleServer = server || null;
 
-            // Handle roles - use roles array if provided, otherwise use single role
-            let roleValue = role; // Default to single role for backward compatibility
-            if (roles && Array.isArray(roles) && roles.length > 0) {
-                // If roles array is provided, store it as JSON
-                roleValue = JSON.stringify(roles);
-            } else if (role && typeof role === 'object' && Array.isArray(role)) {
-                // If role field itself is an array (sent as "role" instead of "roles")
-                roleValue = JSON.stringify(role);
-            }
-
-            // Нормализуем путь к изображению перед сохранением
-            let imagePath = normalizeImagePath(image);
-
-            // Вставляем новую статью с конкретным ID
-            articlesDb.run(
-              'INSERT INTO articles (id, title, content, views, locked, role, category, tags, author, image, attachments, server) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [nextId, title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer],
-              function(err) {
-                if (err) {
-                  res.status(500).json({ error: err.message });
-                  return;
-                }
-                res.json({ id: nextId });
-              }
-            );
-          });
-        });
-
-        app.put('/api/articles/:id', auth.authenticateToken, (req, res) => {
-          const { id } = req.params;
-          const { title, content, views, locked, role, roles, category, tags, author, image, attachments, server } = req.body;
-          // Используем сервер из тела запроса, если он указан, иначе определяем на основе хоста запроса
-          const articleServer = server || req.get('Host') || 'localhost';
-          
-          // Подготавливаем данные для обновления
+          // Подготавливаем данные для вставки
           const tagsJson = tags ? JSON.stringify(tags) : '[]';
           const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
           const lockedInt = locked ? 1 : 0;
@@ -608,21 +611,81 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
           // Нормализуем путь к изображению перед сохранением
           let imagePath = normalizeImagePath(image);
 
+          // id не указываем — SQLite сам назначит следующий по автоинкременту.
+          // Раньше id искался как "наименьший свободный" отдельным запросом, что
+          // могло приводить к гонке при параллельном создании статей и к
+          // переиспользованию id удалённых статей (опасно для ссылок на статьи).
           articlesDb.run(
-            'UPDATE articles SET title = ?, content = ?, views = ?, locked = ?, role = ?, category = ?, tags = ?, author = ?, image = ?, attachments = ?, server = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer, id],
+            'INSERT INTO articles (title, content, views, locked, role, category, tags, author, image, attachments, server) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer],
             function(err) {
               if (err) {
                 res.status(500).json({ error: err.message });
                 return;
               }
-              if (this.changes === 0) {
-                res.status(404).json({ error: 'Article not found' });
-                return;
-              }
-              res.json({ updated: this.changes });
+              res.json({ id: this.lastID });
             }
           );
+        });
+
+        app.put('/api/articles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
+          const { id } = req.params;
+
+          // Сначала читаем текущую статью, чтобы проверить право на её редактирование
+          // (раньше правку мог сохранить любой авторизованный пользователь, включая
+          // статьи, закрытые по ролям).
+          articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, existing) => {
+            if (err) {
+              res.status(500).json({ error: err.message });
+              return;
+            }
+            if (!existing) {
+              res.status(404).json({ error: 'Article not found' });
+              return;
+            }
+            if (!(await canAccessArticle(req.user, existing))) {
+              res.status(403).json({ error: 'Недостаточно прав для редактирования этой статьи' });
+              return;
+            }
+
+            const { title, content, views, locked, role, roles, category, tags, author, image, attachments, server } = req.body;
+            // Сервер статьи берём только из тела запроса (см. комментарий в POST /api/articles)
+            const articleServer = server || existing.server;
+
+            // Подготавливаем данные для обновления
+            const tagsJson = tags ? JSON.stringify(tags) : '[]';
+            const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
+            const lockedInt = locked ? 1 : 0;
+
+            // Handle roles - use roles array if provided, otherwise use single role
+            let roleValue = role; // Default to single role for backward compatibility
+            if (roles && Array.isArray(roles) && roles.length > 0) {
+                // If roles array is provided, store it as JSON
+                roleValue = JSON.stringify(roles);
+            } else if (role && typeof role === 'object' && Array.isArray(role)) {
+                // If role field itself is an array (sent as "role" instead of "roles")
+                roleValue = JSON.stringify(role);
+            }
+
+            // Нормализуем путь к изображению перед сохранением
+            let imagePath = normalizeImagePath(image);
+
+            articlesDb.run(
+              'UPDATE articles SET title = ?, content = ?, views = ?, locked = ?, role = ?, category = ?, tags = ?, author = ?, image = ?, attachments = ?, server = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+              [title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer, id],
+              function(err) {
+                if (err) {
+                  res.status(500).json({ error: err.message });
+                  return;
+                }
+                if (this.changes === 0) {
+                  res.status(404).json({ error: 'Article not found' });
+                  return;
+                }
+                res.json({ updated: this.changes });
+              }
+            );
+          });
         });
 
         // Функция для форматирования URL изображения
@@ -697,23 +760,41 @@ app.post('/api/messages', auth.authenticateToken, (req, res) => {
     return serverIP;
   }
 
-app.delete('/api/articles/:id', auth.authenticateToken, (req, res) => {
+app.delete('/api/articles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { id } = req.params;
-  articlesDb.run('DELETE FROM articles WHERE id = ?', [id], function(err) {
+
+  // Читаем статью перед удалением, чтобы проверить право на удаление
+  // (раньше удалить закрытую по ролям статью мог кто угодно авторизованный).
+  articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, existing) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
     }
-    if (this.changes === 0) {
+    if (!existing) {
       res.status(404).json({ error: 'Article not found' });
       return;
     }
-    res.json({ deleted: this.changes });
+    if (!(await canAccessArticle(req.user, existing))) {
+      res.status(403).json({ error: 'Недостаточно прав для удаления этой статьи' });
+      return;
+    }
+
+    articlesDb.run('DELETE FROM articles WHERE id = ?', [id], function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Article not found' });
+        return;
+      }
+      res.json({ deleted: this.changes });
+    });
   });
 });
 
 // Маршрут для поиска статей с использованием полнотекстового поиска
-app.get('/api/search-articles', auth.authenticateToken, async (req, res) => {
+app.get('/api/search-articles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   const { q, limit = 50, offset = 0 } = req.query;
   
   if (!q || q.trim().length === 0) {
@@ -770,10 +851,15 @@ app.get('/api/search-articles', auth.authenticateToken, async (req, res) => {
         // Преобразование кодировки для кириллических символов и парсинг JSON полей
         const encodedRows = [];
         for (const row of rows) {
-          console.log('Original image path from DB:', row.image); // Отладка
+          // Закрытые по ролям статьи не должны находиться поиском для тех, у кого нет доступа
+          // (total выше считает по всей БД без учёта прав — с переездом на Markdown-поиск
+          // в Этапе 3 это будет учтено на уровне самого поиска)
+          if (!(await canAccessArticle(req.user, row))) {
+            continue;
+          }
+
           const formattedImage = formatImageUrl(row.image, req);
-          console.log('Formatted image URL:', formattedImage); // Отладка
-          
+
           // Проверяем, является ли значение server числовым ID
           let serverName = row.server;
           if (row.server && !isNaN(row.server) && parseInt(row.server) > 0) {
@@ -819,7 +905,7 @@ app.get('/api/search-articles', auth.authenticateToken, async (req, res) => {
 });
 
 // API маршруты для категорий
-app.get('/api/categories', auth.authenticateToken, (req, res) => {
+app.get('/api/categories', auth.authenticateToken, auth.checkApproved, (req, res) => {
   articlesDb.all('SELECT * FROM categories ORDER BY name', (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
@@ -829,7 +915,7 @@ app.get('/api/categories', auth.authenticateToken, (req, res) => {
   });
 });
 
-app.post('/api/categories', auth.authenticateToken, (req, res) => {
+app.post('/api/categories', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { name } = req.body;
   articlesDb.run('INSERT INTO categories (name) VALUES (?)', [name], function(err) {
     if (err) {
@@ -840,7 +926,7 @@ app.post('/api/categories', auth.authenticateToken, (req, res) => {
   });
 });
 
-app.delete('/api/categories/:id', auth.authenticateToken, (req, res) => {
+app.delete('/api/categories/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { id } = req.params;
   articlesDb.run('DELETE FROM categories WHERE id = ?', [id], function(err) {
     if (err) {
@@ -856,7 +942,7 @@ app.delete('/api/categories/:id', auth.authenticateToken, (req, res) => {
 });
 
 // API маршруты для ролей
-app.get('/api/roles', auth.authenticateToken, (req, res) => {
+app.get('/api/roles', auth.authenticateToken, auth.checkApproved, (req, res) => {
   // Получаем роли из базы пользователей
   const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
   usersDb.all('SELECT * FROM roles ORDER BY name', (err, rows) => {
@@ -869,7 +955,7 @@ app.get('/api/roles', auth.authenticateToken, (req, res) => {
   });
 });
 
-app.post('/api/roles', auth.authenticateToken, (req, res) => {
+app.post('/api/roles', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { name, code } = req.body;
   const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
   usersDb.run('INSERT INTO roles (name, code) VALUES (?, ?)', [name, code], function(err) {
@@ -883,7 +969,7 @@ app.post('/api/roles', auth.authenticateToken, (req, res) => {
   });
 });
 
-app.delete('/api/roles/:id', auth.authenticateToken, (req, res) => {
+app.delete('/api/roles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { id } = req.params;
   const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
   usersDb.run('DELETE FROM roles WHERE id = ?', [id], function(err) {
@@ -908,7 +994,7 @@ const serverSystem = require('./server-system-logic');
 // === API маршруты для системы серверов ===
 
 // Получение всех серверов
-app.get('/api/servers', auth.authenticateToken, async (req, res) => {
+app.get('/api/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const servers = await serverSystem.getAllServersWithUserCount();
     res.json(servers);
@@ -918,7 +1004,7 @@ app.get('/api/servers', auth.authenticateToken, async (req, res) => {
 });
 
 // Получение сервера по ID
-app.get('/api/servers/:id', auth.authenticateToken, async (req, res) => {
+app.get('/api/servers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const server = await serverSystem.getServerWithDetails(id);
@@ -932,7 +1018,7 @@ app.get('/api/servers/:id', auth.authenticateToken, async (req, res) => {
 });
 
 // Создание нового сервера
-app.post('/api/servers', auth.authenticateToken, async (req, res) => {
+app.post('/api/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { name, description } = req.body;
     // В реальной системе owner_id должен быть из req.user.id (аутентифицированный пользователь)
@@ -952,7 +1038,7 @@ app.post('/api/servers', auth.authenticateToken, async (req, res) => {
 });
 
 // Обновление сервера
-app.put('/api/servers/:id', auth.authenticateToken, async (req, res) => {
+app.put('/api/servers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description } = req.body;
@@ -996,7 +1082,7 @@ app.put('/api/servers/:id', auth.authenticateToken, async (req, res) => {
 });
 
 // Удаление сервера
-app.delete('/api/servers/:id', auth.authenticateToken, async (req, res) => {
+app.delete('/api/servers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -1039,7 +1125,7 @@ app.delete('/api/servers/:id', auth.authenticateToken, async (req, res) => {
 });
 
 // Получение пользователей на сервере
-app.get('/api/servers/:id/users', auth.authenticateToken, async (req, res) => {
+app.get('/api/servers/:id/users', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const users = await serverSystem.getUsersOnServer(id);
@@ -1050,7 +1136,7 @@ app.get('/api/servers/:id/users', auth.authenticateToken, async (req, res) => {
 });
 
 // Получение ролей на сервере
-app.get('/api/servers/:id/roles', auth.authenticateToken, async (req, res) => {
+app.get('/api/servers/:id/roles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const roles = await serverSystem.getRolesOnServer(id);
@@ -1061,10 +1147,10 @@ app.get('/api/servers/:id/roles', auth.authenticateToken, async (req, res) => {
 });
 
 // Импортируем утилиты для проверки прав
-const { isAdminOnServer, hasPermission, canManageUser } = require('./server-permissions');
+const { hasPermission, canManageUser } = require('./server-permissions'); // isAdminOnServer подключён в начале файла
 
 // Создание роли на сервере
-app.post('/api/servers/:id/roles', auth.authenticateToken, async (req, res) => {
+app.post('/api/servers/:id/roles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, hierarchy_level, permissions } = req.body;
@@ -1084,7 +1170,7 @@ app.post('/api/servers/:id/roles', auth.authenticateToken, async (req, res) => {
 });
 
 // Добавление пользователя к серверу
-app.post('/api/servers/:serverId/users/:userId', auth.authenticateToken, async (req, res) => {
+app.post('/api/servers/:serverId/users/:userId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, userId } = req.params;
     const result = await serverSystem.addUserToServer(userId, serverId);
@@ -1095,7 +1181,7 @@ app.post('/api/servers/:serverId/users/:userId', auth.authenticateToken, async (
 });
 
 // Назначение роли пользователю на сервере
-app.post('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateToken, async (req, res) => {
+app.post('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, userId, roleId } = req.params;
     const currentUserId = req.user.id;
@@ -1120,7 +1206,7 @@ app.post('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authenticate
 });
 
 // Удаление роли с пользователя на сервере
-app.delete('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateToken, async (req, res) => {
+app.delete('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, userId, roleId } = req.params;
     const currentUserId = req.user.id;
@@ -1157,7 +1243,7 @@ app.delete('/api/servers/:serverId/users/:userId/roles/:roleId', auth.authentica
 });
 
 // Удаление роли на сервере
-app.delete('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, async (req, res) => {
+app.delete('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, roleId } = req.params;
     const currentUserId = req.user.id;
@@ -1209,7 +1295,7 @@ app.delete('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, async
 });
 
 // Обновление роли на сервере
-app.put('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, async (req, res) => {
+app.put('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, roleId } = req.params;
     const { name, hierarchy_level, permissions } = req.body;
@@ -1248,7 +1334,7 @@ app.put('/api/servers/:serverId/roles/:roleId', auth.authenticateToken, async (r
 });
 
 // Обновление владельца сервера
-app.put('/api/servers/:serverId/owner', auth.authenticateToken, async (req, res) => {
+app.put('/api/servers/:serverId/owner', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId } = req.params;
     const { newOwnerId } = req.body;
@@ -1376,7 +1462,7 @@ function formatFileSize(bytes) {
 // и дает минимальные права - только чтение контента
 
 // Получение статуса наблюдателя пользователя
-app.get('/api/profile/observer-status', auth.authenticateToken, async (req, res) => {
+app.get('/api/profile/observer-status', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { assignObserverRoleIfNeeded } = require('./server-membership-check');
     const observerCheck = await assignObserverRoleIfNeeded(req.user.id);
@@ -1387,7 +1473,7 @@ app.get('/api/profile/observer-status', auth.authenticateToken, async (req, res)
 });
 
         // Маршрут для загрузки изображений
-        app.post('/api/upload-image', auth.authenticateToken, upload.single('image'), (req, res) => {
+        app.post('/api/upload-image', auth.authenticateToken, auth.checkApproved, upload.single('image'), (req, res) => {
           try {
             if (!req.file) {
               return res.status(400).json({ error: 'Файл не загружен' });
@@ -1438,7 +1524,7 @@ async function isAdminUser(userId) {
 }
 
 // Удаление сервера
-app.delete('/api/servers/:serverId', auth.authenticateToken, async (req, res) => {
+app.delete('/api/servers/:serverId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId } = req.params;
     const currentUserId = req.user.id;
@@ -1525,7 +1611,7 @@ app.delete('/api/servers/:serverId', auth.authenticateToken, async (req, res) =>
 });
 
 // Получение всех пользователей (для выбора нового владельца сервера)
-app.get('/api/users', auth.authenticateToken, async (req, res) => {
+app.get('/api/users', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     // Проверяем, что текущий пользователь является администратором
     const isAdmin = await isAdminUser(req.user.id);
@@ -1615,15 +1701,18 @@ app.post('/api/backups/upload', auth.authenticateToken, auth.checkApproved, auth
       fs.mkdirSync(backup.BACKUP_DIR, { recursive: true });
     }
 
-    // Перемещаем файл в директорию бэкапов
-    const destPath = path.join(backup.BACKUP_DIR, req.file.originalname);
+    // Перемещаем файл в директорию бэкапов. Используем только "голое" имя файла
+    // (path.basename) — req.file.originalname приходит от клиента и может
+    // содержать "../", что позволило бы записать файл вне BACKUP_DIR.
+    const safeOriginalName = path.basename(req.file.originalname);
+    const destPath = path.join(backup.BACKUP_DIR, safeOriginalName);
     fs.renameSync(req.file.path, destPath);
 
     res.json({
       success: true,
       message: 'Бэкап успешно загружен',
       data: {
-        fileName: req.file.originalname,
+        fileName: safeOriginalName,
         size: req.file.size
       }
     });
