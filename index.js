@@ -1210,10 +1210,21 @@ app.post('/api/servers/:id/roles', auth.authenticateToken, auth.checkApproved, a
   }
 });
 
-// Добавление пользователя к серверу
+// Добавление пользователя к серверу — либо сам пользователь (вступление),
+// либо администратор сервера (раньше это мог сделать любой approved-пользователь
+// для произвольного userId/serverId).
 app.post('/api/servers/:serverId/users/:userId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { serverId, userId } = req.params;
+    const currentUserId = req.user.id;
+
+    if (parseInt(userId) !== currentUserId) {
+      const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Можно добавить только себя, либо быть администратором сервера' });
+      }
+    }
+
     const result = await serverSystem.addUserToServer(userId, serverId);
     res.json(result);
   } catch (err) {
