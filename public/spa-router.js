@@ -1677,8 +1677,8 @@ class SPARouter {
           <div class="meta-item"><strong>Создано:</strong> ${article.created_at}</div>
         </div>
         <div class="article-actions">
-          <button class="btn btn-primary" onclick="window.spaRouter ? window.spaRouter.editArticle(${article.id}) : console.error('spaRouter not available')">Редактировать</button>
-          <button class="btn btn-danger" onclick="window.spaRouter ? window.spaRouter.deleteArticle(${article.id}) : console.error('spaRouter not available')">Удалить</button>
+          <button class="btn btn-primary" onclick="window.spaRouter ? window.spaRouter.editArticle('${article.id}') : console.error('spaRouter not available')">Редактировать</button>
+          <button class="btn btn-danger" onclick="window.spaRouter ? window.spaRouter.deleteArticle('${article.id}') : console.error('spaRouter not available')">Удалить</button>
         </div>
       `;
       container.appendChild(articleDiv);

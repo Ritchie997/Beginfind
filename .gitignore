@@ -16,3 +16,8 @@ tmp/
 .qwen
 backups/
 backup-settings.json
+
+# Статьи (Markdown) — реальный пользовательский контент, не версионируется,
+# как раньше articles.db. Живёт только на диске сервера; резервные копии —
+# через /api/backups (см. src/services/backup.js).
+/content/

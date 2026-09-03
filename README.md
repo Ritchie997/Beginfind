@@ -17,12 +17,14 @@ src/
     auth.js                  — регистрация, вход, JWT, middleware authenticateToken/
                                checkApproved/checkRoot
   services/
-    backup.js                 — создание/восстановление/список бэкапов (ZIP)
-    backup-settings.json       — настройки автобэкапа (создаётся автоматически)
-    backup-settings.js         — чтение/запись backup-settings.json
-    scheduled-cleanup.js       — очистка неиспользуемых файлов в uploads/ (cron, сейчас выключен)
-    server-permissions.js      — проверка прав/иерархии ролей на сервере
-    server-system-logic.js     — CRUD для серверов, ролей, участников
+    articles-store.js          — файловое хранилище статей (Markdown + frontmatter, см. ниже)
+    slugify.js                  — транслитерация заголовка в slug (имя файла статьи)
+    backup.js                   — создание/восстановление/список бэкапов (ZIP, включает content/)
+    backup-settings.json        — настройки автобэкапа (создаётся автоматически)
+    backup-settings.js          — чтение/запись backup-settings.json
+    scheduled-cleanup.js        — очистка неиспользуемых файлов в uploads/ (cron, сейчас выключен)
+    server-permissions.js       — проверка прав/иерархии ролей на сервере
+    server-system-logic.js      — CRUD для серверов, ролей, участников
   uploads/
     multer-config.js           — конфигурация загрузки изображений и ZIP-бэкапов
   routes/
@@ -35,9 +37,14 @@ src/
     uploads.routes.js           — /api/upload-image
     backups.routes.js           — /api/backups*
 
+scripts/
+  migrate-articles-to-markdown.js — одноразовая миграция articles.db -> content/*.md
+
 public/                     — статические файлы веб-интерфейса (SPA)
-backups/                    — сохранённые ZIP-бэкапы баз данных (создаётся автоматически)
-articles.db, messenger.db, servers.db, users.db — базы данных SQLite (создаются автоматически)
+backups/                    — сохранённые ZIP-бэкапы (создаётся автоматически, не в git)
+content/                    — статьи в формате Markdown (см. раздел "Хранение статей", не в git)
+messenger.db, servers.db, users.db, articles.db — базы данных SQLite (создаются автоматически, не в git;
+                               articles.db с Этапа 3 хранит только категории, не тексты статей)
 ```
 
 ## Установка зависимостей
@@ -93,11 +100,12 @@ npm start
 
 ### Ibripedia (вики)
 - `GET /api/articles` — список статей (закрытые по ролям статьи видны только тем, у кого есть доступ)
-- `GET /api/articles/:id` — статья по ID
+- `GET /api/articles/:slug` — статья по slug (раньше был числовой id, см. "Хранение статей")
 - `POST /api/articles` — создать статью
-- `PUT /api/articles/:id` — обновить статью
-- `DELETE /api/articles/:id` — удалить статью
-- `GET /api/search-articles?q=...` — полнотекстовый поиск
+- `PUT /api/articles/:slug` — обновить статью
+- `DELETE /api/articles/:slug` — удалить статью (перемещается в content/.trash/, не стирается)
+- `GET /api/articles/:slug/backlinks` — статьи, ссылающиеся на данную через `[[wiki-ссылку]]`
+- `GET /api/search-articles?q=...` — поиск по заголовку/содержимому
 - `GET/POST/DELETE /api/categories` — категории статей (изменение — root only)
 - `GET/POST/DELETE /api/roles` — глобальный справочник ролей (изменение — root only)
 
@@ -118,13 +126,48 @@ npm start
   `POST /api/backups/restore/:fileName`, `GET /api/backups/download/:fileName`,
   `DELETE /api/backups/:fileName`, `GET/PUT /api/backups/auto/settings`, `POST /api/backups/auto/run`
 
+## Хранение статей (content/)
+
+С Этапа 3 статьи Ibripedia хранятся не в БД, а как Markdown-файлы:
+`content/<slug>.md`, где `slug` — транслитерированный заголовок
+(`src/services/slugify.js`), он же id статьи в URL и цель wiki-ссылок
+`[[slug]]`. Каждый файл — YAML-frontmatter + тело в Markdown:
+
+```markdown
+---
+title: Заголовок статьи
+date: '2026-04-09T15:19:39.000Z'
+updated: '2026-04-09T15:19:51.000Z'
+author: ''
+tags: []
+category: ''
+excerpt: ''
+server: null       # id или имя "сервера", к которому привязана статья
+locked: false       # если true — видна только по ролям ниже
+roles: []           # id ролей сервера, у кого есть доступ при locked=true
+image: null         # обложка
+attachments: []
+views: 0
+---
+Текст статьи в Markdown.
+```
+
+- Удаление перемещает файл в `content/.trash/` (не безвозвратно).
+- Список статей кэшируется в памяти (`src/services/articles-store.js`) и
+  инвалидируется при любой записи через API или восстановлении бэкапа.
+- `scripts/migrate-articles-to-markdown.js` — миграция из старого
+  `articles.db` (HTML в SQLite) в `content/*.md` (HTML конвертируется в
+  Markdown через `turndown`). Безопасно запускать повторно — уже
+  смигрированные статьи (по `legacyId` в frontmatter) пропускаются.
+- Резервные копии (`/api/backups/*`) включают `content/` целиком.
+
 ## Базы данных
 
-Сервер использует SQLite для хранения данных:
+Сервер использует SQLite для остальных данных:
 
 1. **messenger.db** — сообщения мессенджера
 2. **users.db** — пользователи и роли
-3. **articles.db** — статьи и категории Ibripedia
+3. **articles.db** — только категории статей (сами статьи — в `content/`, см. выше)
 4. **servers.db** — серверы, роли на серверах и участники
 
 ## Веб-интерфейс
@@ -134,7 +177,8 @@ npm start
 ## Разработка
 
 - Node.js + Express.js
-- SQLite3
+- SQLite3 (мессенджер, серверы, пользователи, категории)
+- gray-matter для чтения/записи Markdown-frontmatter статей, turndown — для миграции HTML в Markdown
 - JWT (jsonwebtoken) + bcryptjs для аутентификации
 - Multer для загрузки файлов, adm-zip для бэкапов
 - Nodemon для автоматической перезагрузки при изменениях

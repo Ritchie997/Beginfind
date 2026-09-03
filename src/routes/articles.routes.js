@@ -1,14 +1,14 @@
 // articles.routes.js — CRUD и поиск статей (Ibripedia).
 //
-// ВНИМАНИЕ: этот модуль всё ещё читает/пишет articles.db (SQLite). В Этапе 3
-// хранение статей переезжает на Markdown-файлы в content/ — эта реализация
-// будет заменена, но сам файл и маршруты (пути /api/articles*) останутся
-// на своём месте в новой структуре.
+// С Этапа 3 статьи хранятся как Markdown-файлы в content/ (см.
+// src/services/articles-store.js) вместо articles.db. id статьи теперь —
+// строковый slug (например "moya-statya"), а не число.
 
 const express = require('express');
 const os = require('os');
 const auth = require('../middleware/auth');
-const { articlesDb, serversDb } = require('../db/connections');
+const store = require('../services/articles-store');
+const { serversDb } = require('../db/connections');
 const { isAdminOnServer } = require('../services/server-permissions');
 const { PORT, HOST } = require('../config/env');
 
@@ -39,25 +39,10 @@ function getUserRoleIdsOnServer(userId, serverId) {
   });
 }
 
-// Разбирает поле articles.role (JSON-массив id ролей сервера, одиночная роль
-// или пусто) в массив числовых id ролей сервера
-function parseArticleRoleIds(roleField) {
-  if (!roleField) return [];
-  let values;
-  try {
-    values = (roleField.startsWith('[') && roleField.endsWith(']'))
-      ? JSON.parse(roleField)
-      : [roleField];
-  } catch (e) {
-    values = [roleField];
-  }
-  return values.map(v => parseInt(v)).filter(v => !isNaN(v));
-}
-
 // Проверяет, может ли пользователь просматривать/редактировать/удалять статью
 // с учётом её флага "locked" и списка разрешённых ролей сервера.
 // root и админ сервера статьи могут всё; остальным при locked=true нужна
-// одна из ролей, перечисленных в article.role.
+// одна из ролей, перечисленных в article.roles.
 async function canAccessArticle(user, article) {
   if (!article.locked) return true;
   if (user.is_root) return true;
@@ -71,7 +56,7 @@ async function canAccessArticle(user, article) {
 
   if (await isAdminOnServer(user.id, serverId)) return true;
 
-  const allowedRoleIds = parseArticleRoleIds(article.role);
+  const allowedRoleIds = (article.roles || []).map(r => parseInt(r)).filter(r => !isNaN(r));
   if (allowedRoleIds.length === 0) return true; // ограничение не задано корректно — не блокируем
 
   const userRoleIds = await getUserRoleIdsOnServer(user.id, serverId);
@@ -80,13 +65,10 @@ async function canAccessArticle(user, article) {
 
 // Функция для определения IP-адреса сервера
 function getServerIP() {
-  // Если HOST уже является конкретным IP, возвращаем его
   if (HOST !== '0.0.0.0' && HOST !== 'localhost' && HOST !== '127.0.0.1') {
     return HOST;
   }
 
-  // В противном случае возвращаем IP-адрес машины,
-  // который можно использовать из локальной сети
   const networkInterfaces = os.networkInterfaces();
   let serverIP = 'localhost';
 
@@ -106,28 +88,24 @@ function getServerIP() {
   return serverIP;
 }
 
-// Функция для форматирования URL изображения
+// Функция для форматирования URL изображения (та же логика, что была в
+// SQLite-версии — не менялась при переезде на Markdown)
 function formatImageUrl(imagePath, req = null) {
   if (!imagePath) return null;
-
-  // Если это уже полный URL (внешнее изображение), возвращаем как есть
   if (imagePath.startsWith('http')) {
     return imagePath;
   }
 
-  // Убедимся, что путь начинается с '/', иначе добавляем
   let normalizedPath = imagePath;
   if (!imagePath.startsWith('/')) {
     normalizedPath = '/' + imagePath;
   }
 
-  // Проверяем, есть ли заголовок X-Forwarded-Host (может использоваться с обратным прокси)
   if (req && req.get('X-Forwarded-Host')) {
     const protocol = req.get('X-Forwarded-Proto') || 'http';
     return `${protocol}://${req.get('X-Forwarded-Host')}${normalizedPath}`;
   }
 
-  // Для доступа через DuckDNS используем внешний домен
   if (req && req.get('Host')) {
     const host = req.get('Host');
     if (host.includes('duckdns.org')) {
@@ -135,359 +113,187 @@ function formatImageUrl(imagePath, req = null) {
     }
   }
 
-  // В остальных случаях используем текущий хост
   if (req && req.get('Host')) {
     const host = req.get('Host');
     return `http://${host}${normalizedPath}`;
   }
 
-  // Получаем IP-адрес сервера для формирования корректного URL
-  // при доступе с разных устройств в сети
   const serverIP = getServerIP();
-  const baseUrl = `http://${serverIP}:${PORT}`;
-  return baseUrl + normalizedPath;
+  return `http://${serverIP}:${PORT}${normalizedPath}`;
 }
 
-// Функция для обновления URL изображений в содержимом статьи
+// Обновляет относительные пути картинок вида ![alt](/uploads/x.png) на
+// абсолютные — чтобы статьи корректно открывались с других устройств в
+// локальной сети или через внешний домен. Markdown-эквивалент старой
+// updateImageUrlsInContent(), которая работала с HTML <img>.
 function updateImageUrlsInContent(content, req = null) {
   if (!content) return content;
-
-  // Обрабатываем все теги <img> с относительными URL на полные URL
-  return content.replace(/<img\s+([^>]*?)src=(["'])((?!https?:\/\/)[^"']*)(["'])([^>]*?)>/gi, (match, beforeSrc, quote1, src, quote2, afterTag) => {
-    const isSelfClosing = match.trim().endsWith('/>');
-    const formattedUrl = formatImageUrl(src, req);
-    const newTag = `<img ${beforeSrc}src=${quote1}${formattedUrl}${quote2}${afterTag}>`;
-
-    if (isSelfClosing) {
-      return newTag.replace('>', '/>');
-    }
-    return newTag;
+  return content.replace(/!\[([^\]]*)\]\(((?!https?:\/\/)[^)\s]+)\)/g, (match, alt, src) => {
+    return `![${alt}](${formatImageUrl(src, req)})`;
   });
 }
 
-// Функция для нормализации пути к изображению перед сохранением в базу
-function normalizeImagePath(imagePath) {
-  if (!imagePath) return null;
-
-  // Если это внешний URL, извлекаем только путь
-  if (imagePath.startsWith('http')) {
-    try {
-      const url = new URL(imagePath);
-      return url.pathname;
-    } catch (e) {
-      console.warn('Could not parse image URL, saving as is:', imagePath);
-      return imagePath;
-    }
-  }
-
-  // Если путь уже содержит uploads, но не начинается с /, добавляем /
-  if (imagePath.includes('uploads') && !imagePath.startsWith('/')) {
-    return '/' + imagePath;
-  }
-
-  // Если это просто имя файла, добавляем /uploads/
-  if (!imagePath.startsWith('/') && !imagePath.includes('/')) {
-    return `/uploads/${imagePath}`;
-  }
-
-  return imagePath;
-}
-
-// Собирает роль(и) статьи в единое поле для хранения в БД
-function resolveRoleValue(role, roles) {
-  if (roles && Array.isArray(roles) && roles.length > 0) {
-    return JSON.stringify(roles);
-  }
-  if (role && typeof role === 'object' && Array.isArray(role)) {
-    return JSON.stringify(role);
-  }
-  return role; // одиночная роль для обратной совместимости
-}
-
-// Преобразует строку row из БД в объект статьи для ответа клиенту
-async function formatArticleRow(row, req, { includeDescription = false } = {}) {
-  const formattedImage = formatImageUrl(row.image, req);
-
-  let serverName = row.server;
-  if (row.server && !isNaN(row.server) && parseInt(row.server) > 0) {
-    const serverFromDb = await getServerNameById(parseInt(row.server));
+// Преобразует статью из хранилища в объект ответа клиенту (резолвит имя
+// сервера по id, абсолютизирует пути картинок).
+async function formatArticleResponse(article, req) {
+  let serverName = article.server;
+  if (article.server && !isNaN(article.server) && parseInt(article.server) > 0) {
+    const serverFromDb = await getServerNameById(parseInt(article.server));
     if (serverFromDb) {
       serverName = serverFromDb;
     }
   }
 
-  const formatted = {
-    ...row,
-    title: row.title,
-    content: updateImageUrlsInContent(row.content, req),
-    views: row.views,
-    locked: row.locked === 1,
-    role: row.role,
-    roles: row.role && row.role.startsWith('[') && row.role.endsWith(']') ? JSON.parse(row.role) : (row.role ? [row.role] : []),
-    category: row.category,
-    tags: row.tags ? JSON.parse(row.tags) : [],
-    author: row.author,
-    image: formattedImage,
-    attachments: row.attachments ? JSON.parse(row.attachments) : [],
-    server: serverName,
-    created_at: row.created_at
+  return {
+    ...article,
+    content: updateImageUrlsInContent(article.content, req),
+    image: formatImageUrl(article.image, req),
+    server: serverName
   };
-
-  if (includeDescription) {
-    formatted.description = row.description;
-  }
-
-  return formatted;
 }
 
 // === API маршруты для статей ===
 
 router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
-  const { since, server: serverFilter } = req.query;
+  try {
+    const { since, server: serverFilter } = req.query;
+    let articles = store.listArticles();
 
-  let query = 'SELECT * FROM articles';
-  let params = [];
-
-  let whereConditions = [];
-  if (since) {
-    whereConditions.push('created_at > ?');
-    params.push(since);
-  }
-
-  if (serverFilter) {
-    whereConditions.push('server = ?');
-    params.push(serverFilter);
-  }
-
-  if (whereConditions.length > 0) {
-    query += ' WHERE ' + whereConditions.join(' AND ');
-  }
-
-  query += ' ORDER BY created_at DESC';
-
-  articlesDb.all(query, params, async (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+    if (since) {
+      const sinceDate = new Date(since);
+      articles = articles.filter(a => new Date(a.created_at) > sinceDate);
     }
-    const encodedRows = [];
-    for (const row of rows) {
-      // Закрытые статьи показываем только тем, у кого есть доступ по роли/правам
-      if (!(await canAccessArticle(req.user, row))) {
-        continue;
-      }
-      encodedRows.push(await formatArticleRow(row, req));
+    if (serverFilter) {
+      articles = articles.filter(a => String(a.server) === String(serverFilter));
     }
-    res.json(encodedRows);
-  });
+
+    const result = [];
+    for (const article of articles) {
+      if (!(await canAccessArticle(req.user, article))) continue;
+      result.push(await formatArticleResponse(article, req));
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/articles/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
-  const { id } = req.params;
-  articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+  try {
+    const article = store.getArticle(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
     }
-    if (!row) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
+    if (!(await canAccessArticle(req.user, article))) {
+      return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
-    if (!(await canAccessArticle(req.user, row))) {
-      res.status(403).json({ error: 'Доступ к этой статье ограничен' });
-      return;
-    }
-    res.json(await formatArticleRow(row, req, { includeDescription: true }));
-  });
+    res.json(await formatArticleResponse(article, req));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/articles', auth.authenticateToken, auth.checkApproved, (req, res) => {
-  const { title, content, views, locked, role, roles, category, tags, author, image, attachments, server } = req.body;
-  // Сервер статьи берём только из тела запроса. Раньше сюда подставлялся
-  // req.get('Host'), из-за чего статья без явного сервера получала в
-  // качестве "сервера" хост запроса (например "localhost:3002") — это
-  // ломало и отображение имени сервера, и проверку прав по ролям.
-  const articleServer = server || null;
-
-  const tagsJson = tags ? JSON.stringify(tags) : '[]';
-  const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
-  const lockedInt = locked ? 1 : 0;
-  const roleValue = resolveRoleValue(role, roles);
-  const imagePath = normalizeImagePath(image);
-
-  // id не указываем — SQLite сам назначит следующий по автоинкременту.
-  // Раньше id искался как "наименьший свободный" отдельным запросом, что
-  // могло приводить к гонке при параллельном создании статей и к
-  // переиспользованию id удалённых статей (опасно для ссылок на статьи).
-  articlesDb.run(
-    'INSERT INTO articles (title, content, views, locked, role, category, tags, author, image, attachments, server) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ id: this.lastID });
-    }
-  );
-});
-
-router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
-  const { id } = req.params;
-
-  // Сначала читаем текущую статью, чтобы проверить право на её редактирование
-  // (раньше правку мог сохранить любой авторизованный пользователь, включая
-  // статьи, закрытые по ролям).
-  articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, existing) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (!existing) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
-    }
-    if (!(await canAccessArticle(req.user, existing))) {
-      res.status(403).json({ error: 'Недостаточно прав для редактирования этой статьи' });
-      return;
-    }
-
+  try {
     const { title, content, views, locked, role, roles, category, tags, author, image, attachments, server } = req.body;
-    const articleServer = server || existing.server;
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'Заголовок статьи обязателен' });
+    }
 
-    const tagsJson = tags ? JSON.stringify(tags) : '[]';
-    const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
-    const lockedInt = locked ? 1 : 0;
-    const roleValue = resolveRoleValue(role, roles);
-    const imagePath = normalizeImagePath(image);
-
-    articlesDb.run(
-      'UPDATE articles SET title = ?, content = ?, views = ?, locked = ?, role = ?, category = ?, tags = ?, author = ?, image = ?, attachments = ?, server = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [title, content, views || 0, lockedInt, roleValue, category, tagsJson, author, imagePath, attachmentsJson, articleServer, id],
-      function(err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        if (this.changes === 0) {
-          res.status(404).json({ error: 'Article not found' });
-          return;
-        }
-        res.json({ updated: this.changes });
-      }
-    );
-  });
+    const article = store.createArticle({
+      title, content, views, locked, role, roles, category, tags, author, image, attachments,
+      // Сервер статьи берём только из тела запроса — без фоллбэка на заголовок Host.
+      server: server || null
+    });
+    res.json({ id: article.slug, slug: article.slug });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.delete('/articles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
-  const { id } = req.params;
-
-  // Читаем статью перед удалением, чтобы проверить право на удаление
-  // (раньше удалить закрытую по ролям статью мог кто угодно авторизованный).
-  articlesDb.get('SELECT * FROM articles WHERE id = ?', [id], async (err, existing) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
+router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const existing = store.getArticle(req.params.id);
     if (!existing) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
+      return res.status(404).json({ error: 'Article not found' });
     }
     if (!(await canAccessArticle(req.user, existing))) {
-      res.status(403).json({ error: 'Недостаточно прав для удаления этой статьи' });
-      return;
+      return res.status(403).json({ error: 'Недостаточно прав для редактирования этой статьи' });
     }
 
-    articlesDb.run('DELETE FROM articles WHERE id = ?', [id], function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Article not found' });
-        return;
-      }
-      res.json({ deleted: this.changes });
-    });
-  });
+    const updated = store.updateArticle(req.params.id, req.body);
+    res.json({ updated: 1, slug: updated.slug });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/articles/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const existing = store.getArticle(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    if (!(await canAccessArticle(req.user, existing))) {
+      return res.status(403).json({ error: 'Недостаточно прав для удаления этой статьи' });
+    }
+
+    // Файл перемещается в content/.trash/, а не удаляется безвозвратно.
+    const deleted = store.deleteArticle(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    res.json({ deleted: 1 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Маршрут для поиска статей
 router.get('/search-articles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
-  const { q, limit = 50, offset = 0 } = req.query;
-
-  if (!q || q.trim().length === 0) {
-    return res.status(400).json({ error: 'Search query is required' });
-  }
-
-  const searchQuery = q.trim();
-
-  const searchSql = `
-    SELECT a.*,
-           CASE
-             WHEN a.title = ? THEN 1  -- Точное совпадение в заголовке
-             WHEN a.title LIKE ? THEN 2  -- Частичное совпадение в заголовке
-             ELSE 3  -- Совпадение в содержимом
-           END AS sort_rank
-    FROM articles a
-    WHERE a.title LIKE ?
-       OR a.content LIKE ?
-    ORDER BY sort_rank
-    LIMIT ? OFFSET ?
-  `;
-
-  const countSql = `
-    SELECT COUNT(*) as total
-    FROM articles a
-    WHERE a.title LIKE ?
-       OR a.content LIKE ?
-  `;
-
   try {
-    const titleExact = searchQuery;
-    const titleLike = `%${searchQuery}%`;
-    const contentLike = `%${searchQuery}%`;
+    const { q, limit = 50, offset = 0 } = req.query;
+    if (!q || q.trim().length === 0) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
 
-    articlesDb.get(countSql, [titleLike, contentLike], (err, countRow) => {
-      if (err) {
-        console.error('Search count error:', err);
-        return res.status(500).json({ error: err.message });
-      }
+    const { rows, total } = store.searchArticles(q, { limit: parseInt(limit), offset: parseInt(offset) });
 
-      const total = countRow ? countRow.total : 0;
+    const data = [];
+    for (const article of rows) {
+      // Закрытые по ролям статьи не должны находиться поиском для тех, у кого нет доступа
+      if (!(await canAccessArticle(req.user, article))) continue;
+      data.push(await formatArticleResponse(article, req));
+    }
 
-      articlesDb.all(searchSql, [titleExact, titleLike, titleLike, contentLike, parseInt(limit), parseInt(offset)], async (err, rows) => {
-        if (err) {
-          console.error('Search error:', err);
-          return res.status(500).json({ error: err.message });
-        }
-
-        const encodedRows = [];
-        for (const row of rows) {
-          // Закрытые по ролям статьи не должны находиться поиском для тех, у кого нет доступа
-          // (total выше считает по всей БД без учёта прав — с переездом на Markdown-поиск
-          // в Этапе 3 это будет учтено на уровне самого поиска)
-          if (!(await canAccessArticle(req.user, row))) {
-            continue;
-          }
-          const formatted = await formatArticleRow(row, req);
-          formatted.relevance_score = (row.sort_rank === 1) ? 100 : (row.sort_rank === 2) ? 80 : (row.sort_rank === 3) ? 60 : 40;
-          encodedRows.push(formatted);
-        }
-
-        res.json({
-          success: true,
-          data: encodedRows,
-          total: total,
-          limit: parseInt(limit),
-          offset: parseInt(offset),
-          query: q
-        });
-      });
+    res.json({
+      success: true,
+      data,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      query: q
     });
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Backlinks — статьи, ссылающиеся на данную через [[wiki-ссылку]] (используется
+// панелью обратных ссылок редактора, см. Этап 4).
+router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const article = store.getArticle(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    if (!(await canAccessArticle(req.user, article))) {
+      return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+    }
+    res.json(store.getBacklinks(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

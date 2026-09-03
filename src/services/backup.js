@@ -1,15 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
-const { dbPath, BACKUPS_DIR } = require('../config/paths');
+const { dbPath, BACKUPS_DIR, CONTENT_DIR } = require('../config/paths');
+const articlesStore = require('./articles-store');
 
-// Список файлов баз данных для бэкапа
+// Список файлов баз данных для бэкапа. articles.db больше не хранит тексты
+// статей (см. Этап 3 — они в content/*.md), но остаётся справочником
+// категорий, поэтому по-прежнему бэкапится.
 const DATABASE_FILES = [
   'articles.db',
   'messenger.db',
   'servers.db',
   'users.db'
 ];
+
+// Папка внутри ZIP-архива, где лежат Markdown-статьи
+const CONTENT_ZIP_FOLDER = 'content';
 
 // Директория для хранения бэкапов
 const BACKUP_DIR = BACKUPS_DIR;
@@ -79,8 +85,18 @@ async function createBackup(customName = null) {
       }
     }
 
-    if (filesAdded.length === 0) {
-      throw new Error('Не найдено ни одной базы данных для бэкапа. Ожидаемые файлы: ' + DATABASE_FILES.join(', '));
+    // Добавляем статьи (content/*.md, включая корзину content/.trash)
+    let contentFilesAdded = 0;
+    if (fs.existsSync(CONTENT_DIR)) {
+      zip.addLocalFolder(CONTENT_DIR, CONTENT_ZIP_FOLDER);
+      contentFilesAdded = zip.getEntries().filter(e => e.entryName.startsWith(CONTENT_ZIP_FOLDER + '/') && !e.isDirectory).length;
+      console.log(`[Backup] ✓ Добавлено файлов статей: ${contentFilesAdded}`);
+    } else {
+      console.warn('[Backup] ⚠ Директория content не найдена, статьи не добавлены в бэкап');
+    }
+
+    if (filesAdded.length === 0 && contentFilesAdded === 0) {
+      throw new Error('Не найдено ни одной базы данных или статьи для бэкапа. Ожидаемые файлы: ' + DATABASE_FILES.join(', '));
     }
 
     // Сохраняем ZIP архив
@@ -96,8 +112,9 @@ async function createBackup(customName = null) {
       filePath: filePath,
       fileName: fileName,
       size: fileSizeInBytes,
-      filesCount: filesAdded.length,
+      filesCount: filesAdded.length + contentFilesAdded,
       files: filesAdded,
+      contentFilesCount: contentFilesAdded,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -125,6 +142,7 @@ async function restoreBackup(backupPath) {
 
     for (const entry of zipEntries) {
       const entryName = entry.entryName;
+      if (entry.isDirectory) continue;
 
       // Восстанавливаем только известные файлы баз данных из белого списка —
       // раньше проверялось лишь "заканчивается на .db", а путь строился из
@@ -147,14 +165,41 @@ async function restoreBackup(backupPath) {
           errors.push(`Ошибка при восстановлении ${entryName}: ${err.message}`);
           console.error(`✗ ${errors[errors.length - 1]}`);
         }
+        continue;
+      }
+
+      // Статьи (content/*.md, включая content/.trash/*). Проверяем, что
+      // итоговый путь остаётся внутри CONTENT_DIR — защита от zip slip
+      // (entryName вида "content/../../../public/x").
+      if (entryName.startsWith(CONTENT_ZIP_FOLDER + '/') && entryName.endsWith('.md')) {
+        const relative = entryName.slice(CONTENT_ZIP_FOLDER.length + 1);
+        const targetPath = path.resolve(CONTENT_DIR, relative);
+        if (!targetPath.startsWith(path.resolve(CONTENT_DIR) + path.sep)) {
+          errors.push(`Пропущена небезопасная запись в архиве: ${entryName}`);
+          continue;
+        }
+
+        try {
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+          fs.writeFileSync(targetPath, entry.getData());
+          restoredFiles.push(entryName);
+          console.log(`✓ Восстановлена статья: ${entryName}`);
+        } catch (err) {
+          errors.push(`Ошибка при восстановлении ${entryName}: ${err.message}`);
+          console.error(`✗ ${errors[errors.length - 1]}`);
+        }
       }
     }
 
     if (restoredFiles.length === 0) {
-      throw new Error('В архиве не найдено файлов баз данных (.db)');
+      throw new Error('В архиве не найдено файлов баз данных или статей для восстановления');
     }
 
     console.log(`✓ Восстановлено ${restoredFiles.length} файл(ов)`);
+
+    // Восстановленные статьи могли заменить содержимое content/ — сбрасываем
+    // кэш списка статей, иначе сервер продолжит отдавать старые данные из памяти.
+    articlesStore.invalidateCache();
 
     return {
       success: true,
