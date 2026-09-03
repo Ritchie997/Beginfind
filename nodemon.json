@@ -1,0 +1,11 @@
+{
+  "watch": ["src", "public"],
+  "ext": "js,json,html,css",
+  "ignore": [
+    "content/**",
+    "backups/**",
+    "public/uploads/**",
+    "*.db",
+    "backup-settings.json"
+  ]
+}

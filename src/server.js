@@ -19,7 +19,7 @@ const cron = require('node-cron');
 
 const { PUBLIC_DIR, UPLOADS_DIR, BACKUPS_DIR } = require('./config/paths');
 const backup = require('./services/backup');
-const { readSettings, writeSettings } = require('./services/backup-settings');
+const { readSettings, writeSettings, SETTINGS_PATH } = require('./services/backup-settings');
 
 const pages = require('./routes/pages.routes');
 const authRoutes = require('./routes/auth.routes');
@@ -128,9 +128,16 @@ function initializeAutoBackup() {
     console.log('[Uploads] Директория uploads создана');
   }
 
-  // readSettings() сам подставит значения по умолчанию, если файла ещё нет —
-  // но пишем его явно один раз, чтобы он существовал на диске сразу.
-  writeSettings(readSettings());
+  // Создаём файл настроек только если его ещё нет. Раньше здесь стояло
+  // writeSettings(readSettings()) безусловно — при каждом старте сервера
+  // это перезаписывало backup-settings.json на диске, а nodemon (который
+  // по умолчанию следит и за .json-файлами в корне проекта) воспринимал
+  // это как изменение и перезапускал сервер — который тут же снова
+  // перезаписывал файл, и так по кругу (бесконечный restart-loop в `npm
+  // run dev`).
+  if (!fs.existsSync(SETTINGS_PATH)) {
+    writeSettings(readSettings());
+  }
 
   cron.schedule('*/5 * * * *', async () => {
     try {
