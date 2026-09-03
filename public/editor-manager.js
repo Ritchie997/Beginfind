@@ -1,1593 +1,919 @@
-// editor-manager.js - Module for managing the rich text editor functionality
+// editor-manager.js — редактор статей в стиле Obsidian на CodeMirror 6.
+//
+// Заменяет прежний contenteditable-редактор (rich text -> HTML). Теперь
+// содержимое статьи — обычный Markdown. CodeMirror 6 подключается прямо из
+// CDN (jsDelivr, +esm-бандлы) через динамический import() — в проекте нет
+// сборщика фронтенда, а классический <script> (не type="module") всё равно
+// может использовать import() как выражение, поэтому подключение в
+// index.html менять не пришлось.
+//
+// Совместимость со старым кодом spa-router.js: он читает/пишет содержимое
+// статьи как document.getElementById('articleContent').innerHTML (раньше —
+// HTML, теперь — Markdown). Вместо правки полутора десятков мест в
+// spa-router.js эта совместимость обеспечена шимом: свойство innerHTML на
+// контейнере редактора переопределено через Object.defineProperty и
+// прозрачно читает/пишет текст документа CodeMirror. См. shimInnerHTML().
 
-class EditorManager {
-  constructor() {
-    this.editor = null;
-    this.toolbar = null;
-    this.imageWrappers = new Set();
-    this.savedRange = null;
-    this.init();
+(function () {
+  'use strict';
+
+  // ===== Динамическая загрузка CodeMirror 6 / marked / DOMPurify =====
+  //
+  // Используем esm.sh, а не jsdelivr — jsdelivr резолвит зависимости каждого
+  // +esm-бандла независимо (проверено: @codemirror/lang-markdown внутри себя
+  // тянул @codemirror/state другого патч-релиза, чем при прямом импорте
+  // @codemirror/state), из-за чего в один EditorState попадали бы расширения,
+  // построенные на разных экземплярах Facet/StateField — CodeMirror такое не
+  // принимает. esm.sh поддерживает параметр ?deps=, который заставляет пакет
+  // и всё, что он импортирует, использовать ОДНИ и те же версии state/view —
+  // это явно проверено (curl) перед тем, как закладывать сюда. Версии
+  // зафиксированы точно (не "@6"), чтобы граф модулей был предсказуем.
+  const CM_STATE_VERSION = '6.7.2';
+  const CM_VIEW_VERSION = '6.43.11';
+  const CM_DEPS = `@codemirror/state@${CM_STATE_VERSION},@codemirror/view@${CM_VIEW_VERSION}`;
+
+  const CM = {
+    state: `https://esm.sh/@codemirror/state@${CM_STATE_VERSION}`,
+    view: `https://esm.sh/@codemirror/view@${CM_VIEW_VERSION}?deps=${CM_DEPS}`,
+    commands: `https://esm.sh/@codemirror/commands@6.11.0?deps=${CM_DEPS}`,
+    language: `https://esm.sh/@codemirror/language@6.12.4?deps=${CM_DEPS}`,
+    langMarkdown: `https://esm.sh/@codemirror/lang-markdown@6.5.2?deps=${CM_DEPS}`,
+    autocomplete: `https://esm.sh/@codemirror/autocomplete@6.20.3?deps=${CM_DEPS}`
+  };
+
+  let cmModulesPromise = null;
+  function loadCodeMirror() {
+    if (!cmModulesPromise) {
+      cmModulesPromise = Promise.all([
+        import(CM.state),
+        import(CM.view),
+        import(CM.commands),
+        import(CM.language),
+        import(CM.langMarkdown),
+        import(CM.autocomplete)
+      ]).then(([state, view, commands, language, langMarkdown, autocomplete]) => ({
+        state, view, commands, language, langMarkdown, autocomplete
+      }));
+    }
+    return cmModulesPromise;
   }
 
-  init() {
-    // Initialize when editor is available
-    this.setupEventListeners();
+  let markedPromise = null;
+  function loadMarked() {
+    if (!markedPromise) {
+      markedPromise = import('https://cdn.jsdelivr.net/npm/marked@12/+esm').then(m => m.marked || m.default);
+    }
+    return markedPromise;
   }
 
-  setupEventListeners() {
-    // Set up event listeners that will be attached when editor is loaded
-    document.addEventListener('click', this.handleDocumentClick.bind(this));
-    window.addEventListener('resize', this.handleResize.bind(this));
+  let dompurifyPromise = null;
+  function loadDOMPurify() {
+    if (!dompurifyPromise) {
+      dompurifyPromise = import('https://cdn.jsdelivr.net/npm/dompurify@3/+esm').then(m => m.default || m);
+    }
+    return dompurifyPromise;
   }
 
-  // Save the current selection/cursor position
-  saveSelection() {
-    const sel = window.getSelection();
-    if (sel.getRangeAt && sel.rangeCount) {
-      this.savedRange = sel.getRangeAt(0).cloneRange();
-    }
+  // ===== slugify (клиентское зеркало src/services/slugify.js) =====
+
+  const RU_TO_LAT = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
+    и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+    с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch',
+    ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya'
+  };
+
+  function slugify(text) {
+    const transliterated = String(text || '')
+      .split('')
+      .map(ch => {
+        const lower = ch.toLowerCase();
+        return Object.prototype.hasOwnProperty.call(RU_TO_LAT, lower) ? RU_TO_LAT[lower] : ch;
+      })
+      .join('');
+    return transliterated
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-')
+      .slice(0, 80) || 'article';
   }
 
-  // Initialize the editor when it's loaded on the page
-  initializeEditor() {
-    this.editor = document.getElementById('articleContent');
-    this.toolbar = document.getElementById('toolbar') || document.querySelector('.editor-toolbar');
+  // ===== Регэкспы wiki-ссылок / тегов (те же, что на сервере) =====
 
-    if (this.editor) {
-      // Guarantee that empty editor contains at least one paragraph
-      if (this.editor.innerHTML.trim() === "") {
-          this.editor.innerHTML = "<p><br></p>";
-      }
+  const WIKILINK_RE_G = () => /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
+  const WIKILINK_PARSE_RE_G = () => /\[\[([^\]|#]+)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g;
+  const HASHTAG_RE_G = () => /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
 
-      // Command that forces browser to always create <p> when pressing Enter
-      document.execCommand('defaultParagraphSeparator', false, 'p');
+  // ===== Markdown -> безопасный HTML для панели превью =====
 
-      // Setup toolbar event listeners
-      this.setupToolbar();
+  // Маркеры wiki-ссылок из символов Private Use Area — гарантированно не
+  // встречаются в обычном тексте и не имеют смысла для markdown-парсера, так
+  // что проходят через marked как обычный текст. Раньше здесь использовалась
+  // временная ссылка вида [текст](wikilink://slug), но DOMPurify по
+  // умолчанию вырезает href с нестандартной схемой (это его штатное
+  // поведение защиты от XSS через javascript:-подобные схемы) — в итоге
+  // подсветка "существует/не существует" не применялась вообще. Текстовые
+  // маркеры эту фильтрацию не проходят, так как заменяются на <a> уже ПОСЛЕ
+  // санитайзинга.
+  const WIKILINK_MARK_START = String.fromCharCode(0xE000);
+  const WIKILINK_MARK_SEP = String.fromCharCode(0xE001);
+  const WIKILINK_MARK_END = String.fromCharCode(0xE002);
 
-      // Setup editor event listeners
-      this.setupEditorEvents();
-
-      // Wrap existing images in the editor
-      this.wrapExistingImages();
+  async function renderMarkdownPreview(md, articlesIndexBySlug) {
+    if (!md || !md.trim()) {
+      return '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
     }
+
+    const marked = await loadMarked();
+    const DOMPurify = await loadDOMPurify();
+
+    const preprocessed = md.replace(WIKILINK_PARSE_RE_G(), (full, target, _anchor, alias) => {
+      const slug = slugify(target.trim());
+      const text = (alias && alias.trim()) || target.trim();
+      return `${WIKILINK_MARK_START}${slug}${WIKILINK_MARK_SEP}${text}${WIKILINK_MARK_END}`;
+    });
+
+    const rawHtml = marked.parse(preprocessed, { gfm: true, breaks: false });
+    const clean = DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] });
+
+    const container = document.createElement('div');
+    container.innerHTML = clean;
+
+    replaceWikilinkMarkersInDom(container, articlesIndexBySlug);
+    highlightHashtagsInDom(container);
+
+    return container.innerHTML;
   }
 
-  setupToolbar() {
-    if (!this.toolbar) return;
-
-    // Handle formatting buttons using mousedown to prevent focus loss
-    const buttons = this.toolbar.querySelectorAll('.toolbar-button[data-command]');
-    buttons.forEach(btn => {
-        btn.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // This prevents focus loss!
-
-            // Save current selection before executing the command
-            if (this.editor) {
-                this.editor.focus();
-                this.saveSelection();
-            }
-
-            const command = btn.getAttribute('data-command');
-
-            // Handle alignment commands with smart targeting
-            if (['justifyLeft', 'justifyCenter', 'justifyRight'].includes(command)) {
-                this.executeAlignmentCommandSmart(command);
-            } else {
-                // Execute the command normally for non-alignment commands
-                this.executeCommand(command);
-            }
-
-            // Update toolbar active states after applying formatting
-            this.updateToolbarActiveStates();
-
-            if (this.editor) {
-                this.editor.focus();
-            }
-        });
-    });
-
-    // Handle image insertion buttons separately
-    const insertImageFileBtn = document.getElementById('insert-image-file-btn');
-    const insertImageUrlBtn = document.getElementById('insert-image-url-btn');
-    const insertLinkBtn = document.getElementById('editor-link-btn');
-
-    if (insertImageFileBtn) {
-      insertImageFileBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        // Save current selection before executing the command
-        if (this.editor) {
-          this.editor.focus();
-          this.saveSelection();
-        }
-        this.insertImageFromPC();
-      });
-    }
-
-    if (insertImageUrlBtn) {
-      insertImageUrlBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        // Save current selection before executing the command
-        if (this.editor) {
-          this.editor.focus();
-          this.saveSelection();
-        }
-        this.insertImageFromURL();
-      });
-    }
-
-    // Handle link insertion button
-    if (insertLinkBtn) {
-      insertLinkBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        // Save current selection before executing the command
-        if (this.editor) {
-          this.editor.focus();
-          this.saveSelection();
-        }
-        this.insertLink();
-      });
-    }
-
-    const blockquoteBtn = this.toolbar.querySelector('[data-command="formatBlock"][data-value="blockquote"]');
-    if (blockquoteBtn) {
-      blockquoteBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        // Save current selection before executing the command
-        if (this.editor) {
-          this.editor.focus();
-          this.saveSelection();
-        }
-        document.execCommand('formatBlock', false, 'blockquote');
-        this.updateToolbarActiveStates();
-        if (this.editor) {
-          this.editor.focus();
-        }
-      });
-    }
-
-    // Handle spoiler button
-    const spoilerBtn = document.getElementById('btn-spoiler');
-    if (spoilerBtn) {
-      spoilerBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        // Save current selection before executing the command
-        if (this.editor) {
-          this.editor.focus();
-          this.saveSelection();
-        }
-        this.applyClassToSelection('spoiler-text');
-      });
-    }
-
-  }
-
-  // Execute alignment command with smart targeting (like in Word)
-  executeAlignmentCommandSmart(command) {
-    this.editor.focus();
-
-    // Check if an image is currently selected
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      let element = range.commonAncestorContainer;
-      
-      // If the selection is a text node, get its parent element
-      if (element.nodeType === Node.TEXT_NODE) {
-        element = element.parentElement;
-      }
-      
-      // Check if we're inside an image wrapper
-      const imageWrapper = element.closest('.image-wrapper');
-      if (imageWrapper) {
-        // Apply alignment to the image wrapper
-        const imgElement = imageWrapper.querySelector('img.article-inline-image');
-        const alignValue = command.replace('justify', '').toLowerCase();
-        this.applyAlignment(imgElement, imageWrapper, alignValue);
-        this.updateToolbarActiveStates();
-        return;
-      }
-    }
-
-    // 1. Try to use the standard command for text
-    document.execCommand('styleWithCSS', false, true);
-    document.execCommand(command, false, null);
-
-    // 2. Fix on the fly: find the current container and force the style
-    if (selection.rangeCount > 0) {
-        let container = selection.getRangeAt(0).commonAncestorContainer;
-
-        // Find the parent block element (P, DIV, H1, H2, H3, LI, BLOCKQUOTE)
-        while (container && container !== this.editor) {
-            if (container.nodeType === 1 && (['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(container.tagName))) {
-                // Apply alignment directly to the block
-                const alignValue = command.replace('justify', '').toLowerCase();
-                container.style.textAlign = alignValue === 'full' ? 'justify' : alignValue;
-                break;
-            }
-            container = container.parentNode;
-        }
-    }
-
-    // Return focus and update button states
-    this.editor.focus();
-    this.updateToolbarActiveStates();
-  }
-
-  // Execute editor command with proper handling
-  executeCommand(command, value = null) {
-    this.editor.focus();
-
-    // For alignment commands, sometimes it's useful to enable styleWithCSS
-    if (command.startsWith('justify')) {
-        document.execCommand('styleWithCSS', false, true);
-    }
-
-    document.execCommand(command, false, value);
-
-    // Return focus and update button states
-    this.editor.focus();
-    this.updateToolbarActiveStates();
-  }
-
-
-  setupEditorEvents() {
-    if (!this.editor) return;
-
-    // Add event listeners for updating toolbar states
-    this.editor.addEventListener('keyup', () => {
-      this.updateToolbarActiveStates();
-      this.saveSelection();
-    });
-    this.editor.addEventListener('mouseup', () => {
-      this.updateToolbarActiveStates();
-      this.saveSelection();
-    });
-    this.editor.addEventListener('click', this.updateToolbarActiveStates.bind(this));
-    this.editor.addEventListener('input', () => {
-      this.updateToolbarActiveStates();
-      this.saveSelection();
-
-      // Если внутри редактора появляется пустой спойлер - удаляем его
-      const emptySpoilers = this.editor.querySelectorAll('mark[data-type="spoiler"]:empty');
-      emptySpoilers.forEach(spoiler => spoiler.remove());
-
-      // Также удаляем пустые span с красным цветом для полной санитарной очистки
-      const badSpans = this.editor.querySelectorAll('span[style*="color: red"]');
-      badSpans.forEach(s => {
-        if(s.textContent.trim() === "") s.remove();
-      });
-    });
-    this.editor.addEventListener('selectionchange', () => {
-      this.updateToolbarActiveStates();
-      this.saveSelection();
-    });
-    this.editor.addEventListener('click', this.handleImageClick.bind(this));
-
-    // Add keydown event to clean up empty elements when deleting
-    this.editor.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' || e.key === 'Delete') {
-            // Небольшая задержка, чтобы браузер успел удалить символ
-            setTimeout(() => {
-                const emptySpans = this.editor.querySelectorAll('span:empty');
-                emptySpans.forEach(span => span.remove());
-
-                // Also remove empty mark tags with data-type="spoiler"
-                const emptySpoilers = this.editor.querySelectorAll('mark[data-type="spoiler"]:empty');
-                emptySpoilers.forEach(spoiler => spoiler.remove());
-            }, 10);
-        }
-
-        if (e.key === 'Enter') {
-            const selection = window.getSelection();
-            const anchorNode = selection.anchorNode.parentElement;
-
-            if (anchorNode && anchorNode.hasAttribute('data-type') && anchorNode.getAttribute('data-type') === 'spoiler') {
-                // Если жмем Enter в спойлере - принудительно выходим из него
-                e.preventDefault();
-                const div = document.createElement('div');
-                div.innerHTML = '<br>';
-                anchorNode.after(div);
-
-                const range = document.createRange();
-                range.setStart(div, 0);
-                range.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }
-        }
-    });
-
-    // Add click handler for spoiler reveal
-    this.editor.addEventListener('click', (e) => {
-        if (e.target.hasAttribute('data-type') && e.target.getAttribute('data-type') === 'spoiler') {
-            // Одиночный клик — просто показываем содержимое (только визуально)
-            e.target.classList.toggle('revealed');
-        }
-    });
-
-    // Add double-click handler for editing inside spoiler
-    this.editor.addEventListener('dblclick', (e) => {
-        if (e.target.hasAttribute('data-type') && e.target.getAttribute('data-type') === 'spoiler') {
-            // Двойной клик — позволяем редактировать текст внутри
-            e.target.setAttribute('contenteditable', 'true');
-            e.target.focus();
-        }
-    });
-
-    // Add keyup handler for detecting and removing empty spoiler tags
-    this.editor.addEventListener('keyup', (e) => {
-        if (e.key === 'Backspace' || e.key === 'Delete') {
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return;
-
-            // Находим, где находится курсор
-            let container = selection.anchorNode;
-            if (container.nodeType === 3) container = container.parentElement;
-
-            // Если мы внутри спойлера и он пустой или содержит только невидимый символ
-            if (container && container.hasAttribute('data-type') && container.getAttribute('data-type') === 'spoiler') {
-                if (container.textContent.length === 0 || container.textContent === '\u200B') {
-                    const parent = container.parentNode;
-                    const textNode = document.createTextNode('\u00A0'); // Обычный пробел
-                    parent.replaceChild(textNode, container);
-
-                    // Ставим курсор на этот пробел и сбрасываем форматирование
-                    const range = document.createRange();
-                    range.setStart(textNode, 1);
-                    range.collapse(true);
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-
-                    // ФИНАЛЬНЫЙ УДАР ПО ЦВЕТАМ
-                    document.execCommand('removeFormat', false, null);
-                }
-            }
-        }
-    });
-  }
-
-  // formatText method is no longer needed as formatting is handled directly in toolbar event listeners
-
-  // Update toolbar active states based on current selection
-  updateToolbarActiveStates() {
-    if (!this.toolbar) return;
-
-    // Check formatting states using document.queryCommandState
-    const boldActive = document.queryCommandState('bold');
-    const italicActive = document.queryCommandState('italic');
-    const underlineActive = document.queryCommandState('underline');
-    const strikethroughActive = document.queryCommandState('strikeThrough');
-    const unorderedListActive = document.queryCommandState('insertUnorderedList');
-    const orderedListActive = document.queryCommandState('insertOrderedList');
-
-    // First, try to find buttons by their data-command attributes (used in articles.html)
-    const commandButtons = [
-      { cmd: 'bold', selector: '[data-command="bold"]', state: boldActive },
-      { cmd: 'italic', selector: '[data-command="italic"]', state: italicActive },
-      { cmd: 'underline', selector: '[data-command="underline"]', state: underlineActive },
-      { cmd: 'strikeThrough', selector: '[data-command="strikeThrough"]', state: strikethroughActive },
-      { cmd: 'insertUnorderedList', selector: '[data-command="insertUnorderedList"]', state: unorderedListActive },
-      { cmd: 'insertOrderedList', selector: '[data-command="insertOrderedList"]', state: orderedListActive }
-    ];
-
-    commandButtons.forEach(item => {
-      const button = this.toolbar.querySelector(item.selector);
-      if (button) {
-        if (item.cmd === 'insertUnorderedList') {
-          // Special handling for list buttons to ensure mutual exclusivity
-          button.classList.toggle('active', item.state && !orderedListActive);
-        } else if (item.cmd === 'insertOrderedList') {
-          // Special handling for list buttons to ensure mutual exclusivity
-          button.classList.toggle('active', item.state && !unorderedListActive);
-        } else {
-          button.classList.toggle('active', item.state);
-        }
-      }
-    });
-
-    // Handle alignment buttons separately since queryCommandState is unreliable for alignment
-    this.updateAlignmentButtonStates();
-
-    // Fallback to ID-based selectors for backward compatibility
-    const idButtons = [
-      { cmd: 'bold', selector: '#bold-btn', state: boldActive },
-      { cmd: 'italic', selector: '#italic-btn', state: italicActive },
-      { cmd: 'underline', selector: '#underline-btn', state: underlineActive },
-      { cmd: 'strikeThrough', selector: '#strike-btn', state: strikethroughActive },
-      { cmd: 'insertUnorderedList', selector: '#list-btn', state: unorderedListActive },
-      { cmd: 'insertOrderedList', selector: '#ordered-list-btn', state: orderedListActive }
-    ];
-
-    idButtons.forEach(item => {
-      const button = document.querySelector(item.selector);
-      if (button) {
-        if (item.cmd === 'insertUnorderedList') {
-          // Special handling for list buttons to ensure mutual exclusivity
-          button.classList.toggle('active', item.state && !orderedListActive);
-        } else if (item.cmd === 'insertOrderedList') {
-          // Special handling for list buttons to ensure mutual exclusivity
-          button.classList.toggle('active', item.state && !unorderedListActive);
-        } else {
-          button.classList.toggle('active', item.state);
-        }
-      }
-    });
-  }
-
-  // Update alignment button states based on current selection (since queryCommandState is unreliable for alignment)
-  updateAlignmentButtonStates() {
-    if (!this.toolbar) return;
-
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-
-    const range = selection.getRangeAt(0);
-    let element = range.commonAncestorContainer;
-
-    // If the selection is a text node, get its parent element
-    if (element.nodeType === Node.TEXT_NODE) {
-      element = element.parentElement;
-    }
-
-    // First check if we're inside an image wrapper
-    const imageWrapper = element.closest('.image-wrapper');
-    if (imageWrapper) {
-      // We're editing an image - check wrapper's alignment via margins
-      this.updateAlignmentButtonsForImage(imageWrapper);
-      return;
-    }
-
-    // Walk up the DOM tree to find the nearest block element
-    while (element && element !== this.editor) {
-      if (element.nodeType === Node.ELEMENT_NODE &&
-          ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(element.tagName)) {
+  // Заменяет текстовые маркеры wiki-ссылок (см. константы выше) на настоящие
+  // <a class="wiki-link"|"wiki-link-missing" data-slug="..."> элементы. Работает
+  // по тексту (не по HTML-строке через regex), поэтому не задевает разметку,
+  // которую вокруг маркера успел построить marked (параграфы, списки и т.п.).
+  // Разбирает text на массив кусочков {type:'text', value} / {type:'link', slug, label},
+  // где найдены полные маркеры START..SEP..END. Реализовано через indexOf/slice, а не
+  // через RegExp — сопоставление символов из Private Use Area (-) внутри
+  // построенного через new RegExp() паттерна на практике давало ложноотрицательный
+  // результат (m.test()/exec() стабильно не находили заведомо присутствующие маркеры),
+  // а indexOf с теми же символами работает надёжно.
+  function splitWikilinkMarkers(text) {
+    const parts = [];
+    let pos = 0;
+    while (pos < text.length) {
+      const startIdx = text.indexOf(WIKILINK_MARK_START, pos);
+      if (startIdx === -1) {
+        parts.push({ type: 'text', value: text.slice(pos) });
         break;
       }
-      element = element.parentElement;
+      const sepIdx = text.indexOf(WIKILINK_MARK_SEP, startIdx + 1);
+      const endIdx = sepIdx === -1 ? -1 : text.indexOf(WIKILINK_MARK_END, sepIdx + 1);
+      if (sepIdx === -1 || endIdx === -1) {
+        // Маркер повреждён/не закрыт — оставляем остаток как обычный текст
+        parts.push({ type: 'text', value: text.slice(pos) });
+        break;
+      }
+      if (startIdx > pos) {
+        parts.push({ type: 'text', value: text.slice(pos, startIdx) });
+      }
+      parts.push({
+        type: 'link',
+        slug: text.slice(startIdx + 1, sepIdx),
+        label: text.slice(sepIdx + 1, endIdx)
+      });
+      pos = endIdx + 1;
     }
-
-    // If we found a block element, check its text-align style
-    if (element && element !== this.editor) {
-      // Check inline styles first (which we set directly)
-      let textAlign = element.style.textAlign;
-
-      // If no inline style, check computed style
-      if (!textAlign) {
-        const computedStyle = window.getComputedStyle(element);
-        textAlign = computedStyle.textAlign;
-      }
-
-      // Activate the appropriate alignment button based on text-align value
-      let activeButtonSelector;
-      switch (textAlign) {
-        case 'left':
-          activeButtonSelector = '[data-command="justifyLeft"]';
-          break;
-        case 'center':
-          activeButtonSelector = '[data-command="justifyCenter"]';
-          break;
-        case 'right':
-          activeButtonSelector = '[data-command="justifyRight"]';
-          break;
-        default:
-          // If no specific alignment or it's 'start'/'justify', don't activate any button
-          activeButtonSelector = null;
-      }
-
-      // Reset all alignment buttons first
-      this.resetAlignmentButtons();
-
-      if (activeButtonSelector) {
-        const activeButton = this.toolbar.querySelector(activeButtonSelector);
-        if (activeButton) {
-          activeButton.classList.add('active');
-        }
-      }
-    } else {
-      // No block element found, reset all buttons
-      this.resetAlignmentButtons();
-    }
+    return parts;
   }
 
-  // Reset all alignment buttons
-  resetAlignmentButtons() {
-    if (!this.toolbar) return;
-    
-    const alignButtons = [
-      '[data-command="justifyLeft"]',
-      '[data-command="justifyCenter"]',
-      '[data-command="justifyRight"]'
-    ];
-    
-    alignButtons.forEach(selector => {
-      const button = this.toolbar.querySelector(selector);
-      if (button) {
-        button.classList.remove('active');
+  function replaceWikilinkMarkersInDom(root, articlesIndexBySlug) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
+        if (node.parentElement.closest('code, pre')) return NodeFilter.FILTER_REJECT;
+        return node.nodeValue.indexOf(WIKILINK_MARK_START) !== -1 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
+    });
+
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+
+    nodes.forEach((node) => {
+      const parts = splitWikilinkMarkers(node.nodeValue);
+      const frag = document.createDocumentFragment();
+      parts.forEach((part) => {
+        if (part.type === 'text') {
+          frag.appendChild(document.createTextNode(part.value));
+          return;
+        }
+        const exists = articlesIndexBySlug.has(part.slug);
+        const a = document.createElement('a');
+        a.href = 'javascript:void(0)';
+        a.className = exists ? 'wiki-link' : 'wiki-link-missing';
+        a.dataset.slug = part.slug;
+        a.textContent = part.label;
+        frag.appendChild(a);
+      });
+      node.parentNode.replaceChild(frag, node);
     });
   }
 
-  // Update alignment buttons when an image is selected
-  updateAlignmentButtonsForImage(wrapper) {
-    // Reset all alignment buttons first
-    this.resetAlignmentButtons();
-    
-    // Получаем вычисленные стили для определения текущего выравнивания
-    const computedStyle = window.getComputedStyle(wrapper);
-    const marginLeft = computedStyle.marginLeft;
-    const marginRight = computedStyle.marginRight;
-    
-    let activeButtonSelector;
-    
-    // Определяем выравнивание по вычисленным значениям margin
-    // При marginLeft='0px', marginRight='auto' -> left aligned
-    // При marginLeft='auto', marginRight='0px' -> right aligned
-    // При marginLeft='auto', marginRight='auto' -> center aligned
-    
-    if (marginLeft === '0px' && marginRight === 'auto') {
-      // Left aligned
-      activeButtonSelector = '[data-command="justifyLeft"]';
-    } else if (marginLeft === 'auto' && marginRight === '0px') {
-      // Right aligned
-      activeButtonSelector = '[data-command="justifyRight"]';
-    } else if (marginLeft === 'auto' && marginRight === 'auto') {
-      // Center aligned
-      activeButtonSelector = '[data-command="justifyCenter"]';
-    } else {
-      // По умолчанию считаем что это center
-      activeButtonSelector = '[data-command="justifyCenter"]';
+  function highlightHashtagsInDom(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
+        if (node.parentElement.closest('code, pre, a')) return NodeFilter.FILTER_REJECT;
+        return HASHTAG_RE_G().test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+
+    nodes.forEach((node) => {
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      const re = HASHTAG_RE_G();
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index) + m[1]));
+        const span = document.createElement('span');
+        span.className = 'hashtag';
+        span.dataset.tag = m[2].toLowerCase();
+        span.textContent = '#' + m[2];
+        frag.appendChild(span);
+        lastIndex = m.index + m[0].length;
+      }
+      frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  // ===== EditorManager =====
+
+  class EditorManager {
+    constructor() {
+      this.view = null;
+      this.container = null;
+      this.panesEl = null;
+      this.previewEl = null;
+      this.mode = 'edit';
+      this.articlesIndex = []; // [{slug, title, tags}]
+      this.articlesIndexBySlug = new Map();
+      this._pendingValue = null;
+      this._articleIdObserver = null;
+      this._previewTimer = null;
+      this._lastObservedArticleId = undefined;
     }
-    
-    if (activeButtonSelector) {
-      const activeButton = this.toolbar.querySelector(activeButtonSelector);
-      if (activeButton) {
-        activeButton.classList.add('active');
+
+    // Вызывается spa-router'ом при каждом открытии страницы /articles.
+    async initializeEditor() {
+      this.cleanup();
+
+      this.container = document.getElementById('articleContent');
+      if (!this.container) return; // не на странице статей
+
+      this.panesEl = this.container.closest('.editor-panes');
+      this.previewEl = document.getElementById('markdownPreviewPane');
+      this.setupPreviewClickHandling();
+
+      // Ставим шим ДО начала асинхронной загрузки CodeMirror — так любые
+      // обращения к innerHTML в этот промежуток (маловероятно, но возможно
+      // при очень медленной сети) не потеряются, а попадут в очередь.
+      this.shimInnerHTML();
+
+      await this.loadArticlesIndex();
+
+      let cm;
+      try {
+        cm = await loadCodeMirror();
+      } catch (e) {
+        console.error('Не удалось загрузить CodeMirror с CDN:', e);
+        if (window.showMessage) {
+          window.showMessage('Не удалось загрузить редактор (нет соединения с CDN?)', 'error');
+        }
+        return;
+      }
+
+      // Контейнер мог быть заменён/удалён, пока грузился CodeMirror (быстрая
+      // навигация) — перепроверяем, что мы всё ещё на странице статей.
+      if (!document.body.contains(this.container)) return;
+
+      this.buildEditorView(cm); // хоткеи (Ctrl+B/I/K/S/Shift+F) собираются внутри как CM6-расширение
+      this.setupToolbar();
+      this.setupModeTabs();
+      this.observeArticleIdForBacklinks();
+      this.scheduleRenderPreview();
+    }
+
+    // Шим innerHTML на #articleContent: spa-router.js по-прежнему читает и
+    // пишет содержимое статьи через .innerHTML (раньше — HTML из
+    // contenteditable, теперь — Markdown из CodeMirror). Подробности — в
+    // комментарии в начале файла.
+    shimInnerHTML() {
+      const el = this.container;
+      const self = this;
+      try {
+        Object.defineProperty(el, 'innerHTML', {
+          configurable: true,
+          get() {
+            return self.view ? self.view.state.doc.toString() : (self._pendingValue || '');
+          },
+          set(value) {
+            if (self.view) {
+              self.setValue(value || '');
+            } else {
+              self._pendingValue = value || '';
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Не удалось установить innerHTML-шим редактора:', e);
       }
     }
-  }
 
+    async loadArticlesIndex() {
+      try {
+        const result = await window.apiClient.makeAuthenticatedRequest('/api/articles-index');
+        this.articlesIndex = (result.success && Array.isArray(result.data)) ? result.data : [];
+      } catch (e) {
+        this.articlesIndex = [];
+      }
+      this.articlesIndexBySlug = new Map(this.articlesIndex.map(a => [a.slug, a]));
+    }
 
-  updateToolbarStyles() {
-    // Alias for updateToolbarActiveStates for backward compatibility
-    this.updateToolbarActiveStates();
-  }
+    buildEditorView(cm) {
+      this.cmModules = cm; // нужен другим методам (wrapSelection и т.п.) для EditorSelection
+      const { EditorState } = cm.state;
+      const { EditorView, keymap, Decoration, ViewPlugin, placeholder } = cm.view;
+      const { defaultKeymap, history, historyKeymap } = cm.commands;
+      const { syntaxHighlighting, defaultHighlightStyle } = cm.language;
+      const { markdown } = cm.langMarkdown;
+      const { autocompletion } = cm.autocomplete;
 
-  // Function to insert image from file
-  async insertImageFromPC() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
+      const self = this;
+      const initialDoc = this._pendingValue != null ? this._pendingValue : '';
+      this._pendingValue = null;
 
-    fileInput.onchange = async (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        // Validate file type and size
+      const wikilinkPlugin = ViewPlugin.fromClass(class {
+        constructor(view) {
+          this.decorations = this.build(view);
+        }
+
+        update(update) {
+          if (update.docChanged || update.viewportChanged) {
+            this.decorations = this.build(update.view);
+          }
+        }
+
+        build(view) {
+          const { RangeSetBuilder } = cm.state;
+          const builder = new RangeSetBuilder();
+          const marks = [];
+          for (const { from, to } of view.visibleRanges) {
+            const text = view.state.doc.sliceString(from, to);
+            const re = WIKILINK_RE_G();
+            let m;
+            while ((m = re.exec(text)) !== null) {
+              const start = from + m.index;
+              const end = start + m[0].length;
+              const target = slugify(m[1].trim());
+              const exists = self.articlesIndexBySlug.has(target);
+              marks.push({ start, end, exists, target });
+            }
+            const hre = HASHTAG_RE_G();
+            while ((m = hre.exec(text)) !== null) {
+              const start = from + m.index + m[1].length;
+              const end = start + 1 + m[2].length;
+              marks.push({ start, end, tag: m[2].toLowerCase() });
+            }
+          }
+          marks.sort((a, b) => a.start - b.start);
+          for (const mark of marks) {
+            if (mark.tag) {
+              builder.add(mark.start, mark.end, Decoration.mark({ class: 'cm-hashtag', attributes: { 'data-tag': mark.tag } }));
+            } else {
+              builder.add(mark.start, mark.end, Decoration.mark({
+                class: mark.exists ? 'cm-wikilink' : 'cm-wikilink-missing',
+                attributes: { 'data-slug': mark.target, title: 'Ctrl+клик — перейти' }
+              }));
+            }
+          }
+          return builder.finish();
+        }
+      }, { decorations: v => v.decorations });
+
+      const wikilinkAutocomplete = autocompletion({
+        override: [(context) => {
+          const before = context.matchBefore(/\[\[[^\]]*/);
+          if (!before) return null;
+          const query = before.text.slice(2).toLowerCase();
+          const options = self.articlesIndex
+            .filter(a => a.title.toLowerCase().includes(query))
+            .slice(0, 30)
+            .map(a => ({
+              label: a.title,
+              detail: a.tags && a.tags.length ? a.tags.map(t => '#' + t).join(' ') : undefined,
+              apply: (view, completion, from, to) => {
+                const after = view.state.doc.sliceString(to, to + 2);
+                const insert = a.title + (after === ']]' ? '' : ']]');
+                view.dispatch({
+                  changes: { from, to, insert },
+                  selection: { anchor: from + insert.length }
+                });
+              }
+            }));
+          return { from: before.from + 2, options, filter: false };
+        }]
+      });
+
+      const clickHandler = EditorView.domEventHandlers({
+        mousedown(event, view) {
+          const target = event.target;
+          if (!(target instanceof Element)) return false;
+
+          const wikiEl = target.closest('.cm-wikilink, .cm-wikilink-missing');
+          if (wikiEl && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            self.navigateToWikiLink(wikiEl.dataset.slug, wikiEl.classList.contains('cm-wikilink'));
+            return true;
+          }
+
+          const tagEl = target.closest('.cm-hashtag');
+          if (tagEl && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            self.showTagResults(tagEl.dataset.tag);
+            return true;
+          }
+
+          return false;
+        }
+      });
+
+      const theme = EditorView.theme({
+        '&': {
+          backgroundColor: 'var(--background-tertiary)',
+          color: 'var(--text-normal)'
+        },
+        '.cm-content': { caretColor: 'var(--text-normal)' },
+        '.cm-cursor': { borderLeftColor: 'var(--text-normal)' },
+        '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+          backgroundColor: 'rgba(88, 101, 242, 0.35) !important'
+        },
+        '.cm-placeholder': { color: 'var(--text-muted)' }
+      });
+
+      const updateListener = EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          self.scheduleRenderPreview();
+        }
+      });
+
+      const state = EditorState.create({
+        doc: initialDoc,
+        extensions: [
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          this.buildHotkeyExtensions(cm),
+          markdown(),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          EditorView.lineWrapping,
+          placeholder('Начните писать статью в Markdown… Наберите [[ для ссылки на другую статью.'),
+          wikilinkPlugin,
+          wikilinkAutocomplete,
+          clickHandler,
+          theme,
+          updateListener
+        ]
+      });
+
+      this.view = new EditorView({ state, parent: this.container });
+    }
+
+    buildHotkeyExtensions(cm) {
+      const { keymap } = cm.view;
+      const self = this;
+      return keymap.of([
+        { key: 'Mod-b', run: () => { self.wrapSelection('**'); return true; } },
+        { key: 'Mod-i', run: () => { self.wrapSelection('_'); return true; } },
+        { key: 'Mod-k', run: () => { self.insertLink(); return true; } },
+        {
+          key: 'Mod-s',
+          run: () => {
+            document.getElementById('saveArticleBtn')?.click();
+            return true;
+          }
+        },
+        {
+          key: 'Mod-Shift-f',
+          run: () => {
+            const search = document.getElementById('searchText');
+            if (search) { search.scrollIntoView({ behavior: 'smooth', block: 'center' }); search.focus(); }
+            return true;
+          }
+        }
+      ]);
+    }
+
+    setValue(md) {
+      if (!this.view) { this._pendingValue = md; return; }
+      this.view.dispatch({
+        changes: { from: 0, to: this.view.state.doc.length, insert: md || '' }
+      });
+    }
+
+    getValue() {
+      return this.view ? this.view.state.doc.toString() : (this._pendingValue || '');
+    }
+
+    // ===== Тулбар =====
+
+    setupToolbar() {
+      const toolbar = document.getElementById('toolbar') || document.querySelector('.editor-toolbar-sticky');
+      if (!toolbar) return;
+
+      toolbar.querySelectorAll('[data-md-command]').forEach((btn) => {
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // не терять фокус/выделение в редакторе
+          this.runToolbarCommand(btn.getAttribute('data-md-command'));
+        });
+      });
+    }
+
+    runToolbarCommand(command) {
+      if (!this.view) return;
+      switch (command) {
+        case 'bold': this.wrapSelection('**'); break;
+        case 'italic': this.wrapSelection('_'); break;
+        case 'strike': this.wrapSelection('~~'); break;
+        case 'code': this.wrapSelection('`'); break;
+        case 'codeblock': this.wrapBlock('```\n', '\n```'); break;
+        case 'h1': this.toggleLinePrefix('# '); break;
+        case 'h2': this.toggleLinePrefix('## '); break;
+        case 'h3': this.toggleLinePrefix('### '); break;
+        case 'quote': this.toggleLinePrefix('> '); break;
+        case 'ul': this.toggleLinePrefix('- '); break;
+        case 'ol': this.toggleLinePrefix('1. '); break;
+        case 'checklist': this.toggleLinePrefix('- [ ] '); break;
+        case 'hr': this.insertText('\n\n---\n\n'); break;
+        case 'table': this.insertText('\n| Колонка 1 | Колонка 2 |\n| --- | --- |\n| значение | значение |\n'); break;
+        case 'link': this.insertLink(); break;
+        case 'image': this.insertImage(); break;
+        case 'wikilink': this.wrapSelection('[[', ']]'); break;
+      }
+      this.view.focus();
+    }
+
+    wrapSelection(before, after = before) {
+      const view = this.view;
+      const { EditorSelection } = this.cmModules.state;
+      const changes = view.state.changeByRange((range) => {
+        const insert = before + view.state.sliceDoc(range.from, range.to) + after;
+        const newFrom = range.from + before.length;
+        const newTo = newFrom + (range.to - range.from);
+        return {
+          changes: { from: range.from, to: range.to, insert },
+          range: range.empty
+            ? EditorSelection.cursor(newFrom)
+            : EditorSelection.range(newFrom, newTo)
+        };
+      });
+      view.dispatch(view.state.update(changes));
+    }
+
+    wrapBlock(before, after) {
+      const view = this.view;
+      const sel = view.state.selection.main;
+      const selected = view.state.sliceDoc(sel.from, sel.to);
+      const insert = before + selected + after;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert },
+        selection: { anchor: sel.from + before.length + selected.length }
+      });
+    }
+
+    toggleLinePrefix(prefix) {
+      const view = this.view;
+      const sel = view.state.selection.main;
+      const startLine = view.state.doc.lineAt(sel.from);
+      const endLine = view.state.doc.lineAt(sel.to);
+
+      const changes = [];
+      for (let ln = startLine.number; ln <= endLine.number; ln++) {
+        const line = view.state.doc.line(ln);
+        if (line.text.startsWith(prefix)) {
+          changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
+        } else {
+          changes.push({ from: line.from, to: line.from, insert: prefix });
+        }
+      }
+      view.dispatch({ changes });
+    }
+
+    insertText(text) {
+      const view = this.view;
+      const sel = view.state.selection.main;
+      view.dispatch({
+        changes: { from: sel.to, to: sel.to, insert: text },
+        selection: { anchor: sel.to + text.length }
+      });
+    }
+
+    insertLink() {
+      const url = prompt('Введите URL ссылки:');
+      if (!url) return;
+      const view = this.view;
+      const sel = view.state.selection.main;
+      const text = view.state.sliceDoc(sel.from, sel.to) || 'ссылка';
+      const insert = `[${text}](${url})`;
+      view.dispatch({ changes: { from: sel.from, to: sel.to, insert } });
+    }
+
+    async insertImage() {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
         if (!file.type.startsWith('image/')) {
-          showMessage('Пожалуйста, выберите файл изображения', 'error');
+          window.showMessage?.('Пожалуйста, выберите файл изображения', 'error');
           return;
         }
-
-        const maxSize = 5 * 1024 * 1024; // 5MB
-        if (file.size > maxSize) {
-          showMessage('Размер файла превышает допустимый лимит (5MB)', 'error');
+        if (file.size > 5 * 1024 * 1024) {
+          window.showMessage?.('Размер файла превышает допустимый лимит (5MB)', 'error');
           return;
         }
-
         try {
-          const result = await apiClient.uploadImage(file);
+          const result = await window.apiClient.uploadImage(file);
           if (result.success) {
-            this.insertImageToEditor(result.data.url);
+            this.insertText(`![изображение](${result.data.url})`);
           } else {
-            showMessage('Ошибка при загрузке изображения: ' + result.error, 'error');
+            window.showMessage?.('Ошибка при загрузке изображения: ' + result.error, 'error');
           }
         } catch (error) {
-          console.error('Error:', error);
-          showMessage('Произошла ошибка при загрузке изображения', 'error');
-        }
-      }
-    };
-
-    fileInput.click();
-  }
-
-  // Function to insert link
-  insertLink() {
-    const url = prompt("Введите URL ссылки:");
-    if(url) {
-      // Focus back to editor and restore saved selection before inserting link
-      if (this.editor) {
-        this.editor.focus();
-
-        // If we have a saved range, restore it before inserting
-        if (this.savedRange) {
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(this.savedRange);
-        }
-      }
-
-      document.execCommand('createLink', false, url);
-      if (this.editor) {
-        this.editor.focus();
-      }
-    }
-  }
-
-  // Apply class to selected text
-  applyClassToSelection(className) {
-    const selection = window.getSelection();
-    if (!selection.rangeCount || selection.isCollapsed) return;
-
-    const range = selection.getRangeAt(0);
-
-    let element;
-    if (className === 'spoiler-text') {
-      // For spoiler, use mark tag with data-type attribute
-      element = document.createElement('mark');
-      element.setAttribute('data-type', 'spoiler');
-    } else {
-      element = document.createElement('span');
-      element.classList.add(className);
-    }
-
-    // For spoiler, add click handler to reveal it in editor
-    if (className === 'spoiler-text') {
-      element.title = "Кликните, чтобы увидеть";
-      element.onclick = (e) => {
-        e.stopPropagation();
-        element.classList.toggle('revealed');
-      };
-    }
-
-    try {
-      // Оборачиваем выделенный текст
-      element.appendChild(range.extractContents());
-      range.insertNode(element);
-
-      // Выход из спойлера: добавляем чистый текст после него
-      const afterNode = document.createTextNode('\u00A0');
-      element.after(afterNode);
-
-      const newRange = document.createRange();
-      newRange.setStartAfter(afterNode);
-      newRange.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(newRange);
-
-      // ПРИНУДИТЕЛЬНЫЙ СБРОС ЦВЕТА (убирает синий и красный)
-      document.execCommand('removeFormat', false, null);
-      this.editor.focus();
-    } catch (e) {
-      console.error("Не удалось применить стиль:", e);
-    }
-
-    // Focus back to editor
-    if (this.editor) {
-      this.editor.focus();
-    }
-  }
-
-  // Function to insert image from URL
-  insertImageFromURL() {
-    const imageUrl = prompt('Введите URL изображения:');
-    if (imageUrl) {
-      this.insertImageToEditor(imageUrl);
-    }
-  }
-
-  // Insert image into editor
-  insertImageToEditor(imageUrl) {
-    const imgElement = document.createElement('img');
-    imgElement.src = imageUrl;
-    imgElement.style.maxWidth = '100%';
-    imgElement.style.maxHeight = '75vh';  // ограничиваем высоту, чтобы панель управления всегда была видна
-    imgElement.style.borderRadius = '4px';
-    imgElement.style.margin = '10px 0';
-    imgElement.alt = 'Изображение';
-    imgElement.className = 'article-inline-image';
-
-    // Create wrapper container for the image
-    const imageWrapper = document.createElement('div');
-    imageWrapper.className = 'image-wrapper';
-    imageWrapper.style.position = 'relative';
-    imageWrapper.style.display = 'block';
-    imageWrapper.appendChild(imgElement);
-
-    // Focus back to editor and restore saved selection before inserting
-    if (this.editor) {
-      this.editor.focus();
-
-      // If we have a saved range, restore it before inserting
-      if (this.savedRange) {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(this.savedRange);
-      }
-    }
-
-    // Insert the wrapped container at the current cursor position
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(imageWrapper);
-    } else {
-      // If no selection, add to the end of content
-      if (this.editor) {
-        this.editor.appendChild(imageWrapper);
-      }
-    }
-
-    // Add the wrapper to our tracking set
-    this.imageWrappers.add(imageWrapper);
-
-    // Add click handler to the image
-    imgElement.addEventListener('click', this.handleImageClick.bind(this));
-
-    // Focus back to editor after insertion
-    if (this.editor) {
-      this.editor.focus();
-    }
-  }
-
-  // Handle image click to show controls
-  handleImageClick(event) {
-    // Hide all existing image controls
-    this.hideAllImageControls();
-
-    const clickedElement = event.target;
-
-    // If click was on an image
-    if (clickedElement.tagName === 'IMG' && clickedElement.classList.contains('article-inline-image')) {
-      event.stopPropagation();
-
-      const wrapper = clickedElement.parentElement;
-      if (wrapper && wrapper.classList.contains('image-wrapper')) {
-        // Check if controls panel already exists
-        let controlPanel = wrapper.querySelector('.image-control-panel');
-
-        if (!controlPanel) {
-          // Create new controls panel
-          controlPanel = this.createImageControlPanel(clickedElement);
-          wrapper.appendChild(controlPanel);
-        }
-
-        // Show the controls panel and adjust its position
-        setTimeout(() => {
-          this.adjustControlPanelPosition(wrapper, controlPanel);
-          controlPanel.style.opacity = '1';
-        }, 0);
-        
-        // Update alignment button states to reflect current image alignment
-        this.updateAlignmentButtonStates();
-      }
-    }
-    // If click was outside image and its controls
-    else if (!clickedElement.classList.contains('image-control-button') &&
-             !clickedElement.classList.contains('image-size-option') &&
-             clickedElement.closest('.image-control-panel') === null &&
-             clickedElement.closest('.image-size-menu') === null) {
-      // Hide all controls
-      this.hideAllImageControls();
-    }
-  }
-
-  // Create image controls panel
-  createImageControlPanel(imgElement) {
-    // Create container for control buttons
-    const controlPanel = document.createElement('div');
-    controlPanel.className = 'image-control-panel';
-    controlPanel.style.position = 'absolute';
-    controlPanel.style.display = 'flex';
-    controlPanel.style.gap = '5px';
-    controlPanel.style.zIndex = '1000';
-    controlPanel.style.opacity = '0';
-    controlPanel.style.transition = 'opacity 0.2s ease';
-    controlPanel.style.cursor = 'move';
-    controlPanel.setAttribute('data-draggable', 'true');
-    
-    // Add drag handle area
-    const dragHandle = document.createElement('div');
-    dragHandle.style.position = 'absolute';
-    dragHandle.style.top = '-8px';
-    dragHandle.style.left = '0';
-    dragHandle.style.right = '0';
-    dragHandle.style.height = '8px';
-    dragHandle.style.cursor = 'move';
-    controlPanel.appendChild(dragHandle);
-
-    // Settings button - opens modal editor
-    const settingsButton = document.createElement('button');
-    settingsButton.type = 'button';
-    settingsButton.className = 'image-control-button';
-    settingsButton.innerHTML = '⚙️';
-    settingsButton.title = 'Настройки изображения';
-    settingsButton.onclick = (e) => {
-      e.stopPropagation();
-      this.openImageEditorModal(imgElement);
-    };
-
-    // Delete button
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.className = 'image-control-button';
-    deleteButton.innerHTML = '🗙';
-    deleteButton.title = 'Удалить изображение';
-    deleteButton.onclick = (e) => {
-      e.stopPropagation();
-      if (confirm('Вы уверены, что хотите удалить это изображение?')) {
-        const wrapper = imgElement.parentElement;
-        wrapper.remove();
-        this.hideAllImageControls();
-      }
-    };
-
-    controlPanel.appendChild(settingsButton);
-    controlPanel.appendChild(deleteButton);
-    
-    // Make panel draggable
-    this.makePanelDraggable(controlPanel);
-
-    return controlPanel;
-  }
-  
-  // Make panel draggable
-  makePanelDraggable(panel) {
-    let isDragging = false;
-    let startX, startY, initialLeft, initialTop;
-    
-    const onMouseDown = (e) => {
-      // Only start dragging if clicking on the panel itself or drag handle
-      if (e.target.closest('button')) return;
-      
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      
-      // Get current position in viewport coordinates
-      const rect = panel.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-      
-      // Switch to fixed positioning when dragging starts
-      panel.style.position = 'fixed';
-      panel.style.left = initialLeft + 'px';
-      panel.style.top = initialTop + 'px';
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
-      panel.style.margin = '0';
-      
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      
-      let newLeft = initialLeft + dx;
-      let newTop = initialTop + dy;
-      
-      // Keep panel within viewport
-      const panelRect = panel.getBoundingClientRect();
-      const maxX = window.innerWidth - panelRect.width;
-      const maxY = window.innerHeight - panelRect.height;
-      
-      newLeft = Math.max(0, Math.min(newLeft, maxX));
-      newTop = Math.max(0, Math.min(newTop, maxY));
-      
-      panel.style.left = newLeft + 'px';
-      panel.style.top = newTop + 'px';
-    };
-    
-    const onMouseUp = () => {
-      isDragging = false;
-    };
-    
-    // Use capture phase to ensure we get the event before it bubbles
-    panel.addEventListener('mousedown', onMouseDown, true);
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-    
-    // Clean up listeners when panel is removed
-    const originalRemove = panel.remove;
-    panel.remove = function() {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      return originalRemove.call(this);
-    };
-  }
-
-  // Create image size menu
-  createImageSizeMenu(imgElement) {
-    const sizeMenu = document.createElement('div');
-    sizeMenu.className = 'image-size-menu';
-    sizeMenu.style.display = 'none';
-
-    // Calculate max size based on screen width
-    const maxWidthForScreen = Math.floor(window.innerWidth * 0.8) + 'px'; // 80% screen width
-
-    const sizeOptions = [
-      { name: 'Маленький', value: '300px' },
-      { name: 'Средний', value: '600px' },
-      { name: 'Большой', value: '100%' },
-      { name: 'На экран', value: maxWidthForScreen }
-    ];
-
-    sizeOptions.forEach(size => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'image-size-option';
-      button.textContent = size.name;
-      button.style.display = 'block';
-      button.style.width = '100%';
-      button.style.padding = '5px';
-      button.style.margin = '2px 0';
-      button.style.border = 'none';
-      button.style.background = 'var(--background-tertiary)';
-      button.style.color = 'var(--text-normal)';
-      button.style.borderRadius = '3px';
-      button.style.cursor = 'pointer';
-      button.onclick = (e) => {
-        e.stopPropagation();
-        this.changeImageSize(imgElement, size.value);
-        sizeMenu.style.display = 'none';
-      };
-
-      sizeMenu.appendChild(button);
-    });
-
-    return sizeMenu;
-  }
-
-  // Change image size
-  changeImageSize(imgElement, size) {
-    if (typeof size === 'string') {
-      if (size === 'none') {
-        imgElement.style.maxWidth = '100%';  // Limit width but preserve original size
-        imgElement.style.width = 'auto';
-      } else if (size.endsWith('%') || size.endsWith('px')) {
-        // Set max width limit to prevent controls from going off screen
-        if (size.endsWith('px')) {
-          const pxValue = parseInt(size);
-          if (pxValue > window.innerWidth * 0.8) {  // no more than 80% screen width
-            imgElement.style.maxWidth = (window.innerWidth * 0.8) + 'px';
-          } else {
-            imgElement.style.maxWidth = size;
-          }
-        } else {
-          imgElement.style.maxWidth = size;
-        }
-      } else {
-        // Support for legacy values
-        switch(size) {
-          case 'small':
-            imgElement.style.maxWidth = '300px';
-            break;
-          case 'medium':
-            imgElement.style.maxWidth = '600px';
-            break;
-          case 'large':
-            imgElement.style.maxWidth = '100%';
-            break;
-          case 'original':
-            imgElement.style.maxWidth = '100%';  // Limit to prevent going off screen
-            break;
-        }
-      }
-    }
-  }
-
-  // Function to hide all image controls
-  hideAllImageControls() {
-    document.querySelectorAll('.image-control-panel').forEach(panel => {
-      panel.style.opacity = '0';
-      // Reset position to absolute when hiding, so next time it appears it will be positioned relative to image
-      if (panel.getAttribute('data-draggable') === 'true') {
-        panel.style.position = 'absolute';
-        panel.style.left = '';
-        panel.style.top = '';
-      }
-    });
-    document.querySelectorAll('.image-size-menu').forEach(menu => {
-      menu.style.display = 'none';
-    });
-  }
-
-  // Function to wrap existing images in the editor
-  wrapExistingImages() {
-    if (!this.editor) return;
-
-    // Find all images in the editor that aren't wrapped
-    const images = this.editor.querySelectorAll('img:not(.article-inline-image)');
-
-    images.forEach(img => {
-      // Check if already wrapped
-      if (img.parentElement && img.parentElement.classList.contains('image-wrapper')) {
-        return; // Already wrapped, skip
-      }
-
-      // Create wrapper container
-      const imageWrapper = document.createElement('div');
-      imageWrapper.className = 'image-wrapper';
-      imageWrapper.style.position = 'relative';
-      imageWrapper.style.display = 'block';
-
-      // Replace image with wrapped version
-      if (img.parentNode) {
-        img.parentNode.replaceChild(imageWrapper, img);
-        imageWrapper.appendChild(img);
-      }
-
-      // Add styling class and click handler
-      if (!img.classList.contains('article-inline-image')) {
-        img.classList.add('article-inline-image');
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-
-        // Add click handler for image management
-        img.addEventListener('click', this.handleImageClick.bind(this));
-      }
-
-      // Add to tracking set
-      this.imageWrappers.add(imageWrapper);
-    });
-  }
-
-  // Function to adjust controls panel position to prevent going off screen
-  adjustControlPanelPosition(wrapper, controlPanel) {
-    // Get image wrapper and button positions
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
-    
-    // Ensure controls panel is displayed to measure its dimensions
-    controlPanel.style.visibility = 'hidden';
-    controlPanel.style.opacity = '1';
-    controlPanel.style.display = 'flex';
-    
-    // Use fixed positioning for consistent behavior with centered images
-    controlPanel.style.position = 'fixed';
-    
-    // Measure dimensions
-    const panelRect = controlPanel.getBoundingClientRect();
-    
-    // Position directly under the settings button
-    let topPos, leftPos;
-    
-    if (settingsBtn) {
-      const btnRect = settingsBtn.getBoundingClientRect();
-      // Position directly below the button
-      topPos = btnRect.bottom + 5;
-      // Align to the right edge of the button
-      leftPos = btnRect.right - panelRect.width;
-      
-      // Adjust if goes off left edge
-      if (leftPos < 5) {
-        leftPos = Math.max(5, btnRect.left);
-      }
-    } else {
-      // Fallback: center above image
-      const panelWidth = panelRect.width;
-      const wrapperWidth = wrapperRect.width;
-      leftPos = wrapperRect.left + (wrapperWidth / 2) - (panelWidth / 2);
-      topPos = wrapperRect.top - panelRect.height - 10;
-    }
-    
-    // Adjust if goes off right edge
-    if (leftPos + panelRect.width > window.innerWidth - 5) {
-      leftPos = window.innerWidth - panelRect.width - 5;
-    }
-    
-    // Adjust if goes off top (show below instead)
-    if (topPos < 5) {
-      topPos = wrapperRect.bottom + 10;
-    }
-    
-    // Adjust if goes off bottom (show above instead)
-    if (topPos + panelRect.height > window.innerHeight - 5) {
-      topPos = wrapperRect.top - panelRect.height - 10;
-    }
-    
-    // Apply positions using fixed coordinates
-    controlPanel.style.left = leftPos + 'px';
-    controlPanel.style.top = topPos + 'px';
-    controlPanel.style.right = 'auto';
-    controlPanel.style.bottom = 'auto';
-
-    // Restore visibility
-    controlPanel.style.visibility = 'visible';
-  }
-
-  // Handle clicks outside the editor to hide controls
-  handleDocumentClick(event) {
-    if (this.editor && !this.editor.contains(event.target)) {
-      this.hideAllImageControls();
-    }
-  }
-
-  // Handle window resize to adjust controls
-  handleResize() {
-    this.hideAllImageControls();
-  }
-
-  // Open compact image editor popup (no modal)
-  openImageEditorModal(imgElement) {
-    // Hide all controls first
-    this.hideAllImageControls();
-    
-    // Get current image properties
-    const currentWidth = imgElement.getAttribute('data-width') || imgElement.style.maxWidth || imgElement.style.width || '100%';
-    const wrapper = imgElement.parentElement;
-    const currentAlign = wrapper.style.textAlign || 
-                         (wrapper.style.display === 'flex' ? 
-                          (wrapper.style.justifyContent === 'flex-end' ? 'right' : 
-                           wrapper.style.justifyContent === 'center' ? 'center' : 'left') : 
-                          'center');
-    const currentAlt = imgElement.alt || '';
-    const captionElement = wrapper.querySelector('.image-caption');
-    const currentCaption = captionElement ? captionElement.textContent : '';
-    
-    // Create compact popup menu
-    const popup = document.createElement('div');
-    popup.className = 'image-editor-popup';
-    popup.style.cssText = 'position:fixed;background:var(--background-secondary);border:1px solid var(--background-accent);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:1001;min-width:280px;max-width:320px;cursor:move;user-select:none;';
-    
-    // Add drag handle area at the top
-    const dragHandle = document.createElement('div');
-    dragHandle.style.cssText = 'height:16px;margin-bottom:8px;cursor:grab;opacity:0.5;';
-    dragHandle.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:10px;">⋮⋮</div>';
-    popup.appendChild(dragHandle);
-    
-    // Position popup directly under the settings button
-    const settingsBtn = wrapper.querySelector('button[title="Настройки изображения"]');
-    
-    // Append temporarily to get dimensions
-    popup.style.visibility = 'hidden';
-    document.body.appendChild(popup);
-    
-    const actualPopupRect = popup.getBoundingClientRect();
-    
-    let top, left;
-    
-    if (settingsBtn) {
-      const btnRect = settingsBtn.getBoundingClientRect();
-      
-      // Position exactly under the button, aligned to the right edge of the button
-      top = btnRect.bottom + 5;
-      left = btnRect.right - actualPopupRect.width;
-      
-      // Adjust if goes off screen horizontally
-      if (left < 10) {
-        left = Math.max(10, btnRect.left);
-      }
-      
-      // Adjust if goes off screen vertically (show above instead)
-      if (top + actualPopupRect.height > window.innerHeight) {
-        top = btnRect.top - actualPopupRect.height - 5;
-      }
-    } else {
-      // Fallback: center on screen
-      top = (window.innerHeight - actualPopupRect.height) / 2;
-      left = (window.innerWidth - actualPopupRect.width) / 2;
-    }
-    
-    // Final boundary checks
-    left = Math.max(10, Math.min(left, window.innerWidth - actualPopupRect.width - 10));
-    top = Math.max(10, Math.min(top, window.innerHeight - actualPopupRect.height - 10));
-    
-    popup.style.top = top + 'px';
-    popup.style.left = left + 'px';
-    popup.style.visibility = 'visible';
-    
-    // Make draggable
-    let isDragging = false;
-    let startX, startY, startTop, startLeft;
-    
-    dragHandle.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      isDragging = true;
-      dragHandle.style.cursor = 'grabbing';
-      startX = e.clientX;
-      startY = e.clientY;
-      startTop = popup.offsetTop;
-      startLeft = popup.offsetLeft;
-      
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    });
-    
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      
-      let newTop = startTop + dy;
-      let newLeft = startLeft + dx;
-      
-      // Keep within viewport
-      const popupRect = popup.getBoundingClientRect();
-      const maxTop = window.innerHeight - popupRect.height;
-      const maxLeft = window.innerWidth - popupRect.width;
-      
-      newTop = Math.max(0, Math.min(newTop, maxTop));
-      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-      
-      popup.style.top = newTop + 'px';
-      popup.style.left = newLeft + 'px';
-    };
-    
-    const onMouseUp = () => {
-      isDragging = false;
-      dragHandle.style.cursor = 'grab';
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    
-    // Store temp values
-    let tempWidth = currentWidth;
-    let tempAlign = currentAlign;
-    let tempAlt = currentAlt;
-    let tempCaption = currentCaption;
-    
-    // Size section
-    const sizeSection = document.createElement('div');
-    sizeSection.style.marginBottom = '12px';
-    
-    const sizeLabel = document.createElement('div');
-    sizeLabel.textContent = 'Размер';
-    sizeLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
-    sizeSection.appendChild(sizeLabel);
-    
-    const sizePresets = document.createElement('div');
-    sizePresets.style.display = 'grid';
-    sizePresets.style.gridTemplateColumns = '1fr 1fr';
-    sizePresets.style.gap = '6px';
-    
-    const presets = [
-      { name: 'Мал.', value: '300px' },
-      { name: 'Сред.', value: '500px' },
-      { name: 'Бол.', value: '800px' },
-      { name: '100%', value: '100%' }
-    ];
-    
-    presets.forEach(preset => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = preset.name;
-      btn.style.cssText = 'padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:(tempWidth === preset.value) ? var(--blurple) : var(--background-tertiary);color:(tempWidth === preset.value) ? #fff : var(--text-normal);cursor:pointer;font-size:12px;transition:all 0.2s;';
-      btn.style.backgroundColor = (currentWidth === preset.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
-      btn.style.color = (currentWidth === preset.value) ? '#fff' : 'var(--text-normal)';
-      
-      btn.onmouseover = () => {
-        if (tempWidth !== preset.value) {
-          btn.style.backgroundColor = 'var(--background-modifier-selected)';
+          window.showMessage?.('Произошла ошибка при загрузке изображения', 'error');
         }
       };
-      btn.onmouseout = () => {
-        if (tempWidth !== preset.value) {
-          btn.style.backgroundColor = 'var(--background-tertiary)';
-        }
-      };
-      
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        tempWidth = preset.value;
-        // Apply immediately
-        this.applyImageSize(imgElement, wrapper, preset.value);
-        // Update button states
-        Array.from(sizePresets.children).forEach(child => {
-          child.style.backgroundColor = 'var(--background-tertiary)';
-          child.style.color = 'var(--text-normal)';
-        });
-        btn.style.backgroundColor = 'var(--blurple)';
-        btn.style.color = '#fff';
-      };
-      
-      sizePresets.appendChild(btn);
-    });
-    
-    sizeSection.appendChild(sizePresets);
-    
-    // Custom width slider
-    const sliderContainer = document.createElement('div');
-    sliderContainer.style.marginTop = '10px';
-    
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '100';
-    slider.max = '1200';
-    slider.value = parseInt(currentWidth) || 500;
-    slider.style.cssText = 'width:100%;cursor:pointer;';
-    
-    const sliderValue = document.createElement('div');
-    sliderValue.textContent = `${slider.value}px`;
-    sliderValue.style.cssText = 'text-align:right;color:var(--text-muted);font-size:11px;margin-top:4px;';
-    
-    slider.oninput = (e) => {
-      e.stopPropagation();
-      const val = `${slider.value}px`;
-      sliderValue.textContent = val;
-      tempWidth = val;
-      this.applyImageSize(imgElement, wrapper, val);
-      // Reset preset buttons
-      Array.from(sizePresets.children).forEach(child => {
-        child.style.backgroundColor = 'var(--background-tertiary)';
-        child.style.color = 'var(--text-normal)';
+      fileInput.click();
+    }
+
+    // ===== Режимы (Редактирование / Просмотр / Двойной просмотр) =====
+
+    setupModeTabs() {
+      const tabs = document.querySelectorAll('.editor-mode-tab');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => this.setMode(tab.getAttribute('data-mode')));
       });
-    };
-    
-    sliderContainer.appendChild(slider);
-    sliderContainer.appendChild(sliderValue);
-    sizeSection.appendChild(sliderContainer);
-    popup.appendChild(sizeSection);
-    
-    // Alignment section
-    const alignSection = document.createElement('div');
-    alignSection.style.marginBottom = '12px';
-    
-    const alignLabel = document.createElement('div');
-    alignLabel.textContent = 'Выравнивание';
-    alignLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;';
-    alignSection.appendChild(alignLabel);
-    
-    const alignButtons = document.createElement('div');
-    alignButtons.style.display = 'flex';
-    alignButtons.style.gap = '6px';
-    
-    const alignOptions = [
-      { icon: '⬅️', value: 'left', title: 'Слева' },
-      { icon: '↕️', value: 'center', title: 'По центру' },
-      { icon: '➡️', value: 'right', title: 'Справа' }
-    ];
-    
-    alignOptions.forEach(option => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.innerHTML = option.icon;
-      btn.title = option.title;
-      btn.style.cssText = 'flex:1;padding:8px;border:1px solid var(--background-accent);border-radius:4px;background:(tempAlign === option.value) ? var(--blurple) : var(--background-tertiary);color:(tempAlign === option.value) ? #fff : var(--text-normal);cursor:pointer;font-size:14px;transition:all 0.2s;';
-      btn.style.backgroundColor = (currentAlign === option.value) ? 'var(--blurple)' : 'var(--background-tertiary)';
-      btn.style.color = (currentAlign === option.value) ? '#fff' : 'var(--text-normal)';
-      
-      btn.onmouseover = () => {
-        if (tempAlign !== option.value) {
-          btn.style.backgroundColor = 'var(--background-modifier-selected)';
-        }
-      };
-      btn.onmouseout = () => {
-        if (tempAlign !== option.value) {
-          btn.style.backgroundColor = 'var(--background-tertiary)';
-        }
-      };
-      
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        tempAlign = option.value;
-        this.applyAlignment(imgElement, wrapper, option.value);
-        // Update button states
-        Array.from(alignButtons.children).forEach(child => {
-          child.style.backgroundColor = 'var(--background-tertiary)';
-          child.style.color = 'var(--text-normal)';
-        });
-        btn.style.backgroundColor = 'var(--blurple)';
-        btn.style.color = '#fff';
-      };
-      
-      alignButtons.appendChild(btn);
-    });
-    
-    alignSection.appendChild(alignButtons);
-    popup.appendChild(alignSection);
-    
-    // Alt text section
-    const altSection = document.createElement('div');
-    altSection.style.marginBottom = '12px';
-    
-    const altLabel = document.createElement('div');
-    altLabel.textContent = 'ALT текст';
-    altLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:6px;';
-    altSection.appendChild(altLabel);
-    
-    const altInput = document.createElement('input');
-    altInput.type = 'text';
-    altInput.value = currentAlt;
-    altInput.placeholder = 'Описание изображения';
-    altInput.style.cssText = 'width:100%;padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:var(--background-tertiary);color:var(--text-normal);font-size:12px;box-sizing:border-box;';
-    
-    altInput.oninput = (e) => {
-      e.stopPropagation();
-      tempAlt = altInput.value;
-      imgElement.alt = altInput.value;
-    };
-    
-    altSection.appendChild(altInput);
-    popup.appendChild(altSection);
-    
-    // Caption section
-    const captionSection = document.createElement('div');
-    captionSection.style.marginBottom = '12px';
-    
-    const captionLabel = document.createElement('div');
-    captionLabel.textContent = 'Подпись';
-    captionLabel.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:600;margin-bottom:6px;';
-    captionSection.appendChild(captionLabel);
-    
-    const captionInput = document.createElement('textarea');
-    captionInput.value = currentCaption;
-    captionInput.placeholder = 'Подпись под изображением';
-    captionInput.style.cssText = 'width:100%;padding:6px 8px;border:1px solid var(--background-accent);border-radius:4px;background:var(--background-tertiary);color:var(--text-normal);font-size:12px;resize:vertical;min-height:50px;box-sizing:border-box;';
-    
-    captionInput.oninput = (e) => {
-      e.stopPropagation();
-      tempCaption = captionInput.value;
-      this.updateCaption(wrapper, captionInput.value);
-    };
-    
-    captionSection.appendChild(captionInput);
-    popup.appendChild(captionSection);
-    
-    // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.textContent = 'Закрыть';
-    closeBtn.style.cssText = 'width:100%;padding:8px;border:none;border-radius:4px;background:var(--background-accent);color:var(--text-normal);cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s;';
-    
-    closeBtn.onmouseover = () => {
-      closeBtn.style.backgroundColor = 'var(--background-modifier-selected)';
-    };
-    closeBtn.onmouseout = () => {
-      closeBtn.style.backgroundColor = 'var(--background-accent)';
-    };
-    
-    closeBtn.onclick = (e) => {
-      e.stopPropagation();
-      popup.remove();
-    };
-    
-    popup.appendChild(closeBtn);
-    
-    // Add click outside to close
-    const closeOnClickOutside = (e) => {
-      if (!popup.contains(e.target)) {
-        popup.remove();
-        document.removeEventListener('click', closeOnClickOutside);
-      }
-    };
-    
-    // Delay adding the listener so the current click doesn't trigger it
-    setTimeout(() => {
-      document.addEventListener('click', closeOnClickOutside);
-    }, 10);
-    
-    document.body.appendChild(popup);
-  }
-  
-  // Apply image size
-  applyImageSize(imgElement, wrapper, size) {
-    if (size === '100%') {
-      imgElement.style.width = '100%';
-      imgElement.style.maxWidth = 'none';
-      wrapper.style.width = '100%';
-    } else {
-      imgElement.style.width = size;
-      imgElement.style.maxWidth = size;
-      wrapper.style.width = size;
+      this.setMode(this.mode || 'edit');
     }
-    imgElement.setAttribute('data-width', size);
-    
-    // Update caption max-width to match image barrier
-    const caption = wrapper.querySelector('.image-caption');
-    if (caption) {
-      caption.style.maxWidth = wrapper.style.width || '100%';
+
+    setMode(mode) {
+      this.mode = mode;
+      if (this.panesEl) this.panesEl.setAttribute('data-mode', mode);
+      document.querySelectorAll('.editor-mode-tab').forEach((tab) => {
+        tab.classList.toggle('active', tab.getAttribute('data-mode') === mode);
+      });
+      if (mode !== 'edit') this.scheduleRenderPreview(true);
     }
-  }
-  
-  // Apply alignment - wrapper acts as barrier for text
-  applyAlignment(imgElement, wrapper, align) {
-    // Сохраняем текущую ширину изображения перед сбросом стилей
-    const currentImgWidth = imgElement.style.width || imgElement.getAttribute('width') || '';
-    const currentWrapperWidth = wrapper.style.width || '';
-    
-    // Сбрасываем только стили выравнивания, не трогая размеры
-    wrapper.style.marginLeft = '';
-    wrapper.style.marginRight = '';
-    wrapper.style.marginTop = '';
-    wrapper.style.marginBottom = '';
-    wrapper.style.float = '';
-    
-    // Для центрирования и выравнивания по правому краю нужен display: block
-    // Для левого края можно использовать float или margin
-    if (align === 'center' || align === 'right') {
-      wrapper.style.display = 'block';
-    } else {
-      wrapper.style.display = 'inline-block';
+
+    scheduleRenderPreview(immediate) {
+      if (!this.previewEl) return;
+      clearTimeout(this._previewTimer);
+      const run = () => this.renderPreview();
+      this._previewTimer = setTimeout(run, immediate ? 0 : 250);
     }
-    
-    wrapper.style.verticalAlign = 'top';
-    
-    // Очищаем только стили изображения связанные с отображением
-    imgElement.style.display = 'block';
-    imgElement.style.maxWidth = '100%';
-    imgElement.style.height = 'auto';
-    
-    // Восстанавливаем ширину если она была установлена
-    if (currentImgWidth) {
-      imgElement.style.width = currentImgWidth;
-    }
-    if (currentWrapperWidth) {
-      wrapper.style.width = currentWrapperWidth;
-    }
-    
-    // Применяем выравнивание
-    if (align === 'left') {
-      // Левое выравнивание через float
-      wrapper.style.float = 'left';
-      wrapper.style.marginLeft = '0';
-      wrapper.style.marginRight = '10px';
-      wrapper.style.marginTop = '0';
-      wrapper.style.marginBottom = '10px';
-    } else if (align === 'right') {
-      // Правое выравнивание через margin auto
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = '0';
-      wrapper.style.marginTop = '0';
-      wrapper.style.marginBottom = '10px';
-    } else {
-      // Center
-      wrapper.style.marginLeft = 'auto';
-      wrapper.style.marginRight = 'auto';
-      wrapper.style.marginTop = '0';
-      wrapper.style.marginBottom = '10px';
-    }
-    
-    // Обновляем выравнивание подписи
-    const caption = wrapper.querySelector('.image-caption');
-    if (caption) {
-      caption.style.display = 'block';
-      caption.style.marginLeft = 'auto';
-      caption.style.marginRight = 'auto';
-      caption.style.textAlign = 'center';
-      caption.style.width = '100%';
-      if (currentWrapperWidth) {
-        caption.style.maxWidth = currentWrapperWidth;
+
+    async renderPreview() {
+      if (!this.previewEl || !this.view) return;
+      try {
+        this.previewEl.innerHTML = await renderMarkdownPreview(this.getValue(), this.articlesIndexBySlug);
+      } catch (e) {
+        console.error('Ошибка рендера превью:', e);
       }
     }
-    
-    // Принудительно перерисовываем элемент
-    void wrapper.offsetWidth;
-  }
 
-  
-  // Update caption
-  updateCaption(wrapper, text) {
-    // Remove old caption
-    let oldCap = wrapper.querySelector('.image-caption');
-    if (oldCap) oldCap.remove();
-    
-    if (text && text.trim()) {
-      const newCap = document.createElement('div');
-      newCap.className = 'image-caption';
-      newCap.style.cssText = 'text-align:center;margin-top:8px;color:var(--text-muted);font-size:13px;font-style:italic;max-width:100%;';
-      newCap.textContent = text;
-      wrapper.appendChild(newCap);
+    // В превью (в отличие от редактора) клик по ссылке не конфликтует с
+    // позиционированием курсора, поэтому здесь достаточно обычного клика —
+    // без Ctrl, как в самом Obsidian при просмотре заметки.
+    setupPreviewClickHandling() {
+      if (!this.previewEl || this.previewEl.dataset.clickBound) return;
+      this.previewEl.dataset.clickBound = 'true';
+      this.previewEl.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const wikiEl = target.closest('.wiki-link, .wiki-link-missing');
+        if (wikiEl) {
+          event.preventDefault();
+          this.navigateToWikiLink(wikiEl.dataset.slug, wikiEl.classList.contains('wiki-link'));
+          return;
+        }
+
+        const tagEl = target.closest('.hashtag');
+        if (tagEl) {
+          event.preventDefault();
+          this.showTagResults(tagEl.dataset.tag);
+        }
+      });
+    }
+
+    // ===== Wiki-ссылки: навигация =====
+
+    navigateToWikiLink(slug, exists) {
+      if (!window.spaRouter) return;
+      if (exists) {
+        window.spaRouter.editArticle(slug);
+        return;
+      }
+      const article = this.articlesIndex.find(a => a.slug === slug);
+      const title = article ? article.title : slug;
+      const create = confirm(`Статьи «${title}» ещё нет. Создать новую?`);
+      if (create) {
+        window.spaRouter.resetArticleForm?.();
+        const titleInput = document.getElementById('articleTitle');
+        if (titleInput) titleInput.value = title;
+        this.view?.focus();
+      }
+    }
+
+    // ===== Теги: результаты по клику =====
+
+    async showTagResults(tag) {
+      const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles?tag=${encodeURIComponent(tag)}`);
+      const articles = (result.success && Array.isArray(result.data)) ? result.data : [];
+
+      let panel = document.getElementById('tagResultsPanel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'tagResultsPanel';
+        panel.className = 'tag-results-panel';
+        const anchor = document.querySelector('.articles-section') || document.body;
+        anchor.parentNode.insertBefore(panel, anchor);
+      }
+
+      const list = articles.length
+        ? articles.map(a => `<li><a href="javascript:void(0)" data-slug="${a.slug || a.id}">${escapeHtml(a.title)}</a></li>`).join('')
+        : '<li style="color: var(--text-muted);">Статей с этим тегом не найдено</li>';
+
+      panel.innerHTML = `
+        <button type="button" class="close-tag-results" title="Закрыть">&times;</button>
+        <h4>Статьи с тегом #${escapeHtml(tag)}</h4>
+        <ul>${list}</ul>
+      `;
+      panel.querySelector('.close-tag-results').addEventListener('click', () => panel.remove());
+      panel.querySelectorAll('a[data-slug]').forEach((a) => {
+        a.addEventListener('click', () => window.spaRouter?.editArticle(a.getAttribute('data-slug')));
+      });
+      panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ===== Backlinks =====
+
+    observeArticleIdForBacklinks() {
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (!saveBtn) return;
+
+      const check = () => {
+        const id = saveBtn.getAttribute('data-article-id');
+        if (id === this._lastObservedArticleId) return;
+        this._lastObservedArticleId = id;
+        this.renderBacklinksPanel(id);
+        this.renderRenameButton(id);
+      };
+
+      check();
+      this._articleIdObserver = new MutationObserver(check);
+      this._articleIdObserver.observe(saveBtn, { attributes: true, attributeFilter: ['data-article-id'] });
+    }
+
+    async renderBacklinksPanel(slug) {
+      let panel = document.getElementById('backlinksPanel');
+      const anchor = document.querySelector('.articles-section');
+      if (!panel && anchor) {
+        panel = document.createElement('div');
+        panel.id = 'backlinksPanel';
+        panel.className = 'backlinks-panel';
+        anchor.parentNode.insertBefore(panel, anchor);
+      }
+      if (!panel) return;
+
+      if (!slug) {
+        panel.style.display = 'none';
+        return;
+      }
+
+      panel.style.display = 'block';
+      panel.innerHTML = '<h3>Ссылки на эту статью</h3><div class="backlinks-empty">Загрузка…</div>';
+
+      const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles/${slug}/backlinks`);
+      const backlinks = (result.success && Array.isArray(result.data)) ? result.data : [];
+
+      panel.innerHTML = '<h3>Ссылки на эту статью</h3>' + (
+        backlinks.length
+          ? `<ul>${backlinks.map(b => `<li><a href="javascript:void(0)" data-slug="${b.slug}">${escapeHtml(b.title)}</a></li>`).join('')}</ul>`
+          : '<div class="backlinks-empty">Пока никто не сослался на эту статью через [[wiki-ссылку]]</div>'
+      );
+      panel.querySelectorAll('a[data-slug]').forEach((a) => {
+        a.addEventListener('click', () => window.spaRouter?.editArticle(a.getAttribute('data-slug')));
+      });
+    }
+
+    // Кнопка "Переименовать" рядом с заголовком статьи — виден только при
+    // редактировании существующей статьи (не при создании новой). Меняет
+    // title и slug через PUT /api/articles/:slug/rename, который сам
+    // обновляет [[wiki-ссылки]] на неё во всех остальных статьях.
+    renderRenameButton(slug) {
+      const titleGroup = document.getElementById('articleTitle')?.closest('.form-group');
+      if (!titleGroup) return;
+
+      let btn = document.getElementById('renameArticleBtn');
+      if (!slug) {
+        if (btn) btn.style.display = 'none';
+        return;
+      }
+
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'renameArticleBtn';
+        btn.className = 'btn-action-plus';
+        btn.title = 'Переименовать статью (обновит [[ссылки]] на неё в других статьях)';
+        btn.innerHTML = '<i class="fas fa-i-cursor"></i>';
+        btn.style.marginLeft = '8px';
+        btn.addEventListener('click', () => this.renameCurrentArticle());
+
+        const label = titleGroup.querySelector('.form-label');
+        const wrapper = document.createElement('span');
+        wrapper.style.display = 'inline-flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.gap = '8px';
+        label.replaceWith(wrapper);
+        wrapper.appendChild(label);
+        wrapper.appendChild(btn);
+      }
+      btn.style.display = 'inline-flex';
+      btn.dataset.slug = slug;
+    }
+
+    async renameCurrentArticle() {
+      const btn = document.getElementById('renameArticleBtn');
+      const slug = btn?.dataset.slug;
+      if (!slug) return;
+
+      const titleInput = document.getElementById('articleTitle');
+      const newTitle = prompt('Новый заголовок статьи:', titleInput?.value || '');
+      if (!newTitle || !newTitle.trim() || newTitle.trim() === titleInput?.value) return;
+
+      const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles/${slug}/rename`, 'PUT', { title: newTitle.trim() });
+      if (!result.success) {
+        window.showMessage?.('Не удалось переименовать статью: ' + (result.data?.error || result.error || ''), 'error');
+        return;
+      }
+
+      const { newSlug, updatedArticles } = result.data;
+      if (titleInput) titleInput.value = newTitle.trim();
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (saveBtn) saveBtn.setAttribute('data-article-id', newSlug);
+
+      const msg = updatedArticles && updatedArticles.length
+        ? `Статья переименована. Обновлены ссылки в ${updatedArticles.length} других статьях.`
+        : 'Статья переименована.';
+      window.showMessage?.(msg, 'success');
+
+      await this.loadArticlesIndex(); // slug изменился — обновляем индекс для wiki-ссылок/автодополнения
+    }
+
+    // ===== Совместимость со старым API editor-manager.js =====
+
+    updateToolbarActiveStates() {
+      // В CM6-редакторе активные кнопки формата не подсвечиваются так же,
+      // как в contenteditable-версии — оставлено как no-op для совместимости
+      // с вызовами из spa-router.js.
+    }
+
+    cleanup() {
+      if (this._articleIdObserver) {
+        this._articleIdObserver.disconnect();
+        this._articleIdObserver = null;
+      }
+      clearTimeout(this._previewTimer);
+      if (this.view) {
+        this.view.destroy();
+        this.view = null;
+      }
+      this._lastObservedArticleId = undefined;
     }
   }
-    
-  // Clean up editor when leaving the page
-  cleanup() {
-    // Remove all image wrappers from tracking
-    this.imageWrappers.clear();
-    
-    // Hide all controls
-    this.hideAllImageControls();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
-}
 
-// Create global instance
-const editorManager = new EditorManager();
-
-// Export for use in other modules
-window.editorManager = editorManager;
+  window.editorManager = new EditorManager();
+})();

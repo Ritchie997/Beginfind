@@ -1,0 +1,307 @@
+/* editor-obsidian.css — стили редактора статей в стиле Obsidian.
+   Использует те же CSS-переменные темы, что и global-styles.css
+   (--background-*, --text-*, --blurple и т.д.), поэтому автоматически
+   следует текущей теме сайта (тёмной/светлой). */
+
+/* === Режимы (Редактирование / Просмотр / Двойной просмотр) === */
+.editor-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.editor-mode-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 36px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.editor-mode-tab:hover {
+  background: var(--background-modifier-selected, var(--background-accent));
+}
+
+.editor-mode-tab.active {
+  background: var(--blurple);
+  border-color: var(--blurple);
+  color: #fff;
+}
+
+/* === Контейнер редактор+превью === */
+.editor-panes {
+  display: flex;
+  min-height: 500px;
+  background: var(--background-tertiary);
+}
+
+.editor-pane,
+.preview-pane {
+  min-height: 500px;
+  overflow-y: auto;
+}
+
+.editor-pane {
+  flex: 1 1 50%;
+  min-width: 0;
+}
+
+.preview-pane {
+  flex: 1 1 50%;
+  min-width: 0;
+  padding: 20px;
+  border-left: 1px solid var(--background-accent);
+  color: var(--text-normal);
+  line-height: 1.7;
+}
+
+/* Режим "Редактирование": только редактор */
+.editor-panes[data-mode="edit"] .preview-pane { display: none; }
+.editor-panes[data-mode="edit"] .editor-pane { flex: 1 1 100%; }
+
+/* Режим "Просмотр": только превью */
+.editor-panes[data-mode="preview"] .editor-pane { display: none; }
+.editor-panes[data-mode="preview"] .preview-pane { flex: 1 1 100%; }
+
+/* Режим "Двойной просмотр": оба рядом (слева редактор, справа превью) */
+.editor-panes[data-mode="split"] .editor-pane,
+.editor-panes[data-mode="split"] .preview-pane { flex: 1 1 50%; }
+
+@media (max-width: 768px) {
+  /* На мобильных split складывается в колонку, чтобы не сжимать до нечитаемого */
+  .editor-panes[data-mode="split"] {
+    flex-direction: column;
+  }
+  .editor-panes[data-mode="split"] .preview-pane {
+    border-left: none;
+    border-top: 1px solid var(--background-accent);
+  }
+  .editor-mode-tabs {
+    margin-left: 0;
+    width: 100%;
+    padding-left: 0;
+    padding-top: 6px;
+  }
+  .editor-mode-tab { flex: 1; justify-content: center; }
+}
+
+/* === CodeMirror: подгонка под тему сайта === */
+.cm-editor {
+  height: 100%;
+  min-height: 500px;
+  font-size: 15px;
+}
+
+.cm-editor.cm-focused { outline: none; }
+
+.cm-scroller {
+  font-family: 'SF Mono', Consolas, Menlo, monospace;
+  line-height: 1.7;
+}
+
+.cm-content {
+  padding: 20px !important;
+  caret-color: var(--text-normal);
+}
+
+.cm-gutters { display: none; } /* заметка, не код — номера строк не нужны */
+
+/* wiki-ссылки прямо в редакторе */
+.cm-wikilink {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.cm-wikilink-missing {
+  color: var(--red);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.cm-hashtag {
+  color: var(--blurple);
+  cursor: pointer;
+}
+
+/* Автодополнение [[wiki-ссылок]] */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--background-floating);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.cm-tooltip-autocomplete ul li {
+  color: var(--text-normal);
+  padding: 6px 10px;
+}
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--blurple);
+  color: #fff;
+}
+
+/* === Превью === */
+.preview-pane h1, .preview-pane h2, .preview-pane h3,
+.preview-pane h4, .preview-pane h5, .preview-pane h6 {
+  color: var(--header-primary);
+  margin: 1.2em 0 0.5em;
+}
+.preview-pane h1:first-child, .preview-pane h2:first-child { margin-top: 0; }
+.preview-pane p { margin: 0 0 1em; }
+.preview-pane a { color: var(--text-link); }
+.preview-pane code {
+  background: var(--background-secondary);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Consolas, Menlo, monospace;
+  font-size: 0.9em;
+}
+.preview-pane pre {
+  background: var(--background-secondary);
+  padding: 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.preview-pane pre code { background: none; padding: 0; }
+.preview-pane blockquote {
+  margin: 0 0 1em;
+  padding: 4px 14px;
+  border-left: 3px solid var(--blurple);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border-radius: 0 4px 4px 0;
+}
+.preview-pane ul, .preview-pane ol { padding-left: 1.6em; margin: 0 0 1em; }
+.preview-pane li { margin: 0.25em 0; }
+.preview-pane li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.6em; padding-left: 0; }
+.preview-pane li input[type="checkbox"] { margin-right: 6px; }
+.preview-pane img { max-width: 100%; border-radius: 4px; }
+.preview-pane hr { border: none; border-top: 1px solid var(--background-accent); margin: 1.5em 0; }
+.preview-pane table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 1em;
+  font-size: 0.95em;
+}
+.preview-pane th, .preview-pane td {
+  border: 1px solid var(--background-accent);
+  padding: 6px 10px;
+  text-align: left;
+}
+.preview-pane th { background: var(--background-secondary); }
+
+.preview-pane .wiki-link {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.preview-pane .wiki-link-missing {
+  color: var(--red);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.preview-pane .wiki-link-missing::after {
+  content: ' (создать)';
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+.preview-pane .hashtag {
+  color: var(--blurple);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.preview-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* === Панель тегов-результатов (клик по #тегу) === */
+.tag-results-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+}
+.tag-results-panel h4 {
+  margin: 0 0 8px;
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.tag-results-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-results-panel li a {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--background-tertiary);
+  border-radius: 12px;
+  color: var(--text-link);
+  text-decoration: none;
+  font-size: 13px;
+}
+.tag-results-panel .close-tag-results {
+  float: right;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  font-size: 16px;
+}
+
+/* === Backlinks === */
+.backlinks-panel {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+}
+.backlinks-panel h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--header-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.backlinks-panel ul { list-style: none; margin: 0; padding: 0; }
+.backlinks-panel li { margin: 4px 0; }
+.backlinks-panel a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+.backlinks-panel a:hover { text-decoration: underline; }
+.backlinks-empty { color: var(--text-muted); font-size: 13px; }
+
+/* === Панель графа связей === */
+.graph-container {
+  width: 100%;
+  height: 70vh;
+  background: var(--background-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--background-accent);
+  position: relative;
+  overflow: hidden;
+}
+.graph-container canvas { display: block; width: 100%; height: 100%; }
+.graph-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--background-floating);
+  border: 1px solid var(--background-accent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-normal);
+  display: none;
+}
