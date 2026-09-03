@@ -156,7 +156,7 @@ async function formatArticleResponse(article, req) {
 
 router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { since, server: serverFilter } = req.query;
+    const { since, server: serverFilter, tag } = req.query;
     let articles = store.listArticles();
 
     if (since) {
@@ -165,6 +165,15 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
     }
     if (serverFilter) {
       articles = articles.filter(a => String(a.server) === String(serverFilter));
+    }
+    if (tag) {
+      // Клик по #тегу в редакторе/просмотре — статьи с этим тегом (frontmatter
+      // tags или #тег прямо в тексте, см. store.extractHashtags).
+      const tagLower = String(tag).toLowerCase();
+      articles = articles.filter(a =>
+        (a.tags || []).some(t => String(t).toLowerCase() === tagLower) ||
+        store.extractHashtags(a.content).includes(tagLower)
+      );
     }
 
     const result = [];
@@ -292,6 +301,70 @@ router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved
       return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
     res.json(store.getBacklinks(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Облегчённый индекс статей (без содержимого) — для автодополнения
+// [[wiki-ссылок]] и проверки "существует ли статья" в редакторе.
+router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const index = [];
+    for (const article of store.listArticles()) {
+      if (!(await canAccessArticle(req.user, article))) continue;
+      index.push({ slug: article.slug, title: article.title, tags: article.tags });
+    }
+    res.json(index);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Данные для графа связей: статьи (узлы) + wiki-ссылки между ними (рёбра).
+router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const accessible = [];
+    for (const article of store.listArticles()) {
+      if (await canAccessArticle(req.user, article)) accessible.push(article);
+    }
+    const slugs = new Set(accessible.map(a => a.slug));
+
+    const nodes = accessible.map(a => ({ slug: a.slug, title: a.title }));
+    const edges = [];
+    for (const article of accessible) {
+      for (const target of store.extractWikiLinks(article.content)) {
+        if (slugs.has(target) && target !== article.slug) {
+          edges.push({ from: article.slug, to: target });
+        }
+      }
+    }
+
+    res.json({ nodes, edges });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Переименование статьи: меняет заголовок и slug, автоматически обновляет
+// [[wiki-ссылки]] на неё в остальных статьях.
+router.put('/articles/:id/rename', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { title } = req.body;
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'Новый заголовок обязателен' });
+    }
+
+    const existing = store.getArticle(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    if (!(await canAccessArticle(req.user, existing))) {
+      return res.status(403).json({ error: 'Недостаточно прав для переименования этой статьи' });
+    }
+
+    const result = store.renameArticle(req.params.id, title);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

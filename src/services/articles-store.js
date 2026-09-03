@@ -277,6 +277,63 @@ function deleteArticle(slug) {
   return true;
 }
 
+/**
+ * Переименовывает статью: меняет заголовок и slug (а значит — и имя файла),
+ * и обновляет [[wiki-ссылки]] на неё во всех остальных статьях, чтобы они
+ * продолжали указывать на правильный файл (см. Этап 4, "быстрое
+ * переименование статьи с автоматическим обновлением ссылок").
+ * @returns {{oldSlug, newSlug, updatedArticles: string[]}|null}
+ */
+function renameArticle(oldSlug, newTitle) {
+  if (!isSafeSlug(oldSlug)) return null;
+  const existing = readArticleFile(oldSlug);
+  if (!existing) return null;
+
+  const newSlug = generateUniqueSlug(newTitle, oldSlug);
+  if (newSlug === oldSlug) {
+    // Заголовок не поменялся настолько, чтобы изменить slug — просто обновляем title
+    updateArticle(oldSlug, { title: newTitle });
+    return { oldSlug, newSlug: oldSlug, updatedArticles: [] };
+  }
+
+  writeArticleFile(newSlug, {
+    ...existing,
+    title: newTitle,
+    updated_at: new Date().toISOString()
+  });
+  fs.unlinkSync(articlePath(oldSlug));
+  invalidateCache();
+
+  // Обновляем [[oldSlug]] / [[oldSlug|текст]] / [[oldSlug#заголовок]] в остальных статьях
+  const updatedArticles = [];
+  const linkRe = new RegExp(`\\[\\[\\s*${escapeRegExp(oldSlug)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
+  // Также поддерживаем ссылки по исходному заголовку статьи (Obsidian принимает
+  // и то, и другое как цель — у нас slug всегда транслитерирован из заголовка)
+  const titleRe = new RegExp(`\\[\\[\\s*${escapeRegExp(existing.title)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
+
+  for (const article of listArticles()) {
+    if (article.slug === newSlug) continue;
+    if (!linkRe.test(article.content) && !titleRe.test(article.content)) continue;
+
+    linkRe.lastIndex = 0;
+    titleRe.lastIndex = 0;
+    const newContent = article.content
+      .replace(linkRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`)
+      .replace(titleRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`);
+
+    writeArticleFile(article.slug, { ...article, content: newContent });
+    updatedArticles.push(article.slug);
+  }
+
+  if (updatedArticles.length > 0) invalidateCache();
+
+  return { oldSlug, newSlug, updatedArticles };
+}
+
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   const q = query.trim().toLowerCase();
   const all = listArticles();
@@ -319,6 +376,24 @@ function extractWikiLinks(content) {
     if (target) links.add(target);
   }
   return Array.from(links);
+}
+
+// #тег прямо в тексте статьи (не путать с frontmatter tags:) — Obsidian-стиль.
+// Не матчим внутри слов (например #include в код-блоке) — требуем начало строки
+// или пробел/пунктуацию перед решёткой.
+const HASHTAG_RE = /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
+
+/**
+ * Извлекает #теги, упомянутые прямо в тексте статьи (в нижнем регистре).
+ */
+function extractHashtags(content) {
+  const tags = new Set();
+  let m;
+  HASHTAG_RE.lastIndex = 0;
+  while ((m = HASHTAG_RE.exec(content || '')) !== null) {
+    tags.add(m[2].toLowerCase());
+  }
+  return Array.from(tags);
 }
 
 /**
@@ -377,8 +452,10 @@ module.exports = {
   importArticle,
   updateArticle,
   deleteArticle,
+  renameArticle,
   searchArticles,
   extractWikiLinks,
+  extractHashtags,
   getBacklinks,
   generateUniqueSlug,
   invalidateCache,
