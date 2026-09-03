@@ -6,6 +6,7 @@ class SPARouter {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
       '/articles': this.loadArticles,
+      '/graph': this.loadGraph,
       '/categories': this.loadCategories,
       '/servers': this.loadServers,
       '/pending-users': this.loadPendingUsers,
@@ -251,6 +252,7 @@ class SPARouter {
       '/': 'Аналитика - Админ-панель BeginFind',
       '/dashboard': 'Аналитика - Админ-панель BeginFind',
       '/articles': 'Редактор - Админ-панель BeginFind',
+      '/graph': 'Граф связей - Админ-панель BeginFind',
       '/categories': 'Категории - Админ-панель BeginFind',
       '/servers': 'Сервера - Админ-панель BeginFind',
       '/settings': 'Настройки - Админ-панель BeginFind'
@@ -334,6 +336,33 @@ class SPARouter {
     } catch (error) {
       console.error('Error loading articles:', error);
       showMessage('Ошибка при загрузке статей', 'error');
+    } finally {
+      this.hideLoader();
+    }
+  }
+
+  // Load graph (full-page связей между статьями) content
+  async loadGraph() {
+    this.showLoader();
+
+    try {
+      const response = await fetch('/views/graph.html');
+      const html = await response.text();
+
+      const appContent = document.getElementById('app-content');
+      if (appContent) {
+        appContent.innerHTML = html;
+
+        const titleElement = document.getElementById('page-title');
+        if (titleElement) {
+          titleElement.textContent = 'Граф связей';
+        }
+      }
+
+      await window.GraphView?.initGraphPage();
+    } catch (error) {
+      console.error('Error loading graph:', error);
+      showMessage('Ошибка при загрузке графа связей', 'error');
     } finally {
       this.hideLoader();
     }

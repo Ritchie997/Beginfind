@@ -783,6 +783,7 @@
         this._lastObservedArticleId = id;
         this.renderBacklinksPanel(id);
         this.renderRenameButton(id);
+        this.renderLocalGraphPanel(id);
       };
 
       check();
@@ -819,6 +820,57 @@
       );
       panel.querySelectorAll('a[data-slug]').forEach((a) => {
         a.addEventListener('click', () => window.spaRouter?.editArticle(a.getAttribute('data-slug')));
+      });
+    }
+
+    // Локальный граф (как в Obsidian) — текущая статья и её прямые связи
+    // (и на кого ссылается она, и кто ссылается на неё).
+    async renderLocalGraphPanel(slug) {
+      let panel = document.getElementById('localGraphPanel');
+      const anchor = document.querySelector('.articles-section');
+      if (!panel && anchor) {
+        panel = document.createElement('div');
+        panel.id = 'localGraphPanel';
+        panel.className = 'backlinks-panel'; // тот же внешний вид карточки, что и у backlinks
+        anchor.parentNode.insertBefore(panel, anchor);
+      }
+      if (!panel) return;
+
+      if (this._localGraphInstance) {
+        this._localGraphInstance.destroy();
+        this._localGraphInstance = null;
+      }
+
+      if (!slug || !window.GraphView) {
+        panel.style.display = 'none';
+        return;
+      }
+
+      panel.style.display = 'block';
+      panel.innerHTML = '<h3>Локальный граф</h3><div class="graph-container graph-container-compact" id="localGraphContainer"><div class="graph-empty">Загрузка…</div></div>';
+
+      const result = await window.apiClient.makeAuthenticatedRequest('/api/articles-graph');
+      if (!result.success) return;
+
+      const { nodes, edges } = result.data;
+      const neighborSlugs = new Set([slug]);
+      edges.forEach((e) => {
+        if (e.from === slug) neighborSlugs.add(e.to);
+        if (e.to === slug) neighborSlugs.add(e.from);
+      });
+
+      const localNodes = nodes.filter((n) => neighborSlugs.has(n.slug));
+      const localEdges = edges.filter((e) => neighborSlugs.has(e.from) && neighborSlugs.has(e.to));
+
+      const container = document.getElementById('localGraphContainer');
+      if (!container) return;
+
+      this._localGraphInstance = await window.GraphView.renderGraph(container, { nodes: localNodes, edges: localEdges }, {
+        centerSlug: slug,
+        compact: true,
+        onNodeClick: (targetSlug) => {
+          if (targetSlug !== slug) window.spaRouter?.editArticle(targetSlug);
+        }
       });
     }
 
@@ -904,6 +956,10 @@
       if (this.view) {
         this.view.destroy();
         this.view = null;
+      }
+      if (this._localGraphInstance) {
+        this._localGraphInstance.destroy();
+        this._localGraphInstance = null;
       }
       this._lastObservedArticleId = undefined;
     }
