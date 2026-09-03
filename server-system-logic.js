@@ -295,34 +295,37 @@ function getAllServersWithUserCount() {
         return;
       }
       
-      // Для каждого сервера получаем количество участников
-      const result = [];
+      // Для каждого сервера получаем количество участников.
+      // Пишем результат по индексу (а не push), иначе порядок result
+      // определялся бы тем, какой асинхронный запрос завершился первым,
+      // и ломал бы ORDER BY created_at DESC из SQL-запроса выше.
+      const result = new Array(rows.length);
       let processed = 0;
-      
+
       if (rows.length === 0) {
         serversDb.close();
         usersDb.close();
         resolve([]);
         return;
       }
-      
-      rows.forEach(row => {
+
+      rows.forEach((row, index) => {
         serversDb.get('SELECT COUNT(user_id) as user_count FROM user_server_memberships WHERE server_id = ?', [row.id], (err, countRow) => {
           if (err) {
             console.error('Error counting users for server:', err);
-            result.push({
+            result[index] = {
               ...row,
               user_count: 0
-            });
+            };
           } else {
-            result.push({
+            result[index] = {
               ...row,
               user_count: countRow.user_count || 0
-            });
+            };
           }
-          
+
           processed++;
-          
+
           // Когда обработали все сервера, получаем имена владельцев
           if (processed === rows.length) {
             // Теперь получим имена владельцев

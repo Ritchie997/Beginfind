@@ -15,6 +15,12 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Разрешённые расширения для загружаемых изображений. mimetype легко подделать
+// в запросе, поэтому дополнительно проверяем и реальное расширение файла —
+// иначе можно было бы загрузить, например, .svg/.html с image/* заголовком
+// и получить хранимый XSS при открытии файла напрямую из /uploads.
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+
 // Настройка multer для загрузки файлов
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -22,21 +28,50 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB лимит
   },
   fileFilter: function (req, file, cb) {
-    // Проверяем, что файл является изображением
-    if (file.mimetype.startsWith('image/')) {
+    // Проверяем и заявленный mimetype, и реальное расширение файла
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (file.mimetype.startsWith('image/') && ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Разрешены только изображения!'));
+      cb(new Error('Разрешены только изображения (jpg, jpeg, png, gif, webp)!'));
+    }
+  }
+});
+
+// Отдельный multer для загрузки ZIP-бэкапов. Раньше POST /api/backups/upload
+// использовал тот же multer-инстанс, что и загрузка картинок — его fileFilter
+// пропускал только image/*, поэтому загрузка .zip-бэкапа была фактически
+// сломана (multer молча отклонял файл ещё до обработчика маршрута).
+const uploadBackupZip = multer({
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, os.tmpdir());
+    },
+    filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, 'backup-upload-' + uniqueSuffix + '.zip');
+    }
+  }),
+  limits: {
+    fileSize: 200 * 1024 * 1024 // 200MB лимит на бэкап
+  },
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.zip') {
+      cb(null, true);
+    } else {
+      cb(new Error('Разрешены только ZIP файлы!'));
     }
   }
 });
@@ -336,7 +371,13 @@ app.get('/api/messages', auth.authenticateToken, auth.checkApproved, (req, res) 
 });
 
 app.post('/api/messages', auth.authenticateToken, auth.checkApproved, (req, res) => {
-  const { sender, content } = req.body;
+  const { content } = req.body;
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'Содержимое сообщения обязательно' });
+  }
+  // Отправитель берётся из токена, а не из тела запроса — раньше клиент мог
+  // прислать любой sender и отправить сообщение от чужого имени.
+  const sender = req.user.display_name || req.user.username;
   messengerDb.run('INSERT INTO messages (sender, content) VALUES (?, ?)', [sender, content], function(err) {
     if (err) {
       res.status(500).json({ error: err.message });
@@ -915,7 +956,7 @@ app.get('/api/categories', auth.authenticateToken, auth.checkApproved, (req, res
   });
 });
 
-app.post('/api/categories', auth.authenticateToken, auth.checkApproved, (req, res) => {
+app.post('/api/categories', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   const { name } = req.body;
   articlesDb.run('INSERT INTO categories (name) VALUES (?)', [name], function(err) {
     if (err) {
@@ -926,7 +967,7 @@ app.post('/api/categories', auth.authenticateToken, auth.checkApproved, (req, re
   });
 });
 
-app.delete('/api/categories/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
+app.delete('/api/categories/:id', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   const { id } = req.params;
   articlesDb.run('DELETE FROM categories WHERE id = ?', [id], function(err) {
     if (err) {
@@ -955,7 +996,7 @@ app.get('/api/roles', auth.authenticateToken, auth.checkApproved, (req, res) => 
   });
 });
 
-app.post('/api/roles', auth.authenticateToken, auth.checkApproved, (req, res) => {
+app.post('/api/roles', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   const { name, code } = req.body;
   const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
   usersDb.run('INSERT INTO roles (name, code) VALUES (?, ?)', [name, code], function(err) {
@@ -969,7 +1010,7 @@ app.post('/api/roles', auth.authenticateToken, auth.checkApproved, (req, res) =>
   });
 });
 
-app.delete('/api/roles/:id', auth.authenticateToken, auth.checkApproved, (req, res) => {
+app.delete('/api/roles/:id', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   const { id } = req.params;
   const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
   usersDb.run('DELETE FROM roles WHERE id = ?', [id], function(err) {
@@ -1685,7 +1726,7 @@ app.post('/api/backups/restore/:fileName', auth.authenticateToken, auth.checkApp
 });
 
 // Загрузка бэкапа из файла
-app.post('/api/backups/upload', auth.authenticateToken, auth.checkApproved, auth.checkRoot, upload.single('backup'), async (req, res) => {
+app.post('/api/backups/upload', auth.authenticateToken, auth.checkApproved, auth.checkRoot, uploadBackupZip.single('backup'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'Файл бэкапа не загружен' });
