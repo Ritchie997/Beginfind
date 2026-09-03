@@ -270,6 +270,47 @@
   font-size: 16px;
 }
 
+/* === Подсказка "переименовать статью" под полем заголовка ===
+   Появляется, только когда значение поля отличается от заголовка, с которым
+   статья была загружена — обычное поле ввода остаётся единственным местом,
+   где меняют текст заголовка (см. editor-manager.js: setupTitleRenameHint). */
+.title-rename-hint {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--yellow);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.title-rename-hint i {
+  color: var(--yellow);
+  flex-shrink: 0;
+}
+.title-rename-hint span {
+  flex: 1;
+}
+.title-rename-hint-btn {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--yellow);
+  border: none;
+  border-radius: 5px;
+  color: #1a1a1a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.title-rename-hint-btn:hover {
+  background: var(--yellow-hover);
+}
+
 /* === Backlinks === */
 .backlinks-panel {
   margin-top: 20px;
@@ -307,6 +348,25 @@
 
 .graph-container.graph-container-compact {
   height: 280px;
+}
+
+/* Карточка графа на дашборде — пониже полноэкранного, но не сжатая
+   до размеров локальной панели редактора */
+.graph-container.graph-container-dashboard {
+  height: 420px;
+}
+
+.graph-page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.graph-page-count {
+  font-size: 13px;
+  color: var(--header-secondary);
 }
 
 .graph-svg {

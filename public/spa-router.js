@@ -6,7 +6,6 @@ class SPARouter {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
       '/articles': this.loadArticles,
-      '/graph': this.loadGraph,
       '/categories': this.loadCategories,
       '/servers': this.loadServers,
       '/pending-users': this.loadPendingUsers,
@@ -252,7 +251,6 @@ class SPARouter {
       '/': 'Аналитика - Админ-панель BeginFind',
       '/dashboard': 'Аналитика - Админ-панель BeginFind',
       '/articles': 'Редактор - Админ-панель BeginFind',
-      '/graph': 'Граф связей - Админ-панель BeginFind',
       '/categories': 'Категории - Админ-панель BeginFind',
       '/servers': 'Сервера - Админ-панель BeginFind',
       '/settings': 'Настройки - Админ-панель BeginFind'
@@ -290,18 +288,17 @@ class SPARouter {
       await this.loadDashboardStats();
 
       // Note: Charts are now initialized in loadDashboardStats with real data
+
+      // Граф связей статей — раньше был отдельной страницей /graph, теперь
+      // живёт прямо на дашборде (initGraphPage универсален: ему достаточно
+      // #graphContainer/#graphNodeCount в разметке, см. views/dashboard.html)
+      await window.GraphView?.initGraphPage();
     } catch (error) {
       console.error('Error loading dashboard:', error);
       showMessage('Ошибка при загрузке дашборда', 'error');
     } finally {
       this.hideLoader();
     }
-  }
-
-  // Legacy method kept for compatibility - charts now initialized with real data in loadDashboardStats
-  initDashboardCharts() {
-    // This method is deprecated - use initDashboardChartsWithData instead
-    console.log('initDashboardCharts is deprecated, use initDashboardChartsWithData');
   }
 
   // Load articles content
@@ -336,33 +333,6 @@ class SPARouter {
     } catch (error) {
       console.error('Error loading articles:', error);
       showMessage('Ошибка при загрузке статей', 'error');
-    } finally {
-      this.hideLoader();
-    }
-  }
-
-  // Load graph (full-page связей между статьями) content
-  async loadGraph() {
-    this.showLoader();
-
-    try {
-      const response = await fetch('/views/graph.html');
-      const html = await response.text();
-
-      const appContent = document.getElementById('app-content');
-      if (appContent) {
-        appContent.innerHTML = html;
-
-        const titleElement = document.getElementById('page-title');
-        if (titleElement) {
-          titleElement.textContent = 'Граф связей';
-        }
-      }
-
-      await window.GraphView?.initGraphPage();
-    } catch (error) {
-      console.error('Error loading graph:', error);
-      showMessage('Ошибка при загрузке графа связей', 'error');
     } finally {
       this.hideLoader();
     }
@@ -505,54 +475,6 @@ class SPARouter {
     } catch (error) {
       console.error(`Error loading template ${templatePath}:`, error);
       throw error;
-    }
-  }
-
-  // Initialize dashboard charts
-  initDashboardCharts() {
-    // Check if Chart.js is available
-    if (typeof Chart !== 'undefined') {
-      // Get the canvas element for weekly activity chart
-      const ctx = document.getElementById('weeklyActivityChart');
-      if (ctx) {
-        // Destroy existing chart if it exists to avoid duplication
-        if (ctx.chartInstance) {
-          ctx.chartInstance.destroy();
-        }
-
-        // Create a sample chart (in a real scenario, this would be populated with actual data)
-        const chartData = {
-          labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          datasets: [{
-            label: 'Активность за неделю',
-            data: [12, 19, 3, 5, 2, 3, 9],
-            borderColor: 'rgb(86, 101, 242)',
-            backgroundColor: 'rgba(86, 101, 242, 0.2)',
-            tension: 0.1
-          }]
-        };
-
-        const config = {
-          type: 'line',
-          data: chartData,
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: 'top',
-              }
-            },
-            scales: {
-              y: {
-                beginAtZero: true
-              }
-            }
-          }
-        };
-
-        // Create the chart and store reference
-        ctx.chartInstance = new Chart(ctx, config);
-      }
     }
   }
 

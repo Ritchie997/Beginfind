@@ -1,4 +1,13 @@
 :root {
+    /* Сайт всегда тёмный (переключателя светлой темы в разметке нет — см.
+       ниже переменные --light-*, они не подключены нигде). Без color-scheme
+       браузер не знает об этом и рисует нативные элементы управления
+       (выпадающий список <select>, скроллбары, системные подсказки) в своей
+       светлой теме по умолчанию — из-за этого, например, текст в выпадающем
+       списке категории читался почти нечитаемым (тёмный на светлом вместо
+       ожидаемого светлого на тёмном текущей темы страницы). */
+    color-scheme: dark;
+
     /* Discord-like dark theme colors */
     --background-primary: #36393f;
     --background-secondary: #2f3136;
@@ -1904,10 +1913,35 @@ html {
 }
 
 /* Recent activity */
+/* Карточки с графиком активности и графом связей на дашборде — раньше
+   у .charts-container/.chart-card/.chart-title не было ни одного правила
+   (карточка "Активность за неделю" рендерилась вообще без фона/отступов),
+   стиль здесь подогнан под уже существующие .stat-card/.activity-container. */
+.charts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.chart-card {
+    background-color: var(--background-secondary);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.chart-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--header-primary);
+}
+
 .activity-container {
     background-color: var(--background-secondary);
     border-radius: 8px;
     padding: 20px;
+    margin-top: 20px;
 }
 
 .activity-title {

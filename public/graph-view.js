@@ -1,5 +1,6 @@
 // graph-view.js — переиспользуемый рендер графа связей статей (SVG + d3-force).
-// Используется и полноэкранной страницей "Граф" (graph-page.js), и локальной
+// Используется на дашборде (карточка "Граф связей статей", initGraphPage
+// монтируется в #graphContainer из views/dashboard.html) и локальной
 // панелью графа внутри редактора (editor-manager.js).
 //
 // d3 подключается так же, как CodeMirror в editor-manager.js: динамическим
@@ -191,8 +192,9 @@
     window.spaRouter.editArticle(slug);
   }
 
-  // Инициализация полноэкранной страницы "Граф" (public/views/graph.html).
-  // Вызывается из spa-router.js после вставки разметки страницы в DOM.
+  // Инициализация графовой карточки на дашборде (public/views/dashboard.html):
+  // ищет #graphContainer/#graphNodeCount в уже вставленной разметке страницы
+  // и рисует в них граф. Вызывается из spa-router.js (loadDashboard).
   async function initGraphPage() {
     const container = document.getElementById('graphContainer');
     if (!container) return;

@@ -135,7 +135,12 @@
       return `${WIKILINK_MARK_START}${slug}${WIKILINK_MARK_SEP}${text}${WIKILINK_MARK_END}`;
     });
 
-    const rawHtml = marked.parse(preprocessed, { gfm: true, breaks: false });
+    // breaks: true — одиночный Enter = перенос строки в превью (как в
+    // Obsidian по умолчанию), а не игнорируется до пустой строки, как того
+    // требует строгий CommonMark. Это ожидаемое поведение для заметок, а не
+    // кода: если бы Enter ничего не менял в предпросмотре, статья выглядела
+    // бы слитной "простынёй" текста.
+    const rawHtml = marked.parse(preprocessed, { gfm: true, breaks: true });
     const clean = DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] });
 
     const container = document.createElement('div');
@@ -267,6 +272,7 @@
       this._articleIdObserver = null;
       this._previewTimer = null;
       this._lastObservedArticleId = undefined;
+      this._loadedArticleTitle = null;
     }
 
     // Вызывается spa-router'ом при каждом открытии страницы /articles.
@@ -279,6 +285,7 @@
       this.panesEl = this.container.closest('.editor-panes');
       this.previewEl = document.getElementById('markdownPreviewPane');
       this.setupPreviewClickHandling();
+      this.setupTitleRenameHint();
 
       // Ставим шим ДО начала асинхронной загрузки CodeMirror — так любые
       // обращения к innerHTML в этот промежуток (маловероятно, но возможно
@@ -781,8 +788,13 @@
         const id = saveBtn.getAttribute('data-article-id');
         if (id === this._lastObservedArticleId) return;
         this._lastObservedArticleId = id;
+        // Заголовок, с которым статья была загружена — точка отсчёта, чтобы
+        // понять, что пользователь его поменял (см. updateTitleRenameHint).
+        // editArticle() в spa-router.js всегда заполняет поле title ДО того,
+        // как проставляет data-article-id, так что здесь уже актуальное значение.
+        this._loadedArticleTitle = id ? (document.getElementById('articleTitle')?.value.trim() || '') : null;
         this.renderBacklinksPanel(id);
-        this.renderRenameButton(id);
+        this.updateTitleRenameHint();
         this.renderLocalGraphPanel(id);
       };
 
@@ -874,62 +886,75 @@
       });
     }
 
-    // Кнопка "Переименовать" рядом с заголовком статьи — виден только при
-    // редактировании существующей статьи (не при создании новой). Меняет
-    // title и slug через PUT /api/articles/:slug/rename, который сам
-    // обновляет [[wiki-ссылки]] на неё во всех остальных статьях.
-    renderRenameButton(slug) {
+    // Подсказка "переименовать статью" под полем заголовка — раньше рядом с
+    // полем была отдельная кнопка, которая по клику ЕЩЁ РАЗ спрашивала новый
+    // заголовок через prompt(), хотя он уже был виден и редактируем прямо в
+    // поле — два способа поменять один и тот же текст. Теперь поле —
+    // единственное место ввода: подсказка появляется, только когда его
+    // значение отличается от заголовка, с которым статья была загружена, и
+    // читает новый заголовок прямо из поля (без повторного ввода).
+    // "Быстрое" сохранение (Обновить статью) правит только текст заголовка в
+    // статье и не трогает slug/адрес/ссылки на неё — эта подсказка предлагает
+    // именно полное переименование через PUT /api/articles/:slug/rename,
+    // которое меняет slug и само обновляет [[wiki-ссылки]] на статью во всех
+    // остальных статьях.
+    setupTitleRenameHint() {
+      const titleInput = document.getElementById('articleTitle');
+      if (!titleInput || titleInput.dataset.renameHintBound) return;
+      titleInput.dataset.renameHintBound = 'true';
+      titleInput.addEventListener('input', () => this.updateTitleRenameHint());
+    }
+
+    ensureTitleRenameHintEl() {
+      let hint = document.getElementById('titleRenameHint');
+      if (hint) return hint;
+
       const titleGroup = document.getElementById('articleTitle')?.closest('.form-group');
-      if (!titleGroup) return;
+      if (!titleGroup) return null;
 
-      let btn = document.getElementById('renameArticleBtn');
-      if (!slug) {
-        if (btn) btn.style.display = 'none';
-        return;
-      }
+      hint = document.createElement('div');
+      hint.id = 'titleRenameHint';
+      hint.className = 'title-rename-hint';
+      hint.innerHTML = `
+        <i class="fas fa-arrow-turn-up"></i>
+        <span>Заголовок изменён — обычное сохранение оставит прежний адрес статьи.</span>
+        <button type="button" id="renameArticleBtn" class="title-rename-hint-btn">Переименовать и обновить ссылки</button>
+      `;
+      titleGroup.appendChild(hint);
+      hint.querySelector('#renameArticleBtn').addEventListener('click', () => this.renameCurrentArticle());
+      return hint;
+    }
 
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.id = 'renameArticleBtn';
-        btn.className = 'btn-action-plus';
-        btn.title = 'Переименовать статью (обновит [[ссылки]] на неё в других статьях)';
-        btn.innerHTML = '<i class="fas fa-i-cursor"></i>';
-        btn.style.marginLeft = '8px';
-        btn.addEventListener('click', () => this.renameCurrentArticle());
+    updateTitleRenameHint() {
+      const titleInput = document.getElementById('articleTitle');
+      const hint = this.ensureTitleRenameHintEl();
+      if (!hint || !titleInput) return;
 
-        const label = titleGroup.querySelector('.form-label');
-        const wrapper = document.createElement('span');
-        wrapper.style.display = 'inline-flex';
-        wrapper.style.alignItems = 'center';
-        wrapper.style.gap = '8px';
-        label.replaceWith(wrapper);
-        wrapper.appendChild(label);
-        wrapper.appendChild(btn);
-      }
-      btn.style.display = 'inline-flex';
-      btn.dataset.slug = slug;
+      const current = titleInput.value.trim();
+      const isDirty = this._loadedArticleTitle !== null && this._loadedArticleTitle !== undefined
+        && current && current !== this._loadedArticleTitle;
+
+      hint.style.display = isDirty ? 'flex' : 'none';
     }
 
     async renameCurrentArticle() {
-      const btn = document.getElementById('renameArticleBtn');
-      const slug = btn?.dataset.slug;
-      if (!slug) return;
-
+      const slug = this._lastObservedArticleId;
       const titleInput = document.getElementById('articleTitle');
-      const newTitle = prompt('Новый заголовок статьи:', titleInput?.value || '');
-      if (!newTitle || !newTitle.trim() || newTitle.trim() === titleInput?.value) return;
+      const newTitle = titleInput?.value.trim();
+      if (!slug || !newTitle || newTitle === this._loadedArticleTitle) return;
 
-      const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles/${slug}/rename`, 'PUT', { title: newTitle.trim() });
+      const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles/${slug}/rename`, 'PUT', { title: newTitle });
       if (!result.success) {
         window.showMessage?.('Не удалось переименовать статью: ' + (result.data?.error || result.error || ''), 'error');
         return;
       }
 
       const { newSlug, updatedArticles } = result.data;
-      if (titleInput) titleInput.value = newTitle.trim();
       const saveBtn = document.getElementById('saveArticleBtn');
       if (saveBtn) saveBtn.setAttribute('data-article-id', newSlug);
+      this._lastObservedArticleId = newSlug;
+      this._loadedArticleTitle = newTitle;
+      this.updateTitleRenameHint();
 
       const msg = updatedArticles && updatedArticles.length
         ? `Статья переименована. Обновлены ссылки в ${updatedArticles.length} других статьях.`
@@ -962,6 +987,7 @@
         this._localGraphInstance = null;
       }
       this._lastObservedArticleId = undefined;
+      this._loadedArticleTitle = null;
     }
   }
 

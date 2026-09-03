@@ -103,12 +103,18 @@
         </div>
       </div>
 
-      <!-- Кнопки управления -->
+      <!-- Кнопки управления: черновик — второстепенное действие слева,
+           сброс — приглушён (чтобы не спутать с публикацией по соседству),
+           публикация — самая заметная и справа, как основное действие. -->
       <div class="button-group">
-        <button id="saveDraftBtn" class="btn btn-secondary">Сохранить черновик</button>
-        <button id="loadDraftBtn" class="btn btn-secondary">Загрузить черновик</button>
-        <button id="resetArticleBtn" class="btn btn-warning">Сбросить</button>
-        <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
+        <div class="btn-cluster">
+          <button id="saveDraftBtn" class="btn btn-secondary btn-sm">💾 Черновик</button>
+          <button id="loadDraftBtn" class="btn btn-secondary btn-sm">📂 Загрузить</button>
+        </div>
+        <div class="btn-cluster">
+          <button id="resetArticleBtn" class="btn btn-ghost-warning">Сбросить</button>
+          <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
+        </div>
       </div>
 
       <!-- Контейнер для управления черновиками -->
@@ -420,11 +426,40 @@
 
 .articles-page .button-group {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid var(--background-accent);
+}
+
+.articles-page .btn-cluster {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* "Сбросить" рядом с "Опубликовать" — сплошная жёлтая кнопка тут спорит за
+   внимание с основной кнопкой публикации и рискует случайным кликом.
+   Приглушённый ("ghost") вариант остаётся заметным по цвету текста/рамки,
+   но явно уступает по весу соседней сплошной кнопке. */
+.articles-page .btn-ghost-warning {
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  transition: all 0.2s ease;
+}
+
+.articles-page .btn-ghost-warning:hover {
+  background: rgba(250, 168, 26, 0.12);
+  color: var(--yellow-hover);
 }
 
 .articles-page .articles-section {
