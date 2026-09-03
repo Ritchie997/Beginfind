@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const { dbPath, BACKUPS_DIR } = require('../config/paths');
 
 // Список файлов баз данных для бэкапа
 const DATABASE_FILES = [
@@ -11,7 +12,7 @@ const DATABASE_FILES = [
 ];
 
 // Директория для хранения бэкапов
-const BACKUP_DIR = path.join(__dirname, 'backups');
+const BACKUP_DIR = BACKUPS_DIR;
 
 /**
  * Проверяет имя файла бэкапа и возвращает безопасный абсолютный путь внутри BACKUP_DIR.
@@ -62,15 +63,15 @@ async function createBackup(customName = null) {
     const filesAdded = [];
 
     for (const dbFile of DATABASE_FILES) {
-      const dbPath = path.join(__dirname, dbFile);
-      console.log(`[Backup] Проверка: ${dbPath}`);
+      const dbFilePath = dbPath(dbFile);
+      console.log(`[Backup] Проверка: ${dbFilePath}`);
 
-      if (fs.existsSync(dbPath)) {
-        const stats = fs.statSync(dbPath);
+      if (fs.existsSync(dbFilePath)) {
+        const stats = fs.statSync(dbFilePath);
         console.log(`[Backup] Файл найден: ${dbFile} (${stats.size} байт)`);
-        
+
         // Добавляем файл в ZIP
-        zip.addLocalFile(dbPath, '', dbFile);
+        zip.addLocalFile(dbFilePath, '', dbFile);
         filesAdded.push(dbFile);
         console.log(`[Backup] ✓ Добавлен в бэкап: ${dbFile}`);
       } else {
@@ -118,7 +119,7 @@ async function restoreBackup(backupPath) {
 
     const zip = new AdmZip(backupPath);
     const zipEntries = zip.getEntries();
-    
+
     const restoredFiles = [];
     const errors = [];
 
@@ -130,16 +131,16 @@ async function restoreBackup(backupPath) {
       // entryName напрямую, что позволяло записи вида "../../public/x.db"
       // (zip slip) перезаписать произвольный файл на сервере.
       if (DATABASE_FILES.includes(path.basename(entryName)) && path.basename(entryName) === entryName) {
-        const targetPath = path.join(__dirname, entryName);
+        const targetPath = dbPath(entryName);
 
         try {
           // Закрываем активные подключения перед восстановлением
           await closeDatabaseConnection(entryName);
-          
+
           // Извлекаем файл
           const buffer = entry.getData();
           fs.writeFileSync(targetPath, buffer);
-          
+
           restoredFiles.push(entryName);
           console.log(`✓ Восстановлен: ${entryName}`);
         } catch (err) {
@@ -154,7 +155,7 @@ async function restoreBackup(backupPath) {
     }
 
     console.log(`✓ Восстановлено ${restoredFiles.length} файл(ов)`);
-    
+
     return {
       success: true,
       restored: restoredFiles,
@@ -170,7 +171,7 @@ async function restoreBackup(backupPath) {
 /**
  * Закрыть активное подключение к базе данных
  */
-function closeDatabaseConnection(dbFile) {
+function closeDatabaseConnection(_dbFile) {
   return new Promise((resolve) => {
     // SQLite кэширует подключения, поэтому просто делаем синхронизацию
     // Фактическое закрытие произойдет когда все запросы завершатся
@@ -193,7 +194,7 @@ function getBackupList() {
       .map(file => {
         const filePath = path.join(BACKUP_DIR, file);
         const stats = fs.statSync(filePath);
-        
+
         return {
           fileName: file,
           size: stats.size,
@@ -226,7 +227,7 @@ function deleteBackup(fileName) {
 
     fs.unlinkSync(filePath);
     console.log(`✓ Бэкап удален: ${fileName}`);
-    
+
     return true;
   } catch (error) {
     console.error('✗ Ошибка при удалении бэкапа:', error.message);
@@ -245,7 +246,7 @@ function getBackupFilePath(fileName) {
   if (!fs.existsSync(filePath)) {
     throw new Error('Файл бэкапа не найден');
   }
-  
+
   return filePath;
 }
 
@@ -254,10 +255,10 @@ function getBackupFilePath(fileName) {
  */
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 Б';
-  
+
   const units = ['Б', 'КБ', 'МБ', 'ГБ'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  
+
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
 
@@ -266,11 +267,11 @@ function formatFileSize(bytes) {
  */
 function shouldRunAutoBackup(lastBackupTime, intervalHours = 12) {
   if (!lastBackupTime) return true;
-  
+
   const now = new Date();
   const last = new Date(lastBackupTime);
   const hoursDiff = (now - last) / (1000 * 60 * 60);
-  
+
   return hoursDiff >= intervalHours;
 }
 

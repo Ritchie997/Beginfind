@@ -1,11 +1,11 @@
 // server-system-logic.js - Базовая логика для системы серверов
 
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { dbPath } = require('../config/paths');
 
 // Функция для подключения к базе данных
 function getDatabaseConnection() {
-  return new sqlite3.Database(path.join(__dirname, 'servers.db'));
+  return new sqlite3.Database(dbPath('servers.db'));
 }
 
 // === CRUD операции для серверов ===
@@ -66,19 +66,58 @@ function updateServer(serverId, name, description) {
   });
 }
 
-// Удаление сервера
+// Удаление сервера вместе со всеми связанными данными (роли, участники,
+// назначения ролей, каналы) в одной транзакции.
+//
+// Раньше в проекте было два независимых обработчика DELETE /api/servers/:id
+// (один по параметру :id, другой по :serverId — фактически один и тот же
+// путь). Express всегда вызывал первый зарегистрированный, поэтому второй —
+// с этой самой каскадной очисткой — был мёртвым кодом, а реально работавший
+// удалял только строку из servers, оставляя в servers.db осиротевшие строки
+// в server_roles/user_server_memberships/user_server_role_assignments/
+// server_channels. Здесь оба поведения объединены в одну рабочую функцию.
 function deleteServer(serverId) {
   return new Promise((resolve, reject) => {
     const db = getDatabaseConnection();
-    const query = 'DELETE FROM servers WHERE id = ?';
-    
-    db.run(query, [serverId], function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ changes: this.changes, serverId });
-      }
-      db.close();
+
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      const rollback = (err) => {
+        db.run('ROLLBACK', () => {
+          db.close();
+          reject(err);
+        });
+      };
+
+      db.run('DELETE FROM server_roles WHERE server_id = ?', [serverId], (err) => {
+        if (err) return rollback(err);
+
+        db.run('DELETE FROM user_server_memberships WHERE server_id = ?', [serverId], (err) => {
+          if (err) return rollback(err);
+
+          db.run('DELETE FROM user_server_role_assignments WHERE server_id = ?', [serverId], (err) => {
+            if (err) return rollback(err);
+
+            db.run('DELETE FROM server_channels WHERE server_id = ?', [serverId], (err) => {
+              if (err) return rollback(err);
+
+              db.run('DELETE FROM servers WHERE id = ?', [serverId], function (err) {
+                if (err) return rollback(err);
+
+                db.run('COMMIT', (commitErr) => {
+                  db.close();
+                  if (commitErr) {
+                    reject(commitErr);
+                  } else {
+                    resolve({ changes: this.changes, serverId });
+                  }
+                });
+              });
+            });
+          });
+        });
+      });
     });
   });
 }
@@ -192,7 +231,7 @@ function assignRoleToUserOnServer(userId, serverId, roleId) {
 function getUsersOnServer(serverId) {
   return new Promise((resolve, reject) => {
     const serversDb = getDatabaseConnection();
-    const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
+    const usersDb = new sqlite3.Database(dbPath('users.db'));
     
     // Сначала получаем всех пользователей, состоящих в этом сервере
     serversDb.all(`
@@ -280,7 +319,7 @@ function getUsersOnServer(serverId) {
 function getAllServersWithUserCount() {
   return new Promise((resolve, reject) => {
     const serversDb = getDatabaseConnection();
-    const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
+    const usersDb = new sqlite3.Database(dbPath('users.db'));
     
     // Сначала получаем все сервера
     serversDb.all(`
@@ -367,7 +406,7 @@ function getAllServersWithUserCount() {
 function getServerWithDetails(serverId) {
   return new Promise((resolve, reject) => {
     const serversDb = getDatabaseConnection();
-    const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
+    const usersDb = new sqlite3.Database(dbPath('users.db'));
     
     // Получаем основную информацию о сервере
     serversDb.get(`

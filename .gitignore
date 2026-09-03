@@ -9,8 +9,8 @@ npm-debug.log*
 .DS_Store
 *.pem
 *.key
-uploads/
-images/
+/public/uploads/*
+!/public/uploads/.gitkeep
 temp/
 tmp/
 .qwen

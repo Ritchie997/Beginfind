@@ -1,10 +1,11 @@
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
+const { dbPath, UPLOADS_DIR } = require('../config/paths');
 const sqlite3 = require('sqlite3').verbose();
 
 // Путь к директории с загрузками
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
+const uploadsDir = UPLOADS_DIR;
 
 // Функция для получения всех файлов в директории
 function getAllFiles(dir) {
@@ -70,8 +71,8 @@ async function cleanUnusedFiles() {
   }
   
   // Подключаемся к базам данных
-  const articlesDb = new sqlite3.Database(path.join(__dirname, 'articles.db'));
-  const messengerDb = new sqlite3.Database(path.join(__dirname, 'messenger.db'));
+  const articlesDb = new sqlite3.Database(dbPath('articles.db'));
+  const messengerDb = new sqlite3.Database(dbPath('messenger.db'));
   
   try {
     // Получаем все используемые файлы из статей: как обложку (image), так и
@@ -145,11 +146,12 @@ async function cleanUnusedFiles() {
 console.log(`[${new Date().toISOString()}] Scheduled cleanup service started (auto-run disabled, see below)`);
 // cleanUnusedFiles(); // Запускаем сразу при старте - отключено, т.к. может удалить используемые файлы
 
-// ВРЕМЕННО ОТКЛЮЧЕНО: cleanUnusedFiles() не учитывает картинки, вставленные
-// внутрь тела статьи (articles.content) — только article.image (обложку) и
-// сообщения мессенджера. Из-за этого ежедневный запуск реально удалял файлы,
-// которые используются в теле статей. Включать обратно только после того,
-// как extractFilenamesFromContent() будет применяться и к articles.content.
+// ВРЕМЕННО ОТКЛЮЧЕНО по решению владельца проекта. Раньше cleanUnusedFiles()
+// не учитывала картинки, вставленные внутрь тела статьи (articles.content) —
+// только article.image (обложку) и сообщения мессенджера, из-за чего
+// ежедневный запуск реально удалял используемые файлы. Логика уже исправлена
+// (сканирует и content тоже), но сам cron остаётся выключенным, пока его не
+// включат осознанно.
 // cron.schedule('0 3 * * *', () => {
 //   cleanUnusedFiles();
 // }, {

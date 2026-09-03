@@ -1,16 +1,29 @@
+// auth.js — аутентификация, регистрация и middleware проверки токена/статуса.
+// Переехал из корня проекта (./auth.js) без изменения логики, кроме путей
+// к БД (см. src/config/paths.js) и явного экспорта assignObserverRoleIfNeeded
+// (см. комментарий у объявления функции).
+//
+// Важно: этот модуль читает process.env.JWT_SECRET на этапе загрузки, поэтому
+// src/config/env.js (который вызывает dotenv.config()) должен быть
+// require()-нут раньше, чем этот файл — это гарантируется тем, что
+// src/server.js требует config/env первым.
+
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { dbPath } = require('../config/paths');
 
 /**
  * Проверяет участие пользователя в серверах и назначает роль "наблюдатель" если нужно
- * (встроена из удалённого server-membership-check.js)
+ * (встроена из удалённого server-membership-check.js).
+ * Экспортируется отдельно — раньше GET /api/profile/observer-status делал
+ * require('./server-membership-check'), которого уже не существует в
+ * репозитории, и маршрут падал с 500 при каждом обращении.
  */
 async function assignObserverRoleIfNeeded(userId) {
   return new Promise((resolve) => {
-    const serversDb = new sqlite3.Database(path.join(__dirname, 'servers.db'));
-    const usersDb = new sqlite3.Database(path.join(__dirname, 'users.db'));
+    const serversDb = new sqlite3.Database(dbPath('servers.db'));
+    const usersDb = new sqlite3.Database(dbPath('users.db'));
 
     serversDb.get(`
       SELECT COUNT(*) as server_count
@@ -57,7 +70,7 @@ async function assignObserverRoleIfNeeded(userId) {
 }
 
 // Подключение к базе данных пользователей
-const db = new sqlite3.Database(path.join(__dirname, 'users.db'), (err) => {
+const db = new sqlite3.Database(dbPath('users.db'), (err) => {
   if (err) {
     console.error('Error opening users database', err);
   } else {
@@ -475,5 +488,6 @@ module.exports = {
   rejectUser,
   getAllUsers,
   rateLimitLimiter,
+  assignObserverRoleIfNeeded,
   JWT_SECRET
 };
