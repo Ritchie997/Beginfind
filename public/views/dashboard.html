@@ -36,6 +36,23 @@
             <h3 class="chart-title" style="margin-bottom: 0;">Граф связей статей</h3>
             <span id="graphNodeCount" class="graph-page-count"></span>
         </div>
+        <div class="graph-controls">
+            <select id="graphServerFilter" class="form-select graph-controls-select">
+                <option value="">Все серверы</option>
+            </select>
+            <div class="graph-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="graphSearchInput" class="form-input" placeholder="Поиск по названию статьи…">
+                <button type="button" id="graphSearchClear" class="graph-search-clear" title="Очистить поиск" hidden>&times;</button>
+            </div>
+            <label class="graph-controls-checkbox">
+                <input type="checkbox" id="graphHideIsolated">
+                Скрыть изолированные
+            </label>
+            <button type="button" id="graphExportPng" class="btn btn-secondary btn-sm graph-controls-export">
+                <i class="fas fa-download"></i> PNG
+            </button>
+        </div>
         <div class="graph-container graph-container-dashboard" id="graphContainer">
             <div class="graph-empty">Загрузка графа…</div>
         </div>

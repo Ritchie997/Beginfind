@@ -330,7 +330,9 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     }
     const slugs = new Set(accessible.map(a => a.slug));
 
-    const nodes = accessible.map(a => ({ slug: a.slug, title: a.title }));
+    // server/category — для клиентских фильтров графа (выбор сервера,
+    // раскраска узлов по категории), см. public/graph-view.js
+    const nodes = accessible.map(a => ({ slug: a.slug, title: a.title, server: a.server ?? null, category: a.category || '' }));
     const edges = [];
     for (const article of accessible) {
       for (const target of store.extractWikiLinks(article.content)) {
