@@ -315,14 +315,62 @@ function updateArticle(slug, fields) {
   // Примечание: заголовок статьи можно менять без переименования файла — slug
   // (и, соответственно, wiki-ссылки [[slug]] на неё) стабилен, пока статью не
   // переименуют явно (см. "быстрое переименование с обновлением ссылок").
+  // Но упоминания статьи в других статьях при смене заголовка всё равно
+  // обновляем — иначе они продолжали бы показывать старое название.
   writeArticleFile(slug, updated);
   invalidateCache();
+  if (updated.title !== existing.title) refreshMentions(slug, slug, updated.title);
   return getArticle(slug);
 }
 
 /**
+ * Переписывает [[wiki-ссылки]] во всех статьях (включая саму статью — она
+ * может ссылаться на себя), для которых rewrite(link) вернул замену — см.
+ * blocks.rewriteWikiLinksInDocument. updated_at правленных статей не трогаем:
+ * это служебная правка ссылок, а не работа автора над текстом.
+ * @returns {string[]} slug'и изменённых статей
+ */
+function rewriteMentions(rewrite) {
+  const updatedArticles = [];
+  for (const article of listArticles()) {
+    const { doc, changed } = blocks.rewriteWikiLinksInDocument(article.content, slugify, rewrite);
+    if (!changed) continue;
+    writeArticleFile(article.slug, { ...article, content: doc });
+    updatedArticles.push(article.slug);
+  }
+  if (updatedArticles.length > 0) invalidateCache();
+  return updatedArticles;
+}
+
+/**
+ * Текст цели для [[ссылки]] на статью: сам заголовок, если он однозначно
+ * превращается обратно в тот же slug (читаемо в редакторе), иначе slug.
+ * Заголовок с []|# ссылкой не записать — ими ссылка разбирается.
+ */
+function mentionTarget(title, slug) {
+  const t = String(title).trim();
+  return slugify(t) === slug && !/[[\]|#]/.test(t) ? t : slug;
+}
+
+/**
+ * Статья была переименована (oldSlug → newSlug, заголовок newTitle):
+ * упоминания [[oldSlug]] / [[Старый заголовок]] / [[oldSlug|текст]] /
+ * [[oldSlug#якорь]] в других статьях указывают на новое имя. Свой алиас
+ * ("|текст") сохраняется — его задал автор упоминания.
+ */
+function refreshMentions(oldSlug, newSlug, newTitle) {
+  const target = mentionTarget(newTitle, newSlug);
+  return rewriteMentions(({ slug, anchor, alias }) =>
+    slug === oldSlug ? `[[${target}${anchor}${alias}]]` : null);
+}
+
+// Что подставляется вместо упоминания удалённой статьи.
+const DELETED_MENTION_TEXT = 'Удалено';
+
+/**
  * "Удаляет" статью, перемещая файл в content/.trash/ вместо безвозвратного
- * удаления.
+ * удаления. Упоминания [[wiki-ссылками]] в остальных статьях заменяются на
+ * текст "Удалено" (вместе с алиасом и якорем — ссылаться больше не на что).
  */
 function deleteArticle(slug) {
   if (!isSafeSlug(slug)) return false;
@@ -333,6 +381,8 @@ function deleteArticle(slug) {
   const trashName = `${slug}.${Date.now()}${FILE_EXT}`;
   fs.renameSync(filePath, path.join(TRASH_DIR, trashName));
   invalidateCache();
+
+  rewriteMentions((link) => (link.slug === slug ? DELETED_MENTION_TEXT : null));
   return true;
 }
 
@@ -349,31 +399,17 @@ function renameArticle(oldSlug, newTitle) {
   if (!existing) return null;
 
   const newSlug = generateUniqueSlug(newTitle, oldSlug);
-  if (newSlug === oldSlug) {
-    // Заголовок не поменялся настолько, чтобы изменить slug — просто обновляем title
-    updateArticle(oldSlug, { title: newTitle });
-    return { oldSlug, newSlug: oldSlug, updatedArticles: [] };
-  }
 
   writeArticleFile(newSlug, {
     ...existing,
     title: newTitle,
     updated_at: new Date().toISOString()
   });
-  fs.unlinkSync(articlePath(oldSlug));
+  // Заголовок мог не поменять slug — тогда файл тот же и удалять нечего.
+  if (newSlug !== oldSlug) fs.unlinkSync(articlePath(oldSlug));
   invalidateCache();
 
-  const updatedArticles = [];
-  for (const article of listArticles()) {
-    if (article.slug === newSlug) continue;
-    const { doc, changed } = blocks.rewriteWikiLinksInDocument(article.content, oldSlug, existing.title, newSlug);
-    if (!changed) continue;
-    writeArticleFile(article.slug, { ...article, content: doc });
-    updatedArticles.push(article.slug);
-  }
-
-  if (updatedArticles.length > 0) invalidateCache();
-
+  const updatedArticles = refreshMentions(oldSlug, newSlug, newTitle);
   return { oldSlug, newSlug, updatedArticles };
 }
 

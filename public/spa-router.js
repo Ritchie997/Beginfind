@@ -3524,11 +3524,13 @@ class SPARouter {
       }
 
       // Load servers count
+      let serversData = [];
       try {
         const serversResult = await apiClient.makeAuthenticatedRequest('/api/servers');
         if (serversResult.success) {
+          serversData = serversResult.data;
           const totalServers = document.getElementById('total-servers');
-          if (totalServers) totalServers.textContent = serversResult.data.length;
+          if (totalServers) totalServers.textContent = serversData.length;
         } else {
           console.error('Error loading servers count:', serversResult.error);
         }
@@ -3536,16 +3538,25 @@ class SPARouter {
         console.error('Error loading servers count:', error);
       }
 
-      // Load messages count
-      let messagesData = [];
-      const messagesResult = await apiClient.getMessages();
-      if (messagesResult.success) {
-        messagesData = messagesResult.data;
-        const totalMessages = document.getElementById('total-messages');
-        if (totalMessages) totalMessages.textContent = messagesData.length;
-        this.renderTrendBadge('trend-messages', this.countLastDays(messagesData, 7));
-      } else {
-        console.error('Error loading messages count:', messagesResult.error);
+      // Пользователи и сообщения — одной сводкой с сервера. "Сообщения" =
+      // мессенджер + комментарии статей Ibripedia (см. dashboard-stats.js);
+      // заодно приходят свежие события для ленты активности.
+      let summary = null;
+      try {
+        const summaryResult = await apiClient.getDashboardSummary();
+        if (summaryResult.success) {
+          summary = summaryResult.data;
+          const totalUsers = document.getElementById('total-users');
+          if (totalUsers) totalUsers.textContent = summary.users.total;
+          this.renderTrendBadge('trend-users', summary.users.trend);
+          const totalMessages = document.getElementById('total-messages');
+          if (totalMessages) totalMessages.textContent = summary.messages.total;
+          this.renderTrendBadge('trend-messages', summary.messages.trend);
+        } else {
+          console.error('Error loading dashboard summary:', summaryResult.data?.error || summaryResult.error);
+        }
+      } catch (error) {
+        console.error('Error loading dashboard summary:', error);
       }
 
       // Load categories count
@@ -3558,7 +3569,7 @@ class SPARouter {
       }
 
       // Load activity list with recent items
-      await this.loadActivityList(articlesData);
+      this.loadActivityList({ articles: articlesData, servers: serversData, summary });
 
       // Initialize charts with real data
       this.initDashboardChartsWithData(articlesData);
@@ -3590,71 +3601,165 @@ class SPARouter {
     el.title = `+${delta} за последние 7 дней`;
   }
 
-  // Load activity list with recent articles, servers, and messages
-  async loadActivityList(articlesData) {
+  // Значения из SQLite (CURRENT_TIMESTAMP, "2026-09-12 14:53:28") — это UTC без
+  // указания зоны: new Date() разобрал бы их как локальное время и сдвинул
+  // "N мин. назад" на величину часового пояса. ISO-строки (статьи, сводка
+  // дашборда) уже с зоной и идут как есть.
+  parseDbDate(value) {
+    if (!value) return new Date(NaN);
+    const s = String(value);
+    return new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(s) ? `${s.replace(' ', 'T')}Z` : s);
+  }
+
+  // Лента "Последняя активность": новые статьи, серверы, регистрации,
+  // комментарии в Ibripedia и сообщения. Записи, у которых есть куда
+  // перейти, кликабельны (см. openActivityTarget): статья/комментарий —
+  // в Ibripedia, сервер — во вкладку "Сервера", пользователь — в профиль.
+  // Сообщение мессенджера открывать некуда — остаётся обычной строкой.
+  loadActivityList({ articles = [], servers = [], summary = null } = {}) {
     const activityList = document.getElementById('activity-list');
     if (!activityList) return;
 
-    activityList.innerHTML = '';
+    const clip = (text, max = 100) => {
+      const t = String(text || '').replace(/\s+/g, ' ').trim();
+      return t.length > max ? `${t.slice(0, max)}...` : t;
+    };
+    const newest = (items, dateOf, limit) => items
+      .map((item) => ({ item, time: dateOf(item) }))
+      .filter(({ time }) => !Number.isNaN(time.getTime()))
+      .sort((a, b) => b.time - a.time)
+      .slice(0, limit);
 
-    try {
-      // Get recent articles (last 5)
-      const recentArticles = articlesData.slice(-5).reverse();
-      
-      // Get recent messages
-      const messagesResult = await apiClient.getMessages();
-      const recentMessages = messagesResult.success ? messagesResult.data.slice(-3).reverse() : [];
+    const activities = [];
 
-      // Combine and sort by date
-      const activities = [];
-      
-      recentArticles.forEach(article => {
-        activities.push({
-          type: 'article',
-          title: `Добавлена статья: ${article.title}`,
-          description: article.excerpt || 'Новая статья опубликована',
-          time: new Date(article.created_at),
-          icon: '📝'
-        });
+    newest(articles, (a) => this.parseDbDate(a.created_at), 5).forEach(({ item: article, time }) => {
+      activities.push({
+        time,
+        icon: '📝',
+        title: `Добавлена статья: ${article.title}`,
+        description: clip(article.excerpt) || 'Новая статья опубликована',
+        target: { action: 'article', slug: article.slug || article.id },
+        hint: 'Открыть статью в Ibripedia'
       });
+    });
 
-      recentMessages.forEach(message => {
-        activities.push({
-          type: 'message',
-          title: `Новое сообщение от ${message.sender}`,
-          description: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
-          time: new Date(message.created_at),
-          icon: '💬'
-        });
+    newest(servers, (s) => this.parseDbDate(s.created_at), 5).forEach(({ item: server, time }) => {
+      activities.push({
+        time,
+        icon: '🌐',
+        title: `Создан сервер: ${server.name}`,
+        description: clip(server.description) || 'Новый сервер',
+        target: { action: 'server', name: server.name },
+        hint: 'Открыть во вкладке «Сервера»'
       });
+    });
 
-      // Sort by time (newest first)
-      activities.sort((a, b) => b.time - a.time);
+    const recent = (summary && summary.recent) || {};
 
-      // Display activities (max 10)
-      activities.slice(0, 10).forEach(activity => {
-        const item = document.createElement('li');
-        item.className = 'activity-item';
-        
-        const timeAgo = this.getTimeAgo(activity.time);
-        
-        item.innerHTML = `
+    (recent.users || []).forEach((user) => {
+      activities.push({
+        time: this.parseDbDate(user.createdAt),
+        icon: '👤',
+        title: `Зарегистрирован пользователь: ${user.name}`,
+        description: '',
+        target: { action: 'user', id: user.id },
+        hint: 'Открыть профиль'
+      });
+    });
+
+    (recent.comments || []).forEach((comment) => {
+      activities.push({
+        time: this.parseDbDate(comment.createdAt),
+        icon: '🗨️',
+        title: `${comment.authorName} прокомментировал(а) «${comment.articleTitle}»`,
+        description: clip(comment.content),
+        target: { action: 'article', slug: comment.slug, jumpToComments: '1' },
+        hint: 'Открыть комментарии в Ibripedia'
+      });
+    });
+
+    (recent.messages || []).forEach((message) => {
+      activities.push({
+        time: this.parseDbDate(message.createdAt),
+        icon: '💬',
+        title: `Новое сообщение от ${message.sender}`,
+        description: clip(message.content),
+        target: null
+      });
+    });
+
+    const shown = activities
+      .filter((a) => !Number.isNaN(a.time.getTime()))
+      .sort((a, b) => b.time - a.time)
+      .slice(0, 10);
+
+    if (shown.length === 0) {
+      activityList.innerHTML = '<li class="activity-item"><div class="activity-description">Нет недавней активности</div></li>';
+      return;
+    }
+
+    activityList.innerHTML = shown.map((activity) => {
+      const clickable = activity.target
+        ? ` activity-item-clickable" role="link" tabindex="0" title="${this.escapeHtml(activity.hint)}"`
+          + Object.entries(activity.target).map(([k, v]) => ` data-${k === 'jumpToComments' ? 'jump-to-comments' : k}="${this.escapeHtml(String(v))}"`).join('')
+        : '"';
+      return `
+        <li class="activity-item${clickable}>
           <div class="activity-header">
-            <span class="activity-title-text">${activity.icon} ${activity.title}</span>
-            <span class="activity-time">${timeAgo}</span>
+            <span class="activity-title-text">${activity.icon} ${this.escapeHtml(activity.title)}</span>
+            <span class="activity-time">${this.getTimeAgo(activity.time)}</span>
           </div>
-          <div class="activity-description">${activity.description}</div>
-        `;
-        
-        activityList.appendChild(item);
-      });
+          ${activity.description ? `<div class="activity-description">${this.escapeHtml(activity.description)}</div>` : ''}
+        </li>`;
+    }).join('');
 
-      if (activities.length === 0) {
-        activityList.innerHTML = '<li class="activity-item"><div class="activity-description">Нет недавней активности</div></li>';
-      }
-    } catch (error) {
-      console.error('Error loading activity list:', error);
-      activityList.innerHTML = '<li class="activity-item"><div class="activity-description">Ошибка загрузки активности</div></li>';
+    // Делегирование: список перерисовывается целиком, а обработчик вешается
+    // один раз на сам <ul> (он живёт, пока открыт дашборд).
+    if (!activityList.dataset.bound) {
+      activityList.dataset.bound = 'true';
+      const open = (event) => {
+        const item = event.target.closest('.activity-item-clickable');
+        if (item) this.openActivityTarget(item.dataset);
+      };
+      activityList.addEventListener('click', open);
+      activityList.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open(event);
+        }
+      });
+    }
+  }
+
+  // Переход по клику на запись ленты (data-* атрибуты записи, см. loadActivityList)
+  async openActivityTarget(data) {
+    switch (data.action) {
+      case 'article':
+        return this.openIbripediaArticle(data.slug, { jumpToComments: data.jumpToComments === '1' });
+      case 'server':
+        return this.openServerByName(data.name);
+      case 'user':
+        return this.navigateTo(`/profile/${data.id}`);
+      default:
+        return undefined;
+    }
+  }
+
+  // Открывает статью в Ibripedia (опционально — сразу на комментариях).
+  async openIbripediaArticle(slug, { jumpToComments = false } = {}) {
+    if (!slug) return;
+    await this.navigateTo('/ibripedia');
+    await window.ibripediaManager?.openArticleView(slug, { jumpToComments });
+  }
+
+  // Открывает вкладку "Сервера" с названием сервера в строке поиска —
+  // каталог сразу фильтруется до нужной карточки.
+  async openServerByName(name) {
+    await this.navigateTo('/servers');
+    const input = document.getElementById('servers-search-input');
+    if (input && name) {
+      input.value = name;
+      this.renderServersGrid();
     }
   }
 

@@ -2131,6 +2131,20 @@ html {
     font-size: 14px;
 }
 
+/* Записи ленты, у которых есть куда перейти (статья, сервер, профиль) */
+.activity-item-clickable {
+    cursor: pointer;
+}
+
+.activity-item-clickable:hover .activity-title-text {
+    color: var(--text-link, var(--blurple));
+}
+
+.activity-item-clickable:focus-visible {
+    outline: 2px solid var(--blurple);
+    outline-offset: -2px;
+}
+
 /* Articles list */
 .articles-section {
     background-color: var(--background-secondary);

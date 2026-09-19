@@ -11,6 +11,7 @@ const auth = require('../middleware/auth');
 const store = require('../services/articles-store');
 const social = require('../services/social-store');
 const stickers = require('../services/stickers-store');
+const dashboardStats = require('../services/dashboard-stats');
 const { serversDb } = require('../db/connections');
 const { isAdminOnServer } = require('../services/server-permissions');
 const { PORT, HOST } = require('../config/env');
@@ -976,6 +977,58 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     }
 
     res.json({ nodes, edges });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Сводка для дашборда: пользователи, "сообщения" (мессенджер + комментарии
+// статей Ibripedia) и свежие события для ленты "Последняя активность". Здесь
+// (рядом с articles-graph), а не в отдельном роутере, потому что комментарии
+// нужно отфильтровать по canAccessArticle — иначе текст комментариев к
+// закрытым статьям утёк бы на дашборд тем, кому сама статья недоступна.
+router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const [users, messenger, comments] = await Promise.all([
+      dashboardStats.getUsersSummary(5),
+      dashboardStats.getMessengerSummary(3),
+      dashboardStats.getCommentsSummary(50)
+    ]);
+
+    const articlesBySlug = new Map(store.listArticles().map((a) => [a.slug, a]));
+
+    // Комментарии удалённых статей остаются в БД — в счётчик не берём.
+    let commentsTotal = 0;
+    let commentsTrend = 0;
+    for (const row of comments.perArticle) {
+      if (!articlesBySlug.has(row.slug)) continue;
+      commentsTotal += row.total;
+      commentsTrend += row.recent;
+    }
+
+    const recentComments = [];
+    const accessBySlug = new Map();
+    for (const c of comments.recent) {
+      if (recentComments.length >= 5) break;
+      const article = articlesBySlug.get(c.slug);
+      if (!article) continue;
+      if (!accessBySlug.has(c.slug)) accessBySlug.set(c.slug, await canAccessArticle(req.user, article));
+      if (!accessBySlug.get(c.slug)) continue;
+      recentComments.push({ ...c, articleTitle: article.title });
+    }
+
+    res.json({
+      users: { total: users.total, trend: users.trend },
+      messages: {
+        total: messenger.total + commentsTotal,
+        trend: messenger.trend + commentsTrend
+      },
+      recent: {
+        users: users.recent,
+        messages: messenger.recent,
+        comments: recentComments
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -430,6 +430,12 @@ class ApiClient {
     return this.makeAuthenticatedRequest('/api/messages', 'POST', { sender, content });
   }
 
+  // Сводка дашборда: пользователи, сообщения (мессенджер + комментарии
+  // Ibripedia) и свежие события для ленты активности
+  async getDashboardSummary() {
+    return this.makeAuthenticatedRequest('/api/dashboard-summary');
+  }
+
   // Method for uploading images
   async uploadImage(file) {
     if (!authManager || !authManager.isAuthenticated()) {

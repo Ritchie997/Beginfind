@@ -158,11 +158,18 @@
   const WIKILINK_MARK_START = String.fromCharCode(0xE000);
   const WIKILINK_MARK_SEP = String.fromCharCode(0xE001);
   const WIKILINK_MARK_END = String.fromCharCode(0xE002);
+  // Стоит первым символом подписи, если у ссылки нет своего алиаса ([[цель]],
+  // а не [[цель|текст]]): подпись такой ссылки — актуальное название статьи
+  // (если она есть), а не то, что было набрано в тексте. Так упоминание не
+  // отстаёт от переименования статьи. Сам набранный текст остаётся запасным
+  // вариантом — для ссылок на ещё не созданные статьи.
+  const WIKILINK_MARK_AUTO = String.fromCharCode(0xE003);
 
   function markWikilinks(md) {
     return String(md || '').replace(WIKILINK_PARSE_RE_G(), (full, target, _anchor, alias) => {
       const slug = slugify(target.trim());
-      const text = (alias && alias.trim()) || target.trim();
+      const hasAlias = !!(alias && alias.trim());
+      const text = hasAlias ? alias.trim() : WIKILINK_MARK_AUTO + target.trim();
       return `${WIKILINK_MARK_START}${slug}${WIKILINK_MARK_SEP}${text}${WIKILINK_MARK_END}`;
     });
   }
@@ -200,12 +207,17 @@
       const frag = document.createDocumentFragment();
       parts.forEach((part) => {
         if (part.type === 'text') { frag.appendChild(document.createTextNode(part.value)); return; }
-        const exists = articlesIndexBySlug.has(part.slug);
+        const article = articlesIndexBySlug.get(part.slug);
+        const exists = !!article;
+        let label = part.label;
+        if (label.startsWith(WIKILINK_MARK_AUTO)) {
+          label = (exists && article.title) || label.slice(1);
+        }
         const a = document.createElement('a');
         a.href = 'javascript:void(0)';
         a.className = exists ? 'wiki-link' : 'wiki-link-missing';
         a.dataset.slug = part.slug;
-        a.textContent = part.label;
+        a.textContent = label;
         frag.appendChild(a);
       });
       node.parentNode.replaceChild(frag, node);

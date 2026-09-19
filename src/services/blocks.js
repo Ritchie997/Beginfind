@@ -364,33 +364,34 @@ function mapImages(doc, mapFn) {
   return { version: doc.version || 1, blocks: (doc.blocks || []).map(mapBlock) };
 }
 
-// ===== Переименование статьи: обновление [[wiki-ссылок]] в тексте блоков =====
+// ===== Изменение/удаление статьи: обновление [[wiki-ссылок]] в тексте блоков =====
 
-function escapeRegExp(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+// Те же части, что и в WIKILINK_RE, но с якорем и алиасом вместе с их
+// разделителями (#/|) — чтобы заменить ссылку целиком, ничего не потеряв.
+const WIKILINK_PARTS_RE = /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\]/g;
 
 /**
- * Заменяет [[oldSlug]] / [[oldSlug|текст]] / [[oldSlug#якорь]] (и то же самое
- * по исходному заголовку статьи, см. старое поведение renameArticle) на
- * newSlug во всех markdown-строках документа. Возвращает { doc, changed }.
+ * Переписывает [[wiki-ссылки]] во всех markdown-строках документа.
+ * Ссылка распознаётся так же, как при разборе/рендере — по slugify(цель), а
+ * не по точному тексту, поэтому [[Дракон]], [[дракон]] и [[drakon]] — одна
+ * и та же ссылка.
+ *
+ * rewrite({ slug, target, anchor, alias }) получает slug цели, исходный
+ * текст цели, а также якорь ("#раздел") и алиас ("|текст") с разделителями
+ * (или пустые строки) и возвращает строку-замену всей ссылки либо null,
+ * если ссылку менять не нужно. Возвращает { doc, changed }.
  */
-function rewriteWikiLinksInDocument(doc, oldSlug, oldTitle, newSlug) {
-  const linkRe = new RegExp(`\\[\\[\\s*${escapeRegExp(oldSlug)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
-  const titleRe = new RegExp(`\\[\\[\\s*${escapeRegExp(oldTitle)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
+function rewriteWikiLinksInDocument(doc, slugify, rewrite) {
   let changed = false;
 
   const rewriteText = (text) => {
     if (!text) return text;
-    linkRe.lastIndex = 0;
-    titleRe.lastIndex = 0;
-    if (!linkRe.test(text) && !titleRe.test(text)) return text;
-    changed = true;
-    linkRe.lastIndex = 0;
-    titleRe.lastIndex = 0;
-    return text
-      .replace(linkRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`)
-      .replace(titleRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`);
+    return text.replace(WIKILINK_PARTS_RE, (full, target, anchor, alias) => {
+      const replacement = rewrite({ slug: slugify(target.trim()), target, anchor: anchor || '', alias: alias || '' });
+      if (replacement == null || replacement === full) return full;
+      changed = true;
+      return replacement;
+    });
   };
 
   const rewriteBlock = (block) => {
