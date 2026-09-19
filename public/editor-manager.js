@@ -542,7 +542,14 @@
         btn.type = 'button';
         btn.textContent = a.title;
         if (i === 0) btn.classList.add('eb-suggest-active');
-        btn.addEventListener('mousedown', (e) => { e.preventDefault(); this.applySuggestSelection(ta); });
+        // Активный пункт по умолчанию — первый (для Enter/Tab), поэтому клик
+        // обязан передавать именно нажатую кнопку, а не искать "активную":
+        // иначе выбирался бы первый пункт списка независимо от того, куда кликнули.
+        btn.addEventListener('mouseenter', () => {
+          el.querySelector('button.eb-suggest-active')?.classList.remove('eb-suggest-active');
+          btn.classList.add('eb-suggest-active');
+        });
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); this.applySuggestSelection(ta, btn); });
         el.appendChild(btn);
       });
       // position:fixed — чистые viewport-координаты, без +scrollX/Y (см.
@@ -564,9 +571,9 @@
       buttons[idx]?.classList.add('eb-suggest-active');
     }
 
-    applySuggestSelection(ta) {
+    applySuggestSelection(ta, chosenBtn = null) {
       const el = this._suggestEl;
-      const active = el && el.querySelector('button.eb-suggest-active');
+      const active = chosenBtn || (el && el.querySelector('button.eb-suggest-active'));
       if (!active) { this.closeSuggest(); return; }
       const title = active.textContent;
       const before = ta.value.slice(0, ta.selectionStart);
