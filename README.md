@@ -19,10 +19,10 @@ src/
   services/
     articles-store.js          — файловое хранилище статей (Markdown + frontmatter, см. ниже)
     slugify.js                  — транслитерация заголовка в slug (имя файла статьи)
-    backup.js                   — создание/восстановление/список бэкапов (ZIP, включает content/)
+    backup.js                   — создание/восстановление/список бэкапов (ZIP: все *.db, content/, public/uploads/, настройки)
     backup-settings.json        — настройки автобэкапа (создаётся автоматически)
     backup-settings.js          — чтение/запись backup-settings.json
-    scheduled-cleanup.js        — очистка неиспользуемых файлов в uploads/ (cron, сейчас выключен)
+    cleanup.js                  — очистка неиспользуемых файлов в uploads/ (cron), настройки — cleanup-settings.js
     server-permissions.js       — проверка прав/иерархии ролей на сервере
     server-system-logic.js      — CRUD для серверов, ролей, участников
   uploads/
@@ -38,7 +38,7 @@ src/
     backups.routes.js           — /api/backups*
 
 scripts/
-  migrate-articles-to-markdown.js — одноразовая миграция articles.db -> content/*.md
+  make-owner.js               — назначить пользователя владельцем (npm run make-owner)
 
 public/                     — статические файлы веб-интерфейса (SPA)
 backups/                    — сохранённые ZIP-бэкапы (создаётся автоматически, не в git)
@@ -167,11 +167,7 @@ views: 0
 - Удаление перемещает файл в `content/.trash/` (не безвозвратно).
 - Список статей кэшируется в памяти (`src/services/articles-store.js`) и
   инвалидируется при любой записи через API или восстановлении бэкапа.
-- `scripts/migrate-articles-to-markdown.js` — миграция из старого
-  `articles.db` (HTML в SQLite) в `content/*.md` (HTML конвертируется в
-  Markdown через `turndown`). Безопасно запускать повторно — уже
-  смигрированные статьи (по `legacyId` в frontmatter) пропускаются.
-- Резервные копии (`/api/backups/*`) включают `content/` целиком.
+- Резервные копии (`/api/backups/*`) включают все базы данных (в том числе `stickers.db`), `content/` целиком, `public/uploads/` (картинки статей и файлы стикеров) и `system-settings.json`/`cleanup-settings.json`. Восстановление заменяет базы и настройки целиком, а статьи и файлы записывает поверх текущих (лишнее не удаляет); после него нужен перезапуск сервера.
 
 ## Редактор статей (в стиле Obsidian)
 

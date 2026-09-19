@@ -1,0 +1,530 @@
+<div class="users-list-page">
+
+  <div class="users-toolbar">
+    <h2 class="users-heading"><i class="fas fa-users"></i> Пользователи</h2>
+    <p class="users-subtitle">Все зарегистрированные пользователи, иерархия админов, мут и блокировки</p>
+  </div>
+
+  <!-- Статистика -->
+  <div class="users-stats-grid" id="users-stats" style="display: none;">
+    <div class="users-stat-tile">
+      <div class="users-stat-value" id="users-count-total">0</div>
+      <div class="users-stat-label">Всего</div>
+    </div>
+    <div class="users-stat-tile">
+      <div class="users-stat-value users-stat-value-admin" id="users-count-admins">0</div>
+      <div class="users-stat-label">Админов</div>
+    </div>
+    <div class="users-stat-tile">
+      <div class="users-stat-value users-stat-value-danger" id="users-count-blocked">0</div>
+      <div class="users-stat-label">Заблокировано</div>
+    </div>
+    <div class="users-stat-tile">
+      <div class="users-stat-value users-stat-value-warn" id="users-count-muted">0</div>
+      <div class="users-stat-label">В муте</div>
+    </div>
+  </div>
+
+  <div id="users-table-container">
+    <div class="users-loading" id="users-loading">
+      <div class="users-skeleton-row"></div>
+      <div class="users-skeleton-row"></div>
+      <div class="users-skeleton-row"></div>
+      <div class="users-skeleton-row"></div>
+    </div>
+
+    <div class="users-empty" id="users-empty" style="display: none;">
+      <i class="fas fa-user"></i>
+      <h3>Пока нет ни одного пользователя</h3>
+    </div>
+
+    <div class="table-container" id="users-table" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Имя</th>
+            <th>Логин</th>
+            <th>Роль</th>
+            <th>Статус</th>
+            <th>Регистрация</th>
+            <th style="text-align: right;">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Каталог ролей — только владелец/доверенный админ (см. users-list.js:renderRolesPanel) -->
+  <div class="users-roles-panel" id="roles-panel" style="display: none;">
+    <div class="users-section-toolbar">
+      <h2 class="users-section-title"><i class="fas fa-user-shield"></i> Роли администраторов</h2>
+      <button id="create-role-btn" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Новая роль</button>
+    </div>
+    <p class="users-roles-hint">Чем выше «Уровень», тем главнее роль в иерархии. Права можно включать/выключать независимо для каждой роли.</p>
+    <div id="roles-list" class="users-roles-list"></div>
+  </div>
+</div>
+
+<!-- Модальное окно: назначить роль -->
+<div id="assign-role-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="assign-role-modal-title">Роль администратора</h3>
+      <button type="button" class="modal-close" id="assign-role-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="assign-role-select">Роль</label>
+        <select id="assign-role-select" class="form-select">
+          <option value="">— Без роли (обычный пользователь) —</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="assign-role-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="assign-role-confirm-btn" class="btn btn-primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: переименовать -->
+<div id="rename-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Переименовать пользователя</h3>
+      <button type="button" class="modal-close" id="rename-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="rename-display-name-input">Отображаемое имя</label>
+        <input type="text" id="rename-display-name-input" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="rename-username-input">Логин</label>
+        <input type="text" id="rename-username-input" class="form-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="rename-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="rename-confirm-btn" class="btn btn-primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: заблокировать -->
+<div id="block-user-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Заблокировать пользователя?</h3>
+      <button type="button" class="modal-close" id="block-user-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="block-user-reason">Причина (необязательно)</label>
+        <input type="text" id="block-user-reason" class="form-input" placeholder="Нарушение правил и т.д.">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="block-user-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="block-user-confirm-btn" class="btn btn-danger">Заблокировать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: мут -->
+<div id="mute-user-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Временный мут</h3>
+      <button type="button" class="modal-close" id="mute-user-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-hint"><i class="fas fa-circle-info"></i> На это время пользователь не сможет писать сообщения и создавать/редактировать статьи.</p>
+      <div class="form-group">
+        <label class="form-label" for="mute-user-minutes">Длительность (минут)</label>
+        <input type="number" id="mute-user-minutes" class="form-input" min="1" step="1" value="60">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="mute-user-reason">Причина (необязательно)</label>
+        <input type="text" id="mute-user-reason" class="form-input" placeholder="Спам, оффтоп и т.д.">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="mute-user-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="mute-user-confirm-btn" class="btn btn-warning">Замутить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: создать/редактировать роль -->
+<div id="role-editor-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="role-editor-title">Новая роль</h3>
+      <button type="button" class="modal-close" id="role-editor-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="role-editor-name">Название роли</label>
+        <input type="text" id="role-editor-name" class="form-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="role-editor-level">Уровень (чем выше — тем главнее)</label>
+        <input type="number" id="role-editor-level" class="form-input" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Права роли</label>
+        <div id="role-editor-permissions" class="users-role-permissions"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="role-editor-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="role-editor-confirm-btn" class="btn btn-primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast уведомления -->
+<div id="users-toast-container" class="toast-container"></div>
+
+<style>
+/* === USERS LIST PAGE — тот же язык дизайна, что и у вкладки "Сервера"
+   (см. public/views/servers.html): карточки-плитки для статистики, единые
+   модалки header/body/footer вместо разномастных инлайн-стилей, таблица —
+   на глобальных .table-container/table/th/td (global-styles.css), без
+   собственных инлайн-цветов и JS-обработчиков hover на каждой строке (это
+   уже даёт tr:hover в глобальных стилях). Раньше вся эта страница была
+   набором строк со style="..." прямо в разметке и в шаблонах JS
+   (renderUsersList/renderRolesPanel в spa-router.js) — визуально не похожа
+   на остальные вкладки, хотя сам функционал не менялся. === */
+
+.users-list-page {
+  padding: 0;
+}
+
+.users-toolbar {
+  margin-bottom: 20px;
+}
+
+.users-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.users-heading i { color: var(--blurple); }
+
+.users-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* --- Статистика --- */
+.users-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.users-stat-tile {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.users-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+.users-stat-value-admin { color: var(--blurple); }
+.users-stat-value-danger { color: var(--red); }
+.users-stat-value-warn { color: var(--yellow); }
+
+.users-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* --- Загрузка / пусто --- */
+.users-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.users-skeleton-row {
+  height: 52px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--background-secondary) 25%, var(--background-tertiary) 37%, var(--background-secondary) 63%);
+  background-size: 400% 100%;
+  animation: users-skeleton-shimmer 1.4s ease infinite;
+  border: 1px solid var(--background-accent);
+}
+@keyframes users-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.users-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-accent);
+  border-radius: 10px;
+}
+.users-empty i {
+  font-size: 40px;
+  color: var(--blurple);
+  margin-bottom: 14px;
+  display: block;
+}
+.users-empty h3 {
+  color: var(--text-normal);
+  margin: 0;
+}
+
+/* --- Панель ролей --- */
+.users-roles-panel {
+  margin-top: 32px;
+}
+
+.users-section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.users-section-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.users-section-title i { color: var(--blurple); }
+
+.users-roles-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.users-roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.users-role-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.users-role-card-name {
+  color: var(--text-normal);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.users-role-card-perms {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.users-role-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* --- Таблица участников — компактнее глобальной .table-container:
+   меньше паддинги и чуть мельче шрифт в ячейках, чтобы строка с 5 кнопками
+   действий не раздувала таблицу по высоте. Сама структура (шапка + строки)
+   не меняется — это просто более плотная версия того же вида. --- */
+.users-list-page .table-container table th,
+.users-list-page .table-container table td {
+  padding: 10px 12px;
+}
+.users-list-page .table-container table td {
+  font-size: 13px;
+}
+
+/* --- Строки таблицы участников: бейджи роли/статуса и мелкие кнопки --- */
+.users-role-pill,
+.users-status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.users-name-link {
+  cursor: pointer;
+  color: var(--text-normal);
+}
+.users-name-link:hover { color: var(--text-link); text-decoration: underline; }
+
+.users-actions-cell {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.users-actions-cell .btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.users-btn-ghost {
+  background: transparent;
+  border: 1px dashed var(--background-accent);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.users-btn-ghost:hover { border-color: var(--blurple); color: var(--text-normal); }
+
+.users-btn-star {
+  background: var(--background-accent);
+  border: none;
+  color: var(--text-normal);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.users-btn-star:hover { background: var(--blurple); }
+
+/* --- Модалки --- */
+/* .modal-overlay/.modal-box/.modal-header/.modal-close/.modal-body/
+   .modal-footer/.modal-hint — общий компонент модалки, см. "MODAL
+   COMPONENT" в global-styles.css. Раньше здесь и в servers.html был
+   идентичный CSS под разными префиксами (.users-modal-*/.servers-modal-*) —
+   теперь один компонент на оба места. Показ/скрытие тут по-прежнему через
+   style.display='flex'/'none' из JS — этот механизм не менялся, общий
+   .modal-overlay совместим с ним (display:flex по умолчанию, инлайновый
+   style побеждает по специфичности в любую сторону). */
+
+.users-role-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.users-role-permissions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .users-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* --- Таблица участников на мобильном — не влезает по ширине (логин,
+   роль, статус, дата и до 5 кнопок действий в одной строке), а глобальный
+   .table-container на мобильном (см. "Mobile table display" в
+   global-styles.css) просто даёт таблице min-width:600px и горизонтальный
+   скролл — тогда кнопки действий уезжают за край экрана и до части из них
+   вообще не дотянуться. Вместо скролла — раскладка "карточка на
+   пользователя": шапка скрыта, каждая строка становится блоком, а подписи
+   колонок берутся из data-label (см. renderUsersList в spa-router.js) через
+   content: attr(). Кнопки действий при этом получают всю ширину экрана и
+   переносятся по строкам вместо обрезания. */
+@media (max-width: 768px) {
+  .users-list-page .table-container {
+    overflow: visible;
+  }
+  .users-list-page .table-container table {
+    min-width: 0;
+  }
+  .users-list-page table,
+  .users-list-page tbody,
+  .users-list-page tr,
+  .users-list-page td {
+    display: block;
+    width: 100%;
+  }
+  .users-list-page thead {
+    display: none;
+  }
+  .users-list-page tbody tr {
+    padding: 10px 12px;
+    border-bottom: 8px solid var(--background-primary);
+  }
+  .users-list-page tbody tr:last-child {
+    border-bottom: none;
+  }
+  .users-list-page .table-container table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: none;
+  }
+  .users-list-page .table-container table td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .users-list-page .table-container table td[data-label="Действия"] {
+    display: block;
+  }
+  .users-list-page .table-container table td[data-label="Действия"]::before {
+    display: block;
+    margin-bottom: 6px;
+  }
+  .users-actions-cell {
+    justify-content: flex-start;
+  }
+  /* Тоньше, чем на десктопе (5px 10px/12px) — на мобильном в карточке
+     может оказаться сразу 4-5 кнопок подряд, слегка уменьшаем высоту и
+     шрифт, чтобы ряд оставался компактным. */
+  .users-actions-cell .btn {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+  .users-btn-ghost,
+  .users-btn-star {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+}
+</style>

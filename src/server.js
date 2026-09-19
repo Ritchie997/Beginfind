@@ -20,6 +20,9 @@ const cron = require('node-cron');
 const { PUBLIC_DIR, UPLOADS_DIR, BACKUPS_DIR } = require('./config/paths');
 const backup = require('./services/backup');
 const { readSettings, writeSettings, SETTINGS_PATH } = require('./services/backup-settings');
+const cleanup = require('./services/cleanup');
+const { readSettings: readCleanupSettings, writeSettings: writeCleanupSettings, SETTINGS_PATH: CLEANUP_SETTINGS_PATH } = require('./services/cleanup-settings');
+const { maintenanceGate } = require('./middleware/maintenance');
 
 const pages = require('./routes/pages.routes');
 const authRoutes = require('./routes/auth.routes');
@@ -29,6 +32,11 @@ const taxonomyRoutes = require('./routes/taxonomy.routes');
 const serversRoutes = require('./routes/servers.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const backupsRoutes = require('./routes/backups.routes');
+const settingsRoutes = require('./routes/settings.routes');
+const bookmarksRoutes = require('./routes/bookmarks.routes');
+const stickersRoutes = require('./routes/stickers.routes');
+const cleanupRoutes = require('./routes/cleanup.routes');
+const notificationsRoutes = require('./routes/notifications.routes');
 
 const app = express();
 
@@ -81,6 +89,11 @@ const corsOptions = {
 app.use('/api/*', express.json({ limit: '10mb' }));
 app.use('/api/*', express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/*', cors(corsOptions));
+// Шлагбаум режима техобслуживания — после json/cors (нужен req.body ни для
+// чего тут, но порядок ради единообразия), ДО всех настоящих маршрутов, иначе
+// they успеют отработать до проверки. См. src/middleware/maintenance.js —
+// пропускает владельца и сам /api/login, всех остальных отбивает 503.
+app.use('/api/*', maintenanceGate);
 
 // Маршруты API
 app.use('/api', authRoutes);
@@ -90,6 +103,11 @@ app.use('/api', taxonomyRoutes);
 app.use('/api', serversRoutes);
 app.use('/api', uploadsRoutes);
 app.use('/api', backupsRoutes);
+app.use('/api', settingsRoutes);
+app.use('/api', bookmarksRoutes);
+app.use('/api', stickersRoutes);
+app.use('/api', cleanupRoutes);
+app.use('/api', notificationsRoutes);
 
 // Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между
@@ -171,8 +189,48 @@ function formatFileSize(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
 }
 
-// Инициализируем планировщик очистки мусорных файлов (побочный эффект require)
-require('./services/scheduled-cleanup');
+/**
+ * Инициализация автоматической очистки серверного мусора (статьи в корзине,
+ * файлы-сироты в uploads/ и uploads/stickers/*) — та же схема, что и у
+ * initializeAutoBackup выше: cron проверяет раз в несколько минут, не пора
+ * ли запустить, по cleanup-settings.json (см. src/services/cleanup.js и
+ * src/routes/cleanup.routes.js — там же ручной "Запустить сейчас"/предпросмотр).
+ */
+function initializeAutoCleanup() {
+  if (!fs.existsSync(CLEANUP_SETTINGS_PATH)) {
+    writeCleanupSettings(readCleanupSettings());
+  }
+
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const settings = readCleanupSettings();
+      if (!settings.enabled) return;
+      if (!cleanup.shouldRunScheduled(settings.lastRun, settings.intervalHours)) return;
+
+      console.log('[Cleanup] Запускаю автоматическую очистку мусора...');
+      const result = await cleanup.runCleanup(settings, { dryRun: false });
+
+      writeCleanupSettings({
+        ...settings,
+        lastRun: result.at,
+        lastReport: {
+          totalCount: result.totalCount,
+          totalBytes: result.totalBytes,
+          trashCount: result.trashCount,
+          uploadsCount: result.uploadsCount,
+          stickersCount: result.stickersCount,
+          at: result.at
+        }
+      });
+
+      console.log(`[Cleanup] Готово: удалено ${result.totalCount} файл(ов) (${formatFileSize(result.totalBytes)})`);
+    } catch (error) {
+      console.error('[Cleanup] Ошибка автоматической очистки:', error.message);
+    }
+  });
+
+  console.log('[Cleanup] Система автоматической очистки мусора инициализирована');
+}
 
 app.listen(PORT, HOST, () => {
   console.log(`Server is running on http://${HOST}:${PORT}`);
@@ -181,4 +239,5 @@ app.listen(PORT, HOST, () => {
   console.log(`Test interface available at http://localhost:${PORT}/test.html or http://[YOUR_LOCAL_IP]:${PORT}/test.html`);
 
   initializeAutoBackup();
+  initializeAutoCleanup();
 });

@@ -82,19 +82,50 @@
 .editor-panes[data-mode="split"] .editor-pane,
 .editor-panes[data-mode="split"] .preview-pane { flex: 1 1 50%; }
 
-@media (max-width: 768px) {
-  /* На мобильных split складывается в колонку, чтобы не сжимать до нечитаемого */
-  .editor-panes[data-mode="split"] {
-    flex-direction: column;
-  }
-  .editor-panes[data-mode="split"] .preview-pane {
-    border-left: none;
-    border-top: 1px solid var(--background-accent);
-  }
+/* Планшет (≤1024px): вкладки растягиваются на всю ширину поровну, но
+   "Разделить" остаётся доступен и по-прежнему кладёт панели БОК О БОК —
+   ширины планшета хватает на два читаемых столбца (в отличие от телефона,
+   см. ниже). */
+@media (max-width: 1024px) {
   .editor-mode-tabs {
     width: 100%;
   }
-  .editor-mode-tab { flex: 1; justify-content: center; }
+  .editor-mode-tab {
+    flex: 1;
+    justify-content: center;
+    /* Флекс-элемент по умолчанию не сжимается уже своего контента (текст
+       нельзя переносить — white-space:nowrap), поэтому без min-width:0 два
+       узких таба на телефоне суммарно шире контейнера, и второй ("Просмотр")
+       просто вылезает за экран вместо того, чтобы сжаться. */
+    min-width: 0;
+  }
+  /* text-overflow не работает на самом флекс-контейнере (.editor-mode-tab),
+     поэтому подпись — во вложенном span: он сжимается вместе с кнопкой
+     (min-width:0) и обрезает текст многоточием, если места всё равно не
+     хватает, вместо того чтобы вылезать за экран. */
+  .editor-mode-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+}
+
+/* Телефон (≤640px): два узких столбца превращают "Разделить" в нечитаемую
+   кашу, поэтому вкладка скрыта целиком — остаются только "Редактирование"/
+   "Просмотр" (setMode() в editor-manager.js не даёт встать в 'split', пока
+   экран такой узкий, даже в обход клика по вкладке). */
+@media (max-width: 640px) {
+  .editor-mode-tab[data-mode="split"] {
+    display: none;
+  }
+  /* Двум оставшимся вкладкам тесно на телефоне при исходных паддингах/шрифте
+     тулбара (рассчитанных на три вкладки на планшете) — подрезаем под узкий
+     экран, чтобы текст умещался без обрезки на типичных 360-430px. */
+  .editor-mode-tab {
+    padding: 0 8px;
+    gap: 5px;
+    font-size: 12.5px;
+  }
 }
 
 /* === CodeMirror: подгонка под тему сайта ===
@@ -142,6 +173,101 @@
 .cm-hashtag {
   color: var(--blurple);
   cursor: pointer;
+}
+
+/* === Картинки видны прямо в редакторе (не только в превью) ===
+   ![alt](url){width=NN% align=...} заменяется живым виджетом (см.
+   imageWidgetPlugin в editor-manager.js) — тот же размер/выравнивание, что
+   и в превью, но без реального обтекания текстом (в CodeMirror это ломает
+   курсор/скролл на соседних строках — см. комментарий в JS); вместо этого у
+   left/right-картинки есть подсказка, а настоящее обтекание видно в
+   "Просмотре"/"Разделить". */
+.cm-img-block {
+  display: flex;
+  margin: 4px 0;
+  cursor: pointer;
+}
+.cm-img-block-align-left { justify-content: flex-start; }
+.cm-img-block-align-right { justify-content: flex-end; }
+.cm-img-block-align-center { justify-content: center; }
+.cm-img-block-align-full { width: 100%; }
+.cm-img-block-align-column { justify-content: flex-start; }
+.cm-img-block-align-column-right { justify-content: flex-end; }
+.cm-img-block-align-column-right .cm-img-block-hint { order: -1; }
+
+.cm-img-block-img {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cm-img-block:hover .cm-img-block-img {
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25);
+}
+
+/* left/right в самом редакторе не обтекаются текстом (см. пояснение выше) —
+   вместо этого рядом с картинкой короткая подсказка, где искать реальный
+   результат. */
+.cm-img-block-hint {
+  align-self: center;
+  margin-left: 10px;
+  padding: 6px 10px;
+  max-width: 220px;
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  cursor: default;
+}
+.cm-img-block-align-right .cm-img-block-hint {
+  margin-left: 0;
+  margin-right: 10px;
+  order: -1;
+}
+
+/* Подсветка редактора при перетаскивании файла картинки (см. dropHandler в
+   editor-manager.js — визуальная обратная связь, что сюда можно бросить файл) */
+.cm-editor.cm-drag-over .cm-scroller {
+  outline: 2px dashed var(--blurple);
+  outline-offset: -2px;
+}
+
+/* === Рамка блока (картинка + текст рядом) — видна в редакторе всегда ===
+   Один блок = один markdown-абзац с картинкой (см. findFrameSpans/
+   framePlugin в editor-manager.js). Рамка рисуется построчно
+   (border-left/right на каждой строке блока, border-top/bottom на первой/
+   последней) — это просто CSS на строках CodeMirror, без float, поэтому
+   курсор/клики/скролл вокруг не ломаются. Цвет тут всегда нейтральный —
+   кастомный цвет из диалога картинки относится только к рамке В СТАТЬЕ
+   (см. .frame-box ниже в блоке превью), не к этой вспомогательной рамке. */
+.cm-frame-line {
+  border-left: 2px dashed var(--background-accent);
+  border-right: 2px dashed var(--background-accent);
+  background: rgba(88, 101, 242, 0.05);
+}
+.cm-frame-line-first {
+  border-top: 2px dashed var(--background-accent);
+  border-radius: 6px 6px 0 0;
+  margin-top: 4px;
+}
+.cm-frame-line-last {
+  border-bottom: 2px dashed var(--background-accent);
+  border-radius: 0 0 6px 6px;
+  margin-bottom: 4px;
+}
+.cm-frame-line-divider { background: rgba(88, 101, 242, 0.09); }
+
+/* "+++" внутри рамки — внутренняя черта, спрятанная за атомарным виджетом
+   (FrameDividerWidget), как и сама картинка. */
+.cm-frame-divider {
+  display: block;
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--background-accent);
 }
 
 /* Автодополнение [[wiki-ссылок]] */
@@ -196,6 +322,151 @@
 .preview-pane li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.6em; padding-left: 0; }
 .preview-pane li input[type="checkbox"] { margin-right: 6px; }
 .preview-pane img { max-width: 100%; border-radius: 4px; }
+
+/* === Размер и положение картинок: ![alt](url){width=NN% align=...} ===
+   Расширение markdown-синтаксиса (см. imgAttrsMarkdown()/parseImgAttrs() в
+   editor-manager.js) — обычные ![alt](url) без "{...}" рендерятся как раньше,
+   этот блок их не затрагивает. */
+.preview-pane img.md-img { display: block; }
+.preview-pane img.md-img-align-center { margin: 0.6em auto; }
+/* left/right плавают, поэтому следующий за картинкой текст обтекает её —
+   это и есть требуемый "текст рядом с картинкой", без какой-либо особой
+   вёрстки: обычное поведение CSS float применительно к параграфам markdown. */
+.preview-pane img.md-img-align-left { float: left; margin: 0.2em 18px 12px 0; }
+.preview-pane img.md-img-align-right { float: right; margin: 0.2em 0 12px 18px; }
+.preview-pane img.md-img-align-full { width: 100% !important; margin: 0.8em 0; }
+/* Заголовок нового раздела не должен "цепляться" к нижнему краю плавающей
+   перед ним картинки — сбрасываем обтекание перед каждым заголовком. */
+.preview-pane h1, .preview-pane h2, .preview-pane h3,
+.preview-pane h4, .preview-pane h5, .preview-pane h6 {
+  clear: both;
+}
+
+/* Клик по картинке в превью открывает диалог размера/положения
+   (editPreviewImage() в editor-manager.js) — работает и для картинок без
+   "{...}", вставленных до появления этого расширения. */
+.preview-pane img.md-img-editable { cursor: pointer; transition: box-shadow 0.15s; }
+.preview-pane img.md-img-editable:hover { box-shadow: 0 0 0 2px var(--blurple); }
+
+/* На узких экранах обтекание текстом мешает читать — картинки слева/справа
+   становятся блочными на всю ширину. Значение width= в самом тексте статьи
+   при этом не меняется — на десктопе автор снова увидит выбранный размер
+   (см. вопрос "выбор размера как на ПК, так и с мобильных" — единая
+   настройка автора, которая на мобильных адаптируется автоматически). */
+@media (max-width: 640px) {
+  .preview-pane img.md-img-align-left,
+  .preview-pane img.md-img-align-right {
+    float: none;
+    width: 100% !important;
+    margin: 0.8em 0;
+  }
+}
+
+/* === Колонка (align=column) — картинка + текст рядом фиксированной
+   суммарной ширины, остаток строки занимает свободный текст вне блока ===
+   Раньше картинка и текст были жёсткими flex-колонками НА ВСЮ ВЫСОТУ блока
+   — при короткой подписи под ней оставалось пустое место, а длинная подпись
+   ниже картинки не могла расшириться, хотя место рядом уже освободилось
+   (попросили: "картинка — это стенка, сделать такую стенку и снизу, чтобы
+   текст уходил под её границу", "избавиться от пустого места").
+   Теперь картинка (.md-col-img-float) просто float'ится ВНУТРИ абзаца —
+   ровно как у обычного align=left/right — а сам абзац (.md-col-p) получает
+   фиксированную суммарную ширину (width+textwidth) и тоже float'ится
+   (applyColumnBlocks() в editor-manager.js). Подпись — обычный текст внутри
+   этого абзаца: обтекает картинку, пока та не кончится по высоте, а дальше
+   сама расширяется на всю ширину блока — обычное поведение float+текст, но
+   подрезанное по ширине абзаца, а не по всей странице (иначе не осталось бы
+   места для третьего столбца). */
+.preview-pane .md-col-p-left { float: left; margin: 0.2em 18px 12px 0; }
+/* side=right — зеркально: блок у правого края, свободный текст течёт слева
+   от него, картинка внутри блока — тоже у правого края (applyColumnBlocks()). */
+.preview-pane .md-col-p-right { float: right; margin: 0.2em 0 12px 18px; }
+
+.preview-pane .md-col-img-float {
+  display: block;
+  margin: 0 0 8px 0;
+}
+.preview-pane .md-col-img-float-left { float: left; margin-right: 14px; }
+.preview-pane .md-col-img-float-right { float: right; margin-left: 14px; }
+
+@media (max-width: 640px) {
+  .preview-pane .md-col-p-left,
+  .preview-pane .md-col-p-right {
+    float: none;
+    width: 100% !important;
+    margin: 0.8em 0;
+  }
+  .preview-pane .md-col-img-float-left,
+  .preview-pane .md-col-img-float-right {
+    float: none;
+    width: 100% !important;
+    margin: 0 0 12px 0;
+  }
+}
+
+/* === Рамка блока в самой статье — включается по желанию (frame=1) ===
+   В отличие от рамки в редакторе (см. .cm-frame-line в CM6-стилях) — тут
+   рамка видна только когда автор явно включил её в диалоге картинки, и
+   цвет — его собственный (--frame-color задаётся инлайново из
+   applyFrameBoxes() в editor-manager.js). Один блок = один <p> (marked с
+   breaks:true не рвёт абзац без пустой строки), поэтому оборачивать
+   достаточно один элемент.
+   display:flow-root обязателен — без него .frame-box (обычный блочный div)
+   не создаёт свой блочный контекст форматирования, и плавающая внутри
+   картинка (float у align=left/right/column) "вылезает" из рамки — та не
+   учитывает её высоту и схлопывается, а картинка просто лежит поверх/рядом,
+   визуально никак не обтянутая бордером. */
+.preview-pane .frame-box {
+  display: flow-root;
+  box-sizing: border-box;
+  border: 2px solid var(--frame-color, var(--blurple));
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0 0 1em;
+  clear: both;
+}
+.preview-pane .frame-box p { margin: 0; }
+
+/* Рамка вокруг "колонки" (align=column) — точную ширину и float ставит JS
+   (applyFrameBoxes()): сам flow-root "запирает" float картинки внутри рамки
+   (иначе бы она не обтягивалась по высоте — см. коммент выше), поэтому,
+   чтобы свободный текст СНАРУЖИ рамки по-прежнему обтекал её, float'им уже
+   саму рамку — как раньше float'ился голый .md-col-p. */
+.preview-pane .frame-box-column {
+  float: left;
+  margin: 0.2em 18px 12px 0;
+}
+.preview-pane .frame-box-column-right {
+  float: right;
+  margin: 0.2em 0 12px 18px;
+}
+@media (max-width: 640px) {
+  .preview-pane .frame-box-column,
+  .preview-pane .frame-box-column-right {
+    float: none;
+    width: 100% !important;
+    margin: 0.8em 0;
+  }
+}
+
+/* "+++" внутри блока — тонкая внутренняя черта на месте склейки двух
+   рамок (см. "Объединить со следующим блоком" в диалоге картинки), цвет
+   наследует от рамки. */
+.preview-pane .frame-divider-line {
+  display: block;
+  height: 1px;
+  margin: 10px 0;
+  background: var(--frame-color, var(--background-accent));
+  opacity: 0.6;
+  /* БЕЗ clear:both — раньше он был тут и заставлял черту (и всё, что после
+     неё) перепрыгивать вниз, за нижний край ещё "открытой" по высоте
+     плавающей картинки, даже если по тексту черта шла сразу после короткой
+     подписи (нашли на практике — "линия уходит в самый низ"). Без clear
+     черта ведёт себя как обычный текст: узкая, пока рядом ещё есть
+     картинка, и во всю ширину блока — как только картинка закончилась
+     (та же механика, что и у текста после неё, см. .md-col-p). */
+}
+
 .preview-pane hr { border: none; border-top: 1px solid var(--background-accent); margin: 1.5em 0; }
 .preview-pane table {
   border-collapse: collapse;
@@ -233,9 +504,211 @@
   font-weight: 500;
 }
 
+/* === Блочная модель статьи (см. src/services/blocks.js,
+   public/blocks-renderer.js) — стили для .preview-pane, общего "как
+   выглядит показанная статья" контейнера что в редакторе, что на Ibripedia
+   (см. class="preview-pane" на #ibripediaViewContent). === */
+
+/* --- новый инлайн-синтаксис: ++подчёркнутый++ / ==выделение== / ||спойлер|| --- */
+.preview-pane .mk-u {
+  text-decoration: underline;
+  text-decoration-color: var(--blurple);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+.preview-pane mark.mk-hl {
+  background: rgba(250, 168, 26, .88);
+  color: #2a1c05;
+  border-radius: 3px;
+  padding: 0 .2em;
+  font-weight: 600;
+}
+.preview-pane .spoiler {
+  background: var(--background-floating);
+  color: var(--background-floating);
+  border-radius: 3px;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  user-select: none;
+}
+.preview-pane .spoiler:hover { background: var(--background-tertiary); }
+.preview-pane .spoiler.revealed {
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  cursor: text;
+}
+
+/* --- image-блок (замена старых {width=...} картинок) --- */
+.preview-pane figure.blk-image {
+  margin: .6em 0 1em;
+  max-width: 100%;
+}
+.preview-pane figure.blk-image img {
+  display: block;
+  width: var(--w, 100%);
+  max-width: 100%;
+  border-radius: 6px;
+}
+.preview-pane figure.blk-image-framed img {
+  border: 3px solid var(--frame-color, var(--blurple));
+}
+.preview-pane figure.blk-image figcaption {
+  font-size: .82em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.preview-pane figure.blk-image-center { margin-left: auto; margin-right: auto; text-align: center; }
+.preview-pane figure.blk-image-center img { margin: 0 auto; }
+.preview-pane figure.blk-image-left { float: left; margin: .2em 18px 12px 0; }
+.preview-pane figure.blk-image-right { float: right; margin: .2em 0 12px 18px; }
+.preview-pane figure.blk-image-full img { width: 100%; }
+
+/* --- ряд/колонки (замена неявных "рамок" по границе markdown-абзаца) --- */
+.preview-pane .blk-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+  margin: 1em 0;
+  clear: both;
+}
+.preview-pane .blk-column {
+  /* flex-grow по widthPct, а не flex-basis в % (--w — просто число, не
+     проценты, см. blocks-renderer.js) — с flex-basis:50%+50% ряд из двух
+     колонок был на 1 gap (20px) шире контейнера и весь ряд переносился
+     целиком на новую строку (внешне — "колонки" друг под другом, как
+     обычный текст); flex-basis:0 распределяет уже вычтенное из gap
+     свободное место пропорционально, поэтому переполнения не возникает. */
+  flex: var(--w, 1) 1 0%;
+  min-width: 220px;
+}
+.preview-pane .blk-column > *:first-child { margin-top: 0; }
+
+/* --- инфобокс: карточка характеристик, вики-стиль, плавает у края текста --- */
+.preview-pane aside.blk-infobox {
+  float: right;
+  width: 240px;
+  margin: 0 0 16px 22px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.preview-pane .blk-infobox-head {
+  background: linear-gradient(135deg, var(--blurple), var(--blurple-hover));
+  color: #fff;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 10px 10px;
+}
+.preview-pane .blk-infobox-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 0 6px;
+  background: var(--background-floating);
+}
+.preview-pane .blk-infobox-art img { max-width: 80%; max-height: 120px; }
+.preview-pane .blk-infobox-rows { display: flex; flex-direction: column; margin: 0; }
+.preview-pane .blk-infobox-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--background-accent);
+}
+.preview-pane .blk-infobox-row dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+.preview-pane .blk-infobox-row dd {
+  font-size: 12.5px;
+  color: var(--text-normal);
+  margin: 0;
+  line-height: 1.45;
+  /* "Значение" в редакторе — теперь textarea (см. renderInfoboxBody), Enter
+     там просто ставит перенос строки — pre-wrap сохраняет его и здесь,
+     иначе в самой статье перенос молча схлопывался бы в пробел. */
+  white-space: pre-wrap;
+}
+@media (max-width: 680px) {
+  .preview-pane aside.blk-infobox { float: none; width: 100%; margin: 0 0 16px; }
+}
+
+/* --- плашка-примечание (info/совет/предупреждение) --- */
+.preview-pane .blk-callout {
+  display: flex;
+  gap: 11px;
+  padding: 12px 14px;
+  margin: .8em 0;
+  border-radius: 8px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-left: 3px solid var(--c-accent);
+}
+.preview-pane .blk-callout > i { flex: 0 0 auto; margin-top: 3px; color: var(--c-accent); }
+.preview-pane .blk-callout-body b { display: block; font-size: .95em; color: var(--header-primary); margin-bottom: 2px; }
+.preview-pane .blk-callout-body p { margin: 0; }
+.preview-pane .blk-callout-info { --c-accent: var(--blurple); }
+.preview-pane .blk-callout-tip { --c-accent: var(--green); }
+.preview-pane .blk-callout-warning { --c-accent: var(--yellow); }
+
+/* --- сворачиваемая секция (нативный <details>/<summary> — доступно с
+   клавиатуры и без лишнего JS для переключения) --- */
+.preview-pane details.blk-spoiler-section {
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  background: var(--background-tertiary);
+  margin: .8em 0;
+  overflow: hidden;
+}
+.preview-pane details.blk-spoiler-section > summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--header-primary);
+  list-style: none;
+}
+.preview-pane details.blk-spoiler-section > summary::-webkit-details-marker { display: none; }
+.preview-pane details.blk-spoiler-section > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--text-muted);
+  transition: transform .15s;
+}
+.preview-pane details.blk-spoiler-section[open] > summary::before { transform: rotate(90deg); }
+.preview-pane details.blk-spoiler-section > summary:hover { background: var(--background-accent); }
+.preview-pane .blk-spoiler-body { padding: 2px 14px 14px 34px; }
+.preview-pane .blk-spoiler-body > *:first-child { margin-top: 0; }
+
+/* --- чек-лист (список с disabled-чекбоксами, только для чтения) --- */
+.preview-pane ul.blk-checklist { list-style: none; padding-left: 0; }
+.preview-pane .blk-check-item { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; }
+.preview-pane .blk-check-item input { margin: 0; }
+
+.preview-pane .blk-table-wrap { overflow-x: auto; margin: 0 0 1em; }
+.preview-pane hr.blk-divider { border: none; border-top: 1px solid var(--background-accent); margin: 1.4em 0; }
+
 .preview-empty {
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* === Якорь для панелей, привязанных к открытой статье (обратные ссылки,
+   локальный граф, результаты клика по #тегу) — см. articles.html и
+   editor-manager.js. Пусто, пока не выбрана статья на редактирование. === */
+.editor-side-panels {
+  margin-top: 20px;
+}
+.editor-side-panels:empty {
+  display: none;
 }
 
 /* === Панель тегов-результатов (клик по #тегу) === */
@@ -436,6 +909,19 @@
   font-weight: 600;
 }
 
+/* Переключатель "Подписи только при наведении" (графовая карточка дашборда,
+   graphHideLabels в graph-view.js) — при большом графе подписи всех узлов
+   сразу превращаются в кашу, скрываем их и показываем адресно: при наведении,
+   попадании в поиск или для закреплённого центрального узла. */
+.graph-hide-labels .graph-node-label {
+  display: none;
+}
+.graph-hide-labels .graph-node-hover .graph-node-label,
+.graph-hide-labels .graph-node-search-match .graph-node-label,
+.graph-hide-labels .graph-node-center .graph-node-label {
+  display: block;
+}
+
 .graph-legend {
   position: absolute;
   bottom: 10px;
@@ -454,7 +940,7 @@
 .graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .graph-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
-/* === Панель фильтров графа (дашборд) — сервер / поиск / изолированные / PNG === */
+/* === Панель фильтров графа (дашборд) — сервер / категория / поиск / изолированные / подписи / PNG === */
 .graph-controls {
   display: flex;
   flex-wrap: wrap;
@@ -525,4 +1011,159 @@
 .graph-controls-export {
   margin-left: auto;
   white-space: nowrap;
+}
+
+/* === Диалог размера/положения картинки ===
+   Один переиспользуемый элемент (ensureImageDialogEl() в editor-manager.js):
+   открывается и при вставке новой картинки, и по клику на существующую
+   в панели превью. */
+.img-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+/* Без этого правила [hidden] и ".img-dialog-backdrop{display:flex}" имеют
+   одинаковую специфичность — какое из них "победит", решает порядок в
+   каскаде, а не el.hidden. Более специфичный селектор снимает эту гонку. */
+.img-dialog-backdrop[hidden] { display: none; }
+.img-dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+}
+.img-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--background-accent);
+}
+.img-dialog-header h3 { margin: 0; font-size: 16px; color: var(--text-normal); }
+.img-dialog-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.img-dialog-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 180px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--background-tertiary);
+}
+.img-dialog-preview img { max-width: 100%; max-height: 180px; object-fit: contain; }
+.img-dialog-field { display: flex; flex-direction: column; gap: 6px; }
+/* Без этого [hidden] и "display: flex" выше формально равны по
+   специфичности — побеждает более специфичный селектор, а не el.hidden
+   (см. такое же правило у .img-dialog-backdrop). Нужно для
+   #imgDialogMergeField, который скрывается/показывается через hidden. */
+.img-dialog-field[hidden] { display: none; }
+.img-dialog-field label { font-size: 13px; font-weight: 600; color: var(--header-secondary); }
+.img-dialog-field-disabled { opacity: 0.5; }
+.img-dialog-align-group { display: flex; gap: 6px; }
+.img-dialog-align-group button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--header-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.img-dialog-align-group button:hover { color: var(--text-normal); }
+.img-dialog-align-group button.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+.img-dialog-presets { display: flex; gap: 6px; }
+.img-dialog-presets button {
+  flex: 1;
+  padding: 6px 0;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--header-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+.img-dialog-presets button:hover:not(:disabled) { color: var(--text-normal); border-color: var(--blurple); }
+.img-dialog-presets button:disabled { cursor: not-allowed; opacity: 0.6; }
+.img-dialog-field input[type="range"] { width: 100%; accent-color: var(--blurple); }
+.img-dialog-hint { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+/* Показывать рамку в статье / цвет рамки / объединение блоков */
+.img-dialog-frame-field { gap: 10px; }
+.img-dialog-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--header-secondary);
+  cursor: pointer;
+}
+.img-dialog-checkbox input { width: 16px; height: 16px; cursor: pointer; }
+.img-dialog-frame-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.15s;
+}
+.img-dialog-frame-color label { font-size: 12px; color: var(--text-muted); }
+.img-dialog-frame-color input[type="color"] {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.img-dialog-merge-btn { display: flex; align-items: center; justify-content: center; width: 100%; gap: 8px; }
+.img-dialog-side-label { margin-top: 4px; }
+
+.img-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--background-accent);
+  flex-wrap: wrap;
+}
+.img-dialog-footer-spacer { flex: 1; }
+
+/* Диалог рассчитан на равное удобство на ПК и на мобильных (см. требование
+   "выбор размера как на ПК, так и с мобильных устройств"): на узких экранах
+   кнопки занимают всю ширину — крупные, удобные под палец, без горизонтальной
+   прокрутки футера.
+   На телефоне это не просто "пошире", а во весь экран (см. requirement
+   "окна с инструментами должны занимать весь экран, иначе пространства для
+   манёвра слишком мало") — центрированная плавающая карточка на 420px с
+   отступом от края съедает бо́льшую часть и без того маленького экрана.
+   Без отступа у backdrop и с height:100% сам диалог становится полноценным
+   на весь экран, а .img-dialog-body внутри по-прежнему прокручивается сам
+   (flex-колонка + overflow-y:auto), если поля не влезли по высоте. */
+@media (max-width: 480px) {
+  .img-dialog-backdrop { padding: 0; }
+  .img-dialog {
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    border: none;
+  }
+  .img-dialog-footer { justify-content: stretch; }
+  .img-dialog-footer .btn { flex: 1 1 auto; }
 }

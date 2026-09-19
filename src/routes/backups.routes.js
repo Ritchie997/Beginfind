@@ -44,7 +44,8 @@ router.post('/backups/restore/:fileName', auth.authenticateToken, auth.checkAppr
       message: `Восстановлено ${result.count} файл(ов)`,
       data: {
         restored: result.restored,
-        errors: result.errors
+        errors: result.errors,
+        summary: result.summary
       }
     });
   } catch (error) {

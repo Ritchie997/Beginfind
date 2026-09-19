@@ -1,46 +1,168 @@
 <div class="form-container">
-  <h2 class="form-title">Создать новую статью</h2>
+  <h2 class="form-title" id="article-form-title">Создать новую статью</h2>
 
-  <div class="form-grid">
-    <!-- Первая колонка -->
-    <div class="column-wrapper first-column">
+  <!-- Форма разбита на сворачиваемые секции (см. .form-section в <style>
+       ниже, нативный <details>/<summary> — без своего JS на
+       раскрытие/закрытие). Раньше все ~12 полей + редактор показывались
+       одним сплошным экраном. Порядок и состояние по умолчанию — по
+       частоте обращения при первом заходе: "Публикация" (там же теперь
+       заголовок и автор — то, с чего реально начинают статью) и
+       "Метаданные" свёрнуты, чтобы не отвлекать; открыт только "Контент"
+       — сам текст, с ним работают дольше и чаще всего. Панель
+       форматирования внутри редактора не трогали — она как была, так и
+       осталась. -->
 
-      <!-- Заголовок -->
-      <div class="form-group">
-        <label class="form-label" for="articleTitle">Заголовок статьи</label>
-        <input type="text" id="articleTitle" class="form-input" placeholder="Введите заголовок">
-      </div>
+  <details class="form-section">
+    <summary>
+      <i class="fas fa-paper-plane"></i>
+      <span>Публикация</span>
+      <span class="form-section-hint">Заголовок, автор, доступ и сохранение</span>
+      <i class="fas fa-chevron-down form-section-chevron"></i>
+    </summary>
+    <div class="form-section-body">
 
-      <!-- Автор -->
-      <div class="form-group">
-        <label class="form-label" for="articleAuthor">Автор</label>
-        <input type="text" id="articleAuthor" class="form-input" placeholder="Имя автора">
-      </div>
-
-      <!-- Категория -->
-      <div class="form-group">
-          <label class="form-label">Категория</label>
-          <div class="input-action-wrapper">
-              <select id="articleCategory" class="form-select">
-                  <option value="">Выберите категорию</option>
-              </select>
-              <button type="button" class="btn-action-plus"
-                      onclick="window.spaRouter.createCategoryFromArticles()" title="Создать категорию">
-                  <i class="fas fa-plus"></i>
-              </button>
-          </div>
-      </div>
-
-      <!-- Теги -->
-      <div class="form-group full-width">
-        <label class="form-label" for="articleTags">Теги</label>
-        <div class="input-action-wrapper" style="max-width: 500px;">
-          <input type="text" id="articleTags" class="form-input" placeholder="Введите теги...">
-          <button type="button" class="btn-action-plus" id="add-tag-mobile-btn">
-            <i class="fas fa-plus"></i>
-          </button>
+      <div class="form-section-grid">
+        <!-- Заголовок -->
+        <div class="form-group">
+          <label class="form-label" for="articleTitle">Заголовок статьи</label>
+          <input type="text" id="articleTitle" class="form-input" placeholder="Введите заголовок">
         </div>
-        <div id="tagsContainer" class="tags-display" style="display: none; margin-top: 4px; padding: 4px; background: var(--background-secondary); border-radius: 4px; border: 1px solid var(--background-accent); max-width: 500px; width: fit-content;"></div>
+
+        <!-- Автор — не редактируется вручную: автором статьи всегда становится
+             её создатель (проставляется сервером из токена), а не то, что
+             вписано в форму. Если статью правит другой профиль — он
+             добавляется соавтором, это можно отключить галочкой ниже
+             (см. PUT /api/articles/:id в src/routes/articles.routes.js). -->
+        <div class="form-group">
+          <label class="form-label">Автор</label>
+          <div class="author-field">
+            <span class="author-chip author-chip-primary" id="articleAuthorChip">—</span>
+            <div id="coAuthorsList" class="author-coauthors" hidden></div>
+          </div>
+          <label class="checkbox-field" id="addAsCoauthorWrap" hidden>
+            <input type="checkbox" id="addAsCoauthorCheckbox" checked>
+            <span>Добавить себя как соавтора</span>
+          </label>
+
+          <!-- Управление авторами — только владелец (is_root), только при
+               редактировании существующей статьи (см. articlesAuthorsAdmin в
+               spa-router.js и parseOwnerAuthorFields в articles.routes.js).
+               Поиск — тот же GET /api/users/search, что и в "Добавить участника". -->
+          <div id="authorsAdmin" class="authors-admin" hidden>
+            <div class="authors-admin-search">
+              <input type="text" id="authorsAdminSearch" class="form-input" placeholder="Найти пользователя: назначить автором или соавтором…" autocomplete="off">
+              <div class="chip-field-dropdown" id="authorsAdminDropdown" hidden></div>
+            </div>
+            <p class="authors-admin-hint">«Автор» заменяет основного автора. У соавтора: ↑ — сделать основным автором (прежний станет соавтором), × — убрать.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section-grid">
+        <!-- Статус статьи -->
+        <div class="form-group">
+          <label class="form-label" for="articleLocked">Статус статьи</label>
+          <select id="articleLocked" class="form-select">
+            <option value="false">🔓 Открытая</option>
+            <option value="true">🔒 Закрытая (только по ролям)</option>
+          </select>
+        </div>
+
+        <!-- Сервер -->
+        <div class="form-group">
+          <label class="form-label" for="articleServer">Сервер</label>
+          <select id="articleServer" class="form-select">
+            <option value="">Выберите сервер</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Доступ для (роли) — тот же чиповый компонент, что и у категории,
+           чтобы оба поля выглядели одинаково (см. .chip-field в global-styles.css). -->
+      <div class="form-group full-width">
+        <label class="form-label">Доступ для</label>
+        <div id="articleRolesField" class="chip-field">
+          <div class="chip-field-box">
+            <div class="chip-field-chips"></div>
+            <input type="text" class="chip-field-input" placeholder="Сначала выберите сервер...">
+          </div>
+          <div class="chip-field-dropdown" hidden></div>
+          <input type="hidden" class="chip-field-hidden">
+        </div>
+      </div>
+
+      <!-- Кнопки управления: черновик — второстепенное действие слева,
+           сброс — приглушён (чтобы не спутать с публикацией по соседству),
+           публикация — самая заметная и справа, как основное действие. -->
+      <div class="button-group">
+        <div class="btn-cluster">
+          <button id="saveDraftBtn" class="btn btn-secondary btn-sm">💾 Черновик</button>
+          <button id="loadDraftBtn" class="btn btn-secondary btn-sm">📂 Загрузить</button>
+        </div>
+        <div class="btn-cluster">
+          <button id="resetArticleBtn" class="btn btn-ghost-warning">Сбросить</button>
+          <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
+        </div>
+      </div>
+
+      <!-- Контейнер для управления черновиками -->
+      <div id="draftsManager" class="tags-display" style="display: none; margin-top: 10px; padding: 8px; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 4px;">
+        <h4 style="margin: 0 0 10px 0; color: var(--text-normal);">Черновики</h4>
+        <div id="draftsList" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
+        <div style="display: flex; gap: 5px;">
+          <button id="closeDraftsManagerBtn" class="btn btn-secondary" style="flex: 1;">Закрыть</button>
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+  <details class="form-section">
+    <summary>
+      <i class="fas fa-tags"></i>
+      <span>Метаданные</span>
+      <span class="form-section-hint">Категория, теги и обложка</span>
+      <i class="fas fa-chevron-down form-section-chevron"></i>
+    </summary>
+    <div class="form-section-body">
+
+      <div class="form-section-grid">
+        <!-- Категория (можно выбрать несколько) -->
+        <div class="form-group">
+            <label class="form-label">Категория</label>
+            <div class="input-action-wrapper">
+                <div id="articleCategoryField" class="chip-field">
+                  <div class="chip-field-box">
+                    <div class="chip-field-chips"></div>
+                    <input type="text" class="chip-field-input" placeholder="Выберите категории...">
+                  </div>
+                  <div class="chip-field-dropdown" hidden></div>
+                  <input type="hidden" class="chip-field-hidden">
+                </div>
+                <button type="button" class="btn-action-plus"
+                        onclick="window.spaRouter.createCategoryFromArticles()" title="Создать категорию">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Теги -->
+        <div class="form-group full-width">
+          <label class="form-label">Теги</label>
+          <div class="input-action-wrapper">
+            <div id="articleTagsField" class="chip-field">
+              <div class="chip-field-box">
+                <div class="chip-field-chips"></div>
+                <input type="text" class="chip-field-input" placeholder="Введите тег и нажмите Enter...">
+              </div>
+              <div class="chip-field-dropdown" hidden></div>
+              <input type="hidden" class="chip-field-hidden">
+            </div>
+            <button type="button" class="btn-action-plus" id="add-tag-mobile-btn" title="Добавить тег">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Обложка -->
@@ -63,128 +185,118 @@
           <input type="file" id="articleImageFileInput" class="form-input" accept="image/*" style="display: none;" onchange="window.spaRouter.handleCoverFileSelect(this)">
           <input type="hidden" id="articleImageFile" value="">
         </div>
+        <div class="form-hint">Чтобы обложка идеально смотрелась на Ibripedia, используйте изображение с соотношением сторон 16:9 (например, 1200×675 px) — оно не обрежется ни в карточке списка, ни на странице статьи.</div>
       </div>
 
     </div>
+  </details>
 
-    <!-- Вторая колонка -->
-    <div class="column-wrapper second-column">
+  <details class="form-section" open>
+    <summary>
+      <i class="fas fa-align-left"></i>
+      <span>Контент</span>
+      <span class="form-section-hint">Текст статьи</span>
+      <i class="fas fa-chevron-down form-section-chevron"></i>
+    </summary>
+    <div class="form-section-body">
 
-      <!-- Статус статьи -->
-      <div class="form-group">
-        <label class="form-label" for="articleLocked">Статус статьи</label>
-        <select id="articleLocked" class="form-select">
-          <option value="false">🔓 Открытая</option>
-          <option value="true">🔒 Закрытая (только по ролям)</option>
-        </select>
-      </div>
-
-      <!-- Сервер -->
-      <div class="form-group">
-        <label class="form-label" for="articleServer">Сервер</label>
-        <select id="articleServer" class="form-select">
-          <option value="">Выберите сервер</option>
-        </select>
-      </div>
-
-      <!-- Доступ -->
-      <div class="form-group">
-        <label class="form-label">Доступ для</label>
-        <div class="roles-input-wrapper" style="max-width: 500px;">
-          <input type="text" id="articleRolesInput" class="form-input" placeholder="Нажмите чтобы выбрать роли..." readonly style="width: 100%; cursor: pointer; border-radius: 4px 4px 0 0;">
-          <!-- Display area for selected roles inside the input wrapper -->
-          <div id="selectedRolesDisplay" class="selected-roles-tags" style="display: none;"></div>
-          <!-- Hidden input to store selected roles as JSON -->
-          <input type="hidden" id="articleRoles" value="[]">
-          <!-- Dropdown container for role selection (as a contextual popup) -->
-          <div id="rolesContainer" class="roles-dropdown" style="display: none;" data-visible="false">
-            <div id="rolesList" class="roles-list"></div>
+      <!-- Редактор (блоки — см. src/services/blocks.js, public/editor-manager.js) -->
+      <div class="form-group full-width">
+        <label class="form-label">Содержание статьи</label>
+        <div class="editor-wrapper">
+          <div id="toolbar" class="editor-toolbar-sticky">
+            <div class="toolbar-format-scroll" id="toolbarFormatScroll">
+            <div class="toolbar-row toolbar-row-format" id="toolbarFormatRow">
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <!-- На ПК новый абзац разбивается клавишей Enter прямо в тексте
+                       (см. splitOnEnter в makeTextArea, editor-manager.js) — на
+                       телефоне это не так очевидно, поэтому явная кнопка первой
+                       в тулбаре: полезна не только на телефоне, но и тем, кто
+                       вообще не в курсе про Enter-разбиение. -->
+                  <button type="button" class="toolbar-button" data-block-command="paragraph" title="Текст — новый абзац"><i class="fas fa-paragraph"></i></button>
+                </div>
+                <span class="toolbar-group-label">текст</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-inline-command="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="highlight" title="Выделение цветом"><i class="fas fa-highlighter"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="code" title="Код (строка)"><i class="fas fa-code"></i></button>
+                </div>
+                <span class="toolbar-group-label">формат</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-inline-command="spoiler" title="Инлайн-спойлер — скрытая фраза, раскрывается по клику"><i class="fas fa-eye-slash"></i></button>
+                </div>
+                <span class="toolbar-group-label">спойлер</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-block-command="heading" data-level="1" title="Заголовок 1"><i class="fas fa-heading"></i>1</button>
+                  <button type="button" class="toolbar-button" data-block-command="heading" data-level="2" title="Заголовок 2"><i class="fas fa-heading"></i>2</button>
+                  <button type="button" class="toolbar-button" data-block-command="heading" data-level="3" title="Заголовок 3"><i class="fas fa-heading"></i>3</button>
+                </div>
+                <span class="toolbar-group-label">заголовки</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-block-command="list" data-style="bullet" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="list" data-style="ordered" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="list" data-style="checklist" title="Чек-лист"><i class="fas fa-check-square"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                </div>
+                <span class="toolbar-group-label">списки</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-block-command="code" title="Блок кода"><i class="fas fa-file-code"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="table" title="Таблица"><i class="fas fa-table"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="divider" title="Горизонтальная линия"><i class="fas fa-minus"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="link" title="Ссылка (Ctrl+K)"><i class="fas fa-link"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="wikilink" title="Wiki-ссылка на статью [[...]]"><i class="fas fa-file-alt"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="image" title="Изображение"><i class="fas fa-image"></i></button>
+                </div>
+                <span class="toolbar-group-label">вставки</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-block-command="infobox" title="Инфобокс — карточка характеристик"><i class="fas fa-rectangle-list"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="callout" title="Плашка-примечание"><i class="fas fa-circle-info"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="columns" title="Колонки / картинка + текст рядом"><i class="fas fa-table-columns"></i></button>
+                  <button type="button" class="toolbar-button" data-block-command="spoiler-section" title="Сворачиваемая секция"><i class="fas fa-square-caret-down"></i></button>
+                </div>
+                <span class="toolbar-group-label">блоки</span>
+              </div>
+            </div>
+            <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>
+            <div class="toolbar-fade toolbar-fade-r"><i class="fas fa-chevron-right toolbar-fade-arrow"></i></div>
+            </div>
+            <div class="toolbar-row toolbar-row-modes">
+              <div class="editor-mode-tabs">
+                <button type="button" class="editor-mode-tab" data-mode="edit" title="Редактирование"><i class="fas fa-pen"></i> <span class="editor-mode-tab-label">Редактирование</span></button>
+                <button type="button" class="editor-mode-tab" data-mode="preview" title="Просмотр"><i class="fas fa-eye"></i> <span class="editor-mode-tab-label">Просмотр</span></button>
+                <button type="button" class="editor-mode-tab" data-mode="split" title="Двойной просмотр"><i class="fas fa-columns"></i> <span class="editor-mode-tab-label">Разделить</span></button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Кнопки управления: черновик — второстепенное действие слева,
-           сброс — приглушён (чтобы не спутать с публикацией по соседству),
-           публикация — самая заметная и справа, как основное действие. -->
-      <div class="button-group">
-        <div class="btn-cluster">
-          <button id="saveDraftBtn" class="btn btn-secondary btn-sm">💾 Черновик</button>
-          <button id="loadDraftBtn" class="btn btn-secondary btn-sm">📂 Загрузить</button>
-        </div>
-        <div class="btn-cluster">
-          <button id="resetArticleBtn" class="btn btn-ghost-warning">Сбросить</button>
-          <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
-        </div>
-      </div>
-
-      <!-- Контейнер для управления черновиками -->
-      <div id="draftsManager" class="tags-display" style="display: none; margin-top: 10px; padding: 8px; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 4px; max-width: 500px;">
-        <h4 style="margin: 0 0 10px 0; color: var(--text-normal);">Черновики</h4>
-        <div id="draftsList" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
-        <div style="display: flex; gap: 5px;">
-          <button id="closeDraftsManagerBtn" class="btn btn-secondary" style="flex: 1;">Закрыть</button>
+          <div class="editor-panes" data-mode="edit">
+            <div class="editor-pane">
+              <div id="articleContent" class="eb-blocklist" data-eb-empty-hint="Нажмите на кнопку в тулбаре, чтобы добавить первый блок — абзац текста, заголовок, картинку…"></div>
+            </div>
+            <div class="preview-pane" id="markdownPreviewPane">
+              <p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>
+            </div>
+          </div>
         </div>
       </div>
 
     </div>
-
-  </div>
-
-  <!-- Редактор (Markdown, в стиле Obsidian) -->
-  <div class="form-group full-width">
-    <label class="form-label">Содержание статьи (Markdown)</label>
-    <div class="editor-wrapper">
-      <div id="toolbar" class="editor-toolbar-sticky">
-        <div class="toolbar-row toolbar-row-format">
-          <div class="toolbar-group">
-            <button type="button" class="toolbar-button" data-md-command="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
-          </div>
-          <div class="toolbar-group">
-            <button type="button" class="toolbar-button" data-md-command="h1" title="Заголовок 1"><i class="fas fa-heading"></i>1</button>
-            <button type="button" class="toolbar-button" data-md-command="h2" title="Заголовок 2"><i class="fas fa-heading"></i>2</button>
-            <button type="button" class="toolbar-button" data-md-command="h3" title="Заголовок 3"><i class="fas fa-heading"></i>3</button>
-          </div>
-          <div class="toolbar-group">
-            <button type="button" class="toolbar-button" data-md-command="ul" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="ol" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="checklist" title="Чек-лист"><i class="fas fa-check-square"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
-          </div>
-          <div class="toolbar-group">
-            <button type="button" class="toolbar-button" data-md-command="code" title="Код (строка)"><i class="fas fa-code"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="codeblock" title="Блок кода"><i class="fas fa-file-code"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="table" title="Таблица"><i class="fas fa-table"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="hr" title="Горизонтальная линия"><i class="fas fa-minus"></i></button>
-          </div>
-          <div class="toolbar-group">
-            <button type="button" class="toolbar-button" data-md-command="link" title="Ссылка (Ctrl+K)"><i class="fas fa-link"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="wikilink" title="Wiki-ссылка на статью [[...]]"><i class="fas fa-file-alt"></i></button>
-            <button type="button" class="toolbar-button" data-md-command="image" title="Изображение"><i class="fas fa-image"></i></button>
-          </div>
-        </div>
-        <div class="toolbar-row toolbar-row-modes">
-          <div class="editor-mode-tabs">
-            <button type="button" class="editor-mode-tab" data-mode="edit" title="Редактирование"><i class="fas fa-pen"></i> Редактирование</button>
-            <button type="button" class="editor-mode-tab" data-mode="preview" title="Просмотр"><i class="fas fa-eye"></i> Просмотр</button>
-            <button type="button" class="editor-mode-tab" data-mode="split" title="Двойной просмотр"><i class="fas fa-columns"></i> Разделить</button>
-          </div>
-        </div>
-      </div>
-      <div class="editor-panes" data-mode="edit">
-        <div class="editor-pane">
-          <div
-            id="articleContent"
-            data-placeholder="Начните писать статью в Markdown… Наберите [[ для ссылки на другую статью."
-          ></div>
-        </div>
-        <div class="preview-pane" id="markdownPreviewPane">
-          <p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>
-        </div>
-      </div>
-    </div>
-  </div>
+  </details>
 
   <!-- Кнопки управления (оставлены для совместимости, но не показываются в схеме) -->
   <div class="button-group" style="display: none;">
@@ -193,20 +305,12 @@
   </div>
 </div>
 
-<!-- Управление статьями -->
-<div class="articles-section">
-  <div class="articles-header">
-    <h2 class="form-title">Управление статьями</h2>
-    <div class="search-bar">
-      <input type="text" id="searchText" class="form-input" placeholder="Поиск по заголовку...">
-      <div class="search-buttons">
-        <button class="btn btn-primary" id="searchArticlesBtn">Найти</button>
-        <button class="btn btn-secondary" id="resetSearchBtn">Сброс</button>
-      </div>
-    </div>
-  </div>
-  <div id="articlesListContainer"></div>
-</div>
+<!-- Панели редактора, привязанные к текущей открытой статье (обратные
+     ссылки, локальный граф связей, результаты клика по #тегу) — заполняются
+     editor-manager.js. Список статей и поиск по нему переехали на отдельную
+     страницу Ibripedia (см. sidebar), поэтому здесь остался только якорь
+     для этих панелей. -->
+<div id="editorSidePanels" class="editor-side-panels"></div>
 
 <!-- Превью -->
 <div id="articlePreview" class="preview-overlay" style="display: none;">
@@ -236,18 +340,67 @@
   color: var(--text-normal);
 }
 
-.articles-page .form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 28px;
-  margin-bottom: 24px;
+/* Сворачиваемые секции формы (нативный <details>/<summary> — без своей
+   JS-логики раскрытия). Раньше тут был двухколоночный .form-grid на всю
+   форму сразу (.column-wrapper.first-column/.second-column) — поля теперь
+   группируются по смыслу (Контент/Метаданные/Публикация), а не по тому, в
+   какую колонку физически попали. */
+.articles-page .form-section {
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  margin-bottom: 16px;
 }
 
-.articles-page .column-wrapper {
+.articles-page .form-section > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text-normal);
+  user-select: none;
+}
+.articles-page .form-section > summary::-webkit-details-marker { display: none; }
+.articles-page .form-section > summary:hover { color: var(--header-primary); }
+.articles-page .form-section > summary > i:first-child {
+  color: var(--header-secondary);
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+}
+
+.articles-page .form-section-hint {
+  font-weight: 400;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.articles-page .form-section-chevron {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.articles-page .form-section[open] > summary .form-section-chevron {
+  transform: rotate(180deg);
+}
+
+.articles-page .form-section-body {
+  padding: 18px 18px 22px;
+  border-top: 1px solid var(--background-accent);
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-width: 0;
+}
+
+.articles-page .form-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px 24px;
 }
 
 .articles-page .form-group {
@@ -258,6 +411,12 @@
 
 .articles-page .form-group.full-width {
   grid-column: 1 / -1;
+  /* Грид-элемент по умолчанию не сжимается уже своего min-content — редактор
+     с прокручиваемой лентой тулбара внутри (см. .toolbar-row-format на
+     телефоне ниже) иначе тянет за собой всю колонку и саму страницу шире
+     экрана, вместо того чтобы прокручиваться самому в своих границах (тот
+     же приём, что и у .form-section-grid выше). */
+  min-width: 0;
 }
 
 .articles-page .form-label {
@@ -276,6 +435,10 @@
   font-size: 14px;
   transition: all 0.2s;
   width: 100%;
+  /* Адаптивная ширина: тянется на всю колонку на узких экранах, но не
+     раздувается до неудобной длины строки на широких (см. requirement
+     "слишком длинное поле ввода, хотелось бы сделать его адаптивным"). */
+  max-width: min(100%, 32rem);
 }
 
 .articles-page .form-input:focus,
@@ -322,24 +485,123 @@
   border-radius: 6px;
 }
 
-.articles-page .tag-item {
-  background: var(--blurple);
-  color: white;
-  padding: 4px 10px;
+/* Стили самого .chip-field (Категория/Доступ для/Теги) переехали в
+   global-styles.css без привязки к .articles-page — этот компонент теперь
+   используется и на странице Ibripedia (фильтры), см. public/chip-field.js. */
+
+/* === Автор / соавторы === */
+.articles-page .author-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 7px 10px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  max-width: min(100%, 32rem);
+}
+
+.articles-page .author-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
   border-radius: 12px;
   font-size: 12px;
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+.articles-page .author-chip-primary {
+  background: var(--blurple);
+  color: #fff;
+  font-weight: 600;
+}
+
+.articles-page .author-coauthors {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.articles-page .tag-remove {
+.articles-page .checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--header-secondary);
+  cursor: pointer;
+}
+
+.articles-page .checkbox-field input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* [hidden] сам по себе — обычное (не !important) правило браузерного
+   стиля, и оно уступает по специфичности двум вложенным классам выше
+   (.articles-page .author-coauthors/.checkbox-field), поэтому без этого
+   явного переопределения el.hidden = true на этих элементах не работал бы. */
+.articles-page .author-coauthors[hidden],
+.articles-page .checkbox-field[hidden],
+.articles-page .authors-admin[hidden] {
+  display: none;
+}
+
+/* Управление авторами (только владелец) */
+.articles-page .authors-admin {
+  margin-top: 8px;
+  max-width: min(100%, 32rem);
+}
+
+.articles-page .authors-admin-search {
+  position: relative; /* якорь для .chip-field-dropdown */
+}
+
+.articles-page .authors-admin-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.articles-page .author-chip-btn {
+  margin-left: 6px;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   opacity: 0.7;
 }
 
-.articles-page .tag-remove:hover {
+.articles-page .author-chip-btn:hover {
   opacity: 1;
+}
+
+.articles-page .authors-admin-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text-normal);
+}
+
+.articles-page .authors-admin-result:hover {
+  background: var(--background-accent);
+}
+
+.articles-page .authors-admin-result-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .articles-page .editor-wrapper {
@@ -347,11 +609,15 @@
   border: 1px solid var(--background-accent);
   border-radius: 8px;
   background: var(--background-tertiary);
+  min-width: 0;
 }
 
 .articles-page .editor-toolbar-sticky {
   position: sticky;
-  top: 70px;
+  /* top:0 — .header не зафиксирован и уходит со страницей при скролле,
+     отступ здесь оставлял бы пустое место над панелью (тот же фикс, что и
+     у панели фильтров Ibripedia, см. ibripedia.css). */
+  top: 0;
   z-index: 100;
   background: var(--background-secondary);
   padding: 10px 14px;
@@ -360,6 +626,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Явно, а не полагаясь на дефолт — в global-styles.css гуляет несколько
+     старых несвязанных .editor-toolbar-sticky ещё от contenteditable-
+     редактора, которые ставят align-items:center; без flex-direction
+     (то есть строкой). Специфичность у .articles-page .editor-toolbar-
+     sticky выше (2 класса против 1), так что эта явная запись гарантированно
+     перебивает их все, а не только те, что нашлись при разборе. Без неё
+     дочерний .toolbar-format-scroll не растягивался на всю ширину колонки и
+     держался по своей ширине содержимого — та самая причина, по которой
+     лента тулбара вылезала за экран на телефоне. */
+  align-items: stretch;
 }
 
 /* Каждая строка тулбара — своя дорожка (форматирование / режимы) */
@@ -379,6 +655,21 @@
 /* Кнопки одного смысла (жирный/курсив, заголовки, списки...) — общий
    "чип" с лёгким фоном, чтобы тулбар читался группами, а не единой
    лентой из 18 одинаковых иконок */
+.articles-page .toolbar-group-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.articles-page .toolbar-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .articles-page .toolbar-group {
   display: flex;
   align-items: center;
@@ -422,6 +713,45 @@
   margin: 0 4px;
 }
 
+/* Тень+стрелка у края тулбара, пока лента прокручиваемая (только на
+   телефоне, см. @media ниже — на десктопе/планшете кнопки не переполняют
+   ряд, скролла нет, классы can-scroll-* никогда не появляются). Без неё
+   на телефоне непонятно, что за краем есть ещё кнопки — просто выглядит
+   как обрезанный список. */
+.articles-page .toolbar-format-scroll {
+  position: relative;
+  /* Флекс-элемент колонки .editor-toolbar-sticky — без этого он не сжимается
+     уже своего min-content (ширины несворачиваемой ленты кнопок внутри) и
+     вылезает за родителя шире экрана вместо того, чтобы прокручиваться сам
+     в своих границах (проверено на реальном iframe с шириной телефона —
+     именно этот элемент, а не .form-group/.editor-wrapper выше по цепочке,
+     оказался тем самым "узким местом"). */
+  min-width: 0;
+}
+.articles-page .toolbar-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.articles-page .toolbar-fade-l { left: 0; background: linear-gradient(to right, rgba(0,0,0,.45), transparent); }
+.articles-page .toolbar-fade-r { right: 0; background: linear-gradient(to left, rgba(0,0,0,.45), transparent); }
+.articles-page .toolbar-format-scroll.can-scroll-l .toolbar-fade-l { opacity: 1; }
+.articles-page .toolbar-format-scroll.can-scroll-r .toolbar-fade-r { opacity: 1; }
+.articles-page .toolbar-fade-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: rgba(255,255,255,.9);
+}
+.articles-page .toolbar-fade-l .toolbar-fade-arrow { left: 2px; }
+.articles-page .toolbar-fade-r .toolbar-fade-arrow { right: 2px; }
+
 /* Стили содержимого редактора (.cm-editor и т.д.) — см. public/editor-obsidian.css */
 
 .articles-page .button-group {
@@ -462,14 +792,6 @@
   color: var(--yellow-hover);
 }
 
-.articles-page .articles-section {
-  margin-top: 30px;
-  padding: 20px;
-  background: var(--background-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--background-accent);
-}
-
 .articles-page .preview-overlay {
   position: fixed;
   top: 0;
@@ -508,21 +830,73 @@
   cursor: pointer;
 }
 
-@media (max-width: 768px) {
-  .articles-page .form-grid {
+/* Планшет (≤1024px): поля секций — в одну колонку (полям есть куда расти),
+   тулбар не липнет к верху — с обычными многострочными группами он
+   заметно выше, чем однострочный, и постоянно съедать экран при скролле
+   длинной статьи уже не оправдано (на десктопе sticky остаётся). */
+@media (max-width: 1024px) {
+  .articles-page .form-section-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .articles-page .editor-toolbar-sticky {
     position: relative;
     top: 0;
-    flex-wrap: wrap;
   }
-  
+}
+
+/* Комфортные касания на тач-экранах — по указателю, а не по ширине экрана
+   (см. тот же приём в ibripedia.css/mobile-menu.css): планшет в альбомной
+   ориентации шириной как у десктопа, но палец всё равно толще курсора. */
+@media (hover: none) and (pointer: coarse) {
   .articles-page .toolbar-button {
     width: 40px;
     height: 40px;
+  }
+}
+
+/* Телефон (≤640px): лента форматирования — один прокручиваемый ряд вместо
+   пяти-шести строк кнопок (экономит экран под сам текст), подписи групп
+   скрыты — остаются только иконки, тень+стрелка с краю (см. .toolbar-fade
+   выше) подсказывает, что есть что прокрутить. */
+@media (max-width: 640px) {
+  .articles-page .toolbar-row-format {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .articles-page .toolbar-row-format::-webkit-scrollbar { height: 4px; }
+  .articles-page .toolbar-group-wrap,
+  .articles-page .toolbar-group {
     flex-shrink: 0;
+  }
+  .articles-page .toolbar-group-label {
+    display: none;
+  }
+}
+
+/* На ПК "рамка" формы (.form-container) — просторная карточка с закруглением
+   и большими отступами поверх фона страницы, это нормально (см. requirement
+   "на ПК страница довольно большая"). Именно эта рамка на телефоне и съедает
+   пространство: закругление + её собственный padding:28px + ещё padding:15px
+   у .content-body вокруг (см. global-styles.css) в сумме уводят под самих
+   полей ввода/тулбара/кнопок заметно меньше и без того узкого экрана.
+   На мобильном рамка разворачивается на весь экран — как .content-body
+   (только для этой страницы, через body.articles-page — везде ещё нужен
+   обычный отступ), так и сама карточка теряют внешние отступы и
+   закругление, сливаясь с краями экрана; небольшой внутренний padding
+   остаётся — просто чтобы текст и поля не упирались в самый край. */
+@media (max-width: 768px) {
+  body.articles-page .content-body {
+    padding: 0;
+  }
+  .articles-page .form-container {
+    padding: 14px;
+    border-radius: 0;
+  }
+  .articles-page .form-section-body {
+    padding: 14px 12px 16px;
   }
 }
 </style>

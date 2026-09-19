@@ -1,37 +1,44 @@
 <div class="pending-users-page">
     <div style="margin-bottom: 24px;">
-        <h2 style="color: var(--header-primary, #fff); margin-bottom: 8px;">Заявки на доступ</h2>
-        <p style="color: var(--text-muted, #b9bbbe); margin: 0;">Управление заявками новых пользователей</p>
+        <h2 style="color: var(--header-primary); margin-bottom: 8px;">Заявки на доступ</h2>
+        <p style="color: var(--text-muted); margin: 0;">Управление заявками новых пользователей</p>
     </div>
 
-    <!-- Статистика -->
-    <div id="pending-stats" style="display: none; margin-bottom: 24px; padding: 16px; background: var(--background-secondary, #2f3136); border-radius: 8px; border: 1px solid var(--background-accent, #4f545c);">
-        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 120px;">
-                <div style="font-size: 28px; font-weight: 700; color: #f59e0b;" id="pending-count">0</div>
-                <div style="color: var(--text-muted, #b9bbbe); font-size: 13px;">Ожидают подтверждения</div>
+    <!-- Статистика — общий компонент .stat-strip/.stat-chip (см. dashboard.html
+         и "MODAL COMPONENT" по соседству в global-styles.css), а не свой
+         div с зашитыми паддингами/радиусами. -->
+    <div class="stat-strip" id="pending-stats" style="display: none;">
+        <div class="stat-chip">
+            <div class="stat-chip-icon">⏳</div>
+            <div class="stat-chip-body">
+                <div class="stat-chip-value"><span id="pending-count">0</span></div>
+                <div class="stat-chip-label">Ожидают подтверждения</div>
             </div>
         </div>
     </div>
 
     <!-- Таблица заявок -->
     <div id="pending-table-container">
-        <div id="pending-loading" style="text-align: center; padding: 40px; color: var(--text-muted, #b9bbbe);">
+        <div id="pending-loading" style="text-align: center; padding: 40px;">
             <div class="skeleton" style="height: 200px;"></div>
         </div>
-        <div id="pending-empty" style="display: none; text-align: center; padding: 40px; color: var(--text-muted, #b9bbbe);">
-            <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
-            <h3 style="color: var(--header-primary, #fff); margin-bottom: 8px;">Нет ожидающих заявок</h3>
+        <div id="pending-empty" class="empty-state" style="display: none;">
+            <i class="fas fa-circle-check"></i>
+            <h3>Нет ожидающих заявок</h3>
             <p>Все заявки обработаны</p>
         </div>
-        <div id="pending-table" style="display: none; overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
+        <!-- .table-container уже стилизует table/th/td/tr (см. "ENHANCED TABLE
+             STYLES" в global-styles.css) — тот же класс, что и у таблицы
+             пользователей (users-list.html), инлайновых стилей на ячейках
+             больше не нужно. -->
+        <div id="pending-table" class="table-container" style="display: none;">
+            <table>
                 <thead>
-                    <tr style="border-bottom: 2px solid var(--background-accent, #4f545c);">
-                        <th style="text-align: left; padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 12px; text-transform: uppercase;">Имя</th>
-                        <th style="text-align: left; padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 12px; text-transform: uppercase;">Логин</th>
-                        <th style="text-align: left; padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 12px; text-transform: uppercase;">Дата заявки</th>
-                        <th style="text-align: right; padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 12px; text-transform: uppercase;">Действия</th>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Логин</th>
+                        <th>Дата заявки</th>
+                        <th class="text-right">Действия</th>
                     </tr>
                 </thead>
                 <tbody id="pending-tbody">
@@ -41,34 +48,42 @@
     </div>
 </div>
 
-<!-- Модальное окно подтверждения -->
-<div id="approve-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10001; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
-    <div style="background: var(--background-secondary, #2f3136); padding: 28px; border-radius: 8px; width: 90%; max-width: 400px; border: 1px solid var(--background-accent, #4f545c);">
-        <h3 style="color: var(--header-primary, #fff); margin: 0 0 12px 0;">Подтвердить заявку?</h3>
-        <p style="color: var(--text-muted, #b9bbbe); margin-bottom: 20px;" id="approve-modal-text">Пользователь получит полный доступ к админ-панели.</p>
-        <div style="display: flex; gap: 12px;">
-            <button id="approve-confirm-btn" style="flex: 1; background: #28a745; color: white; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">Подтвердить</button>
-            <button id="approve-cancel-btn" style="flex: 1; background: var(--background-accent, #4f545c); color: var(--text-normal, #dcddde); padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Отмена</button>
+<!-- Модальное окно подтверждения — общий компонент модалки, см. "MODAL
+     COMPONENT" в global-styles.css. -->
+<div id="approve-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Подтвердить заявку?</h3>
+        </div>
+        <div class="modal-body">
+            <p class="modal-hint" id="approve-modal-text">Пользователь получит полный доступ к админ-панели.</p>
+        </div>
+        <div class="modal-footer">
+            <button id="approve-cancel-btn" class="btn btn-secondary">Отмена</button>
+            <button id="approve-confirm-btn" class="btn btn-success">Подтвердить</button>
         </div>
     </div>
 </div>
 
 <!-- Модальное окно отклонения -->
-<div id="reject-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10001; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
-    <div style="background: var(--background-secondary, #2f3136); padding: 28px; border-radius: 8px; width: 90%; max-width: 400px; border: 1px solid var(--background-accent, #4f545c);">
-        <h3 style="color: var(--header-primary, #fff); margin: 0 0 12px 0;">Отклонить заявку?</h3>
-        <p style="color: var(--text-muted, #b9bbbe); margin-bottom: 8px;">Причина отклонения (необязательно):</p>
-        <input type="text" id="reject-reason" placeholder="Нарушение правил, спам и т.д." style="
-            width: 100%; padding: 10px; box-sizing: border-box; margin-bottom: 16px;
-            background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c);
-            border-radius: 4px; color: var(--text-normal, #dcddde); font-size: 14px;
-        ">
-        <div style="display: flex; gap: 12px;">
-            <button id="reject-confirm-btn" style="flex: 1; background: #dc3545; color: white; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">Отклонить</button>
-            <button id="reject-cancel-btn" style="flex: 1; background: var(--background-accent, #4f545c); color: var(--text-normal, #dcddde); padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Отмена</button>
+<div id="reject-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Отклонить заявку?</h3>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label" for="reject-reason">Причина отклонения (необязательно)</label>
+                <input type="text" id="reject-reason" class="form-input" placeholder="Нарушение правил, спам и т.д.">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="reject-cancel-btn" class="btn btn-secondary">Отмена</button>
+            <button id="reject-confirm-btn" class="btn btn-danger">Отклонить</button>
         </div>
     </div>
 </div>
 
-<!-- Toast уведомления -->
-<div id="pending-toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 10002;"></div>
+<!-- Toast уведомления — общий компонент .toast-container/.toast, см.
+     "TOAST COMPONENT" в global-styles.css. -->
+<div id="pending-toast-container" class="toast-container"></div>

@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="/global-styles.css">
     <link rel="stylesheet" href="/mobile-menu.css">
     <link rel="stylesheet" href="/editor-obsidian.css">
+    <link rel="stylesheet" href="/editor-blocks.css">
+    <link rel="stylesheet" href="/ibripedia.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -21,6 +23,7 @@
             <div class="user-avatar">А</div>
             <div class="username-display">Пользователь</div>
             <div class="dropdown" id="user-dropdown">
+                <div class="dropdown-item" id="profile-btn">Мой профиль</div>
                 <div class="dropdown-item" id="logout-btn">Выход</div>
             </div>
         </div>
@@ -35,6 +38,12 @@
                 <i>📊</i>
                 <span>Аналитика</span>
             </div>
+
+            <div class="sidebar-group-label">Контент</div>
+            <div class="sidebar-item" data-nav="/ibripedia">
+                <i>📚</i>
+                <span>Ibripedia</span>
+            </div>
             <div class="sidebar-item" data-nav="/articles">
                 <i>📝</i>
                 <span>Редактор</span>
@@ -43,6 +52,12 @@
                 <i>📂</i>
                 <span>Категории</span>
             </div>
+            <div class="sidebar-item" data-nav="/stickers" id="sidebar-stickers">
+                <i>🎨</i>
+                <span>Стикеры</span>
+            </div>
+
+            <div class="sidebar-group-label">Сообщество</div>
             <div class="sidebar-item" data-nav="/servers">
                 <i>🌐</i>
                 <span>Сервера</span>
@@ -51,7 +66,16 @@
                 <i>📋</i>
                 <span>Заявки</span>
             </div>
-            <div class="sidebar-item" data-nav="/settings">
+            <div class="sidebar-item" data-nav="/users" id="sidebar-users-list" style="display:none;">
+                <i>👥</i>
+                <span>Пользователи</span>
+            </div>
+
+            <!-- Скрыт вместе с sidebar-settings (см. app.js) — единственный
+                 пункт группы, доступный только владельцу (is_root); иначе
+                 заголовок группы остаётся висеть без единого пункта под ним. -->
+            <div class="sidebar-group-label" id="sidebar-group-system" style="display:none;">Система</div>
+            <div class="sidebar-item" data-nav="/settings" id="sidebar-settings" style="display:none;">
                 <i>⚙️</i>
                 <span>Настройки</span>
             </div>
@@ -70,10 +94,18 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/auth-system.js"></script>
     <script src="/app.js"></script>
+    <script src="/chip-field.js"></script>
     <script src="/spa-router.js"></script>
     <script src="/sidebar-manager.js"></script>
+    <script src="/blocks-renderer.js"></script>
     <script src="/editor-manager.js"></script>
     <script src="/graph-view.js"></script>
+    <script src="/ibripedia.js"></script>
+    <script src="/stickers-manager.js"></script>
+    <script src="/confirm-dialog.js"></script>
+    <script src="/sticker-pack-view.js"></script>
+    <script src="/sticker-store.js"></script>
     <script src="/backup-ui.js"></script>
+    <script src="/cleanup-ui.js"></script>
 </body>
 </html>

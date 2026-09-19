@@ -1,23 +1,283 @@
-<div class="form-container">
-    <h2 class="form-title">Создать новую категорию</h2>
+<!-- Тот же язык дизайна, что и у "Серверов"/"Пользователей": тулбар
+     (заголовок + поиск + быстрое добавление), сетка карточек вместо голых
+     строк с одинокой красной кнопкой "Удалить", общие .modal-*/.empty-state
+     из global-styles.css вместо window.confirm(). -->
+<div class="categories-page">
 
-    <div class="form-group full-width">
-        <label class="form-label" for="newCategoryName">Название категории</label>
-        <div class="input-action-wrapper" style="max-width: 500px;">
-            <input type="text" id="newCategoryName" class="form-input" placeholder="Введите название категории">
-            <button class="btn-action-plus" id="create-new-category-btn" title="Создать категорию">
-                <i class="fas fa-plus"></i>
-            </button>
-        </div>
+  <div class="categories-toolbar">
+    <div class="categories-toolbar-row">
+      <h2 class="categories-heading"><i class="fas fa-folder"></i> Категории</h2>
+      <div class="categories-search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="categoriesSearchInput" class="categories-search-input" placeholder="Поиск по названию...">
+      </div>
+      <div class="categories-quick-add">
+        <input type="text" id="newCategoryName" class="categories-quick-add-input" placeholder="Название новой категории..." maxlength="100">
+        <button type="button" id="create-new-category-btn" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Создать
+        </button>
+      </div>
     </div>
+    <div class="categories-toolbar-row categories-toolbar-row-status">
+      <span class="categories-count" id="categoriesCount"></span>
+    </div>
+  </div>
+
+  <div class="categories-loading" id="categoriesLoading">
+    <div class="categories-skeleton-card"></div>
+    <div class="categories-skeleton-card"></div>
+    <div class="categories-skeleton-card"></div>
+  </div>
+
+  <div class="categories-empty" id="categoriesEmpty" hidden>
+    <i class="fas fa-folder-open"></i>
+    <h3 id="categoriesEmptyTitle">Пока нет ни одной категории</h3>
+    <p id="categoriesEmptyText">Категории помогают группировать статьи по темам — их можно будет выбрать при создании или редактировании статьи.</p>
+  </div>
+
+  <div class="categories-grid" id="categoriesContainer" hidden></div>
+
 </div>
 
-<div class="categories-list">
-    <h2 class="form-title">Существующие категории</h2>
-    <div id="categoriesContainer"></div>
+<!-- Модалка подтверждения удаления — общий компонент, см. "MODAL COMPONENT"
+     в global-styles.css (вместо window.confirm()). -->
+<div id="delete-category-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Удалить категорию?</h3>
+      <button type="button" class="modal-close" id="delete-category-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-hint" id="delete-category-text"><i class="fas fa-circle-info"></i></p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="delete-category-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button type="button" id="delete-category-confirm-btn" class="btn btn-danger">Удалить</button>
+    </div>
+  </div>
 </div>
 
-<!-- Card layout for mobile (will be shown instead of table on mobile) -->
-<div class="card-layout-mobile" id="categories-card-layout" style="display: none;">
-    <!-- Cards will be loaded here on mobile -->
-</div>
+<style>
+/* === CATEGORIES PAGE — язык дизайна серверов/пользователей (тулбар,
+   сетка карточек, skeleton, empty-state) === */
+
+.categories-page { padding: 0; }
+
+/* Тот же приём, что и у .servers-page [hidden] в servers.html: класс вроде
+   .categories-loading{display:grid} ниже имеет ту же специфичность (0-1-0),
+   что и атрибутный [hidden] из UA-таблицы стилей — выигрывает более позднее
+   по каскаду правило (наше), а не hidden, и элемент остаётся видимым даже
+   после el.hidden = true. Одно правило на всю страницу — надёжнее, чем
+   гоняться за каждым классом с явным display по отдельности. */
+.categories-page [hidden] {
+  display: none !important;
+}
+
+.categories-toolbar {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.categories-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.categories-toolbar-row-status {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-accent);
+}
+
+.categories-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.categories-heading i { color: var(--blurple); }
+
+.categories-search-wrap {
+  flex: 1 1 220px;
+  min-width: 160px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.categories-search-wrap i {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+.categories-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 34px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+.categories-search-input:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+
+.categories-quick-add {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 280px;
+}
+.categories-quick-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+.categories-quick-add-input:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+.categories-quick-add .btn { flex-shrink: 0; white-space: nowrap; }
+
+.categories-count {
+  font-size: 13px;
+  color: var(--header-secondary);
+}
+
+/* --- Загрузка / пусто --- */
+.categories-loading {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.categories-skeleton-card {
+  height: 76px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--background-secondary) 25%, var(--background-tertiary) 37%, var(--background-secondary) 63%);
+  background-size: 400% 100%;
+  animation: categories-skeleton-shimmer 1.4s ease infinite;
+  border: 1px solid var(--background-accent);
+}
+@keyframes categories-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.categories-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-accent);
+  border-radius: 10px;
+}
+.categories-empty i {
+  font-size: 40px;
+  color: var(--blurple);
+  margin-bottom: 14px;
+  display: block;
+}
+.categories-empty h3 { color: var(--text-normal); margin: 0 0 8px; }
+.categories-empty p { max-width: 480px; margin: 0 auto; line-height: 1.5; }
+
+/* --- Сетка карточек --- */
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.category-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.category-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--blurple);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.category-card-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(88, 101, 242, 0.15);
+  color: var(--blurple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.category-card-body { min-width: 0; flex: 1; }
+
+.category-card-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.category-card-delete-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.category-card-delete-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+.categories-no-results {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .categories-toolbar-row { flex-direction: column; align-items: stretch; }
+  .categories-quick-add { flex-direction: column; }
+}
+</style>

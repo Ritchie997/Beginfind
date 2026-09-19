@@ -1,0 +1,1970 @@
+/* ibripedia.css — витрина статей (страница Ibripedia): фильтры, сетка/список
+   карточек, страница просмотра одной статьи. Раньше это был раздел
+   "Управление статьями" под формой редактора (public/views/articles.html) —
+   вынесено на отдельную страницу, т.к. со временем статей станет много
+   тысяч и большой плоский список стал бы неудобным (пагинация вместо
+   "отдать всё сразу", фильтры вместо одного поля поиска по заголовку).
+   См. public/views/ibripedia.html и public/ibripedia.js. */
+
+.ibripedia-page {
+  padding: 28px;
+  max-width: 1420px; /* было 1180px — по отзыву "много пустого места по бокам", +20% */
+  margin: 0 auto;
+}
+
+/* Любой элемент этой страницы, которому JS ставит el.hidden = true, обязан
+   реально скрыться — а [hidden] (атрибутный селектор из UA-таблицы стилей,
+   специфичность 0-1-0) и класс с явным display (например,
+   .ibripedia-sidebar-tab{display:flex} и т.п.) имеют РАВНУЮ специфичность:
+   выигрывает не hidden, а то правило, что идёт позже в каскаде — то есть
+   наше. Без этого правила элементы, которым JS ставит .hidden=true,
+   оставались бы видны (и перехватывали бы клики), хотя обработчик исправно
+   отработал. Тот же приём уже используется в public/views/servers.html
+   (.servers-page [hidden]) и public/editor-obsidian.css
+   (.img-dialog-backdrop[hidden]) — здесь так же накрываем этим правилом
+   всю страницу разом. */
+.ibripedia-page [hidden] {
+  display: none !important;
+}
+
+/* === Тулбар: поиск, фильтры, сортировка, переключатель вида === */
+
+.ibripedia-toolbar {
+  position: sticky;
+  /* top:0, не отступ под шапку — .header в этом приложении не зафиксирован
+     (обычный блок, уходит со страницей при скролле), так что отступ
+     оставлял бы над панелью пустое место после того, как шапка проскроллила
+     мимо. Панель должна упираться в самый верх окна. */
+  top: 0;
+  z-index: 50;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ibripedia-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ibripedia-toolbar-row-main {
+  gap: 12px;
+}
+
+.ibripedia-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ibripedia-heading i {
+  color: var(--blurple);
+}
+
+.ibripedia-search-wrap {
+  flex: 1 1 240px;
+  min-width: 160px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ibripedia-search-wrap i {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.ibripedia-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 34px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.ibripedia-search-input:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+
+.ibripedia-toolbar-row-filters {
+  align-items: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-accent);
+  order: 1;
+}
+
+.ibripedia-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.ibripedia-filter label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--header-secondary);
+}
+
+.ibripedia-filter .form-select,
+.ibripedia-filter .form-input {
+  padding: 9px 10px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+/* === Сворачивание фильтров на телефоне (см. #ibripediaFiltersToggleBtn/
+   #ibripediaFiltersPanel в views/ibripedia.html и initFiltersCollapse()/
+   applyFiltersOpenState() в ibripedia.js) — кнопка видна только ≤640px
+   (ниже), панель на планшете/десктопе всегда показана независимо от
+   состояния JS (базовое правило .ibripedia-toolbar-row-filters{display:flex}
+   ничем не перекрыто вне телефонного @media), а на телефоне управляется
+   классом .is-open. Пробовали нативный <details>+display:contents ради
+   "без единой строчки JS", но открытая панель там не желала растягиваться
+   на всю ширину — контент диклоужера в Chrome рендерится в собственном
+   анонимном боксе (::details-content), а не как обычный flex-потомок, так
+   что flex:1 1 100% на вложенном div не срабатывал. Обычная кнопка так не
+   зависит от этой особенности. === */
+.ibripedia-filters-toggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ibripedia-filters-count {
+  background: var(--blurple);
+  color: #fff;
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 11px;
+}
+.ibripedia-filters-chev {
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.ibripedia-filters-toggle.is-open .ibripedia-filters-chev { transform: rotate(180deg); }
+
+.ibripedia-chip-field {
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.ibripedia-date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ibripedia-date-range input {
+  width: 130px;
+}
+
+.ibripedia-date-range span {
+  color: var(--text-muted);
+}
+
+.ibripedia-toolbar-row-status {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-accent);
+  /* order — а не порядок в разметке: на десктопе/планшете эта строка идёт
+     ПОСЛЕ панели фильтров (как и раньше), а на телефоне (см. @media ниже) —
+     ПЕРЕД ней, потому что там же живёт кнопка-переключатель "Фильтры" и
+     панель логично разворачивается под ней, а не расти вверх. */
+  order: 2;
+}
+
+.ibripedia-count {
+  font-size: 13px;
+  color: var(--header-secondary);
+}
+
+.ibripedia-view-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+}
+
+.ibripedia-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--header-secondary);
+  cursor: pointer;
+}
+
+.ibripedia-view-btn:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+.ibripedia-view-btn.active {
+  background: var(--blurple);
+  color: #fff;
+}
+
+/* === Сетка карточек ===
+   auto-fit + minmax(320px, 1fr) внутри контейнера с max-width:1180px даёт
+   ровно 2-3 карточки в ряд на десктопе (как просили), 1 — на мобильном, и
+   само перестраивается при изменении ширины окна. */
+
+.ibripedia-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.ibripedia-grid.ibripedia-grid--list {
+  grid-template-columns: 1fr;
+}
+
+.ibripedia-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.ibripedia-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--blurple);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.ibripedia-grid--list .ibripedia-card {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.ibripedia-card-cover {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--background-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ibripedia-grid--list .ibripedia-card-cover {
+  width: 160px;
+  aspect-ratio: auto;
+}
+
+.ibripedia-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ibripedia-card-cover-empty i {
+  font-size: 28px;
+  color: var(--text-muted);
+}
+
+.ibripedia-card-lock {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--yellow);
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
+.ibripedia-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.ibripedia-card-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ibripedia-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.ibripedia-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ibripedia-card-excerpt {
+  margin: 0;
+  font-size: 13px;
+  color: var(--header-secondary);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.ibripedia-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ibripedia-tag-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--background-tertiary);
+  color: var(--header-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ibripedia-tag-pill:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+.ibripedia-card-meta {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ibripedia-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Просмотры/лайк/комментарии карточки витрины — тот же язык "пилюль", что
+   и панель лайка/комментариев внутри открытой статьи (см.
+   .ibripedia-engagement-btn выше), просто в масштабе карточки: раньше это
+   были голые мелкие иконки вперемешку с автором/датой в .ibripedia-card-meta
+   и визуально терялись. */
+.ibripedia-card-engagement {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ibripedia-card-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+/* Просмотры — не кнопка, только счётчик, курсор обычный. */
+span.ibripedia-card-pill { cursor: default; }
+
+button.ibripedia-card-pill { cursor: pointer; }
+button.ibripedia-card-pill:hover { background: var(--background-accent); color: var(--text-normal); }
+button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
+
+.ibripedia-card-pill.is-liked,
+.ibripedia-card-pill.is-liked:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* === Меню действий (⋮) на карточке === */
+
+.ibripedia-card-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.ibripedia-card-menu-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.ibripedia-card-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.ibripedia-card-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background: var(--background-floating);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.ibripedia-card-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ibripedia-card-menu-dropdown button:hover {
+  background: var(--background-accent);
+}
+
+.ibripedia-card-menu-dropdown button.ibripedia-danger {
+  color: var(--red);
+}
+
+/* === Пустое состояние / индикатор подгрузки === */
+
+.ibripedia-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--header-secondary);
+  text-align: center;
+}
+
+.ibripedia-empty i {
+  font-size: 32px;
+  color: var(--text-muted);
+}
+
+.ibripedia-loading-more {
+  text-align: center;
+  padding: 20px;
+  color: var(--header-secondary);
+  font-size: 13px;
+}
+
+.ibripedia-sentinel {
+  height: 1px;
+}
+
+/* === Skeleton-заглушки при первой загрузке === */
+
+.ibripedia-skeleton-card {
+  height: 260px;
+  border-radius: 10px;
+  background: linear-gradient(100deg, var(--background-secondary) 30%, var(--background-accent) 50%, var(--background-secondary) 70%);
+  background-size: 300% 100%;
+  animation: ibripedia-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes ibripedia-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* === Страница просмотра одной статьи === */
+
+.ibripedia-view {
+  max-width: 1090px; /* было 780px — тот же отзыв "много пустого места", +40% */
+  margin: 0 auto;
+}
+
+.ibripedia-back-btn {
+  margin-bottom: 16px;
+}
+
+.ibripedia-view-article {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ibripedia-view-cover img {
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  display: block;
+}
+
+.ibripedia-view-title {
+  margin: 20px 24px 8px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.ibripedia-view-meta {
+  margin: 0 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ibripedia-view-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ibripedia-view-badges {
+  margin: 12px 24px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ibripedia-view-actions {
+  margin: 16px 24px 0;
+  display: flex;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--background-accent);
+}
+
+.ibripedia-view-content.preview-pane {
+  border-left: none;
+  /* Слева — расширенное поле (было 24px) под значки закладок (см.
+     .ibripedia-bm-toggle и renderBookmarkGutter в ibripedia.js) — каждый
+     значок абсолютно позиционирован внутри этого поля, напротив своего
+     блока, независимо от типа блока. */
+  padding: 20px 24px 28px 54px;
+  min-height: 0;
+  overflow-y: visible;
+  /* Точка отсчёта для .ibripedia-bm-toggle (position: absolute). */
+  position: relative;
+}
+
+.ibripedia-view-backlinks {
+  margin-top: 20px;
+}
+
+/* === Лайк + комментарии под статьёй === */
+
+.ibripedia-view-engagement {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 24px 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-accent);
+}
+
+.ibripedia-engagement-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.ibripedia-engagement-btn:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+.ibripedia-engagement-btn.is-active {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.ibripedia-comments {
+  max-width: 1090px;
+  margin: 20px auto 0;
+  padding: 16px 24px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+}
+
+.ibripedia-comments h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--header-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ibripedia-comments h3 #ibripediaCommentsHeaderCount {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-muted);
+}
+
+.ibripedia-comment-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 18px;
+  position: relative; /* точка отсчёта для .ibripedia-sticker-picker ниже */
+}
+
+/* CONTENTEDITABLE, а не textarea — вставленный стикер рендерится картинкой
+   прямо внутри поля (см. .ibripedia-inline-sticker-chip и
+   insertStickerChip()/serializeRichInput() в ibripedia.js), textarea такого
+   не умеет в принципе. data-placeholder показывается через :empty — см. ниже. */
+.ibripedia-comment-input {
+  flex: 1 1 auto;
+  min-height: 40px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 9px 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-normal);
+  font-size: 14px;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.ibripedia-comment-input:focus { outline: none; border-color: var(--blurple); }
+.ibripedia-comment-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Стикер, вставленный в поле ввода — уже картинка, а не текст шорткода
+   (см. задачу "видно сразу, без текста"): contenteditable="false" на самой
+   картинке, чтобы курсор не заходил внутрь неё при редактировании. */
+.ibripedia-inline-sticker-chip {
+  height: 22px;
+  width: 22px;
+  object-fit: contain;
+  vertical-align: -5px;
+  margin: 0 1px;
+  user-select: none;
+}
+
+.ibripedia-sticker-picker-links {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ibripedia-comment-form-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Кнопка "Отправить" — глобальный .btn{width:100%; padding:12px 16px} на
+   мобильном (@media max-width:480px в global-styles.css, рассчитан на
+   вертикальный .button-group) выбивает и .btn-sm здесь тоже, раздувая кнопку
+   почти во всю ширину строки. Пока поле ввода пустое, это не бросается в
+   глаза — заглушка-плейсхолдер сама по себе достаточно длинная, чтобы форма
+   перенесла кнопки на отдельную строку ещё до них самих; но как только
+   появляется текст, форма и кнопки оказываются в одной строке, и раздутая
+   кнопка отжирает почти всё место, оставляя полю ввода узкий огрызок (см.
+   requirement "поле ввода слишком короткое, как только появляется символ").
+   Двух классов (0,2,0) достаточно, чтобы перебить глобальный .btn (0,1,0) —
+   без привязки к брейкпоинту самого global-styles.css. */
+.ibripedia-comment-form-actions .btn {
+  width: auto;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.ibripedia-sticker-picker-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  transition: background 0.15s, color 0.15s;
+}
+.ibripedia-sticker-picker-btn:hover,
+.ibripedia-sticker-picker-btn.active {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+/* Попап пикера стикеров — общий и для формы комментария/ответа, и для
+   полоски реакций (см. STICKER_PICKER_MARKUP/positionStickerPicker() в
+   ibripedia.js). position: FIXED, а не absolute — top/left считает и
+   проставляет JS по месту клика (рядом с кнопкой-триггером, зажимая в
+   границы окна), а не CSS bottom/right относительно родителя: якорем может
+   быть как широкая форма комментария, так и узкая полоска реакций, которая
+   не обязана стоять у правого края своего контейнера — absolute+right:0
+   в таком случае обрезался бы overflow:hidden соседней статьи. */
+.ibripedia-sticker-picker {
+  position: fixed;
+  /* Больше прежних 300×320 (см. requirement "модульное окно сделай больше
+     по размеру") — min() подрезает под узкий экран, чтобы на телефоне не
+     вылезать за края (positionStickerPicker в ibripedia.js зажимает left,
+     но сама ширина иначе так и осталась бы шире вьюпорта). Высота держится
+     в паре с STICKER_PICKER_MAX_HEIGHT в ibripedia.js — поменяете одно,
+     поменяйте и другое. */
+  width: min(400px, calc(100vw - 16px));
+  max-height: min(480px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  z-index: 1500;
+  overflow: hidden;
+}
+
+/* Телефон — донный лист (bottom sheet), а не попап у кнопки: клавиатура на
+   мобильном всё равно прячется, пока открыт пикер (см. requirement "всё
+   равно клавиатура прячется и так будет удобнее"), так что якорить попап
+   координатами кнопки больше незачем — удобнее знакомый паттерн "выезжает
+   снизу на весь экран". top/left не в счёт — positionStickerPicker() в
+   ibripedia.js на этой ширине их не проставляет (специально не трогает
+   инлайн-стили), чтобы не перебивать этот блок. */
+@media (max-width: 640px) {
+  .ibripedia-sticker-picker {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+.ibripedia-sticker-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-accent);
+  flex-shrink: 0;
+}
+.ibripedia-sticker-picker-links a { color: var(--blurple); text-decoration: none; }
+.ibripedia-sticker-picker-links a:hover { text-decoration: underline; }
+
+/* Лента вкладок-наборов сверху (аналог VK) — звёздочка избранного первая,
+   дальше по одной вкладке на каждый добавленный себе набор, превью — первый
+   стикер набора. Прокручивается по горизонтали, если наборов много. */
+.ibripedia-sticker-picker-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 5px 10px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--background-accent);
+  /* Наборов может быть много — лента листается по горизонтали сама по себе;
+     contain здесь же (не только у .ibripedia-sticker-picker-body ниже),
+     чтобы долистывание этой ленты вбок на трекпаде/тачпаде тоже не утекало
+     вертикальным скроллом на страницу под попапом. */
+  overscroll-behavior: contain;
+}
+.ibripedia-sticker-picker-tabs::-webkit-scrollbar { height: 3px; }
+
+.ibripedia-sticker-picker-tab {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-tertiary);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.ibripedia-sticker-picker-tab:hover { background: var(--background-accent); }
+.ibripedia-sticker-picker-tab.active { border-color: var(--blurple); }
+.ibripedia-sticker-picker-tab img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ibripedia-sticker-picker-tab-fav { color: var(--yellow); }
+.ibripedia-sticker-picker-tab-fav.active { border-color: var(--yellow); }
+
+.ibripedia-sticker-picker-subtitle {
+  padding: 6px 12px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ibripedia-sticker-picker-subtitle:empty { display: none; }
+
+.ibripedia-sticker-picker-body {
+  overflow-y: auto;
+  padding: 8px;
+  flex: 1 1 auto;
+  /* Наборов (и стикеров в них) может быть очень много — сетка внутри
+     попапа своя, прокручиваемая; без contain докрутка до верха/низа ЭТОГО
+     списка "перетекает" в скролл всей страницы позади попапа (классическое
+     scroll chaining) — рамка модального окна не должна ощущаться как дырка
+     в странице. */
+  overscroll-behavior: contain;
+}
+
+.ibripedia-sticker-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.ibripedia-sticker-picker-item {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  /* Долгое нажатие не должно ещё и выделять текст/картинку вокруг (особенно
+     на тач-экранах — см. wireStickerPickerGestures в ibripedia.js). */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.ibripedia-sticker-picker-item:hover { background: var(--background-accent); }
+.ibripedia-sticker-picker-item img { width: 100%; height: 56px; object-fit: contain; display: block; pointer-events: none; }
+
+.ibripedia-sticker-picker-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 12px;
+  text-align: center;
+}
+
+/* Увеличенное превью по долгому нажатию (аналог VK) — отдельный оверлей
+   поверх ВСЕГО экрана, а не внутри тесного попапа пикера: см.
+   ensureStickerPreviewOverlay()/openStickerPreviewOverlay() в ibripedia.js. */
+.ibripedia-sticker-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+/* Элемент вешается прямо на document.body (см. ensureStickerPreviewOverlay в
+   ibripedia.js), а не внутрь .ibripedia-page — общее правило
+   ".ibripedia-page [hidden] { display:none !important }" (см. начало файла)
+   его не накрывает. Без этой строки JS-овское closeStickerPreviewOverlay()
+   (el.hidden = true) ничего не меняло бы визуально: атрибутный селектор
+   [hidden] из UA-таблицы стилей и явный display:flex выше имеют РАВНУЮ
+   специфичность — побеждает тот, что идёт позже в каскаде, то есть display:flex,
+   а не скрытие. Тот же самый приём, что у .modal-overlay[hidden] в
+   global-styles.css. */
+.ibripedia-sticker-preview-overlay[hidden] {
+  display: none;
+}
+.ibripedia-sticker-preview-box {
+  position: relative; /* точка отсчёта для крестика закрытия ниже */
+  background: var(--background-secondary);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: min(320px, calc(100vw - 32px));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+/* Клик по подложке ничего не закрывает (см. requirement) — крестик теперь
+   единственный способ закрыть превью, не отправляя и не добавляя в избранное. */
+.ibripedia-sticker-preview-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.ibripedia-sticker-preview-close:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+.ibripedia-sticker-preview-img {
+  width: 100%;
+  max-width: 220px;
+  max-height: 220px;
+  object-fit: contain;
+}
+.ibripedia-sticker-preview-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.ibripedia-sticker-preview-actions .btn { flex: 1; }
+.ibripedia-sticker-preview-fav.is-active { color: var(--yellow); border-color: var(--yellow); }
+
+/* Стикер внутри текста комментария — маленькая инлайн-картинка на строке
+   текста (см. formatCommentContent() в ibripedia.js). Кликабелен — открывает
+   набор целиком (public/sticker-pack-view.js), поэтому курсор-указатель. */
+.ibripedia-inline-sticker {
+  height: 22px;
+  width: 22px;
+  object-fit: contain;
+  vertical-align: -5px;
+  margin: 0 1px;
+  cursor: pointer;
+}
+
+/* Комментарий, целиком состоящий из одного шорткода — рендерится как
+   отдельный крупный "стикер" (аналог сообщения-стикера в Telegram), без
+   рамки/фона обычного текста комментария. */
+.ibripedia-comment-body.ibripedia-comment-sticker-only {
+  white-space: normal;
+}
+.ibripedia-comment-body.ibripedia-comment-sticker-only .ibripedia-standalone-sticker {
+  display: block;
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  cursor: pointer;
+}
+
+.ibripedia-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ibripedia-comment {
+  padding: 10px 12px;
+  background: var(--background-tertiary);
+  border-radius: 8px;
+}
+
+.ibripedia-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.ibripedia-comment-author {
+  font-weight: 600;
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.ibripedia-comment-date {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Виден только при наведении на сам комментарий (или при фокусе с
+   клавиатуры — иначе кнопка вообще не доступна без мыши) — не занимает
+   внимание/место в обычном состоянии, как значок корзины в Discord/Slack. */
+.ibripedia-comment-delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.ibripedia-comment:hover .ibripedia-comment-delete,
+.ibripedia-comment-delete:focus-visible {
+  opacity: 1;
+}
+
+.ibripedia-comment-delete:hover {
+  color: var(--red);
+}
+
+/* На тач-устройствах не бывает :hover — прячась, кнопка стала бы недоступна
+   вообще никак, поэтому там она видна всегда. */
+@media (hover: none) {
+  .ibripedia-comment-delete { opacity: 1; }
+}
+
+.ibripedia-comment-body {
+  color: var(--text-normal);
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ibripedia-comments-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* === Реакции эмодзи/стикером — общая полоска "пилюль" и под статьёй
+   (#ibripediaReactionsBar), и под каждым комментарием/ответом (см.
+   reactionsBarInnerHtml()/handleReactionsClick() в ibripedia.js). Пустая
+   (без единой реакции) — просто кнопка "добавить", поэтому :empty не
+   используется, разметка всегда рендерит хотя бы .ibripedia-reaction-add. */
+.ibripedia-reactions {
+  position: relative; /* точка отсчёта для .ibripedia-sticker-picker — см. openReactionPicker() в ibripedia.js */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ibripedia-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ibripedia-reaction-pill:hover { background: var(--background-accent); color: var(--text-normal); }
+.ibripedia-reaction-pill.active {
+  background: rgba(88, 101, 242, 0.16);
+  border-color: var(--blurple);
+  color: var(--text-normal);
+}
+.ibripedia-reaction-pill img { width: 16px; height: 16px; object-fit: contain; }
+
+.ibripedia-reaction-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+.ibripedia-reaction-add:hover,
+.ibripedia-reaction-add.active { background: var(--background-accent); color: var(--text-normal); }
+
+/* === Действия под комментарием (реакции + "Ответить") и сами ответы === */
+.ibripedia-comment-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ibripedia-comment-reply-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ibripedia-comment-reply-btn:hover { color: var(--text-normal); }
+
+.ibripedia-replies {
+  margin-top: 10px;
+  padding-left: 18px;
+  border-left: 2px solid var(--background-accent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Без этого правила у самого .ibripedia-replies (flex + gap) был отступ
+   только ПЕРЕД этим блоком целиком (он для родителя — один flex-item), а
+   ответы ВНУТРИ него (второй, третий…) визуально слипались без зазора —
+   тот же gap нужен и здесь. */
+.ibripedia-replies-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ibripedia-comment-reply {
+  padding: 8px 10px;
+  background: var(--background-secondary);
+}
+
+.ibripedia-replies-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--blurple);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ibripedia-replies-toggle:hover { text-decoration: underline; }
+
+.ibripedia-reply-compose-mount:not(:empty) {
+  margin-top: 10px;
+}
+
+/* === Форма ответа — динамически создаётся в toggleReplyComposer(), тот же
+   класс .ibripedia-comment-form, что и основная форма комментария, поэтому
+   переиспользует все стили ниже без дублирования. === */
+.ibripedia-reply-form {
+  margin: 0;
+}
+
+/* === Просмотр статьи: расширяем страницу под боковую панель
+   (Оглавление/Закладки, см. #ibripediaViewSidebar) === */
+.ibripedia-view {
+  max-width: 1320px;
+}
+
+.ibripedia-view-topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ibripedia-back-btn {
+  margin-bottom: 0;
+}
+
+/* === Поиск по тексту открытой статьи === */
+.ibripedia-inline-search {
+  flex: 1 1 240px;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+}
+
+.ibripedia-inline-search > i.fa-search {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ibripedia-inline-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 13px;
+}
+
+.ibripedia-inline-search-input:focus {
+  outline: none;
+}
+
+.ibripedia-inline-search-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ibripedia-inline-search-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--header-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ibripedia-inline-search-nav:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+/* === Раскладка: статья + боковая панель === */
+.ibripedia-view-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 20px;
+  /* Точка отсчёта для .ibripedia-bookmark-gutter — стикеры закладок должны
+     торчать ЗА левым краем карточки статьи, а не внутри неё (у карточки
+     overflow:hidden ради скруглённых углов обложки, он бы их обрезал). */
+  position: relative;
+}
+
+.ibripedia-view-sidebar {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ibripedia-sidebar-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--background-tertiary);
+  border-radius: 8px;
+}
+
+.ibripedia-sidebar-tab {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--header-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ibripedia-sidebar-tab:hover {
+  color: var(--text-normal);
+}
+
+.ibripedia-sidebar-tab.active {
+  background: var(--blurple);
+  color: #fff;
+}
+
+.ibripedia-sidebar-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 6px 2px;
+}
+
+/* Оглавление — как панель "Навигация" в Word: список заголовков статьи
+   с отступом по уровню, клик — плавный скролл к заголовку. Закладки (ниже)
+   используют тот же список — тот же принцип "элемент списка -> телепорт". */
+.ibripedia-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ibripedia-toc-item {
+  display: flex;
+  align-items: center;
+}
+
+.ibripedia-toc-item a {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text-normal);
+  font-size: 13px;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ibripedia-toc-item a:hover {
+  background: var(--background-accent);
+}
+
+.ibripedia-toc-item a.active {
+  background: var(--background-accent);
+  color: var(--blurple);
+  font-weight: 600;
+}
+
+.ibripedia-toc-level-2 a { padding-left: 20px; font-size: 12.5px; }
+.ibripedia-toc-level-3 a { padding-left: 32px; font-size: 12px; color: var(--header-secondary); }
+
+/* === Закладки текущей статьи (панель) — элемент оглавления + иконка
+   закладки её цвета + кнопка удаления. === */
+.ibripedia-bookmark-toc-item a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ibripedia-bookmark-toc-item a i {
+  flex: 0 0 auto;
+}
+
+.ibripedia-toc-item-del {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ibripedia-toc-item-del:hover {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--red);
+}
+
+/* === Стикеры закладок за левым краем карточки статьи (см.
+   renderBookmarkGutter/hasWideGutterSpace в ibripedia.js) — основной режим,
+   когда слева от карточки достаточно места (широкий экран, сайдбар не
+   отъедает всю ширину): именованный цветной флажок торчит из-за края
+   страницы, чуть заходя НА карточку остриём — как книжная закладка между
+   листами. Живёт в #ibripediaBookmarkGutter (см. ibripedia.html) — это
+   СОСЕД карточки, а не её потомок, поэтому overflow:hidden карточки (нужен
+   ради скруглённых углов обложки) его не обрезает. Контейнер нулевого
+   размера в левом верхнем углу .ibripedia-view-layout — точка отсчёта; сами
+   стикеры позиционируются по top (напротив своего блока) и растут от
+   правого края (см. right: -16px) влево, в поле страницы. */
+.ibripedia-bookmark-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none; /* сам контейнер нулевого размера, клики ловят только стикеры внутри */
+  z-index: 5;
+}
+
+.ibripedia-bookmark-gutter > * {
+  pointer-events: auto;
+}
+
+.ibripedia-bm-tab {
+  position: absolute;
+  right: -16px; /* заходит на 16px внутрь карточки — видно, что торчит из-за края, а не просто рядом лежит */
+  max-width: 170px;
+  padding: 7px 16px 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bm-color, var(--blurple));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  /* Остриё справа (указывает на карточку) — тот самый "хвостик" закладки,
+     развёрнутый горизонтально под сторону, откуда торчит стикер. */
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.ibripedia-bm-tab:hover {
+  transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.38);
+}
+
+/* Точки на ещё не отмеченном блоке (см. showBookmarkGhost в ibripedia.js) —
+   тот же флажок, но пунктирный и приглушённый, пока не станет настоящей
+   закладкой. */
+.ibripedia-bm-tab.is-ghost {
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border: 1px dashed var(--background-accent);
+  box-shadow: none;
+}
+
+.ibripedia-bm-tab.is-ghost:hover {
+  color: var(--blurple);
+  border-color: var(--blurple);
+}
+
+/* Зона наведения — пустое поле СЛЕВА от карточки (широкий режим), не сам
+   текст статьи (см. createHoverZone/handleGutterHoverMove в ibripedia.js) —
+   иначе призрак всплывал бы просто от чтения, когда курсор естественно
+   гуляет по строкам. Ничего не рисует, только ловит mousemove/mouseleave;
+   ширина с запасом покрывает место, где может оказаться флажок-призрак. */
+.ibripedia-bm-hover-zone {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 200px;
+}
+
+/* === Компактный режим — слева от карточки недостаточно места (узкое окно,
+   телефон) ЛИБО у устройства нет :hover (палец, см. showBookmarkGhost) и
+   приглашение поставить закладку должно быть видно без наведения. Значок в
+   поле слева ВНУТРИ карточки (см. padding-left у .ibripedia-view-content),
+   не пересекает её край. Полупрозрачный, пока блок не отмечен — не
+   отвлекает; цветной и непрозрачный — когда закладка стоит. */
+.ibripedia-bm-toggle {
+  position: absolute;
+  left: 10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  opacity: 0.35;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.ibripedia-bm-toggle:hover {
+  opacity: 1;
+  background: var(--background-accent);
+}
+
+/* Закладка стоит — значок цвета закладки (--bm-color, см. renderBookmarkGutter
+   в ibripedia.js), непрозрачный, без фона при наведении (чтобы цвет не
+   перебивался). */
+.ibripedia-bm-toggle.is-active {
+  opacity: 1;
+  color: var(--bm-color, var(--blurple));
+}
+
+.ibripedia-bm-toggle.is-active:hover {
+  background: none;
+}
+
+/* "Призрак" приглашения на ещё не отмеченном блоке (см. showBookmarkGhost) —
+   сразу заметен, без дополнительного наведения ровно на сам значок. */
+.ibripedia-bm-toggle.is-ghost {
+  opacity: 1;
+}
+
+/* Зона наведения компактного режима — та же идея, что у .ibripedia-bm-hover-zone
+   выше, только это зарезервированное под значки поле ВНУТРИ карточки (см.
+   padding-left у .ibripedia-view-content.preview-pane), а не снаружи неё. */
+.ibripedia-bm-hover-zone-compact {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 54px;
+  height: 100%;
+}
+
+/* Совсем узкий экран — стикерам-флажкам за краем карточки просто негде
+   быть (край карточки и так у границы экрана). Подстраховка на случай,
+   если JS-измерение (hasWideGutterSpace) ещё не сработало на первом кадре —
+   без неё стикер мог бы на мгновение вылезти поверх остального контента
+   страницы. */
+@media (max-width: 640px) {
+  .ibripedia-bookmark-gutter {
+    display: none;
+  }
+}
+
+/* === Попап "Закладка" (название + цвет) — открывается кликом по
+   .ibripedia-bm-toggle. position: fixed — координаты в пикселях окна
+   выставляет positionFloating() в ibripedia.js. На тач-устройствах (см.
+   @media (hover:none) ниже) становится модальным окном по центру экрана —
+   см. ibripediaBookmarkModalBackdrop/handleContentDblClick в ibripedia.js. === */
+.ibripedia-bookmark-popover {
+  position: fixed;
+  z-index: 30;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--background-floating);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ibripedia-bookmark-popover-close {
+  display: none; /* видна только в модальном режиме на тач-устройствах, см. ниже */
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.ibripedia-bookmark-popover-close:hover {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+
+.ibripedia-bookmark-popover-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--header-secondary);
+}
+
+.ibripedia-bookmark-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ibripedia-bookmark-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.ibripedia-bookmark-swatch.active {
+  border-color: var(--text-normal);
+}
+
+.ibripedia-bookmark-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ibripedia-bookmark-popover-actions-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Подложка модального окна закладки — см. ibripediaBookmarkModalBackdrop в
+   ibripedia.html, показывается только на тач-устройствах (JS-hidden,
+   логика в openBookmarkPopover). Просто затемняет фон, клик по ней ничего
+   не делает — попап закрывается только явно. */
+.ibripedia-bookmark-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 29;
+}
+
+/* === Тач-устройство — у попапа закладки нет хвостика/курсора, рядом с
+   которым его логично поставить, и клик "мимо" на сенсорном экране
+   случается куда чаще, чем на десктопе — поэтому здесь попап превращается
+   в обычное модальное окно по центру экрана (небольшое, без inline-координат
+   от positionFloating — см. openBookmarkPopover в ibripedia.js) и не
+   закрывается кликом за его пределами (см. _docClickHandler). === */
+@media (hover: none) and (pointer: coarse) {
+  .ibripedia-bookmark-popover {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(300px, 88vw);
+    z-index: 31;
+  }
+
+  .ibripedia-bookmark-popover-close {
+    display: flex;
+  }
+}
+
+/* === Панель "Закладки" (боковая, список текущей статьи) — тот же принцип,
+   что и оглавление: строка + клик-телепорт к блоку (см. scrollToBlock,
+   переиспользуется из прыжков по оглавлению). === */
+.ibripedia-bookmark-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ibripedia-bookmark-item:hover {
+  background: var(--background-accent);
+}
+
+.ibripedia-bookmark-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.ibripedia-bookmark-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ibripedia-bookmark-item-name {
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ibripedia-bookmark-item-quote {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ibripedia-bookmark-item-del {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ibripedia-bookmark-item-del:hover {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--red);
+}
+
+/* Кратковременная подсветка блока, к которому только что проскроллили
+   (клик по оглавлению/закладке). */
+.ibripedia-block-flash {
+  animation: ibripedia-block-flash 1.6s ease-out;
+  border-radius: 4px;
+}
+
+@keyframes ibripedia-block-flash {
+  0% { background: rgba(88, 101, 242, 0.25); }
+  100% { background: transparent; }
+}
+
+.ibripedia-view-content [data-block-id] {
+  scroll-margin-top: 16px;
+}
+
+/* === Подсветка результатов поиска по статье === */
+mark.ibripedia-search-hit {
+  background: var(--yellow);
+  color: #1a1a1a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.ibripedia-search-hit.ibripedia-search-hit-current {
+  background: var(--blurple);
+  color: #fff;
+}
+
+.ibripedia-sidebar-toggle {
+  display: none;
+}
+
+/* === Планшет: боковая панель сворачивается по кнопке в шапке просмотра === */
+@media (max-width: 1024px) {
+  .ibripedia-view-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ibripedia-view-sidebar {
+    display: none;
+    position: static;
+    max-height: none;
+    order: -1;
+  }
+
+  .ibripedia-view-sidebar.is-open {
+    display: flex;
+  }
+
+  .ibripedia-sidebar-toggle {
+    display: inline-flex;
+  }
+}
+
+/* === Планшет (≤1024px) — фильтры остаются развёрнутыми (см. .ibripedia-filters
+   выше), но сам тулбар больше не липнет к верху: развёрнутая панель фильтров
+   заметно выше однострочной, и постоянно съедать экран при скролле карточек
+   уже не оправдано (на десктопе панель компактнее — там sticky остаётся). === */
+@media (max-width: 1024px) {
+  .ibripedia-toolbar {
+    position: static;
+  }
+
+  .ibripedia-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* === Телефон (≤640px) === */
+@media (max-width: 640px) {
+  .ibripedia-page {
+    padding: 16px;
+  }
+
+  /* Шапка — колонкой: заголовок отдельно, поиск на всю ширину отдельной
+     строкой (иначе теснится с кнопками), кнопки — своей строкой ниже.
+     "Написать статью" растягивается на всё, что осталось рядом с
+     компактной иконкой "случайная статья", а не жмётся до нечитаемого. */
+  .ibripedia-toolbar-row-main .ibripedia-search-wrap {
+    flex-basis: 100%;
+  }
+  .ibripedia-toolbar-row-main #ibripediaNewBtn {
+    flex: 1 1 auto;
+  }
+
+  /* Кнопка "Фильтры" появляется и переезжает перед панелью (order:1) —
+     панель разворачивается прямо под ней, а не строкой выше. Панель по
+     умолчанию свёрнута, .is-open — переключает applyFiltersOpenState() в
+     ibripedia.js (см. initFiltersCollapse() там же). */
+  .ibripedia-filters-toggle {
+    display: inline-flex;
+  }
+  .ibripedia-toolbar-row-status {
+    order: 1;
+  }
+  .ibripedia-toolbar-row-filters {
+    order: 2;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ibripedia-toolbar-row-filters.is-open {
+    display: flex;
+  }
+
+  .ibripedia-filter,
+  .ibripedia-chip-field {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .ibripedia-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ibripedia-grid--list .ibripedia-card {
+    flex-direction: column;
+  }
+
+  .ibripedia-grid--list .ibripedia-card-cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+  }
+
+  .ibripedia-view-title {
+    font-size: 21px;
+  }
+
+  /* Обложка статьи — защита от нестандартных (не 16:9) загруженных
+     картинок: на десктопе высокая картинка просто ужимается до 360px, на
+     телефоне это заметно больше половины экрана. */
+  .ibripedia-view-cover img {
+    max-height: 220px;
+  }
+
+  /* "Редактировать"/"Удалить" — по половине ширины каждая, а не мелкие
+     кнопки рядом с длинным заголовком статьи. */
+  .ibripedia-view-actions {
+    flex-wrap: wrap;
+  }
+  .ibripedia-view-actions .btn {
+    flex: 1 1 0;
+  }
+
+  /* Шапка просмотра статьи (назад/поиск по статье/оглавление) — своими
+     строками, иначе на телефоне не помещается. */
+  .ibripedia-view-topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ibripedia-inline-search,
+  .ibripedia-sidebar-toggle {
+    flex-basis: auto;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Поле под значки закладок — на телефоне уже, сами значки компактнее
+     (см. также ibripedia-bm-toggle в @media (hover:none) ниже — палец
+     толще курсора, там же его увеличиваем обратно по указателю, а не по
+     ширине экрана). */
+  .ibripedia-view-content.preview-pane {
+    padding-left: 40px;
+  }
+  .ibripedia-bm-toggle {
+    left: 4px;
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+  }
+  .ibripedia-bm-hover-zone-compact {
+    width: 40px;
+  }
+}
+
+/* === Комфортные касания на тач-экранах — по указателю, а не по ширине
+   экрана (тот же приём, что и в mobile-menu.css): у планшета в альбомной
+   ориентации или тач-ноутбука ширина как у десктопа, но палец всё равно
+   толще курсора. Мелкие вспомогательные кнопки (⋮ на карточке, переключатель
+   вида) увеличиваются здесь независимо от брейкпоинта макета. === */
+@media (hover: none) and (pointer: coarse) {
+  .ibripedia-card-menu-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 17px;
+  }
+  .ibripedia-view-btn {
+    width: 36px;
+    height: 36px;
+  }
+  /* Значок закладки — палец толще курсора: обратно увеличиваем размер
+     тач-цели поверх сужения из @media (max-width: 640px) выше. */
+  .ibripedia-bm-toggle {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+  }
+}

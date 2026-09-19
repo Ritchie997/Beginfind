@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beginfind — платформа для ролевых игр и общения</title>
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body data-page="beginfind">
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/site/index.html" class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/site/index.html" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/site/ibripedia.html" class="site-nav-link" data-page="ibripedia">Ibripedia</a>
+      <a href="/site/beginfind.html" class="site-nav-link" data-page="beginfind">Beginfind</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+    </nav>
+    <div class="site-header-actions">
+      <div class="site-search"><i class="fas fa-search"></i><input type="text" placeholder="Поиск по сайту..."></div>
+      <button class="site-icon-btn" title="Уведомления"><i class="far fa-bell"></i><span class="site-icon-dot"></span></button>
+      <a href="/index.html" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="site-user" id="siteUser">
+        <div class="site-user-avatar">А</div>
+        <div class="site-user-dropdown" id="siteUserDropdown">
+          <a href="#" class="dropdown-item">Мой профиль</a>
+          <a href="#" class="dropdown-item">Мои закладки</a>
+          <a href="#" class="dropdown-item">Настройки</a>
+          <div class="dropdown-divider"></div>
+          <a href="/index.html" class="dropdown-item">Админ-панель</a>
+          <a href="#" class="dropdown-item">Выход</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<section class="site-hero site-hero-small">
+  <span class="site-hero-badge"><i class="fas fa-users"></i> Сообщества Beginfind</span>
+  <h1>Платформа для ролевых игр и общения — и не только</h1>
+  <p>Beginfind — это отдельные сервера со своими ролями, каналами и правилами: ролевые игры, клубы по интересам, творческие мастерские и просто уютные чаты.</p>
+  <div class="site-hero-actions" style="margin-bottom:0;">
+    <button class="btn btn-primary btn-lg"><i class="fas fa-plus"></i> Создать свой сервер</button>
+  </div>
+</section>
+
+<main class="site-main">
+  <section class="site-section" style="padding-top:32px;">
+
+    <div class="chip-row" style="margin-bottom:28px;">
+      <span class="filter-chip active">Все жанры</span>
+      <span class="filter-chip">Фэнтези</span>
+      <span class="filter-chip">Sci-Fi</span>
+      <span class="filter-chip">Slice of Life</span>
+      <span class="filter-chip">Хоррор</span>
+      <span class="filter-chip">Историческое</span>
+      <span class="filter-chip">Модерн</span>
+    </div>
+
+    <div class="server-grid">
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#5865f2,#a78bfa);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#5865f2,#4752c4);">ХИ</div>
+          <div class="beginfind-card-name">Хроники Ибри <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Основной РП-сервер по вселенной Ibripedia — фэнтези, политика, магия.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">фэнтези</span><span class="wiki-tag">РП</span><span class="wiki-tag">18+</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 2 140</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#ff9f5a,#ff5d8f);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#ff9f5a,#ff5d8f);">СК</div>
+          <div class="beginfind-card-name">Слайс-оф-лайф Кафе <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Уютное РП без магии и войн — обычная жизнь в маленьком городке.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">slice of life</span><span class="wiki-tag">уют</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 860</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#2dd4bf,#5865f2);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#2dd4bf,#0891b2);">ДР</div>
+          <div class="beginfind-card-name">Sci-Fi: Дальний Рубеж <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Космоопера на грани фронтира — экипажи, станции, контрабанда.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">sci-fi</span><span class="wiki-tag">космос</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 1 375</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#4b5563,#111827);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#374151,#111827);">ТЛ</div>
+          <div class="beginfind-card-name">Тёмный Фэнтези Легион</div>
+          <div class="beginfind-card-desc">Мрачный сеттинг: культы, монстры и выживание на грани.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">хоррор</span><span class="wiki-tag">dark fantasy</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 640</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#a78bfa,#5865f2);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#a78bfa,#7c3aed);">ИВ</div>
+          <div class="beginfind-card-name">Историческая Верфь <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">РП в декорациях XIX века — паровые машины, дипломатия, интриги.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">историческое</span><span class="wiki-tag">стимпанк</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 421</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#22d3ee,#5865f2);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#22d3ee,#0891b2);">МД</div>
+          <div class="beginfind-card-name">Модерн-Дэй Академия <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Современный сеттинг: студенческая жизнь со скрытыми тайнами.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">модерн</span><span class="wiki-tag">школа</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 1 090</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#ff5d8f,#a78bfa);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#ff5d8f,#db2777);">АМ</div>
+          <div class="beginfind-card-name">Арт-Мастерская</div>
+          <div class="beginfind-card-desc">Не РП: клуб художников сообщества — разборы, конкурсы, совместные проекты.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">творчество</span><span class="wiki-tag">клуб</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 305</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#facc15,#ff9f5a);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#facc15,#d97706);">НЧ</div>
+          <div class="beginfind-card-name">Настолки и Чаты <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Общение без привязки к сеттингу: игры, мемы, флудилка.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">общение</span><span class="wiki-tag">каждый день</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 3 820</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="load-more-wrap">
+      <button class="btn btn-secondary btn-lg" data-fake-load-more><i class="fas fa-arrow-down"></i> Показать больше серверов</button>
+    </div>
+  </section>
+
+  <section class="site-section">
+    <div class="site-section-head">
+      <div>
+        <h2><i class="fas fa-compass"></i> Как начать</h2>
+        <p>Три шага до первой истории</p>
+      </div>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Найдите сервер</h4>
+        <p>Выберите жанр и атмосферу — от эпического фэнтези до уютного slice of life.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>Создайте персонажа</h4>
+        <p>Заполните анкету по системе сервера или просто присоединяйтесь к общению.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>Начните историю</h4>
+        <p>Пишите посты, общайтесь в каналах и следите за развитием сюжета вместе с другими.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-section" style="padding-bottom:0;">
+    <div class="cta-banner">
+      <div>
+        <h3>Не нашли подходящий сервер?</h3>
+        <p>Создайте свой — с собственными ролями, каналами и правилами, за пару минут.</p>
+      </div>
+      <button class="btn btn-primary btn-lg"><i class="fas fa-plus"></i> Создать сервер</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</div>
+      <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома Beginfind — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/site/ibripedia.html">Ibripedia</a>
+      <a href="/site/beginfind.html">Beginfind сервера</a>
+      <a href="/site/gallery.html">Галерея</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+      <a href="#">Обратная связь</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="#">Мой профиль</a>
+      <a href="/index.html">Админ-панель</a>
+      <a href="#">Выйти</a>
+    </div></div>
+  </div>
+  <div class="site-footer-bottom">
+    <span>© Beginfind. Демо-макет публичной витрины.</span>
+    <span>Стиль основан на админ-панели проекта</span>
+  </div>
+</footer>
+
+<script src="/site/site.js"></script>
+</body>
+</html>

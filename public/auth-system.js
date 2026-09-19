@@ -124,7 +124,19 @@ class AuthManager {
         headers: { 'Authorization': `Bearer ${this.getToken()}` }
       });
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) { this.logout(); return false; }
+        if (response.status === 401 || response.status === 403) {
+          // Аккаунт мог быть заблокирован/отклонён владельцем уже после
+          // логина — checkApproved на сервере проверяет статус живьём при
+          // каждом запросе, поэтому это обнаруживается здесь, без ожидания
+          // истечения токена. Показываем причину, а не просто тихий выход.
+          let data = null;
+          try { data = await response.json(); } catch (e) { /* тело не JSON — игнорируем */ }
+          this.logout();
+          if (data && data.status && data.status !== 'approved' && typeof window.showStatusBlocker === 'function') {
+            window.showStatusBlocker(data.status, data.error);
+          }
+          return false;
+        }
       }
       const data = await response.json();
       if (data.user) this.setUser(data.user);
@@ -433,19 +445,17 @@ function showModalLogin() {
   // Нет кнопки закрытия — модалка остаётся пока пользователь не войдёт
 }
 
-// Показ сообщения на основной странице
+// Показ сообщения на основной странице — общий компонент тоста
+// (.toast/.toast-success/.toast-error/.toast-info), см. "TOAST COMPONENT" в
+// global-styles.css, тот же, что и у window.showMessage (app.js).
 function showMessageOnPage(text, type = 'info') {
   const existing = document.getElementById('message-container');
   if (existing) existing.remove();
 
   const container = document.createElement('div');
   container.id = 'message-container';
-  container.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 15px 20px;
-    border-radius: 4px; color: white; z-index: 10001;
-    background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'};
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  `;
+  container.className = `toast toast-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}`;
+  container.style.cssText = `position: fixed; top: 20px; right: 20px; z-index: 10001;`;
   container.textContent = text;
   document.body.appendChild(container);
   setTimeout(() => { if (container.parentNode) container.remove(); }, 5000);
@@ -469,11 +479,11 @@ function showStatusBlocker(status, reason) {
     justify-content: center; z-index: 9999; backdrop-filter: blur(8px);
   `;
 
-  const icon = status === 'pending' ? '⏳' : '❌';
-  const title = status === 'pending' ? 'Аккаунт ожидает подтверждения' : 'Доступ отклонён';
+  const icon = status === 'pending' ? '⏳' : status === 'blocked' ? '🚫' : '❌';
+  const title = status === 'pending' ? 'Аккаунт ожидает подтверждения' : status === 'blocked' ? 'Аккаунт заблокирован' : 'Доступ отклонён';
   const message = status === 'pending'
-    ? 'Ваша заявка ещё не одобрена администратором.<br>Пожалуйста, обратитесь к root-пользователю.'
-    : `Причина: ${reason || 'Заявка отклонена администратором.'}<br>Обратитесь к root-пользователю.`;
+    ? 'Ваша заявка ещё не одобрена администратором.<br>Пожалуйста, обратитесь к владельцу.'
+    : `Причина: ${reason || (status === 'blocked' ? 'Заблокирован владельцем.' : 'Заявка отклонена администратором.')}<br>Обратитесь к владельцу.`;
 
   blocker.innerHTML = `
     <div style="
@@ -484,10 +494,7 @@ function showStatusBlocker(status, reason) {
       <div style="font-size:56px; margin-bottom:16px;">${icon}</div>
       <h2 style="color:var(--header-primary, #fff); margin-bottom:12px;">${title}</h2>
       <p style="color:var(--text-muted, #b9bbbe); margin-bottom:24px; line-height:1.6;">${message}</p>
-      <button id="status-blocker-logout" style="
-        background: #dc3545; color: white; padding: 12px 32px; border: none;
-        border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: 500;
-      ">Выйти</button>
+      <button id="status-blocker-logout" class="btn btn-danger">Выйти</button>
     </div>
   `;
 
@@ -499,9 +506,107 @@ function showStatusBlocker(status, reason) {
   });
 }
 
+// ========================================
+// РЕЖИМ ТЕХНИЧЕСКОГО ОБСЛУЖИВАНИЯ
+// ========================================
+// Публичная проверка (GET /api/maintenance-status, без токена — см.
+// src/routes/settings.routes.js) — вызывается ДО решения "показать SPA или
+// форму входа" (spa-router.js::DOMContentLoaded) и периодически, пока сайт
+// открыт, чтобы поймать момент, когда владелец включит режим уже после
+// логина (см. checkMaintenanceMidSession ниже).
+async function checkMaintenanceStatus() {
+  try {
+    const res = await fetch('/api/maintenance-status');
+    if (!res.ok) return { enabled: false, message: '' };
+    return await res.json();
+  } catch (e) {
+    // Сеть недоступна и т.п. — не блокируем сайт из-за того, что сама
+    // проверка не удалась.
+    return { enabled: false, message: '' };
+  }
+}
+
+function escapeMaintenanceHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// Полноэкранная заглушка на время техобслуживания — тот же визуальный приём,
+// что и showStatusBlocker (pending/blocked/rejected), но кнопка не "Выйти",
+// а "Проверить снова": ждать окончания работ можно с уже открытой вкладкой,
+// без разлогина. Незалогиненному посетителю ещё и предлагаем войти — иначе
+// владелец, зашедший с чистого браузера (или у которого истёк токен) пока
+// включено техобслуживание, не смог бы залогиниться и снять его сам
+// (/api/login на сервере разрешён всем именно ради этого случая — см.
+// src/middleware/maintenance.js — но саму форму входа ему тоже нужно откуда-то открыть).
+function showMaintenanceBlocker(message) {
+  if (document.getElementById('maintenance-blocker')) return;
+
+  const isLoggedIn = authManager && authManager.isAuthenticated();
+
+  const blocker = document.createElement('div');
+  blocker.id = 'maintenance-blocker';
+  blocker.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); display: flex; align-items: center;
+    justify-content: center; z-index: 9999; backdrop-filter: blur(8px);
+  `;
+
+  blocker.innerHTML = `
+    <div style="
+      background: var(--background-secondary, #2f3136); padding: 40px; border-radius: 12px;
+      width: 90%; max-width: 480px; text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4); border: 1px solid var(--background-accent, #4f545c);
+    ">
+      <div style="font-size:56px; margin-bottom:16px;">🛠️</div>
+      <h2 style="color:var(--header-primary, #fff); margin-bottom:12px;">Технические работы</h2>
+      <p style="color:var(--text-muted, #b9bbbe); margin-bottom:24px; line-height:1.6;">${escapeMaintenanceHtml(message) || 'Сайт временно на техническом обслуживании.'}</p>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <button id="maintenance-blocker-retry" class="btn btn-primary">Проверить снова</button>
+        ${isLoggedIn ? '' : '<button id="maintenance-blocker-login" class="btn btn-secondary">Я владелец, войти</button>'}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(blocker);
+  document.getElementById('maintenance-blocker-retry').addEventListener('click', async () => {
+    const status = await checkMaintenanceStatus();
+    if (!status.enabled) {
+      window.location.reload();
+    } else {
+      showMessageOnPage('Всё ещё идут технические работы', 'info');
+    }
+  });
+  document.getElementById('maintenance-blocker-login')?.addEventListener('click', () => {
+    showModalLogin();
+  });
+}
+
+function hideMaintenanceBlocker() {
+  document.getElementById('maintenance-blocker')?.remove();
+}
+
+// Опрос раз в пару минут, пока вкладка открыта — ловит "владелец включил
+// техобслуживание, пока я уже был залогинен". Показывает блокировку только
+// не-владельцу — сам владелец продолжает работать как обычно (его исключает
+// и серверный шлагбаум, см. maintenanceGate).
+function startMaintenancePolling() {
+  setInterval(async () => {
+    const user = authManager.getUser();
+    if (user && user.is_root) return; // владельца не блокируем и не дёргаем зря
+    const status = await checkMaintenanceStatus();
+    if (status.enabled) showMaintenanceBlocker(status.message);
+  }, 2 * 60 * 1000);
+}
+
 // Экспорт
 window.authManager = authManager;
 window.showModalLogin = showModalLogin;
 window.showMessageOnPage = showMessageOnPage;
 window.checkAuthStatus = checkAuthStatus;
 window.showStatusBlocker = showStatusBlocker;
+window.checkMaintenanceStatus = checkMaintenanceStatus;
+window.showMaintenanceBlocker = showMaintenanceBlocker;
+window.hideMaintenanceBlocker = hideMaintenanceBlocker;
+window.startMaintenancePolling = startMaintenancePolling;

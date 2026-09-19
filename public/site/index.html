@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beginfind — энциклопедия, сообщества и галерея фэндома</title>
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body data-page="home">
+
+<!-- ============ ШАПКА (одинаковая на всех страницах макета) ============ -->
+<header class="site-header">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/site/index.html" class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/site/index.html" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/site/ibripedia.html" class="site-nav-link" data-page="ibripedia">Ibripedia</a>
+      <a href="/site/beginfind.html" class="site-nav-link" data-page="beginfind">Beginfind</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+    </nav>
+    <div class="site-header-actions">
+      <div class="site-search"><i class="fas fa-search"></i><input type="text" placeholder="Поиск по сайту..."></div>
+      <button class="site-icon-btn" title="Уведомления"><i class="far fa-bell"></i><span class="site-icon-dot"></span></button>
+      <a href="/index.html" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="site-user" id="siteUser">
+        <div class="site-user-avatar">А</div>
+        <div class="site-user-dropdown" id="siteUserDropdown">
+          <a href="#" class="dropdown-item">Мой профиль</a>
+          <a href="#" class="dropdown-item">Мои закладки</a>
+          <a href="#" class="dropdown-item">Настройки</a>
+          <div class="dropdown-divider"></div>
+          <a href="/index.html" class="dropdown-item">Админ-панель</a>
+          <a href="#" class="dropdown-item">Выход</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<!-- ============ HERO ============ -->
+<section class="site-hero">
+  <span class="site-hero-badge"><i class="fas fa-sparkles"></i> Добро пожаловать в фэндом</span>
+  <h1>Один мир — энциклопедия, ролевые сообщества и творчество</h1>
+  <p>Beginfind объединяет Ibripedia — открытую энциклопедию вселенной, живые ролевые сервера для игр и общения, и галерею работ сообщества. Заходите, читайте, играйте, делитесь артом.</p>
+  <div class="site-hero-actions">
+    <a href="/site/ibripedia.html" class="btn btn-primary btn-lg"><i class="fas fa-book-open"></i> Открыть Ibripedia</a>
+    <a href="/site/beginfind.html" class="btn btn-lg" style="background:linear-gradient(135deg, var(--accent-pink), #ff8bab); color:#fff; box-shadow:0 4px 14px rgba(255,93,143,.35);"><i class="fas fa-users"></i> Найти сервер</a>
+    <a href="/site/gallery.html" class="btn btn-ghost btn-lg"><i class="fas fa-images"></i> Галерея арта</a>
+  </div>
+  <div class="site-hero-stats">
+    <div><div class="site-hero-stat-value">1 284</div><div class="site-hero-stat-label">статей в Ibripedia</div></div>
+    <div><div class="site-hero-stat-value">57</div><div class="site-hero-stat-label">активных серверов</div></div>
+    <div><div class="site-hero-stat-value">3 902</div><div class="site-hero-stat-label">работ в галерее</div></div>
+    <div><div class="site-hero-stat-value">12 640</div><div class="site-hero-stat-label">участников</div></div>
+  </div>
+</section>
+
+<main class="site-main">
+
+  <!-- ============ ТРИ ХАБА ============ -->
+  <section class="site-section" style="padding-top:0;">
+    <div class="hub-grid">
+      <a href="/site/ibripedia.html" class="hub-card hub-card--ibripedia">
+        <div class="hub-card-icon"><i class="fas fa-book-open"></i></div>
+        <h3>Ibripedia</h3>
+        <p>Открытая энциклопедия вселенной Beginfind: лор, персонажи, локации, фракции и хроники событий — с оглавлением, закладками и связями между статьями.</p>
+        <span class="hub-card-cta">Читать статьи <i class="fas fa-arrow-right"></i></span>
+      </a>
+      <a href="/site/beginfind.html" class="hub-card hub-card--beginfind">
+        <div class="hub-card-icon"><i class="fas fa-users"></i></div>
+        <h3>Beginfind</h3>
+        <p>Платформа для ролевых игр и общения — не только РП: клубы по интересам, творческие мастерские и уютные чаты в отдельных серверах со своими ролями.</p>
+        <span class="hub-card-cta">Смотреть сервера <i class="fas fa-arrow-right"></i></span>
+      </a>
+      <a href="/site/gallery.html" class="hub-card hub-card--gallery">
+        <div class="hub-card-icon"><i class="fas fa-images"></i></div>
+        <h3>Галерея</h3>
+        <p>Арты, скриншоты, косплей и мемы от сообщества — в удобной ленте карточек, где легко находить и сохранять понравившееся.</p>
+        <span class="hub-card-cta">Смотреть работы <i class="fas fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ ПОПУЛЯРНОЕ В IBRIPEDIA ============ -->
+  <section class="site-section">
+    <div class="site-section-head">
+      <div>
+        <h2><i class="fas fa-fire"></i> Популярное в Ibripedia</h2>
+        <p>Статьи, которые сейчас читают чаще всего</p>
+      </div>
+      <a href="/site/ibripedia.html" class="site-section-link">Все статьи <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="article-grid">
+      <a href="/site/ibripedia.html" class="wiki-card">
+        <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#5865f2,#8b93f8);"><span class="wiki-card-cat">Лор</span><i class="fas fa-scroll"></i></div>
+        <div class="wiki-card-body">
+          <div class="wiki-card-title">Хроники Ибри: от Раскола до наших дней</div>
+          <div class="wiki-card-excerpt">Главный таймлайн вселенной — ключевые эпохи, войны и переломные события мира.</div>
+          <div class="wiki-card-tags"><span class="wiki-tag">история</span><span class="wiki-tag">таймлайн</span></div>
+          <div class="wiki-card-foot">
+            <div class="engage-group">
+              <span class="engage-item is-like"><i class="far fa-heart"></i><span>214</span></span>
+              <span class="engage-item is-comment"><i class="far fa-comment"></i><span>38</span></span>
+            </div>
+            <span><i class="far fa-eye"></i> 5.1k</span>
+          </div>
+        </div>
+      </a>
+      <a href="/site/ibripedia.html" class="wiki-card">
+        <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#a78bfa,#ff5d8f);"><span class="wiki-card-cat">Персонажи</span><i class="fas fa-masks-theater"></i></div>
+        <div class="wiki-card-body">
+          <div class="wiki-card-title">Дом Ториан: правящая династия Севера</div>
+          <div class="wiki-card-excerpt">Родословная, союзы и конфликты одной из ключевых фракций континента.</div>
+          <div class="wiki-card-tags"><span class="wiki-tag">персонажи</span><span class="wiki-tag">фракции</span></div>
+          <div class="wiki-card-foot">
+            <div class="engage-group">
+              <span class="engage-item is-like"><i class="far fa-heart"></i><span>176</span></span>
+              <span class="engage-item is-comment"><i class="far fa-comment"></i><span>22</span></span>
+            </div>
+            <span><i class="far fa-eye"></i> 3.4k</span>
+          </div>
+        </div>
+      </a>
+      <a href="/site/ibripedia.html" class="wiki-card">
+        <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#2dd4bf,#5865f2);"><span class="wiki-card-cat">Механики</span><i class="fas fa-atom"></i></div>
+        <div class="wiki-card-body">
+          <div class="wiki-card-title">Магическая система: Эфирный поток</div>
+          <div class="wiki-card-excerpt">Как работает магия в мире Beginfind — источники силы, ограничения и школы.</div>
+          <div class="wiki-card-tags"><span class="wiki-tag">механики</span><span class="wiki-tag">магия</span></div>
+          <div class="wiki-card-foot">
+            <div class="engage-group">
+              <span class="engage-item is-like"><i class="far fa-heart"></i><span>301</span></span>
+              <span class="engage-item is-comment"><i class="far fa-comment"></i><span>54</span></span>
+            </div>
+            <span><i class="far fa-eye"></i> 6.7k</span>
+          </div>
+        </div>
+      </a>
+      <a href="/site/ibripedia.html" class="wiki-card">
+        <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#ff9f5a,#ff5d8f);"><span class="wiki-card-cat">Локации</span><i class="fas fa-mountain-city"></i></div>
+        <div class="wiki-card-body">
+          <div class="wiki-card-title">Ибри-Порт: город тысячи флагов</div>
+          <div class="wiki-card-excerpt">Торговый узел континента — районы, гильдии и легенды о подземных доках.</div>
+          <div class="wiki-card-tags"><span class="wiki-tag">локации</span><span class="wiki-tag">города</span></div>
+          <div class="wiki-card-foot">
+            <div class="engage-group">
+              <span class="engage-item is-like"><i class="far fa-heart"></i><span>142</span></span>
+              <span class="engage-item is-comment"><i class="far fa-comment"></i><span>17</span></span>
+            </div>
+            <span><i class="far fa-eye"></i> 2.9k</span>
+          </div>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ АКТИВНЫЕ СООБЩЕСТВА ============ -->
+  <section class="site-section">
+    <div class="site-section-head">
+      <div>
+        <h2><i class="fas fa-comments"></i> Активные сообщества</h2>
+        <p>Сервера Beginfind, где сейчас больше всего жизни</p>
+      </div>
+      <a href="/site/beginfind.html" class="site-section-link">Все сервера <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="server-grid">
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#5865f2,#a78bfa);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#5865f2,#4752c4);">ХИ</div>
+          <div class="beginfind-card-name">Хроники Ибри <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Основной РП-сервер по вселенной Ibripedia — фэнтези, политика, магия.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">фэнтези</span><span class="wiki-tag">РП</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 2 140</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#ff9f5a,#ff5d8f);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#ff9f5a,#ff5d8f);">СК</div>
+          <div class="beginfind-card-name">Слайс-оф-лайф Кафе <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Уютное РП без магии и войн — обычная жизнь в маленьком городке.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">slice of life</span><span class="wiki-tag">уют</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 860</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+      <div class="beginfind-card">
+        <div class="beginfind-card-banner" style="--banner-grad:linear-gradient(120deg,#2dd4bf,#5865f2);"></div>
+        <div class="beginfind-card-body">
+          <div class="beginfind-card-avatar" style="--avatar-grad:linear-gradient(135deg,#2dd4bf,#0891b2);">ДР</div>
+          <div class="beginfind-card-name">Sci-Fi: Дальний Рубеж <span class="online-dot"></span></div>
+          <div class="beginfind-card-desc">Космоопера на грани фронтира — экипажи, станции, контрабанда.</div>
+          <div class="beginfind-card-tags"><span class="wiki-tag">sci-fi</span><span class="wiki-tag">космос</span></div>
+          <div class="beginfind-card-foot">
+            <span class="member-count"><i class="fas fa-user-group"></i> 1 375</span>
+            <button class="btn btn-secondary btn-sm">Вступить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ СВЕЖЕЕ В ГАЛЕРЕЕ ============ -->
+  <section class="site-section" style="padding-bottom:0;">
+    <div class="site-section-head">
+      <div>
+        <h2><i class="fas fa-images"></i> Свежее в галерее</h2>
+        <p>Последние работы сообщества</p>
+      </div>
+      <a href="/site/gallery.html" class="site-section-link">Вся галерея <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="masonry">
+      <div class="pin-card" style="--pin-h:200px; --pin-grad:linear-gradient(160deg,#5865f2,#a78bfa);"><div class="pin-media"><i class="fas fa-palette"></i></div><div class="pin-caption"><div class="pin-avatar">Л</div><div class="pin-caption-text">Портрет героини<div class="pin-caption-author">Luna_art</div></div></div></div>
+      <div class="pin-card" style="--pin-h:270px; --pin-grad:linear-gradient(160deg,#ff5d8f,#ff9f5a);"><div class="pin-media"><i class="fas fa-camera-retro"></i></div><div class="pin-caption"><div class="pin-avatar">К</div><div class="pin-caption-text">Скриншот РП-сцены<div class="pin-caption-author">Kirei</div></div></div></div>
+      <div class="pin-card" style="--pin-h:160px; --pin-grad:linear-gradient(160deg,#2dd4bf,#5865f2);"><div class="pin-media"><i class="fas fa-hat-wizard"></i></div><div class="pin-caption"><div class="pin-avatar">М</div><div class="pin-caption-text">Косплей: маг Севера<div class="pin-caption-author">Mirage</div></div></div></div>
+      <div class="pin-card" style="--pin-h:230px; --pin-grad:linear-gradient(160deg,#a78bfa,#ff5d8f);"><div class="pin-media"><i class="fas fa-dragon"></i></div><div class="pin-caption"><div class="pin-avatar">Д</div><div class="pin-caption-text">Фан-арт: дракон Ибри<div class="pin-caption-author">Draken</div></div></div></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ ПОДВАЛ ============ -->
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</div>
+      <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома Beginfind — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/site/ibripedia.html">Ibripedia</a>
+      <a href="/site/beginfind.html">Beginfind сервера</a>
+      <a href="/site/gallery.html">Галерея</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+      <a href="#">Обратная связь</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="#">Мой профиль</a>
+      <a href="/index.html">Админ-панель</a>
+      <a href="#">Выйти</a>
+    </div></div>
+  </div>
+  <div class="site-footer-bottom">
+    <span>© Beginfind. Демо-макет публичной витрины.</span>
+    <span>Стиль основан на админ-панели проекта</span>
+  </div>
+</footer>
+
+<script src="/site/site.js"></script>
+</body>
+</html>

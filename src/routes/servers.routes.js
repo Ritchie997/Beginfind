@@ -10,6 +10,14 @@ const { dbPath } = require('../config/paths');
 
 const router = express.Router();
 
+// "Админ сервера" для проверок в этом файле: владелец системы (is_root)
+// администрирует ЛЮБОЙ сервер, даже если он на нём не участник и роли admin
+// не имеет; остальным нужна реально назначенная системная роль admin.
+async function isServerAdmin(user, serverId) {
+  if (user.is_root) return true;
+  return isAdminOnServer(user.id, serverId);
+}
+
 // Получение всех серверов
 router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -46,13 +54,14 @@ router.post('/servers', auth.authenticateToken, auth.checkApproved, async (req, 
     if (adminRole) {
       await serverSystem.assignRoleToUserOnServer(req.user.id, server.id, adminRole.id);
     }
+    await serverSystem.logServerAction(server.id, req.user.id, req.user.username, 'server_created', { name });
     res.json(server);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Обновление сервера (только владелец)
+// Обновление сервера (владелец сервера или root)
 router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
@@ -74,8 +83,8 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
         return;
       }
 
-      if (row.owner_id !== userId) {
-        res.status(403).json({ error: 'Only server owner can update server' });
+      if (row.owner_id !== userId && !req.user.is_root) {
+        res.status(403).json({ error: 'Only server owner or root can update server' });
         serversDb.close();
         return;
       }
@@ -84,6 +93,7 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
       if (result.changes === 0) {
         res.status(404).json({ error: 'Server not found' });
       } else {
+        await serverSystem.logServerAction(id, req.user.id, req.user.username, 'server_updated', { name, description });
         res.json({ updated: result.changes, serverId: id });
       }
       serversDb.close();
@@ -108,7 +118,7 @@ router.delete('/servers/:id', auth.authenticateToken, auth.checkApproved, async 
 
     const serversDb = new sqlite3.Database(dbPath('servers.db'));
 
-    serversDb.get('SELECT owner_id FROM servers WHERE id = ?', [id], async (err, row) => {
+    serversDb.get('SELECT owner_id, name FROM servers WHERE id = ?', [id], async (err, row) => {
       serversDb.close();
 
       if (err) {
@@ -127,6 +137,12 @@ router.delete('/servers/:id', auth.authenticateToken, auth.checkApproved, async 
       }
 
       try {
+        // Пишем в журнал ДО удаления — после deleteServer строка сервера
+        // (и всё, что на неё формально "ссылалось" бы) уже не существует,
+        // но сама запись в server_audit_log остаётся историческим следом
+        // ("сервер X удалён пользователем Y") — таблицу журнала
+        // deleteServer намеренно не трогает.
+        await serverSystem.logServerAction(id, req.user.id, req.user.username, 'server_deleted', { name: row.name });
         const result = await serverSystem.deleteServer(id);
         if (result.changes === 0) {
           res.status(404).json({ error: 'Server not found' });
@@ -171,12 +187,13 @@ router.post('/servers/:id/roles', auth.authenticateToken, auth.checkApproved, as
     const { name, hierarchy_level, permissions } = req.body;
     const userId = req.user.id;
 
-    const isAdmin = await isAdminOnServer(userId, parseInt(id));
+    const isAdmin = await isServerAdmin(req.user, parseInt(id));
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can create roles' });
     }
 
     const role = await serverSystem.createRoleOnServer(id, name, hierarchy_level, permissions);
+    await serverSystem.logServerAction(id, userId, req.user.username, 'role_created', { name, hierarchy_level });
     res.json(role);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -192,14 +209,79 @@ router.post('/servers/:serverId/users/:userId', auth.authenticateToken, auth.che
     const currentUserId = req.user.id;
 
     if (parseInt(userId) !== currentUserId) {
-      const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+      const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
       if (!isAdmin) {
         return res.status(403).json({ error: 'Можно добавить только себя, либо быть администратором сервера' });
       }
     }
 
     const result = await serverSystem.addUserToServer(userId, serverId);
+    await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'member_added', { targetUserId: parseInt(userId), self: parseInt(userId) === currentUserId });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Удаление пользователя с сервера — сам пользователь (выход из сервера)
+// либо администратор сервера. Владельца нельзя удалить как рядового
+// участника — сначала нужно передать владение (PUT /servers/:id/owner,
+// root) или удалить сам сервер целиком (DELETE /servers/:id), иначе
+// servers.owner_id осиротел бы на несуществующего участника.
+//
+// Раньше этого маршрута не было вовсе, хотя фронтенд (public/spa-router.js,
+// apiClient.removeServerUser) всегда вызывал именно его
+// (DELETE /api/servers/:serverId/users/:userId) — кнопка "Удалить участника"
+// у любого сервера всегда возвращала 404 и ничего не удаляла.
+router.delete('/servers/:serverId/users/:userId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { serverId, userId } = req.params;
+    const currentUserId = req.user.id;
+
+    if (parseInt(userId) !== currentUserId) {
+      const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Можно удалить только себя, либо быть администратором сервера' });
+      }
+    }
+
+    const serversDb = new sqlite3.Database(dbPath('servers.db'));
+
+    serversDb.get('SELECT owner_id FROM servers WHERE id = ?', [serverId], (err, row) => {
+      if (err) {
+        serversDb.close();
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!row) {
+        serversDb.close();
+        return res.status(404).json({ error: 'Server not found' });
+      }
+
+      if (row.owner_id === parseInt(userId)) {
+        serversDb.close();
+        return res.status(403).json({ error: 'Нельзя удалить владельца сервера — сначала передайте владение или удалите сервер' });
+      }
+
+      serversDb.serialize(() => {
+        serversDb.run('DELETE FROM user_server_role_assignments WHERE user_id = ? AND server_id = ?', [userId, serverId], (err) => {
+          if (err) {
+            serversDb.close();
+            return res.status(500).json({ error: err.message });
+          }
+
+          serversDb.run('DELETE FROM user_server_memberships WHERE user_id = ? AND server_id = ?', [userId, serverId], async function (err) {
+            serversDb.close();
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            const isSelf = parseInt(userId) === currentUserId;
+            await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'member_removed', { targetUserId: parseInt(userId), self: isSelf });
+            res.json({ deleted: this.changes, userId, serverId });
+          });
+        });
+      });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -211,17 +293,18 @@ router.post('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateT
     const { serverId, userId, roleId } = req.params;
     const currentUserId = req.user.id;
 
-    const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can assign roles' });
     }
 
-    const canManage = await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
+    const canManage = req.user.is_root || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
     if (!canManage) {
       return res.status(403).json({ error: 'Cannot assign roles to users with higher or equal hierarchy level' });
     }
 
     const result = await serverSystem.assignRoleToUserOnServer(userId, serverId, roleId);
+    await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_assigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -234,22 +317,23 @@ router.delete('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticat
     const { serverId, userId, roleId } = req.params;
     const currentUserId = req.user.id;
 
-    const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can remove roles' });
     }
 
-    const canManage = await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
+    const canManage = req.user.is_root || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
     if (!canManage) {
       return res.status(403).json({ error: 'Cannot remove roles from users with higher or equal hierarchy level' });
     }
 
     const serversDb = new sqlite3.Database(dbPath('servers.db'));
     serversDb.run('DELETE FROM user_server_role_assignments WHERE user_id = ? AND server_id = ? AND role_id = ?',
-      [userId, serverId, roleId], function(err) {
+      [userId, serverId, roleId], async function(err) {
         if (err) {
           res.status(500).json({ error: err.message });
         } else {
+          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_unassigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
           res.json({ deleted: this.changes, userId, serverId, roleId });
         }
         serversDb.close();
@@ -265,7 +349,7 @@ router.delete('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.c
     const { serverId, roleId } = req.params;
     const currentUserId = req.user.id;
 
-    const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can delete roles' });
     }
@@ -273,7 +357,7 @@ router.delete('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.c
     const serversDb = new sqlite3.Database(dbPath('servers.db'));
 
     // Не позволяем удалять системные роли
-    serversDb.get('SELECT role_type FROM server_roles WHERE id = ? AND server_id = ?', [roleId, serverId], (err, row) => {
+    serversDb.get('SELECT role_type, name FROM server_roles WHERE id = ? AND server_id = ?', [roleId, serverId], (err, row) => {
       if (err) {
         res.status(500).json({ error: err.message });
         serversDb.close();
@@ -292,10 +376,11 @@ router.delete('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.c
         return;
       }
 
-      serversDb.run('DELETE FROM server_roles WHERE id = ? AND server_id = ?', [roleId, serverId], function(err) {
+      serversDb.run('DELETE FROM server_roles WHERE id = ? AND server_id = ?', [roleId, serverId], async function(err) {
         if (err) {
           res.status(500).json({ error: err.message });
         } else {
+          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_deleted', { roleId: parseInt(roleId), name: row.name });
           res.json({ deleted: this.changes, roleId, serverId });
         }
         serversDb.close();
@@ -313,7 +398,7 @@ router.put('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.chec
     const { name, hierarchy_level, permissions } = req.body;
     const currentUserId = req.user.id;
 
-    const isAdmin = await isAdminOnServer(currentUserId, parseInt(serverId));
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only administrators can update roles' });
     }
@@ -322,16 +407,109 @@ router.put('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.chec
     const permissionsStr = JSON.stringify(permissions);
 
     serversDb.run('UPDATE server_roles SET name = ?, hierarchy_level = ?, permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND server_id = ?',
-      [name, hierarchy_level, permissionsStr, roleId, serverId], function(err) {
+      [name, hierarchy_level, permissionsStr, roleId, serverId], async function(err) {
         if (err) {
           res.status(500).json({ error: err.message });
         } else if (this.changes === 0) {
           res.status(404).json({ error: 'Role not found or does not belong to this server' });
         } else {
+          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_updated', { roleId: parseInt(roleId), name, hierarchy_level });
           res.json({ updated: this.changes, roleId, serverId, name, hierarchy_level, permissions });
         }
         serversDb.close();
       });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === Каналы сервера ===
+// Таблица server_channels в servers.db существует с самого начала (учтена
+// в каскадном удалении сервера и в channel_count у GET /servers/:id), но
+// маршрутов для неё не было вовсе — управлять каналами было нечем.
+
+// Список каналов — читать может любой approved-пользователь (тот же уровень
+// доступа, что и у GET /servers/:id/users и /roles выше).
+router.get('/servers/:id/channels', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const channels = await serverSystem.getChannelsOnServer(req.params.id);
+    res.json(channels);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Создание канала — только администратор сервера.
+router.post('/servers/:id/channels', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, channel_type, description } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Название канала обязательно' });
+    }
+    if (channel_type && !['text', 'voice'].includes(channel_type)) {
+      return res.status(400).json({ error: 'channel_type должен быть "text" или "voice"' });
+    }
+
+    const isAdmin = await isServerAdmin(req.user, parseInt(id));
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can create channels' });
+    }
+
+    const channel = await serverSystem.createChannelOnServer(id, name.trim(), channel_type, description);
+    await serverSystem.logServerAction(id, req.user.id, req.user.username, 'channel_created', { name: channel.name, channel_type: channel.channel_type });
+    res.json(channel);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Изменение канала — только администратор сервера.
+router.put('/servers/:serverId/channels/:channelId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { serverId, channelId } = req.params;
+    const { name, channel_type, description } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Название канала обязательно' });
+    }
+    if (channel_type && !['text', 'voice'].includes(channel_type)) {
+      return res.status(400).json({ error: 'channel_type должен быть "text" или "voice"' });
+    }
+
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can update channels' });
+    }
+
+    const result = await serverSystem.updateChannel(serverId, channelId, name.trim(), channel_type, description);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+    await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'channel_updated', { channelId: parseInt(channelId), name: name.trim() });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Удаление канала — только администратор сервера.
+router.delete('/servers/:serverId/channels/:channelId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { serverId, channelId } = req.params;
+
+    const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can delete channels' });
+    }
+
+    const result = await serverSystem.deleteChannel(serverId, channelId);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+    await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'channel_deleted', { channelId: parseInt(channelId) });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -356,12 +534,13 @@ router.put('/servers/:serverId/owner', auth.authenticateToken, auth.checkApprove
     }
 
     const serversDb = new sqlite3.Database(dbPath('servers.db'));
-    serversDb.run('UPDATE servers SET owner_id = ? WHERE id = ?', [newOwnerId, serverId], function(err) {
+    serversDb.run('UPDATE servers SET owner_id = ? WHERE id = ?', [newOwnerId, serverId], async function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
       } else if (this.changes === 0) {
         res.status(404).json({ error: 'Server not found' });
       } else {
+        await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'owner_changed', { newOwnerId: parseInt(newOwnerId), newOwnerUsername: newOwner.username });
         res.json({ updated: this.changes, serverId, newOwnerId });
       }
       serversDb.close();
@@ -384,6 +563,58 @@ router.get('/users', auth.authenticateToken, auth.checkApproved, auth.checkRoot,
       }
       usersDb.close();
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Быстрый поиск пользователей по имени — используется в модалке "Добавить
+// участника" вместо ручного ввода ID. Не root-only, в отличие от GET /users
+// выше: отдаёт только id+username, ровно то же самое, что уже видно любому
+// approved-пользователю в списке участников любого сервера
+// (GET /servers/:id/users) — более широкий доступ здесь не раскрывает
+// ничего сверх уже открытого, только упрощает поиск.
+router.get('/users/search', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+
+    const usersDb = new sqlite3.Database(dbPath('users.db'));
+    usersDb.all(
+      "SELECT id, username, display_name FROM users WHERE status = 'approved' AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 10",
+      [`%${q}%`, `%${q}%`],
+      (err, rows) => {
+        usersDb.close();
+        if (err) {
+          res.status(500).json({ error: err.message });
+        } else {
+          res.json(rows);
+        }
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === Журнал действий сервера ===
+// Кто/что/когда сделал на сервере — создание/удаление сервера, ролей,
+// каналов, добавление/удаление участников, назначение ролей, смена
+// владельца (см. logServerAction во всех маршрутах выше и
+// server_audit_log в src/db/connections.js). Доступно только
+// администратору сервера — этот срез действий чувствительнее, чем просто
+// список участников/ролей, который открыт любому approved-пользователю.
+router.get('/servers/:id/audit-log', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const isAdmin = await isServerAdmin(req.user, parseInt(id));
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only administrators can view the audit log' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const entries = await serverSystem.getServerAuditLog(id, limit);
+    res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

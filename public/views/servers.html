@@ -1,62 +1,785 @@
-<div class="btn-group" style="margin-bottom: 20px;">
-    <button class="btn btn-primary" id="create-server-btn">Создать сервер</button>
-</div>
+<div class="servers-page">
 
-<!-- Table layout for desktop -->
-<div class="table-container table-layout-mobile-hidden">
-    <table id="servers-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Название</th>
-                <th>Владелец</th>
-                <th>Дата создания</th>
-                <th>Участников</th>
-                <th>Действия</th>
-            </tr>
-        </thead>
-        <tbody id="servers-tbody">
-            <!-- Servers will be loaded here -->
-        </tbody>
-    </table>
-</div>
-
-<!-- Card layout for mobile -->
-<div class="card-layout-mobile" id="servers-card-layout">
-    <!-- Cards will be loaded here on mobile -->
-</div>
-
-<!-- Modal for creating server -->
-<div id="create-server-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="
-        background: var(--background-secondary);
-        padding: 25px;
-        border-radius: 8px;
-        width: 500px;
-        max-width: 90%;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-        border: 1px solid var(--background-accent);
-    ">
-        <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--header-primary);">Создать сервер</h2>
-
-        <div class="form-group">
-            <label for="server-name">Название (обязательно)</label>
-            <input type="text" id="server-name" placeholder="Введите название сервера">
+  <!-- ============ Каталог серверов ============ -->
+  <div id="servers-directory">
+    <div class="servers-toolbar">
+      <div class="servers-toolbar-row servers-toolbar-row-main">
+        <h2 class="servers-heading"><i class="fas fa-server"></i> Сервера</h2>
+        <div class="servers-search-wrap">
+          <i class="fas fa-search"></i>
+          <input type="text" id="servers-search-input" class="servers-search-input" placeholder="Поиск по названию, описанию или владельцу...">
         </div>
-
-        <div class="form-group">
-            <label for="server-description">Описание (опционально)</label>
-            <textarea id="server-description" placeholder="Введите описание сервера" rows="3"></textarea>
-        </div>
-
-        <div class="form-group">
-            <label for="server-icon">Иконка (опционально)</label>
-            <input type="text" id="server-icon" placeholder="Ссылка на иконку или символ">
-        </div>
-
-        <div class="btn-group" style="margin-top: 20px; justify-content: flex-end;">
-            <button class="btn btn-primary" id="create-server-confirm-btn">Создать</button>
-            <button class="btn btn-danger" id="cancel-create-server-btn">Отмена</button>
-        </div>
+        <select id="servers-sort-select" class="form-select servers-sort-select">
+          <option value="created_desc">Сначала новые</option>
+          <option value="created_asc">Сначала старые</option>
+          <option value="name_asc">По названию (А-Я)</option>
+          <option value="members_desc">Больше всего участников</option>
+        </select>
+        <button class="btn btn-primary" id="create-server-btn"><i class="fas fa-plus"></i> Создать сервер</button>
+      </div>
+      <div class="servers-toolbar-row servers-toolbar-row-status">
+        <div class="servers-stats" id="servers-stats"></div>
+        <div class="servers-count" id="servers-count"></div>
+      </div>
     </div>
+
+    <div class="servers-loading" id="servers-loading">
+      <div class="servers-skeleton-card"></div>
+      <div class="servers-skeleton-card"></div>
+      <div class="servers-skeleton-card"></div>
+    </div>
+
+    <div class="servers-empty" id="servers-empty" hidden>
+      <i class="fas fa-server"></i>
+      <h3>Пока нет ни одного сервера</h3>
+      <p>Сервер — это отдельное пространство со своими ролями и участниками. Он используется, чтобы ограничивать доступ к статьям (поле «Доступ для» в редакторе).</p>
+      <button class="btn btn-primary" id="create-server-empty-btn"><i class="fas fa-plus"></i> Создать первый сервер</button>
+    </div>
+
+    <div class="servers-grid" id="servers-grid" hidden></div>
+  </div>
+
+  <!-- ============ Рабочее пространство сервера (открывается вместо каталога) ============ -->
+  <div id="server-workspace" class="server-workspace" hidden>
+    <button class="server-workspace-back" id="server-workspace-back-btn"><i class="fas fa-arrow-left"></i> Ко всем серверам</button>
+
+    <div class="server-workspace-header">
+      <div class="server-avatar server-avatar-lg" id="server-workspace-avatar"></div>
+      <div class="server-workspace-heading">
+        <h2 id="server-workspace-name">—</h2>
+        <p id="server-workspace-description" class="server-workspace-desc"></p>
+        <div class="server-workspace-meta" id="server-workspace-meta"></div>
+      </div>
+    </div>
+
+    <div class="editor-mode-tabs server-workspace-tabs" id="server-workspace-tabs">
+      <button type="button" class="editor-mode-tab active" data-server-tab="overview"><i class="fas fa-chart-simple"></i> Обзор</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="members"><i class="fas fa-users"></i> Участники</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="roles"><i class="fas fa-user-shield"></i> Роли</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="channels"><i class="fas fa-hashtag"></i> Каналы</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="log"><i class="fas fa-clock-rotate-left"></i> Журнал</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="settings"><i class="fas fa-gear"></i> Настройки</button>
+    </div>
+
+    <div class="server-workspace-body" id="server-workspace-body"></div>
+  </div>
+
+  <!-- ============ Модалки ============
+       Структура header/body/footer — та же, что у диалога вставки/настройки
+       картинки в редакторе статей (см. .img-dialog-* в editor-obsidian.css
+       и ensureImageDialogEl в editor-manager.js): шапка с заголовком и
+       крестиком закрытия, тело с полями, футер с кнопками у нижней границы.
+       Раньше модалки вкладки "Сервера" были одним нерасчленённым блоком
+       (заголовок как обычный текст, кнопки сразу под последним полем) —
+       по отзыву "выглядит устаревше". -->
+
+  <!-- Создать сервер -->
+  <div id="create-server-modal" class="modal-overlay" hidden>
+    <div class="modal-box modal-box-create">
+      <div class="modal-header modal-header-hero">
+        <div class="servers-create-hero">
+          <div class="server-avatar server-avatar-lg" id="create-server-avatar-preview">?</div>
+          <div>
+            <h3>Новый сервер</h3>
+            <p class="modal-subtitle">Пространство со своими ролями и участниками</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close" id="create-server-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="server-name">Название <span class="servers-required">*</span></label>
+          <input type="text" id="server-name" class="form-input" placeholder="Например: Команда разработки" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="server-description">Описание</label>
+          <textarea id="server-description" class="form-input" placeholder="Коротко — для чего этот сервер (необязательно)" rows="3" maxlength="500"></textarea>
+        </div>
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> Вы автоматически станете владельцем и получите системную роль «admin» на этом сервере.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-create-server-btn">Отмена</button>
+        <button class="btn btn-primary" id="create-server-confirm-btn"><i class="fas fa-plus"></i> Создать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Добавить участника -->
+  <div id="add-member-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Добавить участника</h3>
+        <button type="button" class="modal-close" id="add-member-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="add-member-search">Найти пользователя</label>
+          <div class="servers-user-search">
+            <input type="text" id="add-member-search" class="form-input chip-field-input" placeholder="Начните вводить имя..." autocomplete="off">
+            <div class="chip-field-dropdown" id="add-member-search-dropdown" hidden></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-member-id">Или введите ID вручную</label>
+          <input type="number" id="new-member-id" class="form-input" placeholder="Числовой ID пользователя">
+        </div>
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> Поиск находит только подтверждённых пользователей. Если нужного нет в списке — введите его ID вручную (посмотреть можно во вкладке «Пользователи» или в его профиле).</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="add-member-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="add-member-confirm-btn">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Назначить роль участнику — префикс "server-" чтобы не конфликтовать
+       с одноимёнными id (#assign-role-modal и т.д.) в
+       public/views/users-list.html: там живёт модалка выбора АДМИНСКОЙ
+       роли, а не роли сервера. Раньше эти id совпадали, а связанные методы
+       SPARouter — тоже (см. переименование showAssignRoleModal →
+       showServerAssignRoleModal в spa-router.js). -->
+  <div id="server-assign-role-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Назначить роль</h3>
+        <button type="button" class="modal-close" id="server-assign-role-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint" id="server-assign-role-target-hint"></p>
+        <div class="form-group">
+          <label class="form-label" for="server-assign-role-select">Роль</label>
+          <select id="server-assign-role-select" class="form-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="server-assign-role-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="server-assign-role-confirm-btn">Назначить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Создать/редактировать роль -->
+  <div id="server-role-editor-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="server-role-editor-title">Создать роль</h3>
+        <button type="button" class="modal-close" id="server-role-editor-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="server-role-editor-name">Название роли</label>
+          <input type="text" id="server-role-editor-name" class="form-input" placeholder="Например: Модератор" maxlength="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="server-role-editor-hierarchy">Уровень иерархии</label>
+          <input type="number" id="server-role-editor-hierarchy" class="form-input" min="0" max="99" value="0">
+          <p class="modal-hint">Для сравнения: системные роли — admin = 100, member = 10, observer = 1. Управлять пользователем может только роль со строго бОльшим уровнем.</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Права</label>
+          <div class="servers-permissions-grid">
+            <label class="servers-permission-check"><input type="checkbox" id="server-role-editor-perm-read_messages"> Чтение сообщений</label>
+            <label class="servers-permission-check"><input type="checkbox" id="server-role-editor-perm-send_messages"> Отправка сообщений</label>
+            <label class="servers-permission-check"><input type="checkbox" id="server-role-editor-perm-manage_channels"> Управление каналами</label>
+            <label class="servers-permission-check"><input type="checkbox" id="server-role-editor-perm-manage_roles"> Управление ролями</label>
+            <label class="servers-permission-check"><input type="checkbox" id="server-role-editor-perm-ban_users"> Блокировка пользователей</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="server-role-editor-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="server-role-editor-save-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Создать/редактировать канал -->
+  <div id="channel-editor-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="channel-editor-title">Создать канал</h3>
+        <button type="button" class="modal-close" id="channel-editor-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="channel-editor-name">Название канала</label>
+          <input type="text" id="channel-editor-name" class="form-input" placeholder="Например: general" maxlength="80">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="channel-editor-type">Тип</label>
+          <select id="channel-editor-type" class="form-select">
+            <option value="text">💬 Текстовый</option>
+            <option value="voice">🔊 Голосовой</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="channel-editor-description">Описание</label>
+          <textarea id="channel-editor-description" class="form-input" rows="2" placeholder="Необязательно" maxlength="300"></textarea>
+        </div>
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> Канал — это пока просто именованный раздел сервера: отправка и чтение сообщений внутри него в этой панели не реализованы.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="channel-editor-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="channel-editor-save-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сменить владельца (только для владельца системы) -->
+  <div id="change-owner-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Изменить владельца сервера</h3>
+        <button type="button" class="modal-close" id="change-owner-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> Доступно только владельцу системы (root).</p>
+        <div class="form-group">
+          <label class="form-label" for="change-owner-select">Новый владелец</label>
+          <select id="change-owner-select" class="form-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="change-owner-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="change-owner-confirm-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
 </div>
+
+<style>
+/* === SERVERS PAGE — тот же язык дизайна, что и у редактора статей
+   (articles.html/ibripedia.css): тулбар с поиском поверх карточной сетки,
+   вкладки .editor-mode-tab для переключения разделов внутри открытого
+   сервера, единые модалки вместо разномастных инлайн-стилей. === */
+
+.servers-page {
+  padding: 0;
+}
+
+/* Любой элемент этой страницы, которому JS ставит el.hidden = true, обязан
+   реально скрыться — а [hidden] (атрибутный селектор из UA-таблицы стилей,
+   специфичность 0-1-0) и класс вроде .server-workspace{display:flex} или
+   .servers-loading{display:grid} ниже имеют РАВНУЮ специфичность (тоже
+   0-1-0): выигрывает не hidden, а то правило, что идёт позже в каскаде —
+   то есть наше. Из-за этого #server-workspace (вкладки Обзор/Участники/
+   Роли/Каналы/Настройки) и скелетон #servers-loading оставались видны на
+   главной странице "Сервера" одновременно со списком карточек, хотя их
+   .hidden уже был true. Тот же приём уже используется для img-dialog-backdrop
+   в editor-obsidian.css — здесь просто накрываем этим правилом всю
+   страницу разом, а не гоняемся за каждым классом с явным display. */
+.servers-page [hidden] {
+  display: none !important;
+}
+
+/* --- Toolbar --- */
+.servers-toolbar {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.servers-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.servers-toolbar-row-status {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-accent);
+}
+
+.servers-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.servers-heading i { color: var(--blurple); }
+
+.servers-search-wrap {
+  flex: 1 1 220px;
+  min-width: 160px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.servers-search-wrap i {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.servers-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 34px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.servers-search-input:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+
+.servers-sort-select {
+  width: auto;
+  min-width: 190px;
+  padding: 9px 10px;
+}
+
+.servers-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.servers-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  font-size: 12px;
+  color: var(--header-secondary);
+}
+
+.servers-stat-chip strong { color: var(--text-normal); }
+
+.servers-count {
+  font-size: 13px;
+  color: var(--header-secondary);
+}
+
+/* --- Empty / loading --- */
+.servers-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-accent);
+  border-radius: 10px;
+}
+
+.servers-empty i {
+  font-size: 40px;
+  color: var(--blurple);
+  margin-bottom: 14px;
+  display: block;
+}
+
+.servers-empty h3 {
+  color: var(--text-normal);
+  margin: 0 0 8px;
+}
+
+.servers-empty p {
+  max-width: 480px;
+  margin: 0 auto 18px;
+  line-height: 1.5;
+}
+
+.servers-loading {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.servers-skeleton-card {
+  height: 140px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--background-secondary) 25%, var(--background-tertiary) 37%, var(--background-secondary) 63%);
+  background-size: 400% 100%;
+  animation: servers-skeleton-shimmer 1.4s ease infinite;
+  border: 1px solid var(--background-accent);
+}
+
+@keyframes servers-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* --- Grid of server cards --- */
+.servers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.servers-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.servers-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--blurple);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.servers-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.server-avatar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  text-transform: uppercase;
+}
+
+.server-avatar-lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  font-size: 24px;
+}
+
+.servers-card-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.servers-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.servers-card-owner {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.servers-card-desc {
+  font-size: 13px;
+  color: var(--header-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 18px;
+}
+
+.servers-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-accent);
+}
+
+.servers-card-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.servers-card-meta i { color: var(--blurple); width: 13px; text-align: center; }
+
+.servers-card-owner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(250, 168, 26, 0.15);
+  color: var(--yellow);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.servers-card-delete-btn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  background: var(--background-tertiary);
+  color: var(--text-muted);
+}
+.servers-card-delete-btn:hover { background: var(--red); color: #fff; }
+
+/* --- Workspace --- */
+.server-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.server-workspace-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.server-workspace-back:hover { background: var(--background-accent); }
+
+.server-workspace-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.server-workspace-heading { min-width: 0; flex: 1; }
+.server-workspace-heading h2 { margin: 0 0 6px; color: var(--text-normal); font-size: 20px; }
+.server-workspace-desc { margin: 0 0 10px; color: var(--header-secondary); font-size: 14px; line-height: 1.4; }
+
+.server-workspace-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.server-workspace-tabs { align-self: flex-start; }
+
+.server-workspace-body {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.server-section-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.server-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.server-permission-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.server-permission-note i { color: var(--yellow); }
+
+/* Stat tiles for the "Обзор" tab */
+.server-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.server-stat-tile {
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.server-stat-tile-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--blurple);
+}
+
+.server-stat-tile-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.server-danger-zone {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  background: rgba(237, 66, 69, 0.07);
+}
+
+.server-danger-zone h4 {
+  margin: 0 0 6px;
+  color: var(--red);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.server-danger-zone p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Role tags on the members table, with a per-role remove button */
+.server-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px 2px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin: 2px 4px 2px 0;
+  color: #fff;
+}
+
+.server-role-chip-remove {
+  border: none;
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  padding: 0;
+}
+.server-role-chip-remove:hover { background: rgba(0,0,0,0.4); }
+
+.server-empty-row td {
+  text-align: center;
+  padding: 30px !important;
+  color: var(--text-muted);
+}
+
+/* --- Modals --- */
+/* .modal-overlay/.modal-box/.modal-header/.modal-close/.modal-body/
+   .modal-footer/.modal-subtitle/.modal-hint — общий компонент модалки, см.
+   "MODAL COMPONENT" в global-styles.css (там же объяснение, почему он не
+   дублируется на каждой странице). Здесь остались только специфичные для
+   этой страницы вещи: чуть более широкая/центрированная шапка модалки
+   "Создать сервер" и её ограничения прав. */
+.modal-box-create { width: 460px; }
+.modal-header-hero { align-items: center; }
+
+.servers-required { color: var(--red); }
+
+/* --- Шапка модалки "Создать сервер": живой предпросмотр аватара --- */
+.servers-create-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.servers-create-hero h3 { margin: 0; font-size: 16px; color: var(--text-normal); }
+.servers-create-hero .server-avatar { transition: background 0.15s; flex-shrink: 0; }
+
+.servers-permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.servers-permission-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+/* Поиск пользователя в модалке "Добавить участника" — выпадашка переиспользует
+   .chip-field-dropdown* (global-styles.css), тот же вид, что у полей
+   Категория/Теги/Доступ для в редакторе статей, только якорь свой. */
+.servers-user-search {
+  position: relative;
+}
+
+@media (max-width: 640px) {
+  .servers-toolbar-row-main { flex-direction: column; align-items: stretch; }
+  .servers-sort-select { width: 100%; }
+  .server-workspace-header { flex-direction: column; }
+  .servers-permissions-grid { grid-template-columns: 1fr; }
+}
+
+/* Панель вкладок сервера (Обзор/Участники/Роли/Каналы/Журнал/Настройки) —
+   переиспользует .editor-mode-tab* из editor-obsidian.css, где на ≤1024px
+   заложено "flex:1; min-width:0" в расчёте на тулбар редактора статей
+   (2-3 вкладки: Редактирование/Просмотр/Разделить), который на телефоне
+   именно сжимается под ширину экрана. У вкладок сервера их 6, и то же самое
+   min-width:0 при таком количестве позволяет кнопке сжаться уже своего
+   текста (white-space:nowrap не даёт тексту перенестись внутри самой
+   кнопки) — текст просто вылезает за её рамки. Здесь вместо сжатия —
+   перенос: каждая вкладка держит естественный размер (flex:none), а те,
+   что не поместились в строку, уходят на следующую. */
+@media (max-width: 1024px) {
+  .server-workspace-tabs {
+    flex-wrap: wrap;
+  }
+  .server-workspace-tabs .editor-mode-tab {
+    flex: none;
+  }
+}
+</style>

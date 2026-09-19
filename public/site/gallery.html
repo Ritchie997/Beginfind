@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Галерея Beginfind — арт, скриншоты и косплей сообщества</title>
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body data-page="gallery">
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/site/index.html" class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/site/index.html" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/site/ibripedia.html" class="site-nav-link" data-page="ibripedia">Ibripedia</a>
+      <a href="/site/beginfind.html" class="site-nav-link" data-page="beginfind">Beginfind</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+    </nav>
+    <div class="site-header-actions">
+      <div class="site-search"><i class="fas fa-search"></i><input type="text" placeholder="Поиск по сайту..."></div>
+      <button class="site-icon-btn" title="Уведомления"><i class="far fa-bell"></i><span class="site-icon-dot"></span></button>
+      <a href="/index.html" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="site-user" id="siteUser">
+        <div class="site-user-avatar">А</div>
+        <div class="site-user-dropdown" id="siteUserDropdown">
+          <a href="#" class="dropdown-item">Мой профиль</a>
+          <a href="#" class="dropdown-item">Мои закладки</a>
+          <a href="#" class="dropdown-item">Настройки</a>
+          <div class="dropdown-divider"></div>
+          <a href="/index.html" class="dropdown-item">Админ-панель</a>
+          <a href="#" class="dropdown-item">Выход</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<section class="site-hero site-hero-small">
+  <span class="site-hero-badge"><i class="fas fa-images"></i> Творчество сообщества</span>
+  <h1>Галерея</h1>
+  <p>Арты, скриншоты ролевых сцен, косплей и мемы — сохраняйте понравившееся и вдохновляйтесь работами других участников.</p>
+  <div class="site-hero-actions" style="margin-bottom:0;">
+    <button class="btn btn-primary btn-lg"><i class="fas fa-upload"></i> Загрузить работу</button>
+  </div>
+</section>
+
+<main class="site-main">
+  <section class="site-section" style="padding-top:32px;">
+
+    <div class="chip-row" style="margin-bottom:28px;">
+      <span class="filter-chip active">Всё</span>
+      <span class="filter-chip">Арт</span>
+      <span class="filter-chip">Скриншоты</span>
+      <span class="filter-chip">Косплей</span>
+      <span class="filter-chip">Мемы</span>
+      <span class="filter-chip">Референсы</span>
+    </div>
+
+    <div class="masonry">
+
+      <div class="pin-card" style="--pin-h:220px; --pin-grad:linear-gradient(160deg,#5865f2,#a78bfa);">
+        <div class="pin-media"><i class="fas fa-palette"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>412</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>28</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Л</div><div class="pin-caption-text">Портрет героини Хроник Ибри<div class="pin-caption-author">Luna_art</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:310px; --pin-grad:linear-gradient(160deg,#ff5d8f,#ff9f5a);">
+        <div class="pin-media"><i class="fas fa-camera-retro"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>203</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>14</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">К</div><div class="pin-caption-text">Скриншот РП-сцены: Ибри-Порт<div class="pin-caption-author">Kirei</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:180px; --pin-grad:linear-gradient(160deg,#2dd4bf,#5865f2);">
+        <div class="pin-media"><i class="fas fa-hat-wizard"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>356</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>47</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">М</div><div class="pin-caption-text">Косплей: маг Севера<div class="pin-caption-author">Mirage</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:260px; --pin-grad:linear-gradient(160deg,#a78bfa,#ff5d8f);">
+        <div class="pin-media"><i class="fas fa-dragon"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>521</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>63</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Д</div><div class="pin-caption-text">Фан-арт: дракон Ибри<div class="pin-caption-author">Draken</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:200px; --pin-grad:linear-gradient(160deg,#facc15,#ff9f5a);">
+        <div class="pin-media"><i class="fas fa-face-grin-squint-tears"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>689</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>92</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">В</div><div class="pin-caption-text">Мем недели: логика РП-мастера<div class="pin-caption-author">Vex</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:340px; --pin-grad:linear-gradient(160deg,#22d3ee,#5865f2);">
+        <div class="pin-media"><i class="fas fa-rocket"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>274</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>21</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Р</div><div class="pin-caption-text">Концепт-арт: станция «Рубеж»<div class="pin-caption-author">Ray_K</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:190px; --pin-grad:linear-gradient(160deg,#ff5d8f,#a78bfa);">
+        <div class="pin-media"><i class="fas fa-user-ninja"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>198</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>11</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Н</div><div class="pin-caption-text">Референс: экипировка разведчика<div class="pin-caption-author">Nyx</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:250px; --pin-grad:linear-gradient(160deg,#5865f2,#2dd4bf);">
+        <div class="pin-media"><i class="fas fa-crown"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>445</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>39</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Т</div><div class="pin-caption-text">Дом Ториан: семейный портрет<div class="pin-caption-author">Toriana</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:220px; --pin-grad:linear-gradient(160deg,#a78bfa,#2dd4bf);">
+        <div class="pin-media"><i class="fas fa-city"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>167</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>8</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">С</div><div class="pin-caption-text">Скриншот: улицы Ибри-Порта<div class="pin-caption-author">Selin</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:290px; --pin-grad:linear-gradient(160deg,#ff9f5a,#5865f2);">
+        <div class="pin-media"><i class="fas fa-fire"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>532</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>71</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Ф</div><div class="pin-caption-text">Битва у стен Легиона<div class="pin-caption-author">Faelan</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:170px; --pin-grad:linear-gradient(160deg,#2dd4bf,#ff5d8f);">
+        <div class="pin-media"><i class="fas fa-cat"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>289</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>34</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">О</div><div class="pin-caption-text">Чиби: талисман сервера Кафе<div class="pin-caption-author">Orin</div></div></div>
+      </div>
+
+      <div class="pin-card" style="--pin-h:300px; --pin-grad:linear-gradient(160deg,#facc15,#ff5d8f);">
+        <div class="pin-media"><i class="fas fa-mask"></i><button class="pin-save">Сохранить</button>
+          <div class="pin-overlay-foot"><div class="engage-group"><span class="engage-item is-like"><i class="far fa-heart"></i><span>378</span></span><span class="engage-item is-comment"><i class="far fa-comment"></i><span>26</span></span></div></div>
+        </div>
+        <div class="pin-caption"><div class="pin-avatar">Э</div><div class="pin-caption-text">Косплей: культист Пепельного Пламени<div class="pin-caption-author">Ember</div></div></div>
+      </div>
+
+    </div>
+
+    <div class="load-more-wrap">
+      <button class="btn btn-secondary btn-lg" data-fake-load-more><i class="fas fa-arrow-down"></i> Загрузить ещё работы</button>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> Beginfind</div>
+      <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома Beginfind — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/site/ibripedia.html">Ibripedia</a>
+      <a href="/site/beginfind.html">Beginfind сервера</a>
+      <a href="/site/gallery.html">Галерея</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+      <a href="#">Обратная связь</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="#">Мой профиль</a>
+      <a href="/index.html">Админ-панель</a>
+      <a href="#">Выйти</a>
+    </div></div>
+  </div>
+  <div class="site-footer-bottom">
+    <span>© Beginfind. Демо-макет публичной витрины.</span>
+    <span>Стиль основан на админ-панели проекта</span>
+  </div>
+</footer>
+
+<script src="/site/site.js"></script>
+</body>
+</html>

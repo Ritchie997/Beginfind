@@ -2,27 +2,13 @@
     <h2 class="settings-title">Настройки системы</h2>
 
     <fieldset class="fieldset-group">
-        <legend>Общие настройки</legend>
-        <div class="setting-description">Основные параметры работы системы</div>
-
-        <div class="form-group">
-            <label class="form-label">Название системы</label>
-            <input type="text" id="systemName" class="form-input" value="BeginFind Admin Panel">
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Описание системы</label>
-            <textarea id="systemDescription" class="form-textarea">Административная панель управления системой BeginFind</textarea>
-        </div>
-    </fieldset>
-
-    <fieldset class="fieldset-group">
         <legend>Настройки безопасности</legend>
         <div class="setting-description">Параметры безопасности и доступа</div>
 
         <div class="form-group">
             <label class="form-label">Максимальный размер загружаемого файла (МБ)</label>
-            <input type="number" id="maxFileSize" class="form-input" value="5">
+            <input type="number" id="maxFileSize" class="form-input" value="5" min="1" max="20">
+            <div class="form-hint">Действует на загрузку картинок в редакторе статей (POST /api/upload-image)</div>
         </div>
 
         <div class="form-group">
@@ -32,34 +18,43 @@
                 <span class="slider"></span>
             </label>
         </div>
+
+        <div class="form-group">
+            <label class="form-label">Держать вход открытым (часов)</label>
+            <input type="number" id="sessionDurationHours" class="form-input" value="8" min="1" max="720">
+            <div class="form-hint">Сколько часов действует вход, прежде чем попросит войти заново — до 720 (30 дней). Уже открытые сеансы это не меняет, подействует при следующем входе.</div>
+        </div>
     </fieldset>
 
     <fieldset class="fieldset-group">
-        <legend>Настройки отображения</legend>
-        <div class="setting-description">Параметры интерфейса и отображения</div>
-
-        <div class="form-group">
-            <label class="form-label">Количество статей на странице</label>
-            <select id="articlesPerPage" class="form-input">
-                <option value="10">10</option>
-                <option value="20" selected>20</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </select>
+        <legend>Режим технического обслуживания</legend>
+        <div class="setting-description">
+            Пока включено, сайтом может пользоваться только владелец — все остальные (включая
+            админов) видят это сообщение вместо панели. Полезно на время восстановления бэкапа
+            или другой рискованной операции.
         </div>
 
         <div class="form-group">
-            <label class="form-label">Тема интерфейса</label>
-            <select id="theme" class="form-select">
-                <option value="dark" selected>Темная (Discord-like)</option>
-                <option value="light">Светлая</option>
-            </select>
+            <label class="form-label">Включить режим техобслуживания</label>
+            <label class="switch">
+                <input type="checkbox" id="maintenanceMode">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Сообщение для посетителей</label>
+            <textarea id="maintenanceMessage" class="form-textarea" maxlength="300">Сайт временно на техническом обслуживании. Загляните чуть позже.</textarea>
+        </div>
+
+        <div class="button-group">
+            <button class="btn btn-danger btn-sm" id="save-maintenance-settings-btn">Сохранить</button>
         </div>
     </fieldset>
 
     <fieldset class="fieldset-group">
         <legend>Резервное копирование</legend>
-        <div class="setting-description">Управление бэкапами баз данных</div>
+        <div class="setting-description">Управление бэкапами: базы данных, статьи, загруженные файлы и стикеры</div>
 
         <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
             <h4 style="margin-bottom: 10px; color: var(--header-primary);">Автоматический бэкап</h4>
@@ -76,6 +71,10 @@
                 <label class="form-label">Интервал бэкапа (часы)</label>
                 <input type="number" id="autoBackupInterval" class="form-input" value="12" min="1" max="168">
                 <div class="form-hint">Бэкап будет создаваться автоматически каждые N часов</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary btn-sm" id="save-auto-backup-settings-btn">Сохранить настройки автобэкапа</button>
             </div>
         </div>
 
@@ -102,6 +101,78 @@
         </div>
     </fieldset>
 
+    <fieldset class="fieldset-group">
+        <legend>Очистка мусора</legend>
+        <div class="setting-description">
+            Статьи, годами лежащие в корзине, забытые картинки статей, на которые уже никто не
+            ссылается, файлы стикеров, оставшиеся от неудачной загрузки, — всё это со временем
+            копится на диске. Здесь настраивается автоматическая утилизация такого мусора.
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin-bottom: 10px; color: var(--header-primary);">Автоматический запуск</h4>
+
+            <div class="form-group">
+                <label class="form-label">Включить автоматическую очистку по расписанию</label>
+                <label class="switch">
+                    <input type="checkbox" id="cleanupEnabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Проверять и запускать каждые N часов</label>
+                <input type="number" id="cleanupIntervalHours" class="form-input" value="24" min="1" max="168">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Не трогать неиспользуемый файл младше N часов</label>
+                <input type="number" id="cleanupMinOrphanAgeHours" class="form-input" value="48" min="1" max="720">
+                <div class="form-hint">Защита от удаления картинки, которую только что загрузили в редактор, но статью с ней ещё не сохранили</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Хранить статьи в корзине N дней перед безвозвратным удалением</label>
+                <input type="number" id="cleanupTrashRetentionDays" class="form-input" value="30" min="1" max="365">
+            </div>
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin-bottom: 10px; color: var(--header-primary);">Что именно чистить</h4>
+
+            <div class="form-group">
+                <label class="checkbox-field"><input type="checkbox" id="cleanupTrashedArticles"> Старые статьи из корзины</label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-field"><input type="checkbox" id="cleanupOrphanUploads"> Неиспользуемые картинки статей/сообщений</label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-field"><input type="checkbox" id="cleanupOrphanStickers"> Файлы стикеров-сирот (неудачные загрузки, удалённые наборы)</label>
+            </div>
+
+            <div class="button-group" style="margin-top: 10px;">
+                <button class="btn btn-primary btn-sm" id="save-cleanup-settings-btn">Сохранить настройки очистки</button>
+            </div>
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px;">
+            <h4 style="margin-bottom: 10px; color: var(--header-primary);">Запуск вручную</h4>
+
+            <div class="form-hint" id="cleanup-last-run-info" style="margin-bottom: 10px;">Очистка ещё не запускалась</div>
+
+            <div class="button-group" style="margin-bottom: 15px;">
+                <button class="btn btn-secondary btn-sm" id="cleanup-preview-btn">
+                    <i class="fas fa-magnifying-glass"></i> Предпросмотр
+                </button>
+                <button class="btn btn-danger btn-sm" id="cleanup-run-btn">
+                    <i class="fas fa-broom"></i> Запустить очистку сейчас
+                </button>
+            </div>
+
+            <div id="cleanup-report"></div>
+        </div>
+    </fieldset>
+
     <div class="button-group">
         <button class="btn btn-primary" id="save-settings-btn">Сохранить настройки</button>
         <button class="btn btn-secondary" id="reset-settings-btn">Сбросить настройки</button>
@@ -124,8 +195,27 @@
 .status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .status-badge.enabled { background-color: rgba(59, 165, 93, 0.2); color: var(--green); }
 .status-badge.disabled { background-color: rgba(237, 66, 69, 0.2); color: var(--red); }
-.empty-state { text-align: center; padding: 30px 20px; color: var(--text-muted); }
-.empty-state i { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
+
+/* Отчёт очистки мусора (public/cleanup-ui.js) — сводка по трём категориям
+   плюс сворачиваемый список конкретных файлов на категорию (details/summary,
+   тот же приём, что и у form-section в стилях страницы статей). */
+.cleanup-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.cleanup-summary-card { background: var(--background-secondary); border: 1px solid var(--background-accent); border-radius: 8px; padding: 12px 14px; }
+.cleanup-summary-card .count { font-size: 22px; font-weight: 700; color: var(--header-primary); }
+.cleanup-summary-card .label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.cleanup-category { margin-bottom: 8px; }
+.cleanup-category summary { cursor: pointer; padding: 8px 10px; background: var(--background-secondary); border-radius: 6px; color: var(--text-normal); font-size: 13px; }
+.cleanup-category summary:hover { color: var(--header-primary); }
+.cleanup-file-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.cleanup-file-list li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 10px; font-size: 12.5px; color: var(--text-muted); border-bottom: 1px solid var(--background-accent); }
+.cleanup-file-list li span:first-child { word-break: break-all; }
+
+/* Чекбоксы категорий очистки — тот же вид, что и .articles-page .checkbox-field
+   (global-styles.css/articles.html), здесь без той обёртки-класса. */
+.settings-container .checkbox-field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--header-secondary); cursor: pointer; }
+/* .empty-state — общий компонент из global-styles.css (см. "EMPTY STATE"),
+   здесь раньше было его же локальное переопределение с другими паддингами —
+   на странице настроек список бэкапов выглядел иначе, чем везде. */
 @media (max-width: 768px) {
     .backup-table { display: block; overflow-x: auto; }
     .backup-actions { flex-direction: column; }

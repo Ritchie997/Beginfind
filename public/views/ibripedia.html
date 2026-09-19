@@ -1,0 +1,267 @@
+<div class="ibripedia-page">
+
+  <!-- ===== Витрина: фильтры + сетка/список статей ===== -->
+  <section id="ibripediaBrowse" class="ibripedia-browse">
+    <div class="ibripedia-toolbar">
+      <div class="ibripedia-toolbar-row ibripedia-toolbar-row-main">
+        <h1 class="ibripedia-heading"><i class="fas fa-book-open"></i> Ibripedia</h1>
+        <div class="ibripedia-search-wrap">
+          <i class="fas fa-search"></i>
+          <input type="text" id="ibripediaSearch" class="ibripedia-search-input" placeholder="Искать статью по названию или тексту… (нажмите /)">
+        </div>
+        <button type="button" id="ibripediaRandomBtn" class="btn btn-secondary" title="Случайная статья"><i class="fas fa-dice"></i></button>
+        <button type="button" id="ibripediaNewBtn" class="btn btn-primary"><i class="fas fa-pen"></i> Написать статью</button>
+      </div>
+
+      <!-- Кнопка "Фильтры" (видна только на телефоне, см. ibripedia.css) —
+           в одном ряду со счётчиком/переключателем вида, а не сироткой над
+           ними. Показ/скрытие панели ниже — JS (initFiltersCollapse() /
+           applyFiltersOpenState() в ibripedia.js), не <details>: пробовали
+           display:contents на <details>, но у Chrome контент диклоужера
+           рендерится в собственном анонимном боксе (::details-content),
+           который CSS-класс на вложенном div не превращает в full-width —
+           обычная кнопка+div надёжнее и не зависит от такой специфики. -->
+      <div class="ibripedia-toolbar-row ibripedia-toolbar-row-status">
+        <button type="button" id="ibripediaFiltersToggleBtn" class="ibripedia-filters-toggle" aria-expanded="true" aria-controls="ibripediaFiltersPanel">
+          <i class="fas fa-filter"></i> Фильтры
+          <span id="ibripediaFiltersCount" class="ibripedia-filters-count" hidden>0</span>
+          <i class="fas fa-chevron-down ibripedia-filters-chev"></i>
+        </button>
+
+        <span id="ibripediaCount" class="ibripedia-count"></span>
+        <div class="ibripedia-view-toggle" role="group" aria-label="Вид списка">
+          <button type="button" class="ibripedia-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
+          <button type="button" class="ibripedia-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
+        </div>
+      </div>
+
+      <div class="ibripedia-toolbar-row ibripedia-toolbar-row-filters" id="ibripediaFiltersPanel">
+        <div class="ibripedia-filter">
+          <label>Категории</label>
+          <div id="ibripediaCategoryField" class="chip-field ibripedia-chip-field">
+            <div class="chip-field-box">
+              <div class="chip-field-chips"></div>
+              <input type="text" class="chip-field-input" placeholder="Все категории...">
+            </div>
+            <div class="chip-field-dropdown" hidden></div>
+            <input type="hidden" class="chip-field-hidden">
+          </div>
+        </div>
+
+        <div class="ibripedia-filter">
+          <label>Теги</label>
+          <div id="ibripediaTagField" class="chip-field ibripedia-chip-field">
+            <div class="chip-field-box">
+              <div class="chip-field-chips"></div>
+              <input type="text" class="chip-field-input" placeholder="Все теги...">
+            </div>
+            <div class="chip-field-dropdown" hidden></div>
+            <input type="hidden" class="chip-field-hidden">
+          </div>
+        </div>
+
+        <div class="ibripedia-filter">
+          <label>Сервер</label>
+          <select id="ibripediaServerFilter" class="form-select">
+            <option value="">Все</option>
+          </select>
+        </div>
+
+        <div class="ibripedia-filter">
+          <label>Статус</label>
+          <select id="ibripediaStatusFilter" class="form-select">
+            <option value="">Любой</option>
+            <option value="false">🔓 Открытые</option>
+            <option value="true">🔒 Закрытые</option>
+          </select>
+        </div>
+
+        <div class="ibripedia-filter ibripedia-filter-dates">
+          <label>Дата создания</label>
+          <div class="ibripedia-date-range">
+            <input type="date" id="ibripediaDateFrom" class="form-input">
+            <span>—</span>
+            <input type="date" id="ibripediaDateTo" class="form-input">
+          </div>
+        </div>
+
+        <div class="ibripedia-filter">
+          <label>Сортировка</label>
+          <select id="ibripediaSort" class="form-select">
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+            <option value="updated">Недавно обновлённые</option>
+            <option value="views">По просмотрам</option>
+            <option value="alpha">По алфавиту</option>
+          </select>
+        </div>
+
+        <button type="button" id="ibripediaResetFiltersBtn" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+      </div>
+    </div>
+
+    <div id="ibripediaGrid" class="ibripedia-grid"></div>
+
+    <div id="ibripediaEmpty" class="ibripedia-empty" hidden>
+      <i class="fas fa-inbox"></i>
+      <p>Ничего не найдено по текущим фильтрам.</p>
+      <button type="button" id="ibripediaEmptyResetBtn" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+    </div>
+
+    <div id="ibripediaLoadingMore" class="ibripedia-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
+    <div id="ibripediaSentinel" class="ibripedia-sentinel"></div>
+  </section>
+
+  <!-- ===== Просмотр одной статьи ===== -->
+  <section id="ibripediaView" class="ibripedia-view" hidden>
+    <div class="ibripedia-view-topbar">
+      <button type="button" id="ibripediaBackBtn" class="btn btn-secondary btn-sm ibripedia-back-btn">
+        <i class="fas fa-arrow-left"></i> К списку статей
+      </button>
+
+      <!-- Поиск по тексту ОТКРЫТОЙ статьи (не путать с поиском по витрине
+           выше) — подсвечивает совпадения прямо в тексте и листает по ним
+           (см. runInArticleSearch()/gotoSearchHit() в ibripedia.js). -->
+      <div class="ibripedia-inline-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="ibripediaInlineSearch" class="ibripedia-inline-search-input" placeholder="Поиск по статье…">
+        <span id="ibripediaInlineSearchCount" class="ibripedia-inline-search-count" hidden></span>
+        <button type="button" id="ibripediaInlineSearchPrev" class="ibripedia-inline-search-nav" title="Предыдущее совпадение" hidden><i class="fas fa-chevron-up"></i></button>
+        <button type="button" id="ibripediaInlineSearchNext" class="ibripedia-inline-search-nav" title="Следующее совпадение" hidden><i class="fas fa-chevron-down"></i></button>
+        <button type="button" id="ibripediaInlineSearchClear" class="ibripedia-inline-search-nav" title="Очистить" hidden><i class="fas fa-times"></i></button>
+      </div>
+
+      <!-- Только на телефоне/планшете (см. @media в ibripedia.css) —
+           разворачивает боковую панель "Оглавление/Закладки" под текстом. -->
+      <button type="button" id="ibripediaSidebarToggleBtn" class="ibripedia-filters-toggle ibripedia-sidebar-toggle" aria-expanded="false" aria-controls="ibripediaViewSidebar">
+        <i class="fas fa-list-ul"></i> Оглавление и закладки
+        <i class="fas fa-chevron-down ibripedia-filters-chev"></i>
+      </button>
+    </div>
+
+    <div class="ibripedia-view-layout">
+      <!-- Стикеры закладок, когда слева от карточки статьи достаточно места
+           (см. .ibripedia-bookmark-gutter/hasWideGutterSpace в ibripedia.js) —
+           якорь position:relative для них здесь же, у .ibripedia-view-layout,
+           а не внутри карточки (у неё overflow:hidden — стикер бы обрезало
+           по краю вместо того, чтобы ему из-за края торчать). -->
+      <div id="ibripediaBookmarkGutter" class="ibripedia-bookmark-gutter" aria-hidden="true"></div>
+
+      <article id="ibripediaViewArticle" class="ibripedia-view-article">
+        <div id="ibripediaViewCover" class="ibripedia-view-cover" hidden>
+          <img id="ibripediaViewCoverImg" alt="">
+        </div>
+
+        <h1 id="ibripediaViewTitle" class="ibripedia-view-title"></h1>
+        <div id="ibripediaViewMeta" class="ibripedia-view-meta"></div>
+        <div id="ibripediaViewBadges" class="ibripedia-view-badges"></div>
+
+        <div class="ibripedia-view-actions">
+          <button type="button" id="ibripediaEditBtn" class="btn btn-primary"><i class="fas fa-pen"></i> Редактировать</button>
+          <button type="button" id="ibripediaDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Удалить</button>
+        </div>
+
+        <div id="ibripediaViewContent" class="preview-pane ibripedia-view-content"></div>
+
+        <!-- Лайк + переход к комментариям (см. renderEngagementBar()/
+             scrollToComments() в ibripedia.js). Счётчики подгружаются
+             отдельными запросами при открытии статьи, как и закладки. -->
+        <div id="ibripediaViewEngagement" class="ibripedia-view-engagement">
+          <button type="button" id="ibripediaLikeBtn" class="ibripedia-engagement-btn" title="Нравится">
+            <i class="far fa-heart"></i> <span id="ibripediaLikeCount">0</span>
+          </button>
+          <!-- Реакции эмодзи/стикером — сразу рядом с лайком (тот же значок
+               "смайлик", что и у пикера стикеров под комментарием, см.
+               reactionsBarInnerHtml()/handleReactionsClick() в ibripedia.js):
+               лайк ведь тоже своего рода реакция, логично держать их вместе,
+               а не относить комментарии между ними. -->
+          <div id="ibripediaReactionsBar" class="ibripedia-reactions" data-target-type="article" data-target-id=""></div>
+          <button type="button" id="ibripediaCommentsBtn" class="ibripedia-engagement-btn" title="К комментариям">
+            <i class="far fa-comment"></i> <span id="ibripediaCommentsCount">0</span>
+          </button>
+        </div>
+      </article>
+
+      <!-- Оглавление (по заголовкам статьи, как Навигация в Word) +
+           закладки текущей статьи — см. renderToc()/renderBookmarksPanel()
+           в ibripedia.js. -->
+      <aside id="ibripediaViewSidebar" class="ibripedia-view-sidebar">
+        <div class="ibripedia-sidebar-tabs">
+          <button type="button" class="ibripedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button>
+          <button type="button" class="ibripedia-sidebar-tab" data-sidebar-tab="bookmarks"><i class="fas fa-bookmark"></i> Закладки</button>
+        </div>
+        <div id="ibripediaTocPanel" class="ibripedia-sidebar-panel"></div>
+        <div id="ibripediaBookmarksPanel" class="ibripedia-sidebar-panel" hidden></div>
+      </aside>
+    </div>
+
+    <div id="ibripediaViewBacklinks" class="backlinks-panel ibripedia-view-backlinks" hidden></div>
+
+    <!-- Комментарии — самый низ статьи: сюда прокручивает клик по значку
+         комментария в панели лайка/комментариев выше (см.
+         scrollToComments()/loadArticleComments() в ibripedia.js). -->
+    <section id="ibripediaViewComments" class="ibripedia-comments">
+      <h3><i class="far fa-comment"></i> Комментарии <span id="ibripediaCommentsHeaderCount"></span></h3>
+
+      <!-- Разметка формы — общий шаблон, что и у формы "Ответить" (генерится
+           динамически, см. toggleReplyComposer() в ibripedia.js): поле ввода
+           .ibripedia-comment-input — CONTENTEDITABLE, а не textarea, чтобы
+           вставленный стикер сразу было видно картинкой, а не текстом
+           шорткода (см. insertStickerChip()/serializeRichInput()). -->
+      <form id="ibripediaCommentForm" class="ibripedia-comment-form">
+        <div id="ibripediaCommentInput" class="ibripedia-comment-input" contenteditable="true" data-placeholder="Написать комментарий…"></div>
+        <div class="ibripedia-comment-form-actions">
+          <button type="button" id="ibripediaStickerPickerBtn" class="ibripedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
+          <button type="submit" data-role="submit" class="btn btn-primary btn-sm">Отправить</button>
+        </div>
+        <div id="ibripediaStickerPicker" class="ibripedia-sticker-picker" hidden>
+          <div class="ibripedia-sticker-picker-header">
+            Стикеры
+            <span class="ibripedia-sticker-picker-links">
+              <a href="#" data-nav="/stickers">управлять наборами</a> ·
+              <a href="#" data-role="open-store">магазин наборов</a>
+            </span>
+          </div>
+          <div class="ibripedia-sticker-picker-tabs"></div>
+          <div class="ibripedia-sticker-picker-subtitle"></div>
+          <div id="ibripediaStickerPickerBody" class="ibripedia-sticker-picker-body"></div>
+        </div>
+      </form>
+
+      <div id="ibripediaCommentsList" class="ibripedia-comments-list"></div>
+      <div id="ibripediaCommentsEmpty" class="ibripedia-comments-empty" hidden>Комментариев пока нет — будьте первым.</div>
+    </section>
+
+    <!-- Подложка модального окна закладки — ТОЛЬКО на тач-устройствах (см.
+         @media (hover:none) в ibripedia.css и openBookmarkPopover в
+         ibripedia.js): затемняет статью позади, но клик по ней НЕ закрывает
+         попап — закрыть можно только явно (Сохранить/Отмена/×), чтобы
+         случайный тап мимо не сбрасывал уже начатую закладку. На
+         устройствах с мышью не показывается — там попап остаётся обычной
+         всплывающей панелью у хвостика. -->
+    <div id="ibripediaBookmarkModalBackdrop" class="ibripedia-bookmark-modal-backdrop" hidden></div>
+
+    <!-- Попап "Закладка" — открывается кликом по хвостику-переключателю
+         слева от блока текста (см. .ibripedia-bm-toggle/renderBookmarkGutter
+         в ibripedia.js), а на тач-устройствах ещё и двойным тапом по самому
+         абзацу (см. handleContentDblClick): назвать закладку и выбрать цвет.
+         position: fixed (см. ibripedia.css) — координаты на устройствах с
+         мышью выставляет positionFloating() в пикселях окна; на
+         тач-устройствах становится модальным окном по центру экрана —
+         координаты там не нужны, задаёт CSS. -->
+    <div id="ibripediaBookmarkPopover" class="ibripedia-bookmark-popover" hidden>
+      <button type="button" id="ibripediaBookmarkPopoverClose" class="ibripedia-bookmark-popover-close" title="Закрыть"><i class="fas fa-times"></i></button>
+      <label class="ibripedia-bookmark-popover-label" for="ibripediaBookmarkPopoverName">Название закладки</label>
+      <input type="text" id="ibripediaBookmarkPopoverName" class="form-input" placeholder="Например: Важный момент" maxlength="100">
+      <div id="ibripediaBookmarkPopoverColors" class="ibripedia-bookmark-swatches"></div>
+      <div class="ibripedia-bookmark-popover-actions">
+        <button type="button" id="ibripediaBookmarkPopoverDelete" class="btn btn-danger btn-sm" title="Удалить закладку" hidden><i class="fas fa-trash"></i></button>
+        <div class="ibripedia-bookmark-popover-actions-right">
+          <button type="button" id="ibripediaBookmarkPopoverCancel" class="btn btn-secondary btn-sm">Отмена</button>
+          <button type="button" id="ibripediaBookmarkPopoverSave" class="btn btn-primary btn-sm">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>

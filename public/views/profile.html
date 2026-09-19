@@ -1,0 +1,137 @@
+<div class="profile-page">
+    <div id="profile-loading" style="text-align: center; padding: 40px; color: var(--text-muted, #b9bbbe);">
+        <div class="skeleton" style="height: 160px;"></div>
+    </div>
+
+    <div id="profile-error" style="display: none; text-align: center; padding: 40px; color: var(--text-muted, #b9bbbe);">
+        <div style="font-size: 48px; margin-bottom: 12px;">🚫</div>
+        <h3 style="color: var(--header-primary, #fff); margin-bottom: 8px;">Профиль не найден</h3>
+        <p id="profile-error-text" style="margin: 0;"></p>
+    </div>
+
+    <div id="profile-content" style="display: none;">
+        <!-- Шапка профиля -->
+        <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; padding: 24px; margin-bottom: 24px; background: var(--background-secondary, #2f3136); border-radius: 8px; border: 1px solid var(--background-accent, #4f545c);">
+            <div id="profile-avatar" style="flex-shrink: 0; width: 72px; height: 72px; border-radius: 50%; background: #5865f2; color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;"></div>
+            <div style="flex: 1; min-width: 200px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;">
+                    <h2 id="profile-display-name" style="color: var(--header-primary, #fff); margin: 0;"></h2>
+                    <span id="profile-role-badge" style="padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
+                    <span id="profile-status-badge" style="display: none; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
+                </div>
+                <div id="profile-username" style="color: var(--text-muted, #b9bbbe); font-family: monospace; font-size: 13px; margin-bottom: 8px;"></div>
+                <div id="profile-created-at" style="color: var(--text-muted, #b9bbbe); font-size: 12px;"></div>
+            </div>
+        </div>
+
+        <!-- Сервера -->
+        <div style="margin-bottom: 24px;">
+            <h3 style="color: var(--header-primary, #fff); margin: 0 0 10px 0; font-size: 15px;">Сервера</h3>
+            <div id="profile-servers" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            <div id="profile-servers-empty" style="display: none; color: var(--text-muted, #b9bbbe); font-size: 13px;">Не состоит ни в одном сервере</div>
+        </div>
+
+        <!-- О себе (bio) -->
+        <div style="margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <h3 style="color: var(--header-primary, #fff); margin: 0; font-size: 15px;">О себе</h3>
+                <button id="profile-bio-edit-btn" style="display: none; background: transparent; border: 1px solid var(--background-accent, #4f545c); color: var(--text-muted, #b9bbbe); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Редактировать</button>
+            </div>
+            <p id="profile-bio-text" style="color: var(--text-normal, #dcddde); margin: 0; white-space: pre-wrap; line-height: 1.5;"></p>
+            <div id="profile-bio-edit" style="display: none;">
+                <textarea id="profile-bio-input" maxlength="2000" rows="4" style="
+                    width: 100%; padding: 10px; box-sizing: border-box; resize: vertical;
+                    background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c);
+                    border-radius: 4px; color: var(--text-normal, #dcddde); font-size: 14px; font-family: inherit;
+                "></textarea>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                    <button id="profile-bio-save-btn" style="background: #5865f2; color: white; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">Сохранить</button>
+                    <button id="profile-bio-cancel-btn" style="background: var(--background-accent, #4f545c); color: var(--text-normal, #dcddde); padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Приватная заметка админ-панели (видна только тем, у кого есть право view_users_tab) -->
+        <!-- Цвет — существующий токен var(--yellow), а не свой одноразовый
+             #f5b642 (см. пункт "хардкод-цвета → переменные" в разборе
+             админки): семантически то же самое предупреждение/акцент, что и
+             .btn-warning в остальном приложении. -->
+        <div id="profile-note-block" style="display: none; margin-bottom: 24px; padding: 16px; background: rgba(250, 168, 26, 0.08); border: 1px dashed var(--yellow); border-radius: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <h3 style="color: var(--yellow); margin: 0; font-size: 14px;">🔒 Заметка админ-панели <span style="font-weight: 400; color: var(--text-muted, #b9bbbe);">— видна только админам</span></h3>
+                <button id="profile-note-edit-btn" style="background: transparent; border: 1px solid var(--yellow); color: var(--yellow); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Редактировать</button>
+            </div>
+            <p id="profile-note-text" style="color: var(--text-normal, #dcddde); margin: 0; white-space: pre-wrap; line-height: 1.5;"></p>
+            <div id="profile-note-edit" style="display: none;">
+                <textarea id="profile-note-input" maxlength="2000" rows="3" style="
+                    width: 100%; padding: 10px; box-sizing: border-box; resize: vertical;
+                    background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c);
+                    border-radius: 4px; color: var(--text-normal, #dcddde); font-size: 14px; font-family: inherit;
+                "></textarea>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                    <button id="profile-note-save-btn" style="background: var(--yellow); color: #1a1a1a; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">Сохранить</button>
+                    <button id="profile-note-cancel-btn" style="background: var(--background-accent, #4f545c); color: var(--text-normal, #dcddde); padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Медиа пользователя -->
+        <div>
+            <div style="display: flex; gap: 4px; border-bottom: 2px solid var(--background-accent, #4f545c); margin-bottom: 16px;">
+                <button class="profile-media-tab active" data-tab="articles" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-normal, #dcddde); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid #5865f2; margin-bottom: -2px;">📄 Статьи</button>
+                <button class="profile-media-tab" data-tab="arts" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">🎨 Арты</button>
+                <button class="profile-media-tab" data-tab="stickers" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">😀 Наборы стикеров</button>
+                <!-- Видна только на СВОЁМ профиле (закладки — личные, см. setupProfileBookmarks в spa-router.js) -->
+                <button id="profile-bookmarks-tab-btn" class="profile-media-tab" data-tab="bookmarks" style="display: none; padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">🔖 Закладки</button>
+            </div>
+
+            <div id="profile-media-articles" class="profile-media-panel">
+                <div id="profile-articles-loading" style="color: var(--text-muted, #b9bbbe); font-size: 13px;">Загрузка…</div>
+                <div id="profile-articles-empty" style="display: none; color: var(--text-muted, #b9bbbe); font-size: 13px; padding: 20px 0;">Пока нет ни одной статьи</div>
+                <div id="profile-articles-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+
+            <div id="profile-media-arts" class="profile-media-panel" style="display: none; text-align: center; padding: 40px 20px; color: var(--text-muted, #b9bbbe);">
+                <div style="font-size: 40px; margin-bottom: 10px;">🎨</div>
+                <div style="font-weight: 600; margin-bottom: 4px;">Загруженные арты</div>
+                <div style="font-size: 13px;">В разработке — появится отдельная страница с артами пользователя</div>
+            </div>
+
+            <!-- Наборы стикеров, СОЗДАННЫЕ пользователем (автор = владелец
+                 профиля) — себе видны все статусы, включая "на модерации"/
+                 "отклонён", в чужом профиле только одобренные (см. GET
+                 /api/stickers/by-user/:userId). Клик по карточке открывает
+                 набор целиком в общей модалке просмотра (см.
+                 public/sticker-pack-view.js) — там же можно добавить набор
+                 себе или убрать подписку. -->
+            <div id="profile-media-stickers" class="profile-media-panel" style="display: none;">
+                <div id="profile-stickers-loading" style="color: var(--text-muted, #b9bbbe); font-size: 13px;">Загрузка…</div>
+                <div id="profile-stickers-empty" style="display: none; text-align: center; padding: 40px 20px; color: var(--text-muted, #b9bbbe);">
+                    <div style="font-size: 40px; margin-bottom: 10px;">😀</div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">Наборов стикеров пока нет</div>
+                    <div id="profile-stickers-empty-hint" style="font-size: 13px;"></div>
+                </div>
+                <div id="profile-stickers-grid" style="display: none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;"></div>
+
+                <!-- Наборы, ДОБАВЛЕННЫЕ себе (чужого авторства — свои и так
+                     видны выше) — только на СВОЁМ профиле: отсюда их можно
+                     быстро убрать крестиком на карточке, не открывая
+                     модалку набора (см. renderProfileAddedStickers() в
+                     spa-router.js — задача "нет возможности убрать набор"). -->
+                <div id="profile-stickers-added-section" style="display: none; margin-top: 24px;">
+                    <h4 style="color: var(--header-primary, #fff); margin: 0 0 10px 0; font-size: 14px;">Добавленные наборы</h4>
+                    <div id="profile-stickers-added-empty" style="display: none; color: var(--text-muted, #b9bbbe); font-size: 13px; padding: 10px 0;">Вы пока не добавили ни одного чужого набора — сделать это можно во вкладке «Стикеры» или в «Магазине наборов» рядом с пикером стикеров.</div>
+                    <div id="profile-stickers-added-grid" style="display: none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;"></div>
+                </div>
+            </div>
+
+            <!-- Закладки, поставленные в статьях Ibripedia (см. public/ibripedia.js) —
+                 сгруппированы по статье, клик открывает статью и скроллит к месту закладки. -->
+            <div id="profile-media-bookmarks" class="profile-media-panel" style="display: none;">
+                <div id="profile-bookmarks-loading" style="color: var(--text-muted, #b9bbbe); font-size: 13px;">Загрузка…</div>
+                <div id="profile-bookmarks-empty" style="display: none; color: var(--text-muted, #b9bbbe); font-size: 13px; padding: 20px 0;">Пока нет ни одной закладки — откройте статью в Ibripedia, выделите текст и добавьте закладку</div>
+                <div id="profile-bookmarks-list" style="display: flex; flex-direction: column; gap: 16px;"></div>
+            </div>
+        </div>
+    </div>
+</div>

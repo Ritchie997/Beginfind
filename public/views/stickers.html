@@ -1,0 +1,204 @@
+<div class="stickers-page">
+    <div class="stickers-toolbar">
+        <h2 class="stickers-heading"><i class="fas fa-icons"></i> Стикеры</h2>
+        <button class="btn btn-primary" id="stickersCreateBtn"><i class="fas fa-plus"></i> Создать набор</button>
+    </div>
+
+    <div class="editor-mode-tabs stickers-tabs" id="stickersTabs">
+        <button type="button" class="editor-mode-tab active" data-stickers-tab="catalog"><i class="fas fa-grip"></i> Каталог</button>
+        <button type="button" class="editor-mode-tab" data-stickers-tab="mine"><i class="fas fa-user"></i> Мои наборы</button>
+        <button type="button" class="editor-mode-tab" data-stickers-tab="pending" id="stickersPendingTabBtn" hidden>
+            <i class="fas fa-clock"></i> На модерации
+            <span class="stickers-badge" id="stickersPendingBadge" hidden>0</span>
+        </button>
+    </div>
+
+    <!-- ============ Каталог: одобренные наборы, доступные для добавления ============ -->
+    <div class="stickers-panel" id="stickersPanelCatalog">
+        <div class="stickers-search-wrap">
+            <i class="fas fa-search"></i>
+            <input type="text" id="stickersCatalogSearch" placeholder="Поиск наборов по названию...">
+        </div>
+        <div class="loading-pulse" id="stickersCatalogLoading">Загрузка наборов...</div>
+        <div class="empty-state" id="stickersCatalogEmpty" hidden>
+            <i class="fas fa-icons"></i>
+            <h3>Пока нет одобренных наборов</h3>
+            <p>Загрузите свой набор во вкладке «Мои наборы» — после подтверждения администратором он появится здесь, и любой сможет добавить его себе.</p>
+        </div>
+        <div class="stickers-pack-grid" id="stickersCatalogGrid" hidden></div>
+    </div>
+
+    <!-- ============ Мои наборы: создание/загрузка/статус модерации ============ -->
+    <div class="stickers-panel" id="stickersPanelMine" hidden>
+        <div class="loading-pulse" id="stickersMineLoading">Загрузка ваших наборов...</div>
+        <div class="empty-state" id="stickersMineEmpty" hidden>
+            <i class="fas fa-icons"></i>
+            <h3>У вас пока нет наборов стикеров</h3>
+            <p>Создайте набор и загрузите в него картинки или GIF (для анимации) — после подтверждения администратором набор можно будет добавить себе и использовать в комментариях.</p>
+            <button class="btn btn-primary" id="stickersMineEmptyCreateBtn"><i class="fas fa-plus"></i> Создать набор</button>
+        </div>
+        <div class="stickers-pack-grid" id="stickersMineGrid" hidden></div>
+    </div>
+
+    <!-- ============ На модерации: видно только с правом moderate_stickers ============ -->
+    <div class="stickers-panel" id="stickersPanelPending" hidden>
+        <div class="loading-pulse" id="stickersPendingLoading">Загрузка заявок...</div>
+        <div class="empty-state" id="stickersPendingEmpty" hidden>
+            <i class="fas fa-check-double"></i>
+            <h3>Нет наборов, ожидающих подтверждения</h3>
+            <p>Новые наборы пользователей будут появляться здесь.</p>
+        </div>
+        <div class="stickers-pack-grid" id="stickersPendingGrid" hidden></div>
+    </div>
+
+    <!-- ============ Модалка: создать набор ============ -->
+    <div class="modal-overlay" id="stickersCreateModal" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Новый набор стикеров</h3>
+                <button class="modal-close" id="stickersCreateCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Название набора</label>
+                    <input type="text" id="stickersCreateTitle" class="form-input" maxlength="100" placeholder="Например: Котики">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Описание (необязательно)</label>
+                    <textarea id="stickersCreateDescription" class="form-textarea" maxlength="200" placeholder="Коротко, до 200 символов — покажется в пикере стикеров при выборе набора"></textarea>
+                </div>
+                <div class="modal-hint"><i class="fas fa-circle-info"></i> После создания набор появится во вкладке «Мои наборы» со статусом «На модерации» — добавьте в него стикеры и дождитесь подтверждения администратором.</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="stickersCreateCancelBtn">Отмена</button>
+                <button class="btn btn-primary" id="stickersCreateConfirmBtn">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Модалка: набор (просмотр/загрузка/модерация) ============ -->
+    <div class="modal-overlay" id="stickersPackModal" hidden>
+        <div class="modal-box modal-box-wide">
+            <div class="modal-header">
+                <h3 id="stickersPackModalTitle">Набор</h3>
+                <button class="modal-close" id="stickersPackModalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stickers-pack-modal-meta" id="stickersPackModalMeta"></div>
+                <div class="stickers-grid" id="stickersPackModalGrid"></div>
+                <div class="stickers-upload-row" id="stickersPackModalUploadRow" hidden>
+                    <input type="file" id="stickersUploadFileInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                    <button type="button" class="btn btn-secondary" id="stickersUploadPickBtn"><i class="fas fa-image"></i> <span id="stickersUploadFileName">Выбрать файл</span></button>
+                    <input type="text" id="stickersUploadAliasInput" class="form-input" placeholder="Имя стикера латиницей, напр. wave" maxlength="60">
+                    <button type="button" class="btn btn-primary" id="stickersUploadConfirmBtn"><i class="fas fa-upload"></i> Добавить</button>
+                </div>
+            </div>
+            <div class="modal-footer" id="stickersPackModalFooter"></div>
+        </div>
+    </div>
+
+    <!-- ============ Модалка: причина отклонения (модератор) ============ -->
+    <div class="modal-overlay" id="stickersRejectModal" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Отклонить набор</h3>
+                <button class="modal-close" id="stickersRejectCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Причина (покажем автору)</label>
+                    <textarea id="stickersRejectReason" class="form-textarea" maxlength="500" placeholder="Например: неприемлемое содержимое"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="stickersRejectCancelBtn">Отмена</button>
+                <button class="btn btn-danger" id="stickersRejectConfirmBtn">Отклонить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stickers-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.stickers-heading { margin: 0; font-size: 20px; color: var(--text-normal); display: flex; align-items: center; gap: 10px; }
+.stickers-tabs { margin-bottom: 18px; }
+.stickers-badge { background: var(--red); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; margin-left: 4px; }
+
+.stickers-search-wrap { position: relative; max-width: 360px; margin-bottom: 16px; }
+.stickers-search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.stickers-search-wrap input { width: 100%; padding: 9px 12px 9px 34px; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 6px; color: var(--text-normal); }
+
+.stickers-pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+/* `display: grid` в правиле выше — авторский normal-стиль, он ВСЕГДА
+   перебивает встроенное `[hidden] { display: none }` браузера (это
+   UA-стиль normal-приоритета — при равном "normal" авторский стиль
+   побеждает независимо от специфичности), поэтому одно только
+   gridEl.hidden = true в JS (loadCatalog/loadMine/loadPending в
+   public/stickers-manager.js) сетку визуально не прятало: после
+   подтверждения/удаления/отзыва набора, когда список становится пустым,
+   старая карточка оставалась на экране (это и был баг "набор спускается
+   вниз страницы и исчезает только после перезагрузки" — исчезал он не
+   поэтому, а потому что до следующей непустой загрузки innerHTML вообще не
+   перезаписывался). Явное правило для [hidden] с более высокой
+   специфичностью действительно прячет сетку. */
+.stickers-pack-grid[hidden] { display: none; }
+
+.stickers-pack-card {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.stickers-pack-card:hover { border-color: var(--blurple); transform: translateY(-2px); }
+
+.stickers-pack-preview { display: flex; gap: 6px; height: 56px; align-items: center; }
+.stickers-pack-preview img { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; background: var(--background-tertiary); }
+.stickers-pack-preview-more { color: var(--text-muted); font-size: 13px; }
+.stickers-pack-preview-empty { color: var(--text-muted); font-size: 13px; font-style: italic; }
+
+.stickers-pack-card-title { font-weight: 600; color: var(--text-normal); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stickers-pack-card-description { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -4px; }
+.stickers-pack-card-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+
+.stickers-status-badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.stickers-status-badge.pending { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
+.stickers-status-badge.approved { background: rgba(59, 165, 93, 0.18); color: var(--green); }
+.stickers-status-badge.rejected { background: rgba(237, 66, 69, 0.18); color: var(--red); }
+
+.stickers-pack-card-actions { display: flex; gap: 6px; }
+.stickers-pack-card-actions .btn { flex: 1; }
+
+.stickers-pack-modal-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
+.stickers-reject-reason-box {
+    background: rgba(237, 66, 69, 0.1);
+    border: 1px solid rgba(237, 66, 69, 0.35);
+    color: var(--text-normal);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 14px;
+}
+
+.stickers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin-bottom: 14px; max-height: 340px; overflow-y: auto; padding: 2px; }
+.stickers-tile { position: relative; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 8px; padding: 6px; text-align: center; cursor: pointer; }
+.stickers-tile img { width: 100%; height: 64px; object-fit: contain; }
+.stickers-tile-alias { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.stickers-tile-remove {
+    position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 20px; cursor: pointer;
+}
+.stickers-grid-empty { grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0; }
+
+.stickers-upload-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 12px; border-top: 1px solid var(--background-accent); }
+.stickers-upload-row .form-input { flex: 1; min-width: 180px; }
+
+@media (max-width: 600px) {
+    .stickers-pack-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .stickers-upload-row .btn, .stickers-upload-row .form-input { width: 100%; }
+}
+</style>

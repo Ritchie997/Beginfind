@@ -1,19 +1,26 @@
-// articles-store.js — файловое хранилище статей (Markdown + YAML frontmatter)
-// взамен articles.db. Каждая статья — один файл content/<slug>.md, slug
-// одновременно служит и именем файла, и идентификатором в URL (/api/articles/:slug),
-// и целью для wiki-ссылок [[slug]] (см. Этап 4).
+// articles-store.js — файловое хранилище статей (JSON: метаданные + дерево
+// блоков) взамен исходного Markdown+YAML-frontmatter формата (см. blocks.js
+// про причину отказа от markdown-текста с самодельным {width=...}-синтаксисом).
+// Каждая статья — один файл content/<slug>.json, slug одновременно служит и
+// именем файла, и идентификатором в URL (/api/articles/:slug), и целью для
+// wiki-ссылок [[slug]].
 //
 // Экспортирует единый CRUD-слой, которым пользуется src/routes/articles.routes.js.
 // Список статей кэшируется в памяти и инвалидируется при любой записи через
 // этот модуль (см. requirement "кэширование списка статей для производительности").
+//
+// Старые *.md-файлы (Markdown-формат, до перехода на блоки) сюда сознательно
+// НЕ читаются — по решению "статьи мусорные, миграция не нужна": при переходе
+// на этот модуль содержимое content/ пересоздаётся с нуля.
 
 const fs = require('fs');
 const path = require('path');
-const matter = require('gray-matter');
 const { CONTENT_DIR } = require('../config/paths');
 const { slugify } = require('./slugify');
+const blocks = require('./blocks');
 
 const TRASH_DIR = path.join(CONTENT_DIR, '.trash');
+const FILE_EXT = '.json';
 
 function ensureDirs() {
   if (!fs.existsSync(CONTENT_DIR)) {
@@ -36,7 +43,12 @@ function isSafeSlug(slug) {
 }
 
 function articlePath(slug) {
-  return path.join(CONTENT_DIR, `${slug}.md`);
+  return path.join(CONTENT_DIR, `${slug}${FILE_EXT}`);
+}
+
+function listArticleFiles() {
+  ensureDirs();
+  return fs.readdirSync(CONTENT_DIR).filter((f) => f.endsWith(FILE_EXT));
 }
 
 // ========================================
@@ -51,12 +63,17 @@ function invalidateCache() {
 
 /**
  * Читает и разбирает один файл статьи. Возвращает null, если файла нет,
- * либо он повреждён/не в формате Markdown+frontmatter (ошибка логируется,
- * но не валит весь список — см. requirement "обработай случаи, когда файл
- * повреждён или содержит неверный формат").
+ * либо он повреждён/не в формате JSON (ошибка логируется, но не валит весь
+ * список — см. requirement "обработай случаи, когда файл повреждён или
+ * содержит неверный формат").
  */
 function readArticleFile(slug) {
-  const filePath = articlePath(slug);
+  return parseArticleFile(articlePath(slug), slug);
+}
+
+// Разбор файла статьи по произвольному пути — общий для файлов в content/ и
+// в корзине content/.trash/ (см. listTrashedArticles).
+function parseArticleFile(filePath, slug) {
   if (!fs.existsSync(filePath)) return null;
 
   let raw;
@@ -67,29 +84,41 @@ function readArticleFile(slug) {
     return null;
   }
 
-  let parsed;
+  let fm;
   try {
-    parsed = matter(raw);
+    fm = JSON.parse(raw);
   } catch (e) {
-    console.error(`[articles-store] Повреждённый frontmatter в ${filePath}:`, e.message);
-    // Отдаём статью как есть, без метаданных, чтобы контент не потерялся молча
-    parsed = { data: {}, content: raw };
+    console.error(`[articles-store] Повреждённый JSON в ${filePath}:`, e.message);
+    return null;
   }
-
-  const fm = parsed.data || {};
+  if (!fm || typeof fm !== 'object') return null;
 
   return {
     id: slug, // для обратной совместимости с фронтендом, ожидающим article.id
     slug,
     title: fm.title || slug,
-    content: parsed.content.trim(),
+    // content — дерево блоков { version, blocks }, а не markdown-строка (см.
+    // blocks.js). normalizeDocument заодно чинит любую неполноту/повреждённость
+    // отдельных блоков, не роняя чтение всей статьи целиком.
+    content: blocks.normalizeDocument(fm.content),
     views: typeof fm.views === 'number' ? fm.views : 0,
     locked: !!fm.locked,
     role: Array.isArray(fm.roles) && fm.roles.length > 0 ? JSON.stringify(fm.roles) : null,
     roles: Array.isArray(fm.roles) ? fm.roles : [],
-    category: fm.category || '',
+    categories: Array.isArray(fm.categories) ? fm.categories : (fm.category ? [fm.category] : []),
     tags: Array.isArray(fm.tags) ? fm.tags : [],
-    author: fm.author || '',
+    // author_id/co_author_ids — id пользователей (числа), имена резолвятся
+    // на лету в articles.routes.js::formatArticleResponse, а не хранятся
+    // здесь снимком — чтобы переименование пользователя сразу отражалось
+    // везде, где он указан автором/соавтором.
+    author_id: fm.author_id != null ? parseInt(fm.author_id, 10) || null : null,
+    // legacyAuthorName — статьи, созданные до появления author_id, хранят
+    // автора текстом (fm.author). articles.routes.js пытается сопоставить
+    // это имя реальному пользователю (см. resolveLegacyAuthorIds).
+    legacyAuthorName: (!fm.author_id && fm.author && String(fm.author).trim()) || null,
+    co_author_ids: Array.isArray(fm.co_author_ids)
+      ? fm.co_author_ids.map((id) => parseInt(id, 10)).filter((id) => !isNaN(id))
+      : [],
     image: fm.image || null,
     attachments: Array.isArray(fm.attachments) ? fm.attachments : [],
     server: fm.server ?? null,
@@ -101,27 +130,33 @@ function readArticleFile(slug) {
 }
 
 function writeArticleFile(slug, article) {
-  const frontmatter = {
+  const fileContents = {
     title: article.title,
     date: article.created_at,
     updated: article.updated_at,
-    author: article.author || '',
+    author_id: article.author_id ?? null,
+    co_author_ids: article.co_author_ids || [],
     tags: article.tags || [],
-    category: article.category || '',
+    categories: article.categories || [],
     excerpt: article.excerpt || '',
     server: article.server ?? null,
     locked: !!article.locked,
     roles: article.roles || [],
     image: article.image || null,
     attachments: article.attachments || [],
-    views: article.views || 0
+    views: article.views || 0,
+    // content всегда нормализуется перед записью — на диске никогда не
+    // оказывается "сырых" данных произвольной формы.
+    content: blocks.normalizeDocument(article.content)
   };
   if (article.legacyId != null) {
-    frontmatter.legacyId = article.legacyId;
+    fileContents.legacyId = article.legacyId;
   }
 
-  const fileContents = matter.stringify(article.content || '', frontmatter);
-  fs.writeFileSync(articlePath(slug), fileContents, 'utf8');
+  // Отступы — чтобы файл оставался читаемым/дифаемым в git, как раньше
+  // читался markdown (полностью machine-readable JSON в одну строку было бы
+  // куда менее приятно смотреть в git diff при правке одной статьи).
+  fs.writeFileSync(articlePath(slug), JSON.stringify(fileContents, null, 2), 'utf8');
 }
 
 /**
@@ -130,12 +165,11 @@ function writeArticleFile(slug, article) {
 function listArticles() {
   if (cache) return cache;
 
-  ensureDirs();
-  const files = fs.readdirSync(CONTENT_DIR).filter(f => f.endsWith('.md'));
+  const files = listArticleFiles();
   const articles = [];
 
   for (const file of files) {
-    const slug = file.slice(0, -3);
+    const slug = file.slice(0, -FILE_EXT.length);
     const article = readArticleFile(slug);
     if (article) articles.push(article);
   }
@@ -143,6 +177,23 @@ function listArticles() {
   articles.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   cache = articles;
   return cache;
+}
+
+/**
+ * Статьи из корзины (content/.trash/<slug>.<timestamp>.json). Без кэша и без
+ * сортировки: нужны только очистке мусора (cleanup.js), чтобы не считать
+ * "сиротами" картинки, на которые ссылаются статьи, лежащие в корзине —
+ * пока статью можно вернуть вручную, её картинки должны быть на месте.
+ */
+function listTrashedArticles() {
+  if (!fs.existsSync(TRASH_DIR)) return [];
+  const articles = [];
+  for (const file of fs.readdirSync(TRASH_DIR)) {
+    if (!file.endsWith(FILE_EXT)) continue;
+    const article = parseArticleFile(path.join(TRASH_DIR, file), file.slice(0, -FILE_EXT.length));
+    if (article) articles.push(article);
+  }
+  return articles;
 }
 
 function getArticle(slug) {
@@ -157,13 +208,11 @@ function getArticle(slug) {
  * Генерирует уникальный slug по заголовку (article-title, article-title-2, ...).
  */
 function generateUniqueSlug(title, excludeSlug = null) {
-  ensureDirs();
   const base = slugify(title);
   const existing = new Set(
-    fs.readdirSync(CONTENT_DIR)
-      .filter(f => f.endsWith('.md'))
-      .map(f => f.slice(0, -3))
-      .filter(s => s !== excludeSlug)
+    listArticleFiles()
+      .map((f) => f.slice(0, -FILE_EXT.length))
+      .filter((s) => s !== excludeSlug)
   );
 
   if (!existing.has(base)) return base;
@@ -180,13 +229,16 @@ function createArticle(fields) {
 
   const article = {
     title: fields.title || 'Без названия',
-    content: fields.content || '',
+    content: blocks.normalizeDocument(fields.content),
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: normalizeRoles(fields.role, fields.roles),
-    category: fields.category || '',
+    categories: Array.isArray(fields.categories) ? fields.categories : [],
     tags: fields.tags || [],
-    author: fields.author || '',
+    // Автор — всегда пользователь, реально создавший статью (проставляется
+    // маршрутом из req.user.id, а не из тела запроса) — см. articles.routes.js.
+    author_id: fields.author_id ?? null,
+    co_author_ids: [],
     image: normalizeImagePath(fields.image),
     attachments: fields.attachments || [],
     server: fields.server ?? null,
@@ -201,21 +253,22 @@ function createArticle(fields) {
 }
 
 /**
- * Низкоуровневая запись статьи с явными датами/legacyId — используется только
- * скриптом миграции (scripts/migrate-articles-to-markdown.js), чтобы сохранить
- * исходные даты создания/изменения и id из articles.db вместо простановки "now".
+ * Низкоуровневая запись статьи с явными датами/legacyId — для скриптов
+ * импорта/переноса данных (сохраняет исходные даты и id вместо простановки
+ * "now").
  */
 function importArticle(slug, fields) {
   ensureDirs();
   writeArticleFile(slug, {
     title: fields.title || 'Без названия',
-    content: fields.content || '',
+    content: blocks.normalizeDocument(fields.content),
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: fields.roles || [],
-    category: fields.category || '',
+    categories: Array.isArray(fields.categories) ? fields.categories : (fields.category ? [fields.category] : []),
     tags: fields.tags || [],
-    author: fields.author || '',
+    author_id: fields.author_id ?? null,
+    co_author_ids: Array.isArray(fields.co_author_ids) ? fields.co_author_ids : [],
     image: fields.image || null,
     attachments: fields.attachments || [],
     server: fields.server ?? null,
@@ -235,15 +288,22 @@ function updateArticle(slug, fields) {
 
   const updated = {
     title: fields.title ?? existing.title,
-    content: fields.content ?? existing.content,
+    content: fields.content !== undefined ? blocks.normalizeDocument(fields.content) : existing.content,
     views: fields.views ?? existing.views,
     locked: fields.locked !== undefined ? !!fields.locked : existing.locked,
     roles: (fields.role !== undefined || fields.roles !== undefined)
       ? normalizeRoles(fields.role, fields.roles)
       : existing.roles,
-    category: fields.category ?? existing.category,
+    categories: Array.isArray(fields.categories) ? fields.categories : existing.categories,
     tags: fields.tags ?? existing.tags,
-    author: fields.author ?? existing.author,
+    // author_id намеренно не берётся из req.body (маршрут его туда даже не
+    // пропускает) — закреплён за статьёй с момента создания и не меняется
+    // при редактировании другим профилем. Единственное исключение — сама
+    // статья ещё ничья (existing.author_id == null): тогда articles.routes.js
+    // передаёт сюда fields.author_id явно, "усыновляя" её первым же
+    // редактором — иначе такая статья не имела бы автора вообще никогда.
+    author_id: fields.author_id !== undefined ? fields.author_id : existing.author_id,
+    co_author_ids: Array.isArray(fields.co_author_ids) ? fields.co_author_ids : existing.co_author_ids,
     image: fields.image !== undefined ? normalizeImagePath(fields.image) : existing.image,
     attachments: fields.attachments ?? existing.attachments,
     server: fields.server ?? existing.server,
@@ -254,7 +314,7 @@ function updateArticle(slug, fields) {
 
   // Примечание: заголовок статьи можно менять без переименования файла — slug
   // (и, соответственно, wiki-ссылки [[slug]] на неё) стабилен, пока статью не
-  // переименуют явно (см. Этап 4, "быстрое переименование с обновлением ссылок").
+  // переименуют явно (см. "быстрое переименование с обновлением ссылок").
   writeArticleFile(slug, updated);
   invalidateCache();
   return getArticle(slug);
@@ -262,8 +322,7 @@ function updateArticle(slug, fields) {
 
 /**
  * "Удаляет" статью, перемещая файл в content/.trash/ вместо безвозвратного
- * удаления — см. requirement Этапа 4 "удаление должно перемещать файл в
- * корзину, а не удалять безвозвратно".
+ * удаления.
  */
 function deleteArticle(slug) {
   if (!isSafeSlug(slug)) return false;
@@ -271,7 +330,7 @@ function deleteArticle(slug) {
   if (!fs.existsSync(filePath)) return false;
 
   ensureDirs();
-  const trashName = `${slug}.${Date.now()}.md`;
+  const trashName = `${slug}.${Date.now()}${FILE_EXT}`;
   fs.renameSync(filePath, path.join(TRASH_DIR, trashName));
   invalidateCache();
   return true;
@@ -279,9 +338,9 @@ function deleteArticle(slug) {
 
 /**
  * Переименовывает статью: меняет заголовок и slug (а значит — и имя файла),
- * и обновляет [[wiki-ссылки]] на неё во всех остальных статьях, чтобы они
- * продолжали указывать на правильный файл (см. Этап 4, "быстрое
- * переименование статьи с автоматическим обновлением ссылок").
+ * и обновляет [[wiki-ссылки]] на неё во всех остальных статьях (внутри
+ * markdown-текста их блоков — см. blocks.rewriteWikiLinksInDocument), чтобы
+ * они продолжали указывать на правильный файл.
  * @returns {{oldSlug, newSlug, updatedArticles: string[]}|null}
  */
 function renameArticle(oldSlug, newTitle) {
@@ -304,34 +363,18 @@ function renameArticle(oldSlug, newTitle) {
   fs.unlinkSync(articlePath(oldSlug));
   invalidateCache();
 
-  // Обновляем [[oldSlug]] / [[oldSlug|текст]] / [[oldSlug#заголовок]] в остальных статьях
   const updatedArticles = [];
-  const linkRe = new RegExp(`\\[\\[\\s*${escapeRegExp(oldSlug)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
-  // Также поддерживаем ссылки по исходному заголовку статьи (Obsidian принимает
-  // и то, и другое как цель — у нас slug всегда транслитерирован из заголовка)
-  const titleRe = new RegExp(`\\[\\[\\s*${escapeRegExp(existing.title)}(\\s*[|#][^\\]]*)?\\]\\]`, 'gi');
-
   for (const article of listArticles()) {
     if (article.slug === newSlug) continue;
-    if (!linkRe.test(article.content) && !titleRe.test(article.content)) continue;
-
-    linkRe.lastIndex = 0;
-    titleRe.lastIndex = 0;
-    const newContent = article.content
-      .replace(linkRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`)
-      .replace(titleRe, (m, suffix) => `[[${newSlug}${suffix || ''}]]`);
-
-    writeArticleFile(article.slug, { ...article, content: newContent });
+    const { doc, changed } = blocks.rewriteWikiLinksInDocument(article.content, oldSlug, existing.title, newSlug);
+    if (!changed) continue;
+    writeArticleFile(article.slug, { ...article, content: doc });
     updatedArticles.push(article.slug);
   }
 
   if (updatedArticles.length > 0) invalidateCache();
 
   return { oldSlug, newSlug, updatedArticles };
-}
-
-function escapeRegExp(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function searchArticles(query, { limit = 50, offset = 0 } = {}) {
@@ -341,7 +384,7 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   const scored = all
     .map(article => {
       const titleLower = article.title.toLowerCase();
-      const contentLower = article.content.toLowerCase();
+      const contentLower = blocks.documentSearchText(article.content).toLowerCase();
       let rank = 0;
       if (titleLower === q) rank = 1;
       else if (titleLower.includes(q)) rank = 2;
@@ -360,40 +403,121 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   return { rows: page, total };
 }
 
-// === Wiki-ссылки и backlinks (данные для Этапа 4) ===
+// === Ibripedia: фильтрация/сортировка витрины статей ===
+//
+// В отличие от searchArticles() (только текстовый поиск, с ранжированием
+// по вхождению) — здесь произвольная комбинация фильтров (категории, теги,
+// сервер, статус, диапазон дат) плюс сортировка. Пагинацию (limit/offset)
+// сюда сознательно не добавляем — её накладывает уже вызывающий код в
+// routes ПОСЛЕ проверки доступа (canAccessArticle) к каждой статье: иначе
+// total и размер отданной страницы врали бы, если часть подходящих статей
+// закрыта по ролям для конкретного пользователя.
+function filterArticles(opts = {}) {
+  const {
+    q = '',
+    categories = [],
+    tags = [],
+    server = '',
+    locked, // true | false | undefined — фильтр не применяется
+    dateFrom = '',
+    dateTo = '',
+    sort = ''
+  } = opts;
 
-const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
+  let list = listArticles();
 
-/**
- * Извлекает все wiki-ссылки [[slug]] / [[slug|текст]] из содержимого статьи.
- */
-function extractWikiLinks(content) {
-  const links = new Set();
-  let m;
-  WIKILINK_RE.lastIndex = 0;
-  while ((m = WIKILINK_RE.exec(content || '')) !== null) {
-    const target = slugify(m[1].trim());
-    if (target) links.add(target);
+  const qLower = q.trim().toLowerCase();
+  let scoreBySlug = null;
+  if (qLower) {
+    scoreBySlug = new Map();
+    list = list.filter((a) => {
+      const titleLower = a.title.toLowerCase();
+      let rank = 0;
+      if (titleLower === qLower) rank = 3;
+      else if (titleLower.includes(qLower)) rank = 2;
+      else if (blocks.documentSearchText(a.content).toLowerCase().includes(qLower)) rank = 1;
+      if (rank > 0) scoreBySlug.set(a.slug, rank);
+      return rank > 0;
+    });
   }
-  return Array.from(links);
+
+  if (categories.length) {
+    const set = new Set(categories.map((c) => c.toLowerCase()));
+    list = list.filter((a) => (a.categories || []).some((c) => set.has(String(c).toLowerCase())));
+  }
+
+  if (tags.length) {
+    const set = new Set(tags.map((t) => t.toLowerCase()));
+    list = list.filter((a) => {
+      const ownTags = (a.tags || []).map((t) => String(t).toLowerCase());
+      if (ownTags.some((t) => set.has(t))) return true;
+      // #теги прямо в тексте статьи (Obsidian-стиль) — те же, что подсвечиваются
+      // в редакторе/превью (см. extractHashtags), тоже должны находиться фильтром.
+      return extractHashtags(a.content).some((t) => set.has(t));
+    });
+  }
+
+  if (server) {
+    list = list.filter((a) => String(a.server) === String(server));
+  }
+
+  if (locked === true || locked === false) {
+    list = list.filter((a) => !!a.locked === locked);
+  }
+
+  if (dateFrom) {
+    const from = new Date(dateFrom);
+    if (!isNaN(from.getTime())) list = list.filter((a) => a.created_at && new Date(a.created_at) >= from);
+  }
+  if (dateTo) {
+    const to = new Date(dateTo);
+    if (!isNaN(to.getTime())) {
+      to.setHours(23, 59, 59, 999); // конец дня — иначе "по" исключало бы весь выбранный день
+      list = list.filter((a) => a.created_at && new Date(a.created_at) <= to);
+    }
+  }
+
+  const effectiveSort = sort || (qLower ? 'relevance' : 'newest');
+  const sorted = [...list];
+  switch (effectiveSort) {
+    case 'relevance':
+      sorted.sort((a, b) => (scoreBySlug?.get(b.slug) || 0) - (scoreBySlug?.get(a.slug) || 0)
+        || new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      break;
+    case 'oldest':
+      sorted.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+      break;
+    case 'updated':
+      sorted.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+      break;
+    case 'views':
+      sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
+      break;
+    case 'alpha':
+      sorted.sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+      break;
+    case 'newest':
+    default:
+      sorted.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }
+
+  return sorted;
 }
 
-// #тег прямо в тексте статьи (не путать с frontmatter tags:) — Obsidian-стиль.
-// Не матчим внутри слов (например #include в код-блоке) — требуем начало строки
-// или пробел/пунктуацию перед решёткой.
-const HASHTAG_RE = /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
+// === Wiki-ссылки и backlinks ===
+
+/**
+ * Извлекает все wiki-ссылки [[slug]] / [[slug|текст]] из документа статьи.
+ */
+function extractWikiLinks(content) {
+  return blocks.extractWikiLinksFromDocument(content, slugify);
+}
 
 /**
  * Извлекает #теги, упомянутые прямо в тексте статьи (в нижнем регистре).
  */
 function extractHashtags(content) {
-  const tags = new Set();
-  let m;
-  HASHTAG_RE.lastIndex = 0;
-  while ((m = HASHTAG_RE.exec(content || '')) !== null) {
-    tags.add(m[2].toLowerCase());
-  }
-  return Array.from(tags);
+  return blocks.extractHashtagsFromDocument(content);
 }
 
 /**
@@ -447,6 +571,7 @@ module.exports = {
   CONTENT_DIR,
   TRASH_DIR,
   listArticles,
+  listTrashedArticles,
   getArticle,
   createArticle,
   importArticle,
@@ -454,10 +579,14 @@ module.exports = {
   deleteArticle,
   renameArticle,
   searchArticles,
+  filterArticles,
   extractWikiLinks,
   extractHashtags,
   getBacklinks,
   generateUniqueSlug,
   invalidateCache,
-  isSafeSlug
+  isSafeSlug,
+  // Переэкспорт блочной модели — routes.js использует её напрямую для
+  // абсолютизации путей картинок (см. formatImageUrl/updateImageUrlsInContent).
+  blocks
 };

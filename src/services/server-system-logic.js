@@ -465,6 +465,140 @@ function getServerWithDetails(serverId) {
   });
 }
 
+// Сервера, в которых состоит пользователь, вместе с его ролями на каждом —
+// используется профилем пользователя (/profile/:id, "с какого сервера").
+// Симметрична getUsersOnServer выше, только с другой стороны связи.
+function getServersForUser(userId) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    db.all(`
+      SELECT s.id, s.name, s.description,
+             GROUP_CONCAT(sr.name, ', ') as role_names
+      FROM user_server_memberships usm
+      JOIN servers s ON s.id = usm.server_id
+      LEFT JOIN user_server_role_assignments ura ON ura.user_id = usm.user_id AND ura.server_id = usm.server_id
+      LEFT JOIN server_roles sr ON sr.id = ura.role_id
+      WHERE usm.user_id = ?
+      GROUP BY s.id
+      ORDER BY s.name
+    `, [userId], (err, rows) => {
+      db.close();
+      if (err) { reject(err); return; }
+      resolve((rows || []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        roles: r.role_names ? r.role_names.split(', ') : []
+      })));
+    });
+  });
+}
+
+// === Каналы сервера ===
+// Таблица server_channels существует в схеме servers.db с самого начала
+// (id, server_id, name, channel_type 'text'|'voice', description) и уже
+// учитывалась при каскадном удалении сервера (см. deleteServer выше) и в
+// счётчике channel_count (см. getServerWithDetails), но ни одного маршрута
+// для чтения/записи каналов не было — управлять ими было нечем.
+
+function createChannelOnServer(serverId, name, channelType, description) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    const query = 'INSERT INTO server_channels (server_id, name, channel_type, description) VALUES (?, ?, ?, ?)';
+
+    db.run(query, [serverId, name, channelType || 'text', description || null], function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ id: this.lastID, server_id: Number(serverId), name, channel_type: channelType || 'text', description: description || null });
+      }
+      db.close();
+    });
+  });
+}
+
+function getChannelsOnServer(serverId) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    db.all('SELECT * FROM server_channels WHERE server_id = ? ORDER BY created_at ASC', [serverId], (err, rows) => {
+      db.close();
+      if (err) { reject(err); return; }
+      resolve(rows || []);
+    });
+  });
+}
+
+function updateChannel(serverId, channelId, name, channelType, description) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    const query = 'UPDATE server_channels SET name = ?, channel_type = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND server_id = ?';
+
+    db.run(query, [name, channelType || 'text', description || null, channelId, serverId], function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ changes: this.changes, channelId, serverId });
+      }
+      db.close();
+    });
+  });
+}
+
+function deleteChannel(serverId, channelId) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    db.run('DELETE FROM server_channels WHERE id = ? AND server_id = ?', [channelId, serverId], function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ changes: this.changes, channelId, serverId });
+      }
+      db.close();
+    });
+  });
+}
+
+// === Журнал действий сервера ===
+
+// Пишет одну запись в журнал. Намеренно никогда не реджектит промис —
+// сбой записи лога не должен рушить основное действие (создание роли,
+// удаление участника и т.д.), которое уже применилось к БД к моменту вызова.
+function logServerAction(serverId, actorId, actorUsername, action, details) {
+  return new Promise((resolve) => {
+    const db = getDatabaseConnection();
+    db.run(
+      'INSERT INTO server_audit_log (server_id, actor_id, actor_username, action, details) VALUES (?, ?, ?, ?, ?)',
+      [serverId, actorId, actorUsername || null, action, details != null ? JSON.stringify(details) : null],
+      (err) => {
+        if (err) console.error('Error writing server audit log:', err.message);
+        db.close();
+        resolve();
+      }
+    );
+  });
+}
+
+function getServerAuditLog(serverId, limit) {
+  return new Promise((resolve, reject) => {
+    const db = getDatabaseConnection();
+    db.all(
+      'SELECT * FROM server_audit_log WHERE server_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+      [serverId, limit || 50],
+      (err, rows) => {
+        db.close();
+        if (err) { reject(err); return; }
+        resolve((rows || []).map((row) => {
+          let details = null;
+          if (row.details) {
+            try { details = JSON.parse(row.details); } catch (e) { details = null; }
+          }
+          return { ...row, details };
+        }));
+      }
+    );
+  });
+}
+
 module.exports = {
   createServer,
   getServerById,
@@ -476,6 +610,13 @@ module.exports = {
   addUserToServer,
   assignRoleToUserOnServer,
   getUsersOnServer,
+  getServersForUser,
+  createChannelOnServer,
+  getChannelsOnServer,
+  updateChannel,
+  deleteChannel,
+  logServerAction,
+  getServerAuditLog,
   getAllServersWithUserCount,
   getServerWithDetails
 };

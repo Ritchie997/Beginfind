@@ -8,23 +8,21 @@ window.showMessage = function(text, type = 'info') {
     existingMessage.remove();
   }
 
-  // Create message container
+  // Общий компонент тоста (.toast/.toast-success/.toast-error/.toast-info) —
+  // см. "TOAST COMPONENT" в global-styles.css, тот же, что и у
+  // showUsersToast/showPendingToast (spa-router.js). Раньше цвет собирался
+  // через style.cssText с зашитым hex (#dc3545/#28a745/#007bff). Этот тост —
+  // сам себе контейнер (создаётся и удаляется точечно, а не копится в общем
+  // .toast-container), поэтому позиционирование остаётся инлайном.
   const messageContainer = document.createElement('div');
   messageContainer.id = 'message-container';
+  messageContainer.className = `toast toast-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}`;
   messageContainer.style.cssText = `
     position: fixed;
     top: 20px;
     right: 20px;
-    padding: 15px 20px;
-    border-radius: 4px;
-    color: white;
     z-index: 10001;
-    ${type === 'error' ? 'background: #dc3545;' :
-      type === 'success' ? 'background: #28a745;' :
-      'background: #007bff;'}
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    animation: slideInRight 0.3s ease;
   `;
   messageContainer.textContent = text;
 
@@ -130,14 +128,18 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
-      // If we get authentication error, reset token via authManager
-      if (response.status === 401 || response.status === 403) {
+      // 401 = токен отсутствует/просрочен/невалиден — реальная проблема
+      // аутентификации, разлогиниваем. 403 = пользователь опознан, но
+      // конкретное действие ему запрещено (например, аудит-лог сервера
+      // доступен только его админам) — это обычная ошибка запроса, а не
+      // повод выкидывать на экран входа.
+      if (response.status === 401) {
         authManager.logout();
         return { success: false, error: 'Authentication required. Please log in.' };
       }
 
       const result = await response.json();
-      return { success: response.ok, data: result, status: response.status };
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -153,6 +155,13 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/articles/${id}`);
   }
 
+  // Засчитать просмотр статьи текущим пользователем (один на пользователя —
+  // см. src/services/social-store.js) — вызывается из читалки Ibripedia
+  // сразу после открытия статьи, не из редактора.
+  async recordArticleView(id) {
+    return this.makeAuthenticatedRequest(`/api/articles/${id}/view`, 'POST');
+  }
+
   async createArticle(articleData) {
     return this.makeAuthenticatedRequest('/api/articles', 'POST', articleData);
   }
@@ -163,6 +172,19 @@ class ApiClient {
 
   async deleteArticle(id) {
     return this.makeAuthenticatedRequest(`/api/articles/${id}`, 'DELETE');
+  }
+
+  // Витрина статей (Ibripedia) — поиск + фильтры + сортировка + постраничная
+  // подгрузка, см. GET /api/articles/browse. filters — любое подмножество
+  // {q, category, tag, server, locked, dateFrom, dateTo, sort}; category/tag
+  // принимают массив (склеивается через запятую) или готовую CSV-строку.
+  async getArticlesBrowse(filters = {}, limit = 24, offset = 0) {
+    const params = new URLSearchParams({ limit, offset });
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) return;
+      params.set(key, Array.isArray(value) ? value.join(',') : value);
+    });
+    return this.makeAuthenticatedRequest(`/api/articles/browse?${params.toString()}`);
   }
 
   // Search articles method
@@ -194,6 +216,182 @@ class ApiClient {
       return result;
     } else {
       return result;
+    }
+  }
+
+  // Закладки статей (Ibripedia) — привязаны к профилю (req.user.id на
+  // сервере, см. src/routes/bookmarks.routes.js). slug опционален — без
+  // него отдаёт все закладки текущего пользователя по всем статьям.
+  async getBookmarks(slug = null) {
+    const endpoint = slug ? `/api/bookmarks?slug=${encodeURIComponent(slug)}` : '/api/bookmarks';
+    return this.makeAuthenticatedRequest(endpoint);
+  }
+
+  async createBookmark(data) {
+    return this.makeAuthenticatedRequest('/api/bookmarks', 'POST', data);
+  }
+
+  async updateBookmark(id, data) {
+    return this.makeAuthenticatedRequest(`/api/bookmarks/${id}`, 'PUT', data);
+  }
+
+  async deleteBookmark(id) {
+    return this.makeAuthenticatedRequest(`/api/bookmarks/${id}`, 'DELETE');
+  }
+
+  // Лайки и комментарии статей (Ibripedia) — см. панель под статьёй в
+  // public/ibripedia.js и src/routes/articles.routes.js.
+  async getArticleLikes(slug) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/likes`);
+  }
+
+  async toggleArticleLike(slug) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/likes/toggle`, 'POST');
+  }
+
+  async getArticleComments(slug) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments`);
+  }
+
+  // parentId — ответ на комментарий (см. "Ответить" в public/ibripedia.js);
+  // без него — обычный комментарий верхнего уровня.
+  async addArticleComment(slug, content, parentId = null) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments`, 'POST', { content, parentId });
+  }
+
+  async deleteArticleComment(slug, commentId) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments/${commentId}`, 'DELETE');
+  }
+
+  // Реакции эмодзи/стикером — на статью целиком и на отдельный комментарий
+  // (см. панель реакций рядом с лайком/под комментарием в ibripedia.js).
+  async getArticleReactions(slug) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/reactions`);
+  }
+
+  async toggleArticleReaction(slug, shortcode) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/reactions/toggle`, 'POST', { shortcode });
+  }
+
+  async toggleCommentReaction(slug, commentId, shortcode) {
+    return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments/${commentId}/reactions/toggle`, 'POST', { shortcode });
+  }
+
+  // Наборы стикеров (см. src/routes/stickers.routes.js) — вкладка "Стикеры"
+  // в public/stickers-manager.js и пикер стикеров в комментариях Ibripedia.
+  async getMyStickerPacks() {
+    return this.makeAuthenticatedRequest('/api/stickers/mine');
+  }
+
+  // Наборы конкретного пользователя — вкладка "Наборы стикеров" в его
+  // профиле (public/views/profile.html); себе видно всё, чужому — только
+  // одобренное (см. GET /api/stickers/by-user/:userId).
+  async getStickerPacksByUser(userId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/by-user/${userId}`);
+  }
+
+  async getStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}`);
+  }
+
+  async getStickerCatalog(q = '') {
+    const endpoint = q ? `/api/stickers/catalog?q=${encodeURIComponent(q)}` : '/api/stickers/catalog';
+    return this.makeAuthenticatedRequest(endpoint);
+  }
+
+  async getSubscribedStickerPacks() {
+    return this.makeAuthenticatedRequest('/api/stickers/subscribed');
+  }
+
+  async createStickerPack(title, description) {
+    return this.makeAuthenticatedRequest('/api/stickers/packs', 'POST', { title, description });
+  }
+
+  async renameStickerPack(packId, title, description) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}`, 'PUT', { title, description });
+  }
+
+  // Избранные стикеры (звёздочка в пикере, см. src/routes/stickers.routes.js).
+  async getFavoriteStickers() {
+    return this.makeAuthenticatedRequest('/api/stickers/favorites');
+  }
+
+  async addFavoriteSticker(stickerId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/stickers/${stickerId}/favorite`, 'POST');
+  }
+
+  async removeFavoriteSticker(stickerId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/stickers/${stickerId}/favorite`, 'DELETE');
+  }
+
+  async deleteStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}`, 'DELETE');
+  }
+
+  async deleteSticker(stickerId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/stickers/${stickerId}`, 'DELETE');
+  }
+
+  async subscribeStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/subscribe`, 'POST');
+  }
+
+  async unsubscribeStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/subscribe`, 'DELETE');
+  }
+
+  async resubmitStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/resubmit`, 'POST');
+  }
+
+  async getPendingStickerPacks() {
+    return this.makeAuthenticatedRequest('/api/stickers/pending');
+  }
+
+  async approveStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/approve`, 'POST');
+  }
+
+  async rejectStickerPack(packId, reason) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/reject`, 'POST', { reason });
+  }
+
+  // Отозвать уже одобренный набор ЧУЖОГО автора (модератор/владелец над
+  // автором ниже по иерархии — см. POST .../revoke в src/routes/stickers.routes.js).
+  async revokeStickerPack(packId, reason) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/revoke`, 'POST', { reason });
+  }
+
+  // Загрузка файла стикера — как uploadImage, но своё поле формы и эндпоинт.
+  async uploadSticker(packId, file, alias) {
+    if (!authManager || !authManager.isAuthenticated()) {
+      return { success: false, error: 'Authentication required. Please log in.' };
+    }
+
+    const formData = new FormData();
+    formData.append('sticker', file);
+    formData.append('alias', alias);
+
+    const options = {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authManager.getToken()}`
+      },
+      body: formData
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/stickers/packs/${packId}/stickers`, options);
+
+      if (response.status === 401) {
+        authManager.logout();
+        return { success: false, error: 'Authentication required. Please log in.' };
+      }
+
+      const result = await response.json();
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 
@@ -252,13 +450,13 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}/api/upload-image`, options);
 
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         authManager.logout();
         return { success: false, error: 'Authentication required. Please log in.' };
       }
 
       const result = await response.json();
-      return { success: response.ok, data: result, status: response.status };
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -319,6 +517,45 @@ class ApiClient {
 
   async removeRoleFromUser(serverId, userId, roleId) {
     return this.makeAuthenticatedRequest(`/api/servers/${serverId}/users/${userId}/roles/${roleId}`, 'DELETE');
+  }
+
+  // Смена владельца сервера — root only (см. PUT /api/servers/:serverId/owner)
+  async changeServerOwner(serverId, newOwnerId) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/owner`, 'PUT', { newOwnerId });
+  }
+
+  // Список всех пользователей для выбора нового владельца — root only
+  // (см. GET /api/users в src/routes/servers.routes.js)
+  async getAllUsersForOwnerTransfer() {
+    return this.makeAuthenticatedRequest('/api/users');
+  }
+
+  // Каналы сервера (см. GET/POST/PUT/DELETE /api/servers/:id/channels)
+  async getServerChannels(serverId) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/channels`);
+  }
+
+  async createServerChannel(serverId, channelData) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/channels`, 'POST', channelData);
+  }
+
+  async updateServerChannel(serverId, channelId, channelData) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/channels/${channelId}`, 'PUT', channelData);
+  }
+
+  async deleteServerChannel(serverId, channelId) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/channels/${channelId}`, 'DELETE');
+  }
+
+  // Поиск пользователей по имени (см. GET /api/users/search) — используется
+  // в модалке "Добавить участника" вместо ручного ввода ID.
+  async searchUsers(query) {
+    return this.makeAuthenticatedRequest(`/api/users/search?q=${encodeURIComponent(query)}`);
+  }
+
+  // Журнал действий сервера (см. GET /api/servers/:id/audit-log)
+  async getServerAuditLog(serverId, limit = 50) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/audit-log?limit=${limit}`);
   }
 
   // Profile methods
@@ -436,6 +673,8 @@ if (document.readyState === 'loading') {
     window.initLogoutHandler();
     window.checkApprovedStatus();
     window.updateUserInfo();
+    window.initMaintenanceBanner();
+    window.initNotificationBadges();
   });
 } else {
   window.initPageAnimations();
@@ -444,18 +683,137 @@ if (document.readyState === 'loading') {
   window.initLogoutHandler();
   window.checkApprovedStatus();
   window.updateUserInfo();
+  window.initMaintenanceBanner();
+  window.initNotificationBadges();
 }
 
-// Показать пункт «Заявки» только для root-пользователей
+// Показать пункты «Заявки», «Пользователи» и «Настройки» по правам роли.
+// «Настройки» — всегда только владелец (is_root); «Заявки»/«Пользователи»
+// открываются владельцу или админу, чья роль включает соответствующее
+// право (manage_pending_users / view_users_tab — см. каталог ролей во
+// вкладке «Пользователи» и src/middleware/auth.js:PERMISSION_KEYS).
 window.initRootSidebarVisibility = function() {
   try {
     const user = authManager.getUser();
-    if (user && user.is_root) {
-      const sidebarItem = document.getElementById('sidebar-pending-users');
-      if (sidebarItem) sidebarItem.style.display = '';
-    }
+    if (!user) return;
+    const perms = user.permissions || {};
+
+    const show = (id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    };
+
+    if (user.is_root) { show('sidebar-settings'); show('sidebar-group-system'); }
+    if (user.is_root || perms.manage_pending_users) show('sidebar-pending-users');
+    if (user.is_root || perms.view_users_tab) show('sidebar-users-list');
   } catch (e) {
     console.error('Error in initRootSidebarVisibility:', e);
+  }
+};
+
+// Напоминание владельцу, что включён режим техобслуживания — сам он
+// заходит на сайт как обычно (см. maintenanceGate/isMaintenanceBlockedForCurrentUser),
+// поэтому легко забыть выключить режим, ушедший в фоне блокировать всех
+// остальных. Показываем только владельцу — остальных вместо этого баннера
+// встречает полноэкранная заглушка (showMaintenanceBlocker в auth-system.js).
+window.initMaintenanceBanner = async function() {
+  try {
+    const user = authManager.getUser();
+    if (!user || !user.is_root) return;
+    if (typeof checkMaintenanceStatus !== 'function') return;
+
+    const status = await checkMaintenanceStatus();
+    const existing = document.getElementById('maintenance-owner-banner');
+    if (!status.enabled) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return; // уже показан
+
+    const banner = document.createElement('div');
+    banner.id = 'maintenance-owner-banner';
+    banner.style.cssText = `
+      position: sticky; top: 0; z-index: 500; padding: 8px 16px;
+      background: var(--yellow, #faa81a); color: #1a1a1a; font-size: 13px;
+      font-weight: 600; text-align: center;
+    `;
+    banner.textContent = '🛠️ Режим техобслуживания включён — сайт недоступен всем, кроме вас. Выключить: Настройки → «Режим технического обслуживания».';
+    document.body.prepend(banner);
+  } catch (e) {
+    console.error('Error in initMaintenanceBanner:', e);
+  }
+};
+
+// Бейджи "N ждёт решения" на пунктах бокового меню — GET /api/notifications/summary
+// сам решает, что именно показывать этому пользователю (владелец видит обе
+// категории всегда; админ — только те, где у его роли есть право
+// manage_pending_users/moderate_stickers; поле для категории без права в
+// ответе просто отсутствует, см. src/routes/notifications.routes.js). Здесь
+// только рисуем то, что пришло — никакой отдельной проверки прав на клиенте
+// нет и не нужно.
+//
+// Тост при УВЕЛИЧЕНИИ числа (не при каждой проверке — иначе он бы всплывал
+// заново каждые пару минут, пока заявка просто лежит необработанной)
+// сравнивается с последним увиденным значением в localStorage; на первом
+// же запуске (значения ещё нет) тост не показываем — иначе внезапно
+// "уведомили" бы о недельной давности бэклоге при первом открытии панели.
+const NOTIF_BADGE_TARGETS = {
+  pendingUsers: { elementId: 'sidebar-pending-users', seenKey: 'beginfind_notif_seen_users', toastText: (n) => `Новая заявка на регистрацию (всего ${n})` },
+  pendingStickerPacks: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_stickers', toastText: (n) => `Новый набор стикеров на модерации (всего ${n})` }
+};
+
+function renderNavBadge(elementId, count) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  let badge = el.querySelector('.nav-badge');
+  if (!count) {
+    badge?.remove();
+    return;
+  }
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'nav-badge';
+    el.appendChild(badge);
+  }
+  badge.textContent = count > 99 ? '99+' : String(count);
+}
+
+async function refreshNotificationBadges() {
+  try {
+    const res = await fetch('/api/notifications/summary', {
+      headers: { 'Authorization': `Bearer ${authManager.getToken()}` }
+    });
+    if (!res.ok) return;
+    const summary = await res.json();
+
+    Object.entries(NOTIF_BADGE_TARGETS).forEach(([key, target]) => {
+      const count = summary[key];
+      if (count === undefined) {
+        // Категория не пришла в ответе — этому пользователю она не видна
+        // (нет права даже на просмотр) — бейдж не рисуем вовсе, не 0.
+        renderNavBadge(target.elementId, 0);
+        return;
+      }
+
+      renderNavBadge(target.elementId, count);
+
+      const seen = parseInt(localStorage.getItem(target.seenKey), 10);
+      if (Number.isFinite(seen) && count > seen && typeof window.showMessage === 'function') {
+        window.showMessage(target.toastText(count), 'info');
+      }
+      localStorage.setItem(target.seenKey, String(count));
+    });
+  } catch (e) {
+    console.error('Error refreshing notification badges:', e);
+  }
+}
+
+window.initNotificationBadges = function() {
+  const user = authManager.getUser();
+  if (!user) return;
+  refreshNotificationBadges();
+  if (!window._notifBadgePoll) {
+    window._notifBadgePoll = setInterval(refreshNotificationBadges, 2 * 60 * 1000);
   }
 };
 
@@ -464,6 +822,7 @@ window.initLogoutHandler = function() {
   const userInfo = document.getElementById('user-info');
   const userDropdown = document.getElementById('user-dropdown');
   const logoutBtn = document.getElementById('logout-btn');
+  const profileBtn = document.getElementById('profile-btn');
 
   // Показываем/скрываем dropdown при клике на аватар/имя
   if (userInfo && userDropdown) {
@@ -476,6 +835,19 @@ window.initLogoutHandler = function() {
     document.addEventListener('click', function(e) {
       if (!userInfo.contains(e.target)) {
         userDropdown.classList.remove('show');
+      }
+    });
+  }
+
+  // Обработчик пункта "Мой профиль" — открывает /profile/:id текущего
+  // пользователя (см. spa-router.js: loadProfile).
+  if (profileBtn) {
+    profileBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (userDropdown) userDropdown.classList.remove('show');
+      const me = authManager.getUser();
+      if (me && me.id != null && window.spaRouter) {
+        window.spaRouter.navigateTo(`/profile/${me.id}`);
       }
     });
   }

@@ -5,17 +5,45 @@ class SPARouter {
     this.routes = {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
+      '/ibripedia': this.loadIbripedia,
       '/articles': this.loadArticles,
       '/categories': this.loadCategories,
+      '/stickers': this.loadStickers,
       '/servers': this.loadServers,
       '/pending-users': this.loadPendingUsers,
-      '/settings': this.loadSettings
+      '/users': this.loadUsersList,
+      '/settings': this.loadSettings,
+      '/profile': this.loadProfile
     };
+
+    // id из "/profile/123" — единственный маршрут с динамическим сегментом,
+    // поэтому отдельного mini-роутера не заводим (см. normalizePathForRouting
+    // и navigateTo: /profile/:id сводится к ключу '/profile' + this.profileUserId).
+    this.profileUserId = null;
 
     this.currentView = null;
     this.loading = false;
     this.templateCache = new Map(); // Cache for fetched templates
     this.currentDraftId = null; // Track the currently loaded draft ID
+
+    // Экземпляры ChipField для формы статьи (Категория/Доступ для/Теги) —
+    // создаются заново в initArticleChipFields() при каждом заходе на
+    // страницу статей, т.к. разметка перезагружается через fetch партиала.
+    this.categoryField = null;
+    this.rolesField = null;
+    this.tagsField = null;
+
+    // Состояние вкладки "Сервера": кэш списка (поиск/сортировка работают по
+    // нему локально, без лишних запросов) и то, какой сервер сейчас открыт
+    // в рабочей области (см. openServerWorkspace/closeServerWorkspace).
+    this.serversCache = [];
+    this.currentServerId = null;
+    this.currentServerData = null; // { server, members, roles, isAdmin, isOwner, isRoot }
+    this.currentServerWorkspaceTab = 'overview';
+    this.assignRoleTargetUserId = null;
+    this.roleEditorEditingId = null;
+    this.channelEditorEditingId = null;
+    this.currentAuditLog = [];
 
     this.init();
   }
@@ -126,12 +154,15 @@ class SPARouter {
         document.body.classList.remove('articles-page');
       }
 
-      // Find corresponding route handler
-      const routeHandler = this.routes[normalizedPath];
+      // Find corresponding route handler (resolveRouteKey сводит "/profile/123"
+      // к ключу '/profile' и запоминает id в this.profileUserId — сам
+      // normalizedPath с id остаётся нетронутым для URL/истории)
+      const routeKey = this.resolveRouteKey(normalizedPath);
+      const routeHandler = this.routes[routeKey];
 
       if (routeHandler) {
         // Update active menu item
-        this.updateActiveMenuItem(normalizedPath);
+        this.updateActiveMenuItem(routeKey);
 
         // Call route handler
         await routeHandler.call(this);
@@ -142,7 +173,7 @@ class SPARouter {
         }
 
         // Update page title
-        this.updatePageTitle(normalizedPath);
+        this.updatePageTitle(routeKey);
       } else {
         // If route not found, redirect to dashboard
         this.navigateTo('/dashboard');
@@ -177,6 +208,21 @@ class SPARouter {
     }
 
     return path;
+  }
+
+  // "/profile/123" -> ключ маршрута '/profile' (this.routes хранит только
+  // статические ключи), id сохраняется в this.profileUserId — loadProfile()
+  // его читает. Без id (просто "/profile") — открываем свой профиль.
+  // Возвращает нормализованный путь как есть, если это не /profile/:id —
+  // сам URL (для history.pushState) в navigateTo не трогаем, меняем только
+  // ключ поиска обработчика.
+  resolveRouteKey(normalizedPath) {
+    const profileMatch = normalizedPath.match(/^\/profile(?:\/(\d+))?$/);
+    if (profileMatch) {
+      this.profileUserId = profileMatch[1] || null;
+      return '/profile';
+    }
+    return normalizedPath;
   }
 
   // Update active menu item
@@ -250,10 +296,14 @@ class SPARouter {
     const titles = {
       '/': 'Аналитика - Админ-панель BeginFind',
       '/dashboard': 'Аналитика - Админ-панель BeginFind',
+      '/ibripedia': 'Ibripedia - Админ-панель BeginFind',
       '/articles': 'Редактор - Админ-панель BeginFind',
       '/categories': 'Категории - Админ-панель BeginFind',
       '/servers': 'Сервера - Админ-панель BeginFind',
-      '/settings': 'Настройки - Админ-панель BeginFind'
+      '/pending-users': 'Заявки - Админ-панель BeginFind',
+      '/users': 'Пользователи - Админ-панель BeginFind',
+      '/settings': 'Настройки - Админ-панель BeginFind',
+      '/profile': 'Профиль - Админ-панель BeginFind'
     };
 
     const titleElement = document.getElementById('page-title');
@@ -296,6 +346,56 @@ class SPARouter {
     } catch (error) {
       console.error('Error loading dashboard:', error);
       showMessage('Ошибка при загрузке дашборда', 'error');
+    } finally {
+      this.hideLoader();
+    }
+  }
+
+  // Load Ibripedia (article browsing/showcase page)
+  async loadIbripedia() {
+    this.showLoader();
+
+    try {
+      const response = await fetch('/views/ibripedia.html');
+      const html = await response.text();
+
+      const appContent = document.getElementById('app-content');
+      if (appContent) {
+        appContent.innerHTML = html;
+
+        const titleElement = document.getElementById('page-title');
+        if (titleElement) titleElement.textContent = 'Ibripedia';
+      }
+
+      await window.ibripediaManager?.init();
+    } catch (error) {
+      console.error('Error loading Ibripedia:', error);
+      showMessage('Ошибка при загрузке Ibripedia', 'error');
+    } finally {
+      this.hideLoader();
+    }
+  }
+
+  // Load Stickers (sticker pack management: catalog/mine/moderation)
+  async loadStickers() {
+    this.showLoader();
+
+    try {
+      const response = await fetch('/views/stickers.html');
+      const html = await response.text();
+
+      const appContent = document.getElementById('app-content');
+      if (appContent) {
+        appContent.innerHTML = html;
+
+        const titleElement = document.getElementById('page-title');
+        if (titleElement) titleElement.textContent = 'Стикеры';
+      }
+
+      await window.stickersManager?.init();
+    } catch (error) {
+      console.error('Error loading stickers:', error);
+      showMessage('Ошибка при загрузке стикеров', 'error');
     } finally {
       this.hideLoader();
     }
@@ -402,6 +502,17 @@ class SPARouter {
 
   // Load settings content
   async loadSettings() {
+    // Настройки системы — только для владельца (см. auth.checkRoot на
+    // соответствующих /api/system-settings маршрутах). Пункт меню и так
+    // скрыт для остальных (см. initRootSidebarVisibility в app.js), но
+    // прямой переход по /settings нужно перехватить и здесь.
+    const currentUser = (typeof authManager !== 'undefined') ? authManager.getUser() : null;
+    if (!currentUser || !currentUser.is_root) {
+      showMessage('Настройки системы доступны только владельцу', 'error');
+      this.navigateTo('/dashboard');
+      return;
+    }
+
     this.showLoader();
 
     try {
@@ -480,11 +591,15 @@ class SPARouter {
 
   // Initialize articles page with all functionality
   async initArticlesPage() {
+    // Чиповые поля должны существовать до загрузки категорий/серверов —
+    // им передаются варианты выбора сразу после создания.
+    this.initArticleChipFields();
+    this.resetArticleAuthorInfo();
+    this.setupArticleAuthorsAdmin();
+
     // Load all required data
     await this.loadCategoriesForArticles();
-    await this.loadRolesForArticles();
     await this.loadServersForArticles();
-    await this.loadArticlesList();
 
     // Initialize editor
     const editorMgr = this.editorManager; // Use getter to get current editorManager
@@ -513,31 +628,345 @@ class SPARouter {
     this.checkAndOfferDraft();
   }
 
-  // Check for and offer to load draft if form is empty
-  checkAndOfferDraft() {
-    // Check if there's a draft in localStorage
-    const draftData = localStorage.getItem('articleDraft');
-    if (draftData) {
-      try {
-        const draft = JSON.parse(draftData);
+  // Создаёт экземпляры ChipField для Категории/Доступа/Тегов заново — вызывается
+  // при каждом заходе на страницу статей, т.к. её разметка каждый раз
+  // перезагружается через fetch партиала (см. loadTemplate/initArticlesPage),
+  // поэтому старые DOM-узлы, на которые ссылались бы прежние экземпляры,
+  // к этому моменту уже заменены новыми.
+  initArticleChipFields() {
+    const categoryRoot = document.getElementById('articleCategoryField');
+    this.categoryField = categoryRoot ? new ChipField(categoryRoot, {
+      freeText: false,
+      placeholder: 'Выберите категории...',
+      emptyText: 'Категории не найдены'
+    }) : null;
 
-        // Check if the current form is empty
-        const title = document.getElementById('articleTitle').value;
-        const content = document.getElementById('articleContent').innerHTML;
-        const author = document.getElementById('articleAuthor').value;
+    const rolesRoot = document.getElementById('articleRolesField');
+    this.rolesField = rolesRoot ? new ChipField(rolesRoot, {
+      freeText: false,
+      placeholder: 'Сначала выберите сервер...',
+      emptyText: 'Нет ролей для этого сервера'
+    }) : null;
 
-        // If form is empty or nearly empty, offer to load the draft
-        if (!title.trim() && !content.trim() && !author.trim()) {
-          const timestamp = new Date(draft.timestamp).toLocaleString();
-          const shouldLoad = confirm(`Найден черновик, сохраненный ${timestamp}. Загрузить его?`);
-          if (shouldLoad) {
-            this.loadDraft();
-          }
-        }
-      } catch (error) {
-        console.error('Error checking draft:', error);
-      }
+    const tagsRoot = document.getElementById('articleTagsField');
+    this.tagsField = tagsRoot ? new ChipField(tagsRoot, {
+      freeText: true,
+      placeholder: 'Введите тег и нажмите Enter...'
+    }) : null;
+  }
+
+  // Подгружает список ролей выбранного сервера в chip-field "Доступ для".
+  // Возвращает промис — editArticle()/loadDraft() сначала дожидаются опций
+  // (чтобы у чипов сразу были названия ролей, а не ID), и только потом
+  // проставляют выбранные значения.
+  async loadRolesForArticleField(serverId) {
+    if (!this.rolesField) return;
+    if (!serverId) {
+      this.rolesField.setOptions([]);
+      this.rolesField.setPlaceholder('Сначала выберите сервер...');
+      return;
     }
+    try {
+      const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
+      if (result.success) {
+        this.rolesField.setOptions(result.data.map((r) => ({ value: String(r.id), label: r.name })));
+        this.rolesField.setPlaceholder('Выберите роли...');
+      } else {
+        showMessage(`Ошибка загрузки ролей сервера: ${result.error}`, 'error');
+        this.rolesField.setOptions([]);
+      }
+    } catch (error) {
+      showMessage(`Неожиданная ошибка загрузки ролей сервера: ${error.message}`, 'error');
+      this.rolesField.setOptions([]);
+    }
+  }
+
+  // Приводит блок "Автор" формы в состояние для создания новой статьи —
+  // показывает текущего пользователя как будущего автора, скрывает
+  // соавторов и галочку "добавить себя как соавтора" (она нужна только
+  // при редактировании чужой статьи).
+  resetArticleAuthorInfo() {
+    const currentUser = authManager.getCurrentUser();
+    const chip = document.getElementById('articleAuthorChip');
+    if (chip) chip.textContent = currentUser?.display_name || currentUser?.username || 'Вы';
+
+    const coAuthorsList = document.getElementById('coAuthorsList');
+    if (coAuthorsList) {
+      coAuthorsList.innerHTML = '';
+      coAuthorsList.hidden = true;
+    }
+
+    const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+    if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = true;
+
+    // Создание новой статьи — управления авторами нет (автор — создатель).
+    this.articleAuthorsAdmin = null;
+    const authorsAdmin = document.getElementById('authorsAdmin');
+    if (authorsAdmin) authorsAdmin.hidden = true;
+  }
+
+  // Заполняет блок "Автор" данными статьи при редактировании: имя автора
+  // (не редактируется — см. комментарий у поля в articles.html), список
+  // соавторов, и показывает галочку "добавить себя как соавтора", если
+  // статью редактирует не её автор (см. PUT /api/articles/:id).
+  // Владельцу (is_root) вместо этого открывается полноценное управление
+  // авторами — см. initArticleAuthorsAdmin().
+  renderArticleAuthorInfo(article) {
+    const currentUser = authManager.getCurrentUser();
+    if (currentUser && currentUser.is_root) {
+      this.initArticleAuthorsAdmin(article);
+      return;
+    }
+
+    const chip = document.getElementById('articleAuthorChip');
+    if (chip) {
+      chip.textContent = article.author ? article.author.display_name : (currentUser?.display_name || currentUser?.username || 'Вы');
+    }
+
+    const coAuthors = article.co_authors || [];
+    const coAuthorsList = document.getElementById('coAuthorsList');
+    if (coAuthorsList) {
+      coAuthorsList.innerHTML = '';
+      coAuthors.forEach((co) => {
+        const chipEl = document.createElement('span');
+        chipEl.className = 'author-chip';
+        chipEl.textContent = co.display_name;
+        coAuthorsList.appendChild(chipEl);
+      });
+      coAuthorsList.hidden = coAuthors.length === 0;
+    }
+
+    const isForeignArticle = !!(article.author && currentUser && article.author.id !== currentUser.id);
+    const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+    if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = !isForeignArticle;
+    const checkbox = document.getElementById('addAsCoauthorCheckbox');
+    if (checkbox) checkbox.checked = true;
+  }
+
+  // --- Управление авторами (только владелец) ---
+  // Состояние — this.articleAuthorsAdmin = { author: {id, display_name}|null,
+  // coAuthors: [{id, display_name}] }; null вне режима правки статьи
+  // владельцем. Уходит на сервер вместе со статьёй (см. saveArticle →
+  // collectArticleAuthorsPayload) и там принимается только от is_root
+  // (parseOwnerAuthorFields в articles.routes.js).
+  initArticleAuthorsAdmin(article) {
+    this.articleAuthorsAdmin = {
+      author: article.author ? { id: article.author.id, display_name: article.author.display_name } : null,
+      coAuthors: (article.co_authors || []).map((c) => ({ id: c.id, display_name: c.display_name }))
+    };
+
+    // Автодобавление "себя как соавтора" тут не работает: владелец явно
+    // задаёт итоговый список, сервер его берёт как есть.
+    const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+    if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = true;
+    const authorsAdmin = document.getElementById('authorsAdmin');
+    if (authorsAdmin) authorsAdmin.hidden = false;
+
+    this.renderArticleAuthorsAdmin();
+  }
+
+  // Перерисовывает чипы автора/соавторов по состоянию. Основной автор — без
+  // кнопок (его меняют через поиск, кнопка "Автор"), у соавторов — ↑ и ×.
+  renderArticleAuthorsAdmin() {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return;
+
+    const chip = document.getElementById('articleAuthorChip');
+    if (chip) chip.textContent = state.author ? state.author.display_name : '— (не назначен)';
+
+    const list = document.getElementById('coAuthorsList');
+    if (!list) return;
+    list.innerHTML = '';
+    state.coAuthors.forEach((co) => {
+      const chipEl = document.createElement('span');
+      chipEl.className = 'author-chip';
+      chipEl.dataset.userId = String(co.id);
+      chipEl.appendChild(document.createTextNode(co.display_name));
+
+      const promoteBtn = document.createElement('button');
+      promoteBtn.type = 'button';
+      promoteBtn.className = 'author-chip-btn';
+      promoteBtn.dataset.action = 'promote';
+      promoteBtn.title = 'Сделать основным автором (прежний станет соавтором)';
+      promoteBtn.textContent = '↑';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'author-chip-btn';
+      removeBtn.dataset.action = 'remove';
+      removeBtn.title = 'Убрать из соавторов';
+      removeBtn.textContent = '×';
+
+      chipEl.append(promoteBtn, removeBtn);
+      list.appendChild(chipEl);
+    });
+    list.hidden = state.coAuthors.length === 0;
+  }
+
+  setArticleAuthor(user) {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return;
+    state.coAuthors = state.coAuthors.filter((c) => c.id !== user.id);
+    state.author = { id: user.id, display_name: user.display_name };
+    this.renderArticleAuthorsAdmin();
+  }
+
+  addArticleCoAuthor(user) {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return;
+    if (state.author && state.author.id === user.id) {
+      showMessage('Этот пользователь уже основной автор', 'warning');
+      return;
+    }
+    if (state.coAuthors.some((c) => c.id === user.id)) return;
+    state.coAuthors.push({ id: user.id, display_name: user.display_name });
+    this.renderArticleAuthorsAdmin();
+  }
+
+  // ↑ на соавторе: он становится основным автором, прежний автор (если был)
+  // переезжает в соавторы — обмен, а не потеря авторства.
+  promoteArticleCoAuthor(userId) {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return;
+    const idx = state.coAuthors.findIndex((c) => c.id === userId);
+    if (idx === -1) return;
+    const [promoted] = state.coAuthors.splice(idx, 1);
+    if (state.author && state.author.id) state.coAuthors.unshift(state.author);
+    state.author = promoted;
+    this.renderArticleAuthorsAdmin();
+  }
+
+  removeArticleCoAuthor(userId) {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return;
+    state.coAuthors = state.coAuthors.filter((c) => c.id !== userId);
+    this.renderArticleAuthorsAdmin();
+  }
+
+  // Поле, отправляемое вместе со статьёй, — только пока владелец правит
+  // существующую статью. author_id шлём, только если у статьи есть автор с
+  // id (легаси без сопоставленного пользователя сервер "усыновит" сам).
+  collectArticleAuthorsPayload() {
+    const state = this.articleAuthorsAdmin;
+    if (!state) return {};
+    return {
+      ...(state.author && state.author.id ? { author_id: state.author.id } : {}),
+      co_author_ids: state.coAuthors.map((c) => c.id)
+    };
+  }
+
+  hideArticleAuthorsDropdown() {
+    const dropdown = document.getElementById('authorsAdminDropdown');
+    if (dropdown) { dropdown.hidden = true; dropdown.innerHTML = ''; }
+  }
+
+  async runArticleAuthorsSearch() {
+    const query = document.getElementById('authorsAdminSearch')?.value.trim() || '';
+    const dropdown = document.getElementById('authorsAdminDropdown');
+    if (!dropdown) return;
+    if (!query) { this.hideArticleAuthorsDropdown(); return; }
+
+    try {
+      const result = await apiClient.searchUsers(query);
+      // Пока запрос летел, поле могли очистить или уйти со страницы.
+      if (!document.getElementById('authorsAdminSearch')?.value.trim()) return;
+      const users = result.success && Array.isArray(result.data) ? result.data : [];
+
+      dropdown.innerHTML = '';
+      if (users.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'chip-field-dropdown-empty';
+        empty.textContent = 'Никого не найдено';
+        dropdown.appendChild(empty);
+      } else {
+        users.forEach((u) => {
+          const name = u.display_name || u.username;
+          const row = document.createElement('div');
+          row.className = 'authors-admin-result';
+          row.dataset.userId = String(u.id);
+          row.dataset.name = name;
+
+          const label = document.createElement('span');
+          label.textContent = name;
+
+          const actions = document.createElement('span');
+          actions.className = 'authors-admin-result-actions';
+          [['author', 'Автор', 'btn btn-primary btn-sm'], ['coauthor', 'Соавтор', 'btn btn-secondary btn-sm']].forEach(([action, text, cls]) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = cls;
+            btn.dataset.action = action;
+            btn.textContent = text;
+            actions.appendChild(btn);
+          });
+
+          row.append(label, actions);
+          dropdown.appendChild(row);
+        });
+      }
+      dropdown.hidden = false;
+    } catch (error) {
+      this.hideArticleAuthorsDropdown();
+    }
+  }
+
+  // Вешает обработчики управления авторами. Вызывается при каждой инициализации
+  // страницы статей (партиал пересоздаётся), кроме клика вне выпадашки — он на
+  // document и вешается один раз (по тому же приёму, что и у поиска участника).
+  setupArticleAuthorsAdmin() {
+    let debounce = null;
+    document.getElementById('authorsAdminSearch')?.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => this.runArticleAuthorsSearch(), 200);
+    });
+
+    document.getElementById('authorsAdminDropdown')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      const row = e.target.closest('.authors-admin-result');
+      if (!btn || !row) return;
+      const user = { id: parseInt(row.dataset.userId, 10), display_name: row.dataset.name };
+      if (btn.dataset.action === 'author') this.setArticleAuthor(user);
+      else this.addArticleCoAuthor(user);
+      const input = document.getElementById('authorsAdminSearch');
+      if (input) input.value = '';
+      this.hideArticleAuthorsDropdown();
+    });
+
+    document.getElementById('coAuthorsList')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      const chipEl = e.target.closest('[data-user-id]');
+      if (!btn || !chipEl || !this.articleAuthorsAdmin) return;
+      const userId = parseInt(chipEl.dataset.userId, 10);
+      if (btn.dataset.action === 'promote') this.promoteArticleCoAuthor(userId);
+      else if (btn.dataset.action === 'remove') this.removeArticleCoAuthor(userId);
+    });
+
+    if (!this._articleAuthorsOutsideClickBound) {
+      document.addEventListener('click', (e) => {
+        const wrap = document.getElementById('authorsAdminSearch')?.closest('.authors-admin-search');
+        if (wrap && !wrap.contains(e.target)) this.hideArticleAuthorsDropdown();
+      });
+      this._articleAuthorsOutsideClickBound = true;
+    }
+  }
+
+  // Собирает данные формы статьи для отправки на сервер/сохранения черновика.
+  // getValues() у чиповых полей сам "доливает" текст, набранный в поле, но
+  // ещё не оформленный в чип явным действием — раньше такой текст молча
+  // терялся при сохранении статьи (см. заголовок chip-field.js).
+  collectArticleFormData() {
+    const addAsCoauthorCheckbox = document.getElementById('addAsCoauthorCheckbox');
+    return {
+      title: document.getElementById('articleTitle').value,
+      categories: this.categoryField ? this.categoryField.getValues() : [],
+      server: document.getElementById('articleServer').value,
+      content: document.getElementById('articleContent').innerHTML,
+      image: document.getElementById('articleImageFile')?.value || '',
+      locked: document.getElementById('articleLocked')?.value === 'true',
+      roles: this.rolesField ? this.rolesField.getValues() : [],
+      tags: this.tagsField ? this.tagsField.getValues() : [],
+      add_as_coauthor: addAsCoauthorCheckbox ? addAsCoauthorCheckbox.checked : true
+    };
   }
 
   // Set up basic editor events as a fallback
@@ -664,20 +1093,8 @@ class SPARouter {
 
   // Set up article form events
   setupArticleFormEvents() {
-    // Set up tag input event
-    const tagInput = document.getElementById('articleTags');
-    if (tagInput) {
-      tagInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          this.addTag();
-        }
-      });
-    }
-
     // Set up all button events using event delegation
-    document.getElementById('create-category-btn')?.addEventListener('click', () => this.createCategoryFromArticles());
-    document.getElementById('add-tag-mobile-btn')?.addEventListener('click', () => this.addTag());
+    document.getElementById('add-tag-mobile-btn')?.addEventListener('click', () => this.tagsField?.commitTyped());
     document.getElementById('upload-image-btn')?.addEventListener('click', () => this.uploadImage());
     document.getElementById('saveArticleBtn')?.addEventListener('click', () => this.saveArticle());
     document.getElementById('saveDraftBtn')?.addEventListener('click', () => this.saveDraft());
@@ -696,72 +1113,64 @@ class SPARouter {
     document.getElementById('clearArticleFormBtn')?.addEventListener('click', () => this.clearArticleForm());
     document.getElementById('previewArticleBtn')?.addEventListener('click', () => this.previewArticle());
     document.getElementById('closePreviewBtn')?.addEventListener('click', () => this.closePreview());
-    document.getElementById('searchArticlesBtn')?.addEventListener('click', () => this.searchArticles());
-    document.getElementById('resetSearchBtn')?.addEventListener('click', () => this.loadArticlesList());
 
-    // Add change event listener for server selection to dynamically load roles
+    // Роли привязаны к серверу — при смене сервера сбрасываем выбранные
+    // роли (они относятся к старому серверу) и грузим варианты нового.
     document.getElementById('articleServer')?.addEventListener('change', (e) => {
-        // For the old single-select role system (kept for compatibility with other parts of the code)
-        this.loadRolesForSelectedServer(e.target.value);
-
-        // For the new multi-role system, if the roles container is open, reload the roles
-        const rolesContainer = document.getElementById('rolesContainer');
-        if (rolesContainer && rolesContainer.style.display === 'block') {
-            this.loadRolesForMultiSelection(e.target.value).catch(error => {
-                console.error('Error loading roles for multi-selection:', error);
-            });
-        }
+      if (this.rolesField) this.rolesField.setValues([]);
+      this.loadRolesForArticleField(e.target.value);
     });
-
-    // Initialize multi-role selection UI
-    this.initMultiRoleSelection();
 
     // Add beforeunload event listener to warn user about unsaved changes
     window.addEventListener('beforeunload', (e) => {
       // Check if there's content in the form that hasn't been saved
       const title = document.getElementById('articleTitle').value;
       const content = document.getElementById('articleContent').innerHTML;
-      const author = document.getElementById('articleAuthor').value;
 
       // If there's content, warn the user about potential data loss
-      if (title.trim() || content.trim() || author.trim()) {
-        // Save draft automatically (synchronous approach for beforeunload)
-        try {
-          const articleData = {
-            id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
-            title: title,
-            author: author,
-            category: document.getElementById('articleCategory').value,
-            server: document.getElementById('articleServer').value,
-            content: content,
-            description: '',
-            image: document.getElementById('articleImageFile')?.value || '',
-            locked: document.getElementById('articleLocked')?.value === 'true',
-            roles: JSON.parse(document.getElementById('articleRoles')?.value || '[]'),
-            tags: this.getTagsFromForm(),
-            timestamp: Date.now()
-          };
+      if (title.trim() || content.trim()) {
+        // Черновик автосохраняется на выход только если в редакторе реально
+        // есть содержимое — один заголовок без единого блока в редакторе
+        // черновиком не считается (см. требование "если содержание статьи
+        // пустое, мы не отправляем её в черновик при выходе"): иначе
+        // checkAndOfferDraft() при следующем заходе на страницу подставлял
+        // бы пустую "статью" из одного заголовка.
+        if (content.trim()) {
+          try {
+            const articleData = {
+              id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
+              ...this.collectArticleFormData(),
+              description: '',
+              timestamp: Date.now()
+            };
 
-          // Get existing drafts or initialize empty array
-          let drafts = this.getDraftsFromStorage();
+            // Get existing drafts or initialize empty array
+            let drafts = this.getDraftsFromStorage();
 
-          // Check if we're updating an existing draft
-          const existingDraftIndex = drafts.findIndex(draft => draft.id === this.currentDraftId);
-          if (existingDraftIndex !== -1) {
-            // Update existing draft
-            drafts[existingDraftIndex] = articleData;
-          } else {
-            // Add new draft to the beginning of the array
-            drafts.unshift(articleData);
+            // Check if we're updating an existing draft
+            const existingDraftIndex = drafts.findIndex(draft => draft.id === this.currentDraftId);
+            if (existingDraftIndex !== -1) {
+              // Update existing draft
+              drafts[existingDraftIndex] = articleData;
+            } else {
+              // Add new draft to the beginning of the array
+              drafts.unshift(articleData);
+            }
+
+            // Save updated drafts array to localStorage
+            localStorage.setItem('articleDrafts', JSON.stringify(drafts));
+
+            // Update currentDraftId to the saved draft's ID
+            this.currentDraftId = articleData.id;
+
+            // Реальный черновик только что создан/обновлён — снимаем флаг
+            // подавления автозагрузки (см. resetArticle()/suppressDraftAutoLoad()):
+            // раз пользователь опять что-то пишет, следующий заход на
+            // страницу снова должен предложить именно этот черновик.
+            this.clearDraftAutoLoadSuppression();
+          } catch (error) {
+            console.error('Could not save draft before unload:', error);
           }
-
-          // Save updated drafts array to localStorage
-          localStorage.setItem('articleDrafts', JSON.stringify(drafts));
-
-          // Update currentDraftId to the saved draft's ID
-          this.currentDraftId = articleData.id;
-        } catch (error) {
-          console.error('Could not save draft before unload:', error);
         }
 
         // Show a warning to the user
@@ -788,57 +1197,193 @@ class SPARouter {
         this.createCategory();
       }
     });
+
+    // Поиск по названию — фильтрация на клиенте (список категорий обычно
+    // небольшой, отдельный API-эндпоинт под поиск не нужен).
+    document.getElementById('categoriesSearchInput')?.addEventListener('input', (e) => {
+      this.renderCategoriesGrid(e.target.value);
+    });
+
+    // Модалка подтверждения удаления — вместо window.confirm()
+    document.getElementById('delete-category-cancel-btn')?.addEventListener('click', () => this.hideDeleteCategoryModal());
+    document.getElementById('delete-category-close-btn')?.addEventListener('click', () => this.hideDeleteCategoryModal());
+    document.getElementById('delete-category-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'delete-category-modal') this.hideDeleteCategoryModal();
+    });
+    document.getElementById('delete-category-confirm-btn')?.addEventListener('click', () => this.confirmDeleteCategory());
   }
 
   // Initialize servers page
   async initServersPage() {
-    await this.loadServersList();
     this.setupServerFormEvents();
-    this.setupServerPageResizeListener();
+    await this.loadServersDirectory();
   }
 
-  // Set up server form events
+  // makeAuthenticatedRequest всегда кладёт тело ответа сервера в result.data
+  // (result.error существует только при сетевом сбое до получения ответа —
+  // см. apiClient.makeAuthenticatedRequest в app.js), поэтому при
+  // response.ok === false настоящий текст ошибки лежит в result.data.error.
+  // Раньше весь блок "Сервера" читал именно result.error и почти всегда
+  // показывал пользователю "undefined" вместо реальной причины отказа.
+  serverApiError(result) {
+    return (result && result.data && result.data.error) || (result && result.error) || 'Неизвестная ошибка';
+  }
+
+  // Аватар сервера — цвет и буква считаются на лету из названия, а не
+  // хранятся в БД: в таблице servers нет колонки под иконку, так что поле
+  // "Иконка" в старой форме создания сервера ничего не сохраняло — сервер
+  // POST /api/servers всегда молча игнорировал его (см. src/routes/servers.routes.js).
+  // Цвет привязан к названию (не к id), чтобы предпросмотр в модалке
+  // "Создать сервер" — где id ещё не существует — совпадал с итоговым
+  // цветом карточки после сохранения, без "прыжка" цвета при создании.
+  serverAvatarPalette() {
+    return ['#5865f2', '#eb459e', '#3ba55d', '#faa81a', '#00b0f4', '#ed4245', '#9b59b6', '#1abc9c'];
+  }
+
+  serverAvatarColorForName(name) {
+    const str = (name || '').trim();
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    }
+    const palette = this.serverAvatarPalette();
+    return palette[Math.abs(hash) % palette.length];
+  }
+
+  serverAvatarInitial(name) {
+    return ((name || '').trim().charAt(0) || '?').toUpperCase();
+  }
+
+  serverAvatarHtml(server) {
+    return `<div class="server-avatar" style="background: ${this.serverAvatarColorForName(server.name)};">${this.escapeHtml(this.serverAvatarInitial(server.name))}</div>`;
+  }
+
+  applyServerAvatar(el, server) {
+    if (!el) return;
+    el.style.background = this.serverAvatarColorForName(server.name);
+    el.textContent = this.serverAvatarInitial(server.name);
+  }
+
+  // Живой предпросмотр аватара в модалке "Создать сервер" — обновляется по
+  // вводу названия тем же расчётом цвета/буквы, что и итоговая карточка.
+  updateCreateServerAvatarPreview() {
+    const el = document.getElementById('create-server-avatar-preview');
+    if (!el) return;
+    const name = document.getElementById('server-name')?.value || '';
+    el.style.background = this.serverAvatarColorForName(name);
+    el.textContent = this.serverAvatarInitial(name);
+  }
+
+  // Set up toolbar/modal events for the servers page — the fragment is
+  // re-fetched from /views/servers.html every time /servers is opened, so
+  // it's safe to always (re)bind here.
   setupServerFormEvents() {
-    // Set up create server button
     document.getElementById('create-server-btn')?.addEventListener('click', () => this.showCreateServerModal());
-    
-    // Set up modal buttons
+    document.getElementById('create-server-empty-btn')?.addEventListener('click', () => this.showCreateServerModal());
     document.getElementById('create-server-confirm-btn')?.addEventListener('click', () => this.createServer());
     document.getElementById('cancel-create-server-btn')?.addEventListener('click', () => this.hideCreateServerModal());
-    
-    // Close modal on outside click
+    document.getElementById('create-server-close-btn')?.addEventListener('click', () => this.hideCreateServerModal());
     document.getElementById('create-server-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'create-server-modal') {
-        this.hideCreateServerModal();
-      }
+      if (e.target.id === 'create-server-modal') this.hideCreateServerModal();
+    });
+    document.getElementById('server-name')?.addEventListener('input', () => this.updateCreateServerAvatarPreview());
+
+    // Поиск/сортировка каталога — работают локально по уже загруженному
+    // списку (this.serversCache), без обращений к серверу.
+    let serversSearchDebounce = null;
+    document.getElementById('servers-search-input')?.addEventListener('input', () => {
+      clearTimeout(serversSearchDebounce);
+      serversSearchDebounce = setTimeout(() => this.renderServersGrid(), 150);
+    });
+    document.getElementById('servers-sort-select')?.addEventListener('change', () => this.renderServersGrid());
+
+    // Рабочая область открытого сервера
+    document.getElementById('server-workspace-back-btn')?.addEventListener('click', () => this.closeServerWorkspace());
+    document.getElementById('server-workspace-tabs')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-server-tab]');
+      if (btn) this.switchServerWorkspaceTab(btn.dataset.serverTab);
+    });
+
+    // Модалка "Добавить участника"
+    document.getElementById('add-member-confirm-btn')?.addEventListener('click', () => this.confirmAddMember());
+    document.getElementById('add-member-cancel-btn')?.addEventListener('click', () => this.hideAddMemberModal());
+    document.getElementById('add-member-close-btn')?.addEventListener('click', () => this.hideAddMemberModal());
+    document.getElementById('add-member-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'add-member-modal') this.hideAddMemberModal();
+    });
+    let addMemberSearchDebounce = null;
+    document.getElementById('add-member-search')?.addEventListener('input', () => {
+      clearTimeout(addMemberSearchDebounce);
+      addMemberSearchDebounce = setTimeout(() => this.runAddMemberSearch(), 200);
+    });
+    // На document, а не на сам инпут — чтобы клик мимо выпадашки её закрывал.
+    // Вешается один раз за всё время жизни страницы (не при каждом заходе на
+    // /servers, в отличие от остальных обработчиков этого метода): document
+    // не пересоздаётся при повторной загрузке партиала, а add-member-search
+    // внутри него ищем каждый раз заново через getElementById.
+    if (!this._addMemberOutsideClickBound) {
+      document.addEventListener('click', (e) => {
+        const wrap = document.getElementById('add-member-search')?.closest('.servers-user-search');
+        if (wrap && !wrap.contains(e.target)) this.hideAddMemberSearchDropdown();
+      });
+      this._addMemberOutsideClickBound = true;
+    }
+
+    // Модалка "Назначить роль" (id и методы с префиксом server- — см.
+    // комментарий в servers.html про коллизию с users-list.html)
+    document.getElementById('server-assign-role-confirm-btn')?.addEventListener('click', () => this.confirmServerAssignRole());
+    document.getElementById('server-assign-role-cancel-btn')?.addEventListener('click', () => this.hideServerAssignRoleModal());
+    document.getElementById('server-assign-role-close-btn')?.addEventListener('click', () => this.hideServerAssignRoleModal());
+    document.getElementById('server-assign-role-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'server-assign-role-modal') this.hideServerAssignRoleModal();
+    });
+
+    // Модалка создания/редактирования роли
+    document.getElementById('server-role-editor-save-btn')?.addEventListener('click', () => this.saveServerRoleEditor());
+    document.getElementById('server-role-editor-cancel-btn')?.addEventListener('click', () => this.hideServerRoleEditorModal());
+    document.getElementById('server-role-editor-close-btn')?.addEventListener('click', () => this.hideServerRoleEditorModal());
+    document.getElementById('server-role-editor-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'server-role-editor-modal') this.hideServerRoleEditorModal();
+    });
+
+    // Модалка смены владельца (root only)
+    document.getElementById('change-owner-confirm-btn')?.addEventListener('click', () => this.confirmChangeOwner());
+    document.getElementById('change-owner-cancel-btn')?.addEventListener('click', () => this.hideChangeOwnerModal());
+    document.getElementById('change-owner-close-btn')?.addEventListener('click', () => this.hideChangeOwnerModal());
+    document.getElementById('change-owner-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'change-owner-modal') this.hideChangeOwnerModal();
+    });
+
+    // Модалка создания/редактирования канала
+    document.getElementById('channel-editor-save-btn')?.addEventListener('click', () => this.saveChannelEditor());
+    document.getElementById('channel-editor-cancel-btn')?.addEventListener('click', () => this.hideChannelEditorModal());
+    document.getElementById('channel-editor-close-btn')?.addEventListener('click', () => this.hideChannelEditorModal());
+    document.getElementById('channel-editor-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'channel-editor-modal') this.hideChannelEditorModal();
     });
   }
 
   // Show create server modal
   showCreateServerModal() {
     const modal = document.getElementById('create-server-modal');
-    if (modal) {
-      modal.style.display = 'flex';
-    }
+    if (modal) modal.hidden = false;
+    this.updateCreateServerAvatarPreview();
+    document.getElementById('server-name')?.focus();
   }
 
   // Hide create server modal
   hideCreateServerModal() {
     const modal = document.getElementById('create-server-modal');
-    if (modal) {
-      modal.style.display = 'none';
-    }
-    // Clear form fields
+    if (modal) modal.hidden = true;
     document.getElementById('server-name').value = '';
     document.getElementById('server-description').value = '';
-    document.getElementById('server-icon').value = '';
+    this.updateCreateServerAvatarPreview();
   }
 
   // Create server
   async createServer() {
     const name = document.getElementById('server-name').value.trim();
     const description = document.getElementById('server-description').value.trim();
-    const icon = document.getElementById('server-icon').value.trim();
 
     if (!name) {
       showMessage('Название сервера обязательно', 'error');
@@ -846,14 +1391,14 @@ class SPARouter {
     }
 
     try {
-      const result = await apiClient.createServer({ name, description, icon });
-      
+      const result = await apiClient.createServer({ name, description });
+
       if (result.success) {
         showMessage('Сервер успешно создан!', 'success');
         this.hideCreateServerModal();
-        await this.loadServersList();
+        await this.loadServersDirectory();
       } else {
-        showMessage(`Ошибка создания сервера: ${result.error}`, 'error');
+        showMessage(`Ошибка создания сервера: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка при создании сервера: ${error.message}`, 'error');
@@ -862,8 +1407,8 @@ class SPARouter {
 
   // Initialize settings page
   async initSettingsPage() {
-    this.setupSettingsFormEvents();
-    // Initialize backup page after DOM update
+    await this.setupSettingsFormEvents();
+    // Initialize backup/cleanup panels after DOM update
     setTimeout(() => {
       if (typeof initBackupPage === 'function') {
         console.log('[SPA] Вызов initBackupPage');
@@ -871,54 +1416,20 @@ class SPARouter {
       } else {
         console.warn('[SPA] initBackupPage не найден');
       }
+      if (typeof initCleanupPage === 'function') {
+        console.log('[SPA] Вызов initCleanupPage');
+        initCleanupPage();
+      } else {
+        console.warn('[SPA] initCleanupPage не найден');
+      }
     }, 100);
-  }
-
-  // Set up settings form events
-  setupSettingsFormEvents() {
-    document.getElementById('save-settings-btn')?.addEventListener('click', () => this.saveSettings());
-    document.getElementById('reset-settings-btn')?.addEventListener('click', () => this.resetSettings());
   }
 
   // Additional methods for handling articles functionality
   // (These would be implementations of the methods mentioned in setupArticleFormEvents)
-
-  addTag() {
-    const tagInput = document.getElementById('articleTags');
-    const tagText = tagInput.value.trim();
-
-    if (tagText && !document.getElementById(`tag-${tagText}`)) {
-      const tagsContainer = document.getElementById('tagsContainer');
-      if (tagsContainer) {
-        const tagElement = document.createElement('span');
-        tagElement.className = 'tag-item';
-        tagElement.id = `tag-${tagText}`;
-        tagElement.innerHTML = `${tagText} <span class="tag-remove" onclick="spaRouter.removeTag('${tagText}')">&times;</span>`;
-        tagsContainer.appendChild(tagElement);
-
-        // Show the tags container if it's hidden
-        tagsContainer.style.display = 'flex';
-      }
-    }
-
-    tagInput.value = '';
-  }
-
-  removeTag(tagText) {
-    const tagElement = document.getElementById(`tag-${tagText}`);
-    if (tagElement) {
-      tagElement.remove();
-
-      // Check if there are any remaining tags
-      const tagsContainer = document.getElementById('tagsContainer');
-      if (tagsContainer) {
-        // If no more tag elements, hide the container
-        if (tagsContainer.children.length === 0) {
-          tagsContainer.style.display = 'none';
-        }
-      }
-    }
-  }
+  // Теги/категория/роли теперь ведёт ChipField (см. public/chip-field.js,
+  // this.tagsField/this.categoryField/this.rolesField) — старые addTag/
+  // removeTag и весь чекбоксовый UI ролей отсюда убраны.
 
   selectCoverFromFile() {
     // Trigger the hidden file input
@@ -1092,17 +1603,16 @@ class SPARouter {
 
     console.log("Пытаюсь сохранить статью. ID:", articleId); // Для отладки
 
+    // Автор в тело запроса не входит — сервер сам проставляет его из токена
+    // при создании и не даёт менять при редактировании (см. articleAuthor
+    // в articles.html и PUT/POST /api/articles в articles.routes.js).
+    // Исключение — владелец: его управление авторами (author_id/
+    // co_author_ids) сервер принимает только от is_root; у остальных этого
+    // состояния нет вовсе (см. collectArticleAuthorsPayload).
     const articleData = {
-        title: document.getElementById('articleTitle').value,
-        author: document.getElementById('articleAuthor').value,
-        category: document.getElementById('articleCategory').value,
-        server: document.getElementById('articleServer').value,
-        content: document.getElementById('articleContent').innerHTML,
-        description: '',
-        image: document.getElementById('articleImageFile')?.value || '', // ИСПРАВЛЕНО: используем правильное поле для изображения
-        locked: document.getElementById('articleLocked')?.value === 'true',
-        roles: JSON.parse(document.getElementById('articleRoles')?.value || '[]'),
-        tags: this.getTagsFromForm()
+        ...this.collectArticleFormData(),
+        ...(articleId ? this.collectArticleAuthorsPayload() : {}),
+        description: ''
     };
 
     // 2. РЕШАЕМ: КУДА И КАК ШЛЕМ
@@ -1146,16 +1656,12 @@ class SPARouter {
   clearArticleForm() {
     document.getElementById('articleTitle').value = '';
     document.getElementById('articleContent').innerHTML = '';
-    document.getElementById('articleAuthor').value = '';
-    document.getElementById('articleCategory').value = '';
-    document.getElementById('articleTags').value = '';
-    document.getElementById('tagsContainer').innerHTML = '';
-    document.getElementById('tagsContainer').style.display = 'none';
+    if (this.categoryField) this.categoryField.setValues([]);
+    if (this.tagsField) this.tagsField.setValues([]);
     document.getElementById('articleImageFile').value = '';
     document.getElementById('articleImageFileInput').value = '';
     document.getElementById('articleCoverPreview').style.display = 'none';
     document.getElementById('coverFileName').textContent = '';
-    document.getElementById('imagePreview').style.display = 'none';
 
     // Reset article status and trigger UI update
     const lockedSelect = document.getElementById('articleLocked');
@@ -1164,20 +1670,14 @@ class SPARouter {
     const lockedChangeEvent = new Event('change', { bubbles: true });
     lockedSelect.dispatchEvent(lockedChangeEvent);
 
-    // Reset roles to empty array
-    document.getElementById('articleRoles').value = '[]';
-    document.getElementById('selectedRolesDisplay').innerHTML = '';
-    document.getElementById('selectedRolesDisplay').style.display = 'none';
-    document.getElementById('rolesContainer').innerHTML = ''; // Clear the roles dropdown content
-    document.getElementById('rolesContainer').style.display = 'none';
-    document.getElementById('articleRolesInput').value = '';
-
-    // Reset server field and trigger any related UI updates
+    // Reset server field and trigger any related UI updates (сбросит и роли —
+    // см. обработчик 'change' в setupArticleFormEvents)
     const serverSelect = document.getElementById('articleServer');
     serverSelect.value = ''; // Reset server field to default (empty/"No server")
-    // Trigger change event to update any dependent UI
     const serverChangeEvent = new Event('change', { bubbles: true });
     serverSelect.dispatchEvent(serverChangeEvent);
+
+    this.resetArticleAuthorInfo();
 
     document.getElementById('draftsManager').style.display = 'none';
     this.currentDraftId = null; // Clear current draft ID
@@ -1192,10 +1692,9 @@ class SPARouter {
     // Check if form is empty before saving
     const title = document.getElementById('articleTitle').value;
     const content = document.getElementById('articleContent').innerHTML;
-    const author = document.getElementById('articleAuthor').value;
 
     // If form is empty, don't save a draft
-    if (!title.trim() && !content.trim() && !author.trim()) {
+    if (!title.trim() && !content.trim()) {
       showMessage('Невозможно сохранить черновик: форма пуста', 'warning');
       return;
     }
@@ -1204,16 +1703,8 @@ class SPARouter {
       // Get all article data from the form
       const articleData = {
         id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
-        title: title,
-        author: author,
-        category: document.getElementById('articleCategory').value,
-        server: document.getElementById('articleServer').value,
-        content: content,
+        ...this.collectArticleFormData(),
         description: '',
-        image: document.getElementById('articleImageFile')?.value || '',
-        locked: document.getElementById('articleLocked')?.value === 'true',
-        roles: JSON.parse(document.getElementById('articleRoles')?.value || '[]'),
-        tags: this.getTagsFromForm(),
         timestamp: Date.now() // Add timestamp for when draft was saved
       };
 
@@ -1236,6 +1727,11 @@ class SPARouter {
       // Update currentDraftId to the saved draft's ID
       this.currentDraftId = articleData.id;
 
+      // Пользователь явно сохранил черновик — снимаем возможный флаг
+      // подавления автозагрузки от предыдущего "Сбросить" (см.
+      // suppressDraftAutoLoad()/checkAndOfferDraft()).
+      this.clearDraftAutoLoadSuppression();
+
       // Show success message
       showMessage('Черновик успешно сохранен в локальное хранилище', 'success');
     } catch (error) {
@@ -1257,6 +1753,33 @@ class SPARouter {
     return [];
   }
 
+  // --- Флаг "не предлагать черновик автоматически" — выставляется
+  // resetArticle() и снимается любым действием, означающим, что пользователь
+  // снова осознанно работает с черновиком (saveDraft(), автосохранение на
+  // выход с непустым контентом, ручная loadDraft()). Отдельный ключ в
+  // localStorage, а не поле на this — должен пережить закрытие вкладки и
+  // повторный заход на страницу, то же самое, ради чего сами черновики
+  // лежат в localStorage, а не просто в памяти.
+  isDraftAutoLoadSuppressed() {
+    return localStorage.getItem('articleDraftAutoLoadSuppressed') === '1';
+  }
+
+  suppressDraftAutoLoad() {
+    try {
+      localStorage.setItem('articleDraftAutoLoadSuppressed', '1');
+    } catch (error) {
+      console.error('Could not set draft auto-load suppression flag:', error);
+    }
+  }
+
+  clearDraftAutoLoadSuppression() {
+    try {
+      localStorage.removeItem('articleDraftAutoLoadSuppressed');
+    } catch (error) {
+      console.error('Could not clear draft auto-load suppression flag:', error);
+    }
+  }
+
   // Load draft from localStorage if it exists
   loadDraft(draftId) {
     try {
@@ -1266,8 +1789,9 @@ class SPARouter {
       if (draft) {
         // Populate the form with draft data
         document.getElementById('articleTitle').value = draft.title || '';
-        document.getElementById('articleAuthor').value = draft.author || '';
-        document.getElementById('articleCategory').value = draft.category || '';
+        if (this.categoryField) {
+          this.categoryField.setValues(draft.categories || (draft.category ? [draft.category] : []));
+        }
 
         // Handle server selection
         if (draft.server) {
@@ -1316,34 +1840,30 @@ class SPARouter {
           document.getElementById('articleLocked').value = draft.locked ? 'true' : 'false';
         }
 
-        // Handle roles
-        if (draft.roles && Array.isArray(draft.roles)) {
-          document.getElementById('articleRoles').value = JSON.stringify(draft.roles);
-
-          // Load the server roles to populate the name mapping, then update the display
+        // Handle roles — сначала грузим варианты для сервера черновика (чтобы
+        // чипы сразу показывали названия, а не ID), потом проставляем значения.
+        if (this.rolesField) {
+          const roleValues = Array.isArray(draft.roles) ? draft.roles.map(String) : [];
           if (draft.server) {
-            // Load roles for the server to populate the name mapping
-            this.loadRolesForMultiSelection(draft.server).then(() => {
-              // After roles are loaded, update the display with proper names
-              this.updateSelectedRolesDisplay(draft.roles);
-            }).catch(e => {
-              console.warn("Could not load server roles to map IDs to names:", e);
-              // If we can't load the server roles, still try to display the IDs as-is
-              this.updateSelectedRolesDisplay(draft.roles);
-            });
+            this.loadRolesForArticleField(draft.server).then(() => this.rolesField.setValues(roleValues));
           } else {
-            // If no server is specified, just display the roles as they are
-            this.updateSelectedRolesDisplay(draft.roles);
+            this.rolesField.setOptions([]);
+            this.rolesField.setValues(roleValues);
           }
         }
 
         // Handle tags
-        if (draft.tags && Array.isArray(draft.tags)) {
-          this.loadTagsToForm(draft.tags);
-        }
+        if (this.tagsField) this.tagsField.setValues(Array.isArray(draft.tags) ? draft.tags : []);
+
+        this.resetArticleAuthorInfo();
 
         // Set the current draft ID to enable overwriting
         this.currentDraftId = draftId;
+
+        // Пользователь явно загрузил черновик (сам или через checkAndOfferDraft
+        // при заходе на страницу) — снимаем возможный флаг подавления
+        // автозагрузки, оставшийся от предыдущего "Сбросить".
+        this.clearDraftAutoLoadSuppression();
 
         // Show a message to the user
         const timestamp = new Date(draft.timestamp).toLocaleString();
@@ -1361,6 +1881,15 @@ class SPARouter {
 
   // Check for and load draft if form is empty
   checkAndOfferDraft() {
+    // Пользователь недавно нажал "Сбросить" — это осознанный выбор начать с
+    // чистого листа, а не просто "форма сейчас пустая" (см. requirement
+    // "если пользователь нажал сбросить статью... черновик не откроется,
+    // даже если пользователь ничего не заполнял"). Флаг снимается сам, как
+    // только появится новый реальный черновик (saveDraft()/beforeunload с
+    // непустым контентом) или пользователь сам откроет черновик из списка
+    // (loadDraft()) — до тех пор автоподстановка молчит.
+    if (this.isDraftAutoLoadSuppressed()) return;
+
     // Check if there's a draft in localStorage
     const drafts = this.getDraftsFromStorage();
     if (drafts && drafts.length > 0) {
@@ -1368,10 +1897,9 @@ class SPARouter {
         // Check if the current form is empty
         const title = document.getElementById('articleTitle').value;
         const content = document.getElementById('articleContent').innerHTML;
-        const author = document.getElementById('articleAuthor').value;
 
         // If form is empty or nearly empty, load the most recent draft
-        if (!title.trim() && !content.trim() && !author.trim()) {
+        if (!title.trim() && !content.trim()) {
           const latestDraft = drafts[0]; // Most recent draft
           this.loadDraft(latestDraft.id);
         }
@@ -1387,16 +1915,12 @@ class SPARouter {
       // Clear all form fields
       document.getElementById('articleTitle').value = '';
       document.getElementById('articleContent').innerHTML = '';
-      document.getElementById('articleAuthor').value = '';
-      document.getElementById('articleCategory').value = '';
-      document.getElementById('articleTags').value = '';
-      document.getElementById('tagsContainer').innerHTML = '';
-      document.getElementById('tagsContainer').style.display = 'none';
+      if (this.categoryField) this.categoryField.setValues([]);
+      if (this.tagsField) this.tagsField.setValues([]);
       document.getElementById('articleImageFile').value = '';
       document.getElementById('articleImageFileInput').value = '';
       document.getElementById('articleCoverPreview').style.display = 'none';
       document.getElementById('coverFileName').textContent = '';
-      document.getElementById('imagePreview').style.display = 'none';
 
       // Reset article status and trigger UI update
       const lockedSelect = document.getElementById('articleLocked');
@@ -1405,20 +1929,14 @@ class SPARouter {
       const lockedChangeEvent = new Event('change', { bubbles: true });
       lockedSelect.dispatchEvent(lockedChangeEvent);
 
-      // Reset roles to empty array
-      document.getElementById('articleRoles').value = '[]';
-      document.getElementById('selectedRolesDisplay').innerHTML = '';
-      document.getElementById('selectedRolesDisplay').style.display = 'none';
-      document.getElementById('rolesContainer').innerHTML = ''; // Clear the roles dropdown content
-      document.getElementById('rolesContainer').style.display = 'none';
-      document.getElementById('articleRolesInput').value = '';
-
-      // Reset server field and trigger any related UI updates
+      // Reset server field and trigger any related UI updates (сбросит и роли —
+      // см. обработчик 'change' в setupArticleFormEvents)
       const serverSelect = document.getElementById('articleServer');
       serverSelect.value = ''; // Reset server field to default (empty/"No server")
-      // Trigger change event to update any dependent UI
       const serverChangeEvent = new Event('change', { bubbles: true });
       serverSelect.dispatchEvent(serverChangeEvent);
+
+      this.resetArticleAuthorInfo();
 
       // Reset form title and save button
       document.getElementById('article-form-title').textContent = 'Создать новую статью';
@@ -1427,6 +1945,31 @@ class SPARouter {
 
       // Hide drafts manager
       document.getElementById('draftsManager').style.display = 'none';
+
+      // "Сбросить" — осознанный выбор начать заново, а не просто очистка
+      // полей: то, что сейчас было в редакторе (свой ли черновик, свежий,
+      // или подставленный автозагрузкой при заходе на страницу), не должно
+      // ни попасть в черновик само (см. requirement "если пользователь
+      // писал статью, а потом нажал сбросить, статья не отправляется в
+      // черновик"), ни всплыть заново при следующем заходе на страницу
+      // (requirement "черновик не откроется, даже если пользователь ничего
+      // не заполнял"). Поэтому удаляем сам сохранённый черновик с этим ID
+      // из localStorage — недостаточно было бы просто забыть currentDraftId,
+      // запись осталась бы лежать в articleDrafts и её всё равно предложил
+      // бы checkAndOfferDraft() при следующем открытии страницы.
+      if (this.currentDraftId) {
+        try {
+          const drafts = this.getDraftsFromStorage().filter((draft) => draft.id !== this.currentDraftId);
+          localStorage.setItem('articleDrafts', JSON.stringify(drafts));
+        } catch (error) {
+          console.error('Could not remove draft on reset:', error);
+        }
+      }
+
+      // Клавиша подавления автозагрузки — на случай, если в хранилище
+      // остался ещё какой-то ДРУГОЙ черновик (не тот, что был открыт сейчас):
+      // после явного "Сбросить" его тоже не нужно подсовывать молча.
+      this.suppressDraftAutoLoad();
 
       // Clear current draft ID
       this.currentDraftId = null;
@@ -1494,7 +2037,7 @@ class SPARouter {
 
   previewArticle() {
     const title = document.getElementById('articleTitle').value;
-    const author = document.getElementById('articleAuthor').value;
+    const author = document.getElementById('articleAuthorChip')?.textContent || '';
     const content = document.getElementById('articleContent').innerHTML;
 
     if (!title && !content) {
@@ -1558,351 +2101,128 @@ class SPARouter {
     previewOverlay.classList.remove('show');
   }
 
-  async searchArticles() {
-    const searchText = document.getElementById('searchText').value;
-
-    if (!searchText || searchText.trim() === '') {
-      // If search field is empty, load all articles
-      await this.loadArticlesList();
-      return;
-    }
-
-    try {
-      const result = await apiClient.searchArticles(searchText);
-      if (result.success) {
-        const articles = result.data.data || result.data; // Support both formats
-        const articlesListContainer = document.getElementById('articlesListContainer');
-        if (articlesListContainer) {
-          articlesListContainer.innerHTML = '';
-
-          if (articles.length === 0) {
-            articlesListContainer.innerHTML = '<p>Статьи не найдены</p>';
-            return;
-          }
-
-          articles.forEach(article => {
-            this.createArticleElement(article, articlesListContainer);
-          });
-        }
-      } else {
-        showMessage(`Ошибка при поиске статей: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      showMessage(`Неожиданная ошибка при поиске статей: ${error.message}`, 'error');
-    }
-  }
-
-  createArticleElement(article, container) {
-    try {
-      const articleDiv = document.createElement('div');
-      articleDiv.className = 'article-item';
-
-      // Create preview image if available
-      let imagePreview = '';
-      if (article.image) {
-        try {
-          const imageUrl = this.getImageUrl(article.image);
-          if (imageUrl) {
-            imagePreview = `<div class="article-image-preview">
-                              <img src="${imageUrl}" alt="Превью статьи" class="article-image-thumb" onerror="this.style.display='none'">
-                            </div>`;
-          }
-        } catch (imgError) {
-          console.warn('Error getting image URL for article:', article.id, imgError);
-        }
-      }
-
-      articleDiv.innerHTML = `
-        <div class="article-title-container">
-          ${imagePreview}
-          <div class="article-title">${article.title}</div>
-        </div>
-        <div class="article-meta">
-          <div class="meta-item"><strong>Автор:</strong> ${article.author || 'Не указан'}</div>
-          <div class="meta-item"><strong>Категория:</strong> ${article.category || 'Не указана'}</div>
-          <div class="meta-item"><strong>Сервер:</strong> ${article.server || 'Не указан'}</div>
-          <div class="meta-item"><strong>Просмотры:</strong> ${article.views || 0}</div>
-          <div class="meta-item"><strong>Статус:</strong> ${article.locked ? 'Закрытая' : 'Открытая'}</div>
-          <div class="meta-item"><strong>ID:</strong> ${article.id}</div>
-          <div class="meta-item"><strong>Создано:</strong> ${article.created_at}</div>
-        </div>
-        <div class="article-actions">
-          <button class="btn btn-primary" onclick="window.spaRouter ? window.spaRouter.editArticle('${article.id}') : console.error('spaRouter not available')">Редактировать</button>
-          <button class="btn btn-danger" onclick="window.spaRouter ? window.spaRouter.deleteArticle('${article.id}') : console.error('spaRouter not available')">Удалить</button>
-        </div>
-      `;
-      container.appendChild(articleDiv);
-    } catch (elementError) {
-      console.error('Error creating article element:', article.id, elementError);
-    }
-  }
-
   // Edit article functionality
   async editArticle(articleId) {
     try {
       const result = await apiClient.getArticle(articleId);
-      if (result.success) {
-        const article = result.data;
-
-        // Populate the form with article data
-        const titleInput = document.getElementById('articleTitle');
-        const authorInput = document.getElementById('articleAuthor');
-        const categorySelect = document.getElementById('articleCategory');
-        const serverSelect = document.getElementById('articleServer');
-        const lockedSelect = document.getElementById('articleLocked');
-        const roleSelect = document.getElementById('articleRole');
-        const imageFileInput = document.getElementById('articleImageFile');
-
-        if (titleInput) titleInput.value = article.title || '';
-        if (authorInput) authorInput.value = article.author || '';
-        if (categorySelect) categorySelect.value = article.category || '';
-        if (serverSelect) {
-            // Try to set by server ID first, then by server name
-            if (article.server_id) {
-                serverSelect.value = article.server_id;
-            } else if (article.server) {
-                // If server field contains a name, try to find corresponding option
-                let found = false;
-                for (let i = 0; i < serverSelect.options.length; i++) {
-                    if (serverSelect.options[i].textContent === article.server) {
-                        serverSelect.value = serverSelect.options[i].value;
-                        found = true;
-                        break;
-                    }
-                }
-                // If name not found as option text, try direct value match (in case it's already an ID)
-                if (!found) {
-                    serverSelect.value = article.server;
-                }
-            } else {
-                serverSelect.value = '';
-            }
-        }
-        if (lockedSelect) lockedSelect.value = article.locked ? 'true' : 'false';
-        // Handle roles as an array for the new multi-role system
-        if (article.roles && Array.isArray(article.roles)) {
-            // Set the hidden input with the roles array
-            document.getElementById('articleRoles').value = JSON.stringify(article.roles);
-
-            // Load the server roles to populate the name mapping, then update the display
-            if (article.server || article.server_id) {
-                // Use setTimeout to ensure DOM is updated before loading roles
-                setTimeout(() => {
-                    const serverForLoading = document.getElementById('articleServer').value || article.server_id || article.server;
-                    if (serverForLoading) {
-                        // Load roles to populate the mapping, then refresh the display
-                        this.loadRolesForMultiSelection(serverForLoading).then(() => {
-                            // Refresh the display to show role names instead of IDs
-                            const currentRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-                            this.updateSelectedRolesDisplay(currentRoles);
-                        }).catch(e => {
-                            console.warn("Could not load roles for server to display names:", e);
-                            // If we can't load the roles, still display the IDs
-                            this.updateSelectedRolesDisplay(article.roles);
-                        });
-                    } else {
-                        // If no server is available, just display the roles as they are
-                        this.updateSelectedRolesDisplay(article.roles);
-                    }
-                }, 100); // Small delay to ensure server selection is updated first
-            } else {
-                // If no server is specified, just display the roles as they are
-                this.updateSelectedRolesDisplay(article.roles);
-            }
-        } else if (article.role) {
-            // For backward compatibility, handle single role
-            // If article.role is a JSON string, parse it; otherwise create array
-            let rolesArray;
-            if (typeof article.role === 'string' && article.role.startsWith('[') && article.role.endsWith(']')) {
-                try {
-                    rolesArray = JSON.parse(article.role);
-                } catch (e) {
-                    rolesArray = [article.role];
-                }
-            } else {
-                rolesArray = [article.role];
-            }
-
-            document.getElementById('articleRoles').value = JSON.stringify(rolesArray);
-
-            // Load server roles to populate name mapping, then update display
-            if (article.server || article.server_id) {
-                setTimeout(() => {
-                    const serverForLoading = document.getElementById('articleServer').value || article.server_id || article.server;
-                    if (serverForLoading) {
-                        // Load roles to populate the mapping, then refresh the display
-                        this.loadRolesForMultiSelection(serverForLoading).then(() => {
-                            // Refresh the display to show role names instead of IDs
-                            const currentRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-                            this.updateSelectedRolesDisplay(currentRoles);
-                        }).catch(e => {
-                            console.warn("Could not load roles for server to display names:", e);
-                            // If we can't load the roles, still display the IDs
-                            this.updateSelectedRolesDisplay(rolesArray);
-                        });
-                    } else {
-                        // If no server is available, just display the roles as they are
-                        this.updateSelectedRolesDisplay(rolesArray);
-                    }
-                }, 100);
-            } else {
-                // If no server is specified, just display the roles as they are
-                this.updateSelectedRolesDisplay(rolesArray);
-            }
-        } else {
-            document.getElementById('articleRoles').value = '[]';
-            this.updateSelectedRolesDisplay([]);
-        }
-
-        // Load tags for the article
-        this.loadTagsToForm(article.tags || []);
-
-        // If a server is specified, load its roles to populate the name mapping
-        if (article.server || article.server_id) {
-            // Use setTimeout to ensure DOM is updated before loading roles
-            setTimeout(() => {
-                const serverForLoading = document.getElementById('articleServer').value || article.server_id || article.server;
-                if (serverForLoading) {
-                    // Load roles to populate the mapping, then refresh the display
-                    this.loadRolesForMultiSelection(serverForLoading).then(() => {
-                        // Refresh the display to show role names instead of IDs
-                        const currentRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-                        this.updateSelectedRolesDisplay(currentRoles);
-                    }).catch(e => {
-                        console.warn("Could not load roles for server to display names:", e);
-                    });
-                }
-            }, 100); // Small delay to ensure server selection is updated first
-        }
-        if (imageFileInput) imageFileInput.value = article.image || '';
-
-        // Show cover preview if image exists
-        if (article.image) {
-          const previewImg = document.getElementById('articleCoverImagePreview');
-          const previewContainer = document.getElementById('articleCoverPreview');
-          const fileNameElement = document.getElementById('coverFileName');
-
-          if (previewImg) previewImg.src = article.image;
-          // Показываем только имя файла или короткую версию URL
-          if (fileNameElement) {
-              try {
-                const imageUrl = new URL(article.image);
-                const pathname = imageUrl.pathname;
-                const filename = pathname.split('/').pop();
-                if (filename && filename.length > 0) {
-                  fileNameElement.textContent = filename;
-                } else {
-                  // Если нет имени файла, показываем укороченный URL
-                  fileNameElement.textContent = 'URL: ' + article.image.substring(0, 30) + (article.image.length > 30 ? '...' : '');
-                }
-              } catch (e) {
-                // Если URL некорректный, просто покажем начало строки
-                fileNameElement.textContent = 'URL: ' + article.image.substring(0, 30) + (article.image.length > 30 ? '...' : '');
-              }
-          }
-          if (previewContainer) previewContainer.style.display = 'flex';
-        }
-
-        // Set content in editor
-        const editor = document.getElementById('articleContent');
-        if (editor) {
-          editor.innerHTML = article.content || '';
-        }
-
-        // Update form title and save button text
-        const formTitle = document.getElementById('article-form-title');
-        const saveBtn = document.getElementById('saveArticleBtn');
-
-        if (formTitle) formTitle.textContent = 'Редактировать статью';
-        if (saveBtn) {
-            saveBtn.textContent = 'Обновить статью';
-            saveBtn.setAttribute('data-article-id', articleId);
-            console.log('Set article ID for editing:', articleId); // Debug log
-        }
-
-        // Hide the drafts manager and clear current draft ID when editing an article
-        document.getElementById('draftsManager').style.display = 'none';
-        this.currentDraftId = null; // Clear current draft ID when editing existing article
-
-        // If article has a server, load server-specific roles
-        if (article.server_id || article.server) {
-          try {
-            // Use the server ID for loading roles, fallback to name if ID not available
-            let serverForRoles = article.server_id;
-            if (!serverForRoles && article.server) {
-                // Try to find the ID that corresponds to the server name
-                for (let i = 0; i < serverSelect.options.length; i++) {
-                    if (serverSelect.options[i].textContent === article.server) {
-                        serverForRoles = serverSelect.options[i].value;
-                        break;
-                    }
-                }
-                // If we still don't have an ID, use the name as fallback
-                if (!serverForRoles) {
-                    serverForRoles = article.server;
-                }
-            }
-            await this.loadRolesForSelectedServer(serverForRoles);
-            // The roles are already loaded and will be set by the updateSelectedRolesDisplay call above
-          } catch (roleError) {
-            console.error('Error loading roles for server:', roleError);
-            // Continue with edit even if roles failed to load
-            // For backward compatibility, handle single role if roles array is not available
-            if (article.role) {
-                const rolesArray = [article.role];
-                document.getElementById('articleRoles').value = JSON.stringify(rolesArray);
-                this.updateSelectedRolesDisplay(rolesArray);
-            } else {
-                document.getElementById('articleRoles').value = '[]';
-                this.updateSelectedRolesDisplay([]);
-            }
-          }
-        } else {
-          // If no server, just set the role value directly
-          // For backward compatibility, handle single role if roles array is not available
-          if (article.role) {
-              const rolesArray = [article.role];
-              document.getElementById('articleRoles').value = JSON.stringify(rolesArray);
-              this.updateSelectedRolesDisplay(rolesArray);
-          } else {
-              document.getElementById('articleRoles').value = '[]';
-              this.updateSelectedRolesDisplay([]);
-          }
-        }
-
-        // Scroll to form
-        const formContainer = document.querySelector('.form-container');
-        if (formContainer) {
-            formContainer.scrollIntoView({ behavior: 'smooth' });
-        }
-      } else {
+      if (!result.success) {
         showMessage(`Ошибка загрузки статьи: ${result.error}`, 'error');
+        return;
+      }
+      const article = result.data;
+
+      // Иерархия: нижестоящий не правит статьи вышестоящих (сервер всё равно
+      // вернёт 403 на сохранение — см. canEditArticle в articles.routes.js).
+      if (article.can_edit === false) {
+        showMessage('Недостаточно прав для редактирования этой статьи: автор выше вас по иерархии', 'error');
+        return;
+      }
+
+      // Populate the form with article data
+      const titleInput = document.getElementById('articleTitle');
+      const serverSelect = document.getElementById('articleServer');
+      const lockedSelect = document.getElementById('articleLocked');
+      const imageFileInput = document.getElementById('articleImageFile');
+
+      if (titleInput) titleInput.value = article.title || '';
+      if (this.categoryField) {
+        this.categoryField.setValues(article.categories || (article.category ? [article.category] : []));
+      }
+
+      // API отдаёт уже разрешённое имя сервера (см. formatArticleResponse в
+      // articles.routes.js), а не его id — ищем совпадающий по подписи option,
+      // чтобы восстановить id для <select> и для подгрузки ролей сервера.
+      let serverForRoles = '';
+      if (serverSelect) {
+        if (article.server) {
+          let found = false;
+          for (let i = 0; i < serverSelect.options.length; i++) {
+            if (serverSelect.options[i].textContent === article.server) {
+              serverSelect.value = serverSelect.options[i].value;
+              serverForRoles = serverSelect.options[i].value;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            serverSelect.value = article.server;
+            serverForRoles = article.server;
+          }
+        } else {
+          serverSelect.value = '';
+        }
+      }
+
+      if (lockedSelect) lockedSelect.value = article.locked ? 'true' : 'false';
+
+      // Роли — сначала грузим варианты для сервера статьи, и только потом
+      // проставляем значения, иначе чипы временно покажут ID вместо названий
+      // (см. ChipField._labelFor в chip-field.js).
+      if (this.rolesField) {
+        if (serverForRoles) {
+          await this.loadRolesForArticleField(serverForRoles);
+        } else {
+          this.rolesField.setOptions([]);
+        }
+        this.rolesField.setValues((article.roles || []).map(String));
+      }
+
+      if (this.tagsField) this.tagsField.setValues(article.tags || []);
+
+      this.renderArticleAuthorInfo(article);
+
+      if (imageFileInput) imageFileInput.value = article.image || '';
+
+      // Show cover preview if image exists
+      if (article.image) {
+        const previewImg = document.getElementById('articleCoverImagePreview');
+        const previewContainer = document.getElementById('articleCoverPreview');
+        const fileNameElement = document.getElementById('coverFileName');
+
+        if (previewImg) previewImg.src = article.image;
+        // Показываем только имя файла или короткую версию URL
+        if (fileNameElement) {
+          try {
+            const imageUrl = new URL(article.image);
+            const pathname = imageUrl.pathname;
+            const filename = pathname.split('/').pop();
+            fileNameElement.textContent = (filename && filename.length > 0)
+              ? filename
+              : 'URL: ' + article.image.substring(0, 30) + (article.image.length > 30 ? '...' : '');
+          } catch (e) {
+            // Если URL некорректный, просто покажем начало строки
+            fileNameElement.textContent = 'URL: ' + article.image.substring(0, 30) + (article.image.length > 30 ? '...' : '');
+          }
+        }
+        if (previewContainer) previewContainer.style.display = 'flex';
+      }
+
+      // Set content in editor
+      const editor = document.getElementById('articleContent');
+      if (editor) editor.innerHTML = article.content || '';
+
+      // Update form title and save button text
+      const formTitle = document.getElementById('article-form-title');
+      const saveBtn = document.getElementById('saveArticleBtn');
+
+      if (formTitle) formTitle.textContent = 'Редактировать статью';
+      if (saveBtn) {
+        saveBtn.textContent = 'Обновить статью';
+        saveBtn.setAttribute('data-article-id', articleId);
+      }
+
+      // Hide the drafts manager and clear current draft ID when editing an article
+      document.getElementById('draftsManager').style.display = 'none';
+      this.currentDraftId = null; // Clear current draft ID when editing existing article
+
+      // Scroll to form
+      const formContainer = document.querySelector('.form-container');
+      if (formContainer) {
+        formContainer.scrollIntoView({ behavior: 'smooth' });
       }
     } catch (error) {
       console.error('Error editing article:', error);
       showMessage('Ошибка при загрузке статьи для редактирования', 'error');
-    }
-  }
-
-  // Delete article functionality
-  async deleteArticle(articleId) {
-    if (!confirm('Вы уверены, что хотите удалить эту статью?')) {
-      return;
-    }
-
-    try {
-      const result = await apiClient.deleteArticle(articleId);
-      if (result.success) {
-        showMessage('Статья успешно удалена!', 'success');
-        // Reload the articles list to reflect the deletion
-        await this.loadArticlesList();
-      } else {
-        showMessage(`Ошибка удаления статьи: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      console.error('Error deleting article:', error);
-      showMessage('Ошибка при удалении статьи', 'error');
     }
   }
 
@@ -1942,23 +2262,8 @@ class SPARouter {
     try {
       const result = await apiClient.getCategories();
       if (result.success) {
-        const categorySelect = document.getElementById('articleCategory');
-        if (categorySelect) {
-          const selectedValue = categorySelect.value;
-
-          // Clear list except first option
-          categorySelect.innerHTML = '<option value="">Выберите категорию</option>';
-
-          // Add categories from API
-          result.data.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category.name;
-            option.textContent = category.name;
-            categorySelect.appendChild(option);
-          });
-
-          // Restore selected value
-          categorySelect.value = selectedValue;
+        if (this.categoryField) {
+          this.categoryField.setOptions(result.data.map((category) => ({ value: category.name, label: category.name })));
         }
       } else {
         showMessage(`Ошибка загрузки категорий: ${result.error}`, 'error');
@@ -1966,376 +2271,6 @@ class SPARouter {
     } catch (error) {
       showMessage(`Неожиданная ошибка загрузки категорий: ${error.message}`, 'error');
     }
-  }
-
-  async loadRolesForArticles() {
-    try {
-      const roleSelect = document.getElementById('articleRole');
-      if (roleSelect) {
-        const selectedValue = roleSelect.value;
-
-        // Clear list and add only base roles
-        roleSelect.innerHTML = '<option value="">Нет</option>';
-
-        // Add observer role
-        const observerOption = document.createElement('option');
-        observerOption.value = 'observer';
-        observerOption.textContent = 'Наблюдатель (только чтение)';
-        roleSelect.appendChild(observerOption);
-
-        // Add system roles: admin and user
-        const systemRoles = [
-          {value: 'admin', text: 'Администратор'},
-          {value: 'user', text: 'Пользователь'}
-        ];
-
-        systemRoles.forEach(role => {
-          const option = document.createElement('option');
-          option.value = role.value;
-          option.textContent = role.text;
-          roleSelect.appendChild(option);
-        });
-
-        // Restore selected value
-        roleSelect.value = selectedValue;
-      }
-    } catch (error) {
-      showMessage(`Неожиданная ошибка загрузки ролей: ${error.message}`, 'error');
-    }
-  }
-
-  // Load roles specific to the selected server
-  async loadRolesForSelectedServer(serverId) {
-    const roleSelect = document.getElementById('articleRole');
-    if (!roleSelect) return;
-
-    // If no server is selected, reset to default roles
-    if (!serverId) {
-      // Load default roles
-      await this.loadRolesForArticles();
-      return;
-    }
-
-    try {
-      // Disable the dropdown while loading
-      roleSelect.disabled = true;
-
-      // Fetch roles from the selected server
-      const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
-
-      if (result.success) {
-        const selectedValue = roleSelect.value;
-
-        // Clear the dropdown
-        roleSelect.innerHTML = '<option value="">Нет (глобальная роль)</option>';
-
-        // Add server-specific roles
-        result.data.forEach(role => {
-          const option = document.createElement('option');
-          option.value = role.id;
-          option.textContent = role.name;
-
-          // Apply role color if available
-          if (role.color) {
-            option.style.color = role.color;
-          }
-
-          roleSelect.appendChild(option);
-        });
-
-        // Restore selected value if it still exists, otherwise use default
-        if (selectedValue) {
-          roleSelect.value = selectedValue;
-        }
-      } else {
-        showMessage(`Ошибка загрузки ролей сервера: ${result.error}`, 'error');
-        // Load default roles on failure
-        await this.loadRolesForArticles();
-      }
-    } catch (error) {
-      showMessage(`Неожиданная ошибка загрузки ролей сервера: ${error.message}`, 'error');
-      // Load default roles on failure
-      await this.loadRolesForArticles();
-    } finally {
-      // Re-enable the dropdown
-      roleSelect.disabled = false;
-    }
-  }
-
-  // Initialize the multi-role selection UI
-  initMultiRoleSelection() {
-    const rolesContainer = document.getElementById('rolesContainer');
-    const rolesInput = document.getElementById('articleRolesInput');
-
-    // Handle click on the input field to show roles container
-    if (rolesInput) {
-      rolesInput.addEventListener('click', (e) => {
-        e.preventDefault();
-        // Toggle the roles container
-        const isVisible = rolesContainer.classList.contains('show');
-        
-        if (!isVisible) {
-          // Show the roles container with animation
-          rolesContainer.classList.add('show');
-          rolesContainer.style.display = 'block';
-
-          // Load roles for the selected server
-          const serverSelect = document.getElementById('articleServer');
-          if (serverSelect && serverSelect.value) {
-            this.loadRolesForMultiSelection(serverSelect.value).catch(error => {
-              console.error('Error loading roles for multi-selection:', error);
-            });
-          } else {
-            // If no server is selected, show a message
-            document.getElementById('rolesList').innerHTML = '<div style="color: var(--header-secondary); font-size: 14px; padding: 8px;">Сначала выберите сервер</div>';
-          }
-
-          // Ensure checkboxes are synchronized with selected roles
-          setTimeout(() => {
-            this.syncCheckboxesWithSelectedRoles();
-          }, 50); // Small delay to ensure the list is populated and animation starts
-        } else {
-          // Hide with animation
-          rolesContainer.classList.remove('show');
-          setTimeout(() => {
-            rolesContainer.style.display = 'none';
-          }, 200); // Match transition duration
-        }
-      });
-
-      // Clear the search input when clicking outside and closing the container
-      rolesInput.addEventListener('blur', (e) => {
-        setTimeout(() => {
-          const isVisible = rolesContainer.classList.contains('show');
-          if (!isVisible) {
-            rolesInput.value = '';
-          }
-        }, 150); // Small delay to allow click events to process
-      });
-    }
-
-    // Close the roles container when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!rolesContainer.contains(e.target) && e.target !== rolesInput) {
-        const isVisible = rolesContainer.classList.contains('show');
-        if (isVisible) {
-          rolesContainer.classList.remove('show');
-          setTimeout(() => {
-            rolesContainer.style.display = 'none';
-          }, 200);
-        }
-        // Clear the search input when closing
-        if (rolesInput) {
-          rolesInput.value = '';
-        }
-      }
-    });
-  }
-
-  // Load roles for multi-selection (checkboxes)
-  loadRolesForMultiSelection(serverId) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        // Fetch roles from the selected server
-        const result = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
-        const rolesList = document.getElementById('rolesList');
-
-        if (result.success) {
-          // Get currently selected roles to preserve them
-          const selectedRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-
-          // Store role ID to name mapping for later use
-          this.roleIdToNameMap = {};
-          result.data.forEach(role => {
-            this.roleIdToNameMap[role.id] = role.name;
-          });
-
-          // Generate checkbox list for roles
-          let rolesHtml = '';
-          result.data.forEach(role => {
-            // Check if role is selected by ID (primary check) or by name (for backward compatibility)
-            const isRoleSelected = selectedRoles.includes(role.id) || selectedRoles.includes(role.name);
-            rolesHtml += `
-              <div class="role-checkbox-item" style="display: flex; align-items: center; gap: 8px; padding: 4px 0;">
-                <input type="checkbox" id="role-${role.id}" value="${role.id}" ${isRoleSelected ? 'checked' : ''}
-                  style="margin: 0;">
-                <label for="role-${role.id}" style="margin: 0; flex: 1; color: var(--text-normal); cursor: pointer;">
-                  ${role.name}
-                </label>
-              </div>
-            `;
-          });
-
-          rolesList.innerHTML = rolesHtml;
-
-          // Add event listeners to the checkboxes
-          rolesList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-              this.updateSelectedRolesFromCheckboxes();
-            });
-          });
-
-          // Add search functionality to the input field
-          const rolesInput = document.getElementById('articleRolesInput');
-          if (rolesInput) {
-            // Remove any existing event listeners to prevent duplicates
-            rolesInput.removeEventListener('input', this.roleSearchHandler);
-
-            // Create a new handler function
-            this.roleSearchHandler = (e) => {
-              const searchTerm = e.target.value.toLowerCase().trim();
-
-              // Get currently selected roles to preserve them during search
-              const selectedRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-
-              // Show/hide roles based on search term
-              const roleItems = rolesList.querySelectorAll('.role-checkbox-item');
-              roleItems.forEach(item => {
-                const roleName = item.querySelector('label').textContent.toLowerCase();
-                if (searchTerm === '' || roleName.includes(searchTerm)) {
-                  item.style.display = 'flex';
-                } else {
-                  item.style.display = 'none';
-                }
-
-                // Ensure checkboxes reflect current selected state even when filtered
-                const checkbox = item.querySelector('input[type="checkbox"]');
-                if (checkbox) {
-                  const roleId = checkbox.value;
-                  checkbox.checked = selectedRoles.includes(roleId);
-                }
-              });
-            };
-
-            // Add the event listener
-            rolesInput.addEventListener('input', this.roleSearchHandler);
-          }
-          resolve(); // Resolve the promise when successful
-        } else {
-          rolesList.innerHTML = `<div style="color: #ff6b6b; font-size: 14px; padding: 8px;">Ошибка загрузки ролей: ${result.error}</div>`;
-          reject(new Error(result.error)); // Reject with the error
-        }
-      } catch (error) {
-        console.error('Error loading roles for multi-selection:', error);
-        const rolesList = document.getElementById('rolesList');
-        rolesList.innerHTML = `<div style="color: #ff6b6b; font-size: 14px; padding: 8px;">Ошибка загрузки ролей: ${error.message}</div>`;
-        reject(error); // Reject with the error
-      }
-    });
-  }
-
-  // Update checkboxes based on currently selected roles
-  updateCheckboxesFromSelectedRoles() {
-    const rolesList = document.getElementById('rolesList');
-    const checkboxes = rolesList.querySelectorAll('input[type="checkbox"]');
-    const selectedRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-
-    checkboxes.forEach(checkbox => {
-      const roleId = checkbox.value;
-      const isChecked = selectedRoles.includes(roleId);
-      checkbox.checked = isChecked;
-    });
-  }
-
-  // Update selected roles based on checkboxes
-  updateSelectedRolesFromCheckboxes() {
-    const rolesList = document.getElementById('rolesList');
-    const selectedCheckboxes = rolesList.querySelectorAll('input[type="checkbox"]:checked');
-    const selectedRoles = Array.from(selectedCheckboxes).map(cb => cb.value);
-
-    // Update the hidden input field
-    document.getElementById('articleRoles').value = JSON.stringify(selectedRoles);
-
-    // Update the display of selected roles
-    this.updateSelectedRolesDisplay(selectedRoles);
-
-    // Synchronize all checkboxes to ensure consistency
-    this.syncCheckboxesWithSelectedRoles();
-  }
-
-  // Synchronize all checkboxes with the currently selected roles
-  syncCheckboxesWithSelectedRoles() {
-    const rolesList = document.getElementById('rolesList');
-    const checkboxes = rolesList.querySelectorAll('input[type="checkbox"]');
-    const selectedRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-
-    checkboxes.forEach(checkbox => {
-      const roleId = checkbox.value;
-      const isChecked = selectedRoles.includes(roleId);
-      checkbox.checked = isChecked;
-    });
-  }
-
-  // Update the display of selected roles to expand horizontally like tags
-  updateSelectedRolesDisplay(selectedRoles) {
-    const displayContainer = document.getElementById('selectedRolesDisplay');
-
-    if (selectedRoles.length === 0) {
-      displayContainer.style.display = 'none';
-      return;
-    } else {
-      displayContainer.style.display = 'flex';
-    }
-
-    displayContainer.innerHTML = ''; // Clear the container
-
-    // Convert role IDs to names using the mapping, or keep as IDs if mapping not available yet
-    const roleNames = selectedRoles.map(roleId => {
-      // If it's already a name (string), return it; otherwise look up the name
-      if (this.roleIdToNameMap && this.roleIdToNameMap[roleId]) {
-        return this.roleIdToNameMap[roleId];
-      } else {
-        // If we don't have the mapping yet, try to fetch role info from the server
-        // For now, we'll just return the ID, but in a real implementation we might fetch the name
-        return roleId; // Return as-is if no mapping available
-      }
-    });
-
-    // Set up the container to behave like tags
-    displayContainer.style.display = 'flex';
-    displayContainer.style.flexWrap = 'wrap';
-    displayContainer.style.gap = '4px';
-    displayContainer.style.marginTop = '0';
-
-    // Add each role as a tag-like element
-    roleNames.forEach((roleName, index) => {
-      const roleId = selectedRoles[index];
-
-      const roleElement = document.createElement('span');
-      roleElement.className = 'role-tag-item';
-      roleElement.innerHTML = `
-        ${roleName}
-        <span class="tag-remove">×</span>
-      `;
-
-      // Add event listener to the remove button
-      const removeBtn = roleElement.querySelector('.tag-remove');
-      removeBtn.onclick = (e) => {
-        e.stopPropagation(); // Prevent event bubbling
-        // Remove by ID, not by name
-        this.removeSelectedRole(roleId);
-      };
-
-      displayContainer.appendChild(roleElement);
-    });
-  }
-
-  // Convert role IDs to names - this function is no longer needed since we now work with role names directly
-  // The roles array now contains role names, not IDs
-
-  // Remove a selected role
-  removeSelectedRole(roleIdToRemove) {
-    const currentRoles = JSON.parse(document.getElementById('articleRoles').value || '[]');
-    const updatedRoles = currentRoles.filter(roleId => roleId !== roleIdToRemove);
-
-    // Update the hidden input
-    document.getElementById('articleRoles').value = JSON.stringify(updatedRoles);
-
-    // Update the display
-    this.updateSelectedRolesDisplay(updatedRoles);
-
-    // Synchronize all checkboxes with the current selected roles
-    this.syncCheckboxesWithSelectedRoles();
   }
 
   async loadServersForArticles() {
@@ -2368,98 +2303,108 @@ class SPARouter {
     }
   }
 
-  async loadArticlesList() {
-    try {
-      const result = await apiClient.getArticles();
-      if (result.success) {
-        const articles = result.data;
-        const articlesListContainer = document.getElementById('articlesListContainer');
-        if (articlesListContainer) {
-          articlesListContainer.innerHTML = '';
-
-          if (articles.length === 0) {
-            articlesListContainer.innerHTML = '<p>Нет статей</p>';
-            return;
-          }
-
-          articles.forEach(article => {
-            this.createArticleElement(article, articlesListContainer);
-          });
-        }
-      } else {
-        const articlesListContainer = document.getElementById('articlesListContainer');
-        if (articlesListContainer) {
-          articlesListContainer.innerHTML = '<p>Ошибка при загрузке статей</p>';
-        }
-        showMessage(`Ошибка загрузки статей: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      const articlesListContainer = document.getElementById('articlesListContainer');
-      if (articlesListContainer) {
-        articlesListContainer.innerHTML = '<p>Ошибка при загрузке статей</p>';
-      }
-      showMessage(`Неожиданная ошибка загрузки статей: ${error.message}`, 'error');
-    }
-  }
-
   // Category management methods
   async loadCategoriesList() {
+    const loadingEl = document.getElementById('categoriesLoading');
+    const emptyEl = document.getElementById('categoriesEmpty');
+    const gridEl = document.getElementById('categoriesContainer');
+    if (loadingEl) loadingEl.hidden = false;
+    if (emptyEl) emptyEl.hidden = true;
+    if (gridEl) gridEl.hidden = true;
+
     try {
       const result = await apiClient.getCategories();
       if (result.success) {
-        // Update regular container
-        const container = document.getElementById('categoriesContainer');
-        if (container) {
-          container.innerHTML = '';
-
-          if (result.data.length === 0) {
-            container.innerHTML = '<p>Нет категорий</p>';
-            return;
-          }
-
-          result.data.forEach(category => {
-            const categoryDiv = document.createElement('div');
-            categoryDiv.className = 'article-item';
-            categoryDiv.innerHTML = `
-              <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <div style="flex: 1;">${category.name}</div>
-                <div class="article-actions">
-                  <button class="btn btn-danger" onclick="spaRouter.deleteCategory(${category.id}, '${category.name}')">Удалить</button>
-                </div>
-              </div>
-            `;
-            container.appendChild(categoryDiv);
-          });
-        }
-
-        // Update card layout for mobile
-        const cardLayout = document.getElementById('categories-card-layout');
-        if (cardLayout) {
-          cardLayout.innerHTML = '';
-
-          if (result.data.length === 0) {
-            cardLayout.innerHTML = '<p>Нет категорий</p>';
-            return;
-          }
-
-          result.data.forEach(category => {
-            const card = document.createElement('div');
-            card.className = 'card-item-mobile';
-            card.innerHTML = `
-              <div class="card-header">
-                <div class="card-title">${category.name}</div>
-                <button class="btn btn-danger" onclick="spaRouter.deleteCategory(${category.id}, '${category.name}')">Удалить</button>
-              </div>
-            `;
-            cardLayout.appendChild(card);
-          });
-        }
+        // Сортировка по названию — тот же порядок, что и в чиповом поле
+        // "Категория" редактора статей (там их отдаёт бэкенд уже
+        // отсортированными, см. GET /categories в taxonomy.routes.js).
+        this.categoriesCache = Array.isArray(result.data) ? result.data : [];
+        // Сохраняем текущий текст поиска при перерисовке после создания/
+        // удаления категории — иначе поле оставалось бы заполненным, а
+        // сетка внезапно показывала бы уже не отфильтрованный список.
+        this.renderCategoriesGrid(document.getElementById('categoriesSearchInput')?.value || '');
       } else {
+        if (loadingEl) loadingEl.hidden = true;
         showMessage(`Ошибка загрузки категорий: ${result.error}`, 'error');
       }
     } catch (error) {
+      if (loadingEl) loadingEl.hidden = true;
       showMessage(`Неожиданная ошибка загрузки категорий: ${error.message}`, 'error');
     }
+  }
+
+  // Сетка карточек + поиск на клиенте + счётчик — единственный путь
+  // рендера (раньше здесь ещё дублировался отдельный #categories-card-layout
+  // под мобильные экраны; .categories-grid и так адаптивная, как и
+  // .servers-grid/.users-stats-grid, второй набор карточек был не нужен).
+  renderCategoriesGrid(filterText = '') {
+    const loadingEl = document.getElementById('categoriesLoading');
+    const emptyEl = document.getElementById('categoriesEmpty');
+    const gridEl = document.getElementById('categoriesContainer');
+    const countEl = document.getElementById('categoriesCount');
+    if (loadingEl) loadingEl.hidden = true;
+
+    const all = this.categoriesCache || [];
+    if (countEl) countEl.textContent = all.length === 0 ? '' : all.length === 1 ? '1 категория' : `Категорий: ${all.length}`;
+
+    if (all.length === 0) {
+      if (gridEl) gridEl.hidden = true;
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        document.getElementById('categoriesEmptyTitle').textContent = 'Пока нет ни одной категории';
+        document.getElementById('categoriesEmptyText').textContent = 'Категории помогают группировать статьи по темам — их можно будет выбрать при создании или редактировании статьи.';
+      }
+      return;
+    }
+
+    const query = filterText.trim().toLowerCase();
+    const filtered = query ? all.filter((c) => c.name.toLowerCase().includes(query)) : all;
+
+    if (!gridEl) return;
+    gridEl.hidden = false;
+    if (emptyEl) emptyEl.hidden = true;
+
+    if (filtered.length === 0) {
+      gridEl.innerHTML = `<div class="categories-no-results">Ничего не найдено по запросу «${this.escapeHtml(filterText)}»</div>`;
+      return;
+    }
+
+    gridEl.innerHTML = filtered.map((category) => {
+      const created = category.created_at ? new Date(category.created_at).toLocaleDateString('ru-RU') : null;
+      return `
+        <div class="category-card">
+          <div class="category-card-icon"><i class="fas fa-folder"></i></div>
+          <div class="category-card-body">
+            <div class="category-card-name">${this.escapeHtml(category.name)}</div>
+            ${created ? `<div class="category-card-meta">создана ${created}</div>` : ''}
+          </div>
+          <button type="button" class="category-card-delete-btn" title="Удалить категорию" onclick="spaRouter.showDeleteCategoryModal(${category.id}, '${this.escapeHtml(category.name).replace(/'/g, "\\'")}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  showDeleteCategoryModal(id, name) {
+    this.pendingDeleteCategory = { id, name };
+    const textEl = document.getElementById('delete-category-text');
+    if (textEl) textEl.innerHTML = `<i class="fas fa-circle-info"></i> Категория «${this.escapeHtml(name)}» будет удалена. У статей, где она была выбрана, категория просто пропадёт из списка — сами статьи не затрагиваются.`;
+    const modal = document.getElementById('delete-category-modal');
+    if (modal) modal.hidden = false;
+  }
+
+  hideDeleteCategoryModal() {
+    this.pendingDeleteCategory = null;
+    const modal = document.getElementById('delete-category-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  async confirmDeleteCategory() {
+    const pending = this.pendingDeleteCategory;
+    if (!pending) return;
+    await this.deleteCategory(pending.id, pending.name);
+    this.hideDeleteCategoryModal();
   }
 
   async createCategory() {
@@ -2483,7 +2428,7 @@ class SPARouter {
         inputElement.value = ''; // Clear the input field
         await this.loadCategoriesList(); // Reload list
         // Also reload categories in article form if on articles page
-        if (document.getElementById('articleCategory')) {
+        if (this.categoryField) {
           await this.loadCategoriesForArticles();
         }
       } else {
@@ -2494,489 +2439,936 @@ class SPARouter {
     }
   }
 
+  // Кнопка "+" рядом с полем "Категория" на странице статей — там нет
+  // отдельного поля ввода названия (оно есть только на странице
+  // /categories), поэтому спрашиваем название через prompt() и сразу
+  // выбираем созданную категорию в чиповом поле.
   async createCategoryFromArticles() {
-    await this.createCategory();
-  }
+    const categoryName = prompt('Введите название новой категории:');
+    if (!categoryName || !categoryName.trim()) return;
 
-  async deleteCategory(id, name) {
-    if (confirm(`Вы уверены, что хотите удалить категорию "${name}"?`)) {
-      try {
-        const result = await apiClient.deleteCategory(id);
-        if (result.success) {
-          showMessage('Категория успешно удалена!', 'success');
-          await this.loadCategoriesList(); // Reload list
-          // Also reload categories in article form if on articles page
-          if (document.getElementById('articleCategory')) {
-            await this.loadCategoriesForArticles();
-          }
-        } else {
-          showMessage('Ошибка при удалении категории: ' + result.data.error, 'error');
-        }
-      } catch (error) {
-        showMessage('Произошла ошибка при удалении категории', 'error');
+    try {
+      const result = await apiClient.createCategory(categoryName.trim());
+      if (result.success) {
+        showMessage('Категория успешно создана!', 'success');
+        await this.loadCategoriesForArticles();
+        this.categoryField?.addValue(categoryName.trim());
+      } else {
+        showMessage('Ошибка при создании категории: ' + result.error, 'error');
       }
+    } catch (error) {
+      showMessage('Произошла ошибка при создании категории', 'error');
     }
   }
 
-  // Server management methods - Complete rewrite with full functionality
-  async loadServersList() {
+  // Подтверждение — модалкой #delete-category-modal (см.
+  // showDeleteCategoryModal/confirmDeleteCategory), а не window.confirm().
+  async deleteCategory(id, name) {
     try {
-      const result = await apiClient.makeAuthenticatedRequest('/api/servers');
-
+      const result = await apiClient.deleteCategory(id);
       if (result.success) {
-        // Update table view (desktop)
-        const tbody = document.getElementById('servers-tbody');
-        if (tbody) {
-          tbody.innerHTML = '';
-
-          if (result.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</td></tr>';
-          } else {
-            result.data.forEach(server => {
-              const row = document.createElement('tr');
-              const userCount = server.user_count || 0;
-
-              row.innerHTML = `
-                <td>${server.id}</td>
-                <td><strong>${this.escapeHtml(server.name)}</strong></td>
-                <td>${server.owner_username || 'N/A'}</td>
-                <td>${new Date(server.created_at).toLocaleDateString()}</td>
-                <td>${userCount}</td>
-                <td>
-                  <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
-                  <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})" style="margin-left: 5px;">Удалить</button>
-                </td>
-              `;
-
-              tbody.appendChild(row);
-            });
-          }
+        showMessage('Категория успешно удалена!', 'success');
+        await this.loadCategoriesList(); // Reload list
+        // Also reload categories in article form if on articles page
+        if (this.categoryField) {
+          await this.loadCategoriesForArticles();
         }
-
-        // Update card layout for mobile ONLY
-        this.updateMobileCardLayout(result.data);
       } else {
-        showMessage(`Ошибка загрузки серверов: ${result.error}`, 'error');
+        showMessage('Ошибка при удалении категории: ' + result.data.error, 'error');
+      }
+    } catch (error) {
+      showMessage('Произошла ошибка при удалении категории', 'error');
+    }
+  }
+
+  // === Server management — каталог + рабочая область открытого сервера ===
+
+  async loadServersDirectory() {
+    const loadingEl = document.getElementById('servers-loading');
+    const gridEl = document.getElementById('servers-grid');
+    const emptyEl = document.getElementById('servers-empty');
+    if (loadingEl) loadingEl.hidden = false;
+    if (gridEl) gridEl.hidden = true;
+    if (emptyEl) emptyEl.hidden = true;
+
+    try {
+      const result = await apiClient.getServers();
+      if (result.success) {
+        this.serversCache = Array.isArray(result.data) ? result.data : [];
+        this.renderServersGrid();
+      } else {
+        showMessage(`Ошибка загрузки серверов: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка при загрузке серверов: ${error.message}`, 'error');
+    } finally {
+      if (loadingEl) loadingEl.hidden = true;
     }
   }
 
-  // Update mobile card layout based on screen size
-  updateMobileCardLayout(servers) {
-    const cardLayout = document.getElementById('servers-card-layout');
-    if (!cardLayout) return;
+  renderServersGrid() {
+    const gridEl = document.getElementById('servers-grid');
+    const emptyEl = document.getElementById('servers-empty');
+    const statsEl = document.getElementById('servers-stats');
+    const countEl = document.getElementById('servers-count');
+    if (!gridEl) return;
 
-    // Only populate card layout on mobile
-    if (window.innerWidth <= 768) {
-      cardLayout.innerHTML = '';
+    const query = (document.getElementById('servers-search-input')?.value || '').trim().toLowerCase();
+    const sort = document.getElementById('servers-sort-select')?.value || 'created_desc';
 
-      if (servers.length === 0) {
-        cardLayout.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Серверы не найдены. Создайте первый сервер!</div>';
-      } else {
-        servers.forEach(server => {
-          const card = document.createElement('div');
-          card.className = 'card-item-mobile';
-          const userCount = server.user_count || 0;
-
-          card.innerHTML = `
-            <div class="card-header">
-              <div class="card-title">${this.escapeHtml(server.name)}</div>
-              <button class="btn btn-primary btn-sm" onclick="spaRouter.viewServerDetails(${server.id})">Управление</button>
-            </div>
-            <div class="card-content">
-              <div class="meta-item"><strong>ID:</strong> ${server.id}</div>
-              <div class="meta-item"><strong>Владелец:</strong> ${server.owner_username || 'N/A'}</div>
-              <div class="meta-item"><strong>Участников:</strong> ${userCount}</div>
-              <div class="meta-item"><strong>Дата создания:</strong> ${new Date(server.created_at).toLocaleDateString()}</div>
-            </div>
-            <div class="card-actions" style="margin-top: 10px; text-align: right;">
-              <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServer(${server.id})">Удалить</button>
-            </div>
-          `;
-
-          cardLayout.appendChild(card);
-        });
-      }
-    } else {
-      // Clear card layout on desktop to prevent duplicates
-      cardLayout.innerHTML = '';
+    let list = this.serversCache.slice();
+    if (query) {
+      list = list.filter(s =>
+        (s.name || '').toLowerCase().includes(query) ||
+        (s.description || '').toLowerCase().includes(query) ||
+        (s.owner_username || '').toLowerCase().includes(query)
+      );
     }
-  }
 
-  // Set up resize listener for mobile/desktop switching
-  setupServerPageResizeListener() {
-    if (this.serverResizeListenerAttached) return;
-    
-    window.addEventListener('resize', () => {
-      // Re-render the appropriate layout when crossing the breakpoint
-      const currentPath = window.location.pathname;
-      if (currentPath === '/servers' || currentPath === '/') {
-        // Reload the server list to update layouts
-        this.loadServersList();
+    list.sort((a, b) => {
+      switch (sort) {
+        case 'created_asc': return new Date(a.created_at) - new Date(b.created_at);
+        case 'name_asc': return (a.name || '').localeCompare(b.name || '', 'ru');
+        case 'members_desc': return (b.user_count || 0) - (a.user_count || 0);
+        case 'created_desc':
+        default: return new Date(b.created_at) - new Date(a.created_at);
       }
     });
-    
-    this.serverResizeListenerAttached = true;
-  }
 
-  // View server details in modal
-  async viewServerDetails(serverId) {
-    try {
-      // Load server details
-      const serverResult = await apiClient.getServer(serverId);
-      if (!serverResult.success) {
-        showMessage('Ошибка загрузки информации о сервере', 'error');
-        return;
-      }
+    // Сводка — по полному списку (без учёта поиска), чтобы не прыгала при вводе
+    if (statsEl) {
+      const totalServers = this.serversCache.length;
+      const totalMembers = this.serversCache.reduce((sum, s) => sum + (s.user_count || 0), 0);
+      statsEl.innerHTML = `
+        <span class="servers-stat-chip"><i class="fas fa-server"></i> Серверов: <strong>${totalServers}</strong></span>
+        <span class="servers-stat-chip"><i class="fas fa-users"></i> Всего участников: <strong>${totalMembers}</strong></span>
+      `;
+    }
+    if (countEl) {
+      countEl.textContent = query ? `Найдено: ${list.length} из ${this.serversCache.length}` : '';
+    }
 
-      const server = serverResult.data;
+    if (this.serversCache.length === 0) {
+      gridEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = false;
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    gridEl.hidden = false;
 
-      // Load members and roles
-      const membersResult = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/users`);
-      const rolesResult = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
+    if (list.length === 0) {
+      gridEl.innerHTML = `<div class="servers-empty" style="grid-column: 1 / -1;"><i class="fas fa-magnifying-glass"></i><h3>Ничего не найдено</h3><p>Попробуйте другой запрос.</p></div>`;
+      return;
+    }
 
-      const members = membersResult.success ? membersResult.data : [];
-      const roles = rolesResult.success ? rolesResult.data : [];
-
-      // Create modal HTML
-      const modalHtml = `
-        <div id="server-details-modal" class="modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
-          <div style="background: var(--background-secondary); padding: 0; border-radius: 8px; width: 900px; max-width: 95%; max-height: 90vh; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent); display: flex; flex-direction: column;">
-            <!-- Header -->
-            <div style="padding: 20px; border-bottom: 1px solid var(--background-accent); display: flex; justify-content: space-between; align-items: center; background: var(--background-tertiary);">
-              <div>
-                <h2 style="margin: 0; color: var(--header-primary);">${this.escapeHtml(server.name)}</h2>
-                <p style="margin: 5px 0 0 0; color: var(--text-muted); font-size: 14px;">${server.description || 'Описание отсутствует'}</p>
-              </div>
-              <button class="btn btn-danger btn-sm" onclick="spaRouter.closeServerDetailsModal()">✕</button>
+    const me = authManager.getUser() || {};
+    gridEl.innerHTML = list.map(server => {
+      const isOwner = server.owner_id === me.id;
+      const canDelete = isOwner || me.is_root;
+      return `
+        <div class="servers-card" onclick="spaRouter.openServerWorkspace(${server.id})">
+          <div class="servers-card-top">
+            ${this.serverAvatarHtml(server)}
+            <div class="servers-card-title-wrap">
+              <h3 class="servers-card-title">${this.escapeHtml(server.name)}</h3>
+              <div class="servers-card-owner">${isOwner ? '<span class="servers-card-owner-badge"><i class="fas fa-crown"></i> Вы владелец</span>' : `Владелец: ${this.escapeHtml(server.owner_username || 'N/A')}`}</div>
             </div>
-
-            <!-- Tabs -->
-            <div style="display: flex; border-bottom: 1px solid var(--background-accent); background: var(--background-secondary);">
-              <button class="tab-button active" onclick="spaRouter.switchServerTab('members')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-members">
-                <strong>Участники (${members.length})</strong>
-              </button>
-              <button class="tab-button" onclick="spaRouter.switchServerTab('roles')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-roles">
-                <strong>Роли (${roles.length})</strong>
-              </button>
-              <button class="tab-button" onclick="spaRouter.switchServerTab('settings')" style="flex: 1; padding: 15px; background: none; border: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;" id="tab-btn-settings">
-                <strong>Настройки</strong>
-              </button>
-            </div>
-
-            <!-- Content -->
-            <div style="flex: 1; overflow-y: auto; padding: 20px;" id="server-tab-content">
-              <!-- Members Tab -->
-              <div id="tab-members" class="server-tab-content">
-                <div style="margin-bottom: 15px;">
-                  <button class="btn btn-primary btn-sm" onclick="spaRouter.showAddMemberModal(${serverId})">Добавить участника</button>
-                </div>
-                <div class="table-container" style="background: var(--background-tertiary); border-radius: 4px;">
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                      <tr style="border-bottom: 1px solid var(--background-accent);">
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">ID</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Пользователь</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Роли</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Дата вступления</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${members.length === 0 ? '<tr><td colspan="5" style="padding: 30px; text-align: center; color: var(--text-muted);">Нет участников</td></tr>' : 
-                        members.map(member => `
-                          <tr style="border-bottom: 1px solid var(--background-accent);">
-                            <td style="padding: 12px;">${member.id}</td>
-                            <td style="padding: 12px;"><strong>${this.escapeHtml(member.username)}</strong></td>
-                            <td style="padding: 12px;">
-                              ${member.roles && member.roles.length > 0 ? 
-                                member.roles.map(role => `<span class="role-tag" style="display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 5px; background: ${role.role_type === 'system' ? '#5865f2' : '#eb459e'}; color: white;">${this.escapeHtml(role.name)}</span>`).join('') : 
-                                '<span style="color: var(--text-muted);">Нет ролей</span>'}
-                            </td>
-                            <td style="padding: 12px;">${new Date(member.joined_at).toLocaleDateString()}</td>
-                            <td style="padding: 12px;">
-                              ${member.id !== server.owner_id ? 
-                                `<button class="btn btn-danger btn-sm" onclick="spaRouter.removeMember(${serverId}, ${member.id})">Удалить</button>` : 
-                                '<span style="color: var(--text-muted); font-size: 12px;">Владелец</span>'}
-                            </td>
-                          </tr>
-                        `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Roles Tab -->
-              <div id="tab-roles" class="server-tab-content" style="display: none;">
-                <div style="margin-bottom: 15px;">
-                  <button class="btn btn-primary btn-sm" onclick="spaRouter.showCreateRoleModal(${serverId})">Создать роль</button>
-                </div>
-                <div class="table-container" style="background: var(--background-tertiary); border-radius: 4px;">
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                      <tr style="border-bottom: 1px solid var(--background-accent);">
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Название</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Тип</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Код</th>
-                        <th style="padding: 12px; text-align: left; color: var(--header-secondary);">Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${roles.length === 0 ? '<tr><td colspan="4" style="padding: 30px; text-align: center; color: var(--text-muted);">Нет ролей</td></tr>' : 
-                        roles.map(role => `
-                          <tr style="border-bottom: 1px solid var(--background-accent);">
-                            <td style="padding: 12px;"><strong>${this.escapeHtml(role.name)}</strong></td>
-                            <td style="padding: 12px;"><span class="role-tag" style="background: ${role.role_type === 'system' ? '#5865f2' : '#eb459e'}; color: white;">${role.role_type === 'system' ? 'Системная' : 'Пользовательская'}</span></td>
-                            <td style="padding: 12px; font-family: monospace; color: var(--text-muted);">${role.code}</td>
-                            <td style="padding: 12px;">
-                              ${role.role_type !== 'system' ? 
-                                `<button class="btn btn-danger btn-sm" onclick="spaRouter.deleteRole(${serverId}, ${role.id})">Удалить</button>` : 
-                                '<span style="color: var(--text-muted); font-size: 12px;">Нельзя удалить</span>'}
-                            </td>
-                          </tr>
-                        `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Settings Tab -->
-              <div id="tab-settings" class="server-tab-content" style="display: none;">
-                <div class="form-group" style="margin-bottom: 20px;">
-                  <label style="display: block; margin-bottom: 8px; color: var(--header-primary); font-weight: 500;">Название сервера</label>
-                  <input type="text" id="edit-server-name" value="${this.escapeHtml(server.name)}" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
-                </div>
-                <div class="form-group" style="margin-bottom: 20px;">
-                  <label style="display: block; margin-bottom: 8px; color: var(--header-primary); font-weight: 500;">Описание</label>
-                  <textarea id="edit-server-description" rows="3" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">${server.description || ''}</textarea>
-                </div>
-                <div class="btn-group">
-                  <button class="btn btn-primary" onclick="spaRouter.updateServer(${serverId})">Сохранить изменения</button>
-                  <button class="btn btn-danger" onclick="spaRouter.deleteServer(${serverId}, true)">Удалить сервер</button>
-                </div>
-              </div>
-            </div>
+          </div>
+          <div class="servers-card-desc">${this.escapeHtml(server.description || 'Без описания')}</div>
+          <div class="servers-card-meta">
+            <span><i class="fas fa-users"></i> ${server.user_count || 0}</span>
+            <span><i class="fas fa-calendar"></i> ${new Date(server.created_at).toLocaleDateString('ru-RU')}</span>
+            <span><i class="fas fa-hashtag"></i> ${server.id}</span>
+            ${canDelete ? `<button class="server-role-chip-remove servers-card-delete-btn" title="Удалить сервер" onclick="event.stopPropagation(); spaRouter.deleteServer(${server.id})"><i class="fas fa-trash"></i></button>` : ''}
           </div>
         </div>
       `;
+    }).join('');
+  }
 
-      // Add modal to body
-      const existingModal = document.getElementById('server-details-modal');
-      if (existingModal) {
-        existingModal.remove();
+  // Загружает сервер+участников+роли и обновляет и состояние, и шапку
+  // рабочей области — общая часть открытия сервера (openServerWorkspace) и
+  // обновления уже открытого (refreshServerWorkspace).
+  async loadServerWorkspaceData(serverId) {
+    const [serverResult, membersResult, rolesResult, channelsResult] = await Promise.all([
+      apiClient.getServer(serverId),
+      apiClient.getServerUsers(serverId),
+      apiClient.getServerRoles(serverId),
+      apiClient.getServerChannels(serverId)
+    ]);
+
+    if (!serverResult.success) {
+      throw new Error(this.serverApiError(serverResult));
+    }
+
+    const server = serverResult.data;
+    const members = membersResult.success ? membersResult.data : [];
+    const roles = rolesResult.success ? rolesResult.data : [];
+    const channels = channelsResult.success ? channelsResult.data : [];
+    const me = authManager.getUser() || {};
+
+    // "Администратор сервера" — фактическое назначение системной роли admin
+    // (см. isAdminOnServer в src/services/server-permissions.js) ЛИБО
+    // владелец системы (is_root): на бэкенде root администрирует любой
+    // сервер (см. isServerAdmin в src/routes/servers.routes.js), даже не
+    // будучи его участником. Другие админ-роли системы (Ведущий и т.п.)
+    // такого доступа не получают.
+    const myMembership = members.find(m => m.id === me.id);
+    const isAdmin = !!me.is_root || !!(myMembership && myMembership.roles && myMembership.roles.some(r => r.name === 'admin' && r.type === 'system'));
+    const isOwner = server.owner_id === me.id;
+
+    this.currentServerId = serverId;
+    this.currentServerData = { server, members, roles, channels, isAdmin, isOwner, isRoot: !!me.is_root };
+
+    this.applyServerAvatar(document.getElementById('server-workspace-avatar'), server);
+    document.getElementById('server-workspace-name').textContent = server.name;
+    document.getElementById('server-workspace-description').textContent = server.description || 'Без описания';
+    document.getElementById('server-workspace-meta').innerHTML = `
+      ${isOwner ? '<span class="servers-card-owner-badge"><i class="fas fa-crown"></i> Вы владелец</span>' : ''}
+      <span class="servers-stat-chip"><i class="fas fa-user"></i> Владелец: ${this.escapeHtml(server.owner_username || 'N/A')}</span>
+      <span class="servers-stat-chip"><i class="fas fa-users"></i> ${members.length} участников</span>
+      <span class="servers-stat-chip"><i class="fas fa-calendar"></i> ${new Date(server.created_at).toLocaleString('ru-RU')}</span>
+    `;
+  }
+
+  // ВАЖНО: здесь нельзя использовать this.showLoader()/hideLoader() — это
+  // не локальный спиннер, а полная замена #app-content на скелетон-заглушку
+  // (см. showLoader ниже в файле), рассчитанная на переход между вкладками
+  // (сразу вслед за ней всегда идёт appContent.innerHTML = <новый партиал>).
+  // Здесь партиал не перезагружается — сервер открывается ВНУТРИ уже
+  // загруженной страницы /servers, так что showLoader() стирал разметку
+  // рабочей области (#server-workspace-name и т.д.), из-за чего следующая
+  // же строка падала с "Cannot set properties of null", а hideLoader()
+  // ничего не делает — скелетон оставался висеть на экране навсегда.
+  async openServerWorkspace(serverId) {
+    document.getElementById('servers-directory').hidden = true;
+    document.getElementById('server-workspace').hidden = false;
+    document.getElementById('server-workspace-name').textContent = 'Загрузка…';
+    document.getElementById('server-workspace-description').textContent = '';
+    document.getElementById('server-workspace-meta').innerHTML = '';
+    document.getElementById('server-workspace-body').innerHTML = '<p style="color: var(--text-muted); padding: 10px 0;">Загрузка данных сервера…</p>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    try {
+      await this.loadServerWorkspaceData(serverId);
+      this.currentServerWorkspaceTab = 'overview';
+      document.querySelectorAll('#server-workspace-tabs [data-server-tab]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.serverTab === 'overview');
+      });
+      this.renderServerWorkspaceTab();
+    } catch (error) {
+      document.getElementById('server-workspace-name').textContent = 'Не удалось открыть сервер';
+      document.getElementById('server-workspace-body').innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${this.escapeHtml(error.message)}</div>`;
+      showMessage(`Ошибка загрузки сервера: ${error.message}`, 'error');
+    }
+  }
+
+  closeServerWorkspace() {
+    document.getElementById('server-workspace').hidden = true;
+    document.getElementById('servers-directory').hidden = false;
+    this.currentServerId = null;
+    this.currentServerData = null;
+    // Число участников на карточках могло измениться, пока сервер был открыт
+    this.loadServersDirectory();
+  }
+
+  async refreshServerWorkspace() {
+    if (!this.currentServerId) return;
+    try {
+      await this.loadServerWorkspaceData(this.currentServerId);
+      this.renderServerWorkspaceTab();
+    } catch (error) {
+      showMessage(`Ошибка обновления: ${error.message}`, 'error');
+    }
+  }
+
+  switchServerWorkspaceTab(tab) {
+    this.currentServerWorkspaceTab = tab;
+    document.querySelectorAll('#server-workspace-tabs [data-server-tab]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.serverTab === tab);
+    });
+    this.renderServerWorkspaceTab();
+  }
+
+  renderServerWorkspaceTab() {
+    const body = document.getElementById('server-workspace-body');
+    if (!body || !this.currentServerData) return;
+    switch (this.currentServerWorkspaceTab) {
+      case 'members': body.innerHTML = this.renderServerMembersTab(); break;
+      case 'roles': body.innerHTML = this.renderServerRolesTab(); break;
+      case 'channels': body.innerHTML = this.renderServerChannelsTab(); break;
+      case 'log': this.loadAndRenderAuditLogTab(); break;
+      case 'settings': body.innerHTML = this.renderServerSettingsTab(); break;
+      case 'overview':
+      default: body.innerHTML = this.renderServerOverviewTab(); break;
+    }
+  }
+
+  // --- Вкладка "Журнал" ---
+  // В отличие от остальных вкладок, не рендерится синхронно из
+  // this.currentServerData — журнал грузится отдельным запросом только когда
+  // вкладку реально открыли (незачем тащить его при каждом открытии
+  // сервера, если пользователь на неё может ни разу не зайти), и доступен
+  // только администраторам сервера (см. GET /servers/:id/audit-log).
+  async loadAndRenderAuditLogTab() {
+    const body = document.getElementById('server-workspace-body');
+    if (!body) return;
+    body.innerHTML = '<p style="color: var(--text-muted); padding: 10px 0;">Загрузка журнала…</p>';
+
+    try {
+      const result = await apiClient.getServerAuditLog(this.currentServerId);
+      // Пока запрос летал, могли уйти с вкладки или со страницы вовсе
+      if (this.currentServerWorkspaceTab !== 'log' || !document.getElementById('server-workspace-body')) return;
+
+      if (!result.success) {
+        body.innerHTML = `<div class="server-permission-note"><i class="fas fa-circle-info"></i> ${this.escapeHtml(this.serverApiError(result))}</div>`;
+        return;
       }
-      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      this.currentAuditLog = Array.isArray(result.data) ? result.data : [];
+      body.innerHTML = this.renderServerAuditLogTab();
+    } catch (error) {
+      if (this.currentServerWorkspaceTab !== 'log') return;
+      body.innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${this.escapeHtml(error.message)}</div>`;
+    }
+  }
 
-      // Store current server ID
-      this.currentViewingServerId = serverId;
+  auditActionLabel(action) {
+    const labels = {
+      server_created: 'создал сервер',
+      server_updated: 'изменил настройки сервера',
+      server_deleted: 'удалил сервер',
+      role_created: 'создал роль',
+      role_updated: 'изменил роль',
+      role_deleted: 'удалил роль',
+      member_added: 'добавил участника',
+      member_removed: 'удалил участника',
+      role_assigned: 'назначил роль',
+      role_unassigned: 'снял роль',
+      channel_created: 'создал канал',
+      channel_updated: 'изменил канал',
+      channel_deleted: 'удалил канал',
+      owner_changed: 'сменил владельца'
+    };
+    return labels[action] || action;
+  }
 
+  auditDetailsText(action, details) {
+    if (!details) return '';
+    switch (action) {
+      case 'server_created':
+      case 'server_updated':
+      case 'server_deleted':
+      case 'channel_created':
+      case 'channel_updated':
+      case 'channel_deleted':
+      case 'role_created':
+      case 'role_updated':
+      case 'role_deleted':
+        return details.name ? `«${details.name}»` : '';
+      case 'member_added':
+      case 'member_removed':
+        return details.self ? '(сам себя)' : `ID ${details.targetUserId}`;
+      case 'role_assigned':
+      case 'role_unassigned':
+        return `пользователю ID ${details.targetUserId}`;
+      case 'owner_changed':
+        return details.newOwnerUsername ? `на ${details.newOwnerUsername}` : '';
+      default:
+        return '';
+    }
+  }
+
+  renderServerAuditLogTab() {
+    const entries = this.currentAuditLog || [];
+
+    const rows = entries.length === 0
+      ? `<tr class="server-empty-row"><td colspan="3">Журнал пуст — действия на сервере появятся здесь</td></tr>`
+      : entries.map(entry => `
+          <tr>
+            <td style="white-space: nowrap; color: var(--text-muted); font-size: 12px;">${new Date(entry.created_at).toLocaleString('ru-RU')}</td>
+            <td><strong>${this.escapeHtml(entry.actor_username || `ID ${entry.actor_id}`)}</strong></td>
+            <td>${this.escapeHtml(this.auditActionLabel(entry.action))} ${this.escapeHtml(this.auditDetailsText(entry.action, entry.details))}</td>
+          </tr>
+        `).join('');
+
+    return `
+      <div class="server-section-toolbar">
+        <h3 class="server-section-title">Журнал действий (${entries.length})</h3>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Когда</th><th>Кто</th><th>Действие</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // --- Вкладка "Обзор" ---
+  renderServerOverviewTab() {
+    const { members, roles, channels } = this.currentServerData;
+    const customRoles = roles.filter(r => r.role_type === 'custom').length;
+    const admins = members.filter(m => m.roles && m.roles.some(r => r.name === 'admin' && r.type === 'system')).length;
+    return `
+      <div class="server-stats-grid">
+        <div class="server-stat-tile"><div class="server-stat-tile-value">${members.length}</div><div class="server-stat-tile-label">Участников</div></div>
+        <div class="server-stat-tile"><div class="server-stat-tile-value">${roles.length}</div><div class="server-stat-tile-label">Ролей (${customRoles} своих)</div></div>
+        <div class="server-stat-tile"><div class="server-stat-tile-value">${channels.length}</div><div class="server-stat-tile-label">Каналов</div></div>
+        <div class="server-stat-tile"><div class="server-stat-tile-value">${admins}</div><div class="server-stat-tile-label">Администраторов</div></div>
+      </div>
+      <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0;">
+        Роли этого сервера используются в редакторе статей: поле «Доступ для» ограничивает закрытую статью выбранными ролями именно этого сервера.
+      </p>
+    `;
+  }
+
+  // --- Вкладка "Участники" ---
+  renderServerMembersTab() {
+    const { server, members, isAdmin } = this.currentServerData;
+    const me = authManager.getUser() || {};
+    const amMember = members.some(m => m.id === me.id);
+
+    const rows = members.length === 0
+      ? `<tr class="server-empty-row"><td colspan="4">Нет участников</td></tr>`
+      : members.map(member => {
+          const isMemberOwner = member.id === server.owner_id;
+          const isSelf = member.id === me.id;
+          const rolesHtml = (member.roles && member.roles.length > 0)
+            ? member.roles.map(role => `
+                <span class="server-role-chip" style="background: ${role.type === 'system' ? '#5865f2' : '#eb459e'};">
+                  ${this.escapeHtml(role.name)}
+                  ${isAdmin ? `<button class="server-role-chip-remove" title="Снять роль" onclick="spaRouter.removeMemberRole(${member.id}, ${role.id})"><i class="fas fa-xmark"></i></button>` : ''}
+                </span>
+              `).join('')
+            : '<span style="color: var(--text-muted); font-size: 12px;">Нет ролей</span>';
+
+          let actions = '<span style="color: var(--text-muted); font-size: 12px;">Владелец</span>';
+          if (!isMemberOwner && isAdmin) {
+            actions = `
+              <button class="btn btn-secondary btn-sm" onclick="spaRouter.showServerAssignRoleModal(${member.id})">Роль</button>
+              <button class="btn btn-danger btn-sm" onclick="spaRouter.removeMember(${member.id})">Удалить</button>
+            `;
+          } else if (!isMemberOwner && isSelf) {
+            actions = `<button class="btn btn-danger btn-sm" onclick="spaRouter.removeMember(${member.id})">Покинуть</button>`;
+          }
+
+          return `
+            <tr>
+              <td>${member.id}</td>
+              <td><strong>${this.escapeHtml(member.username)}</strong>${isSelf ? ' <span style="color: var(--text-muted); font-size: 11px;">(вы)</span>' : ''}</td>
+              <td>${rolesHtml}</td>
+              <td>${actions}</td>
+            </tr>
+          `;
+        }).join('');
+
+    return `
+      ${!isAdmin ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Добавлять участников, назначать и снимать роли может только администратор этого сервера — вы видите список в режиме просмотра.</div>` : ''}
+      <div class="server-section-toolbar">
+        <h3 class="server-section-title">Участники (${members.length})</h3>
+        <div class="btn-group">
+          ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="spaRouter.showAddMemberModal()"><i class="fas fa-user-plus"></i> Добавить по ID</button>` : ''}
+          ${!amMember ? `<button class="btn btn-success btn-sm" onclick="spaRouter.joinCurrentServer()"><i class="fas fa-right-to-bracket"></i> Вступить</button>` : ''}
+        </div>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead><tr><th>ID</th><th>Пользователь</th><th>Роли</th><th>Действия</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  async joinCurrentServer() {
+    const me = authManager.getUser() || {};
+    if (!me.id || !this.currentServerId) return;
+    try {
+      const result = await apiClient.addServerUser(this.currentServerId, me.id);
+      if (result.success) {
+        showMessage('Вы вступили в сервер', 'success');
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Не удалось вступить: ${this.serverApiError(result)}`, 'error');
+      }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Close server details modal
-  closeServerDetailsModal() {
-    const modal = document.getElementById('server-details-modal');
-    if (modal) {
-      modal.remove();
-    }
-    this.currentViewingServerId = null;
+  showAddMemberModal() {
+    document.getElementById('new-member-id').value = '';
+    document.getElementById('add-member-search').value = '';
+    this.hideAddMemberSearchDropdown();
+    document.getElementById('add-member-modal').hidden = false;
+    document.getElementById('add-member-search')?.focus();
+  }
+  hideAddMemberModal() {
+    document.getElementById('add-member-modal').hidden = true;
   }
 
-  // Switch server tab
-  switchServerTab(tabName) {
-    // Hide all tabs
-    document.querySelectorAll('.server-tab-content').forEach(tab => {
-      tab.style.display = 'none';
-    });
-    
-    // Remove active class from all buttons
-    document.querySelectorAll('[id^="tab-btn-"]').forEach(btn => {
-      btn.classList.remove('active');
-      btn.style.borderBottomColor = 'transparent';
-      btn.style.color = 'var(--text-muted)';
-    });
+  // Поиск пользователя по имени (см. GET /api/users/search) — сначала
+  // пробуем найти по имени, ручной ввод ID остаётся резервным вариантом на
+  // случай, если поиск ничего не нашёл (например, для ещё не подтверждённых
+  // пользователей — поиск ищет только среди approved).
+  hideAddMemberSearchDropdown() {
+    const dropdown = document.getElementById('add-member-search-dropdown');
+    if (dropdown) { dropdown.hidden = true; dropdown.innerHTML = ''; }
+  }
+  async runAddMemberSearch() {
+    const query = document.getElementById('add-member-search')?.value.trim() || '';
+    const dropdown = document.getElementById('add-member-search-dropdown');
+    if (!dropdown) return;
 
-    // Show selected tab
-    const selectedTab = document.getElementById(`tab-${tabName}`);
-    if (selectedTab) {
-      selectedTab.style.display = 'block';
+    if (!query) {
+      this.hideAddMemberSearchDropdown();
+      return;
     }
 
-    // Add active class to selected button
-    const selectedBtn = document.getElementById(`tab-btn-${tabName}`);
-    if (selectedBtn) {
-      selectedBtn.classList.add('active');
-      selectedBtn.style.borderBottomColor = 'var(--blurple)';
-      selectedBtn.style.color = 'var(--header-primary)';
+    try {
+      const result = await apiClient.searchUsers(query);
+      const users = result.success && Array.isArray(result.data) ? result.data : [];
+
+      if (users.length === 0) {
+        dropdown.innerHTML = `<div class="chip-field-dropdown-empty">Никого не найдено</div>`;
+      } else {
+        dropdown.innerHTML = users.map(u => `
+          <div class="chip-field-dropdown-item" data-user-id="${u.id}" data-username="${this.escapeHtml(u.username)}">${this.escapeHtml(u.username)} <span style="color: var(--text-muted);">(ID ${u.id})</span></div>
+        `).join('');
+        dropdown.querySelectorAll('[data-user-id]').forEach(item => {
+          item.addEventListener('click', () => {
+            document.getElementById('new-member-id').value = item.dataset.userId;
+            document.getElementById('add-member-search').value = item.dataset.username;
+            this.hideAddMemberSearchDropdown();
+          });
+        });
+      }
+      dropdown.hidden = false;
+    } catch (error) {
+      this.hideAddMemberSearchDropdown();
     }
   }
 
-  // Show add member modal
-  showAddMemberModal(serverId) {
-    const modalHtml = `
-      <div id="add-member-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;">
-        <div style="background: var(--background-secondary); padding: 25px; border-radius: 8px; width: 500px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent);">
-          <h3 style="margin-top: 0; color: var(--header-primary);">Добавить участника</h3>
-          <div class="form-group" style="margin: 20px 0;">
-            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">ID пользователя</label>
-            <input type="number" id="new-member-id" placeholder="Введите ID пользователя" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
-          </div>
-          <div class="btn-group" style="justify-content: flex-end;">
-            <button class="btn btn-primary" onclick="spaRouter.addMember(${serverId})">Добавить</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('add-member-modal').remove()" style="background: var(--background-accent); color: var(--text-normal);">Отмена</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-  }
-
-  // Add member to server
-  async addMember(serverId) {
+  async confirmAddMember() {
     const userId = document.getElementById('new-member-id').value.trim();
     if (!userId) {
       showMessage('Введите ID пользователя', 'error');
       return;
     }
-
     try {
-      const result = await apiClient.addServerUser(serverId, userId);
+      const result = await apiClient.addServerUser(this.currentServerId, userId);
       if (result.success) {
         showMessage('Пользователь добавлен', 'success');
-        document.getElementById('add-member-modal').remove();
-        await this.viewServerDetails(serverId); // Refresh
+        this.hideAddMemberModal();
+        await this.refreshServerWorkspace();
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка добавления: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Remove member from server
-  async removeMember(serverId, userId) {
-    if (!confirm('Удалить участника из сервера?')) return;
+  async removeMember(userId) {
+    const member = (this.currentServerData?.members || []).find(m => m.id === userId);
+    const label = member ? member.username : `ID ${userId}`;
+    const isSelf = (authManager.getUser() || {}).id === userId;
+    if (!confirm(isSelf ? 'Покинуть этот сервер?' : `Удалить участника «${label}» с сервера?`)) return;
 
     try {
-      const result = await apiClient.removeServerUser(serverId, userId);
+      const result = await apiClient.removeServerUser(this.currentServerId, userId);
       if (result.success) {
-        showMessage('Участник удален', 'success');
-        await this.viewServerDetails(serverId); // Refresh
+        showMessage(isSelf ? 'Вы покинули сервер' : 'Участник удалён', 'success');
+        await this.refreshServerWorkspace();
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка удаления: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Show create role modal
-  showCreateRoleModal(serverId) {
-    const modalHtml = `
-      <div id="create-role-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;">
-        <div style="background: var(--background-secondary); padding: 25px; border-radius: 8px; width: 500px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--background-accent);">
-          <h3 style="margin-top: 0; color: var(--header-primary);">Создать роль</h3>
-          <div class="form-group" style="margin: 20px 0;">
-            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">Название роли</label>
-            <input type="text" id="new-role-name" placeholder="Например: Модератор" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
-          </div>
-          <div class="form-group" style="margin: 20px 0;">
-            <label style="display: block; margin-bottom: 8px; color: var(--header-primary);">Код роли (латиницей)</label>
-            <input type="text" id="new-role-code" placeholder="Например: moderator" style="width: 100%; padding: 10px; border-radius: 4px; background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent);">
-          </div>
-          <div class="btn-group" style="justify-content: flex-end;">
-            <button class="btn btn-primary" onclick="spaRouter.createRole(${serverId})">Создать</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('create-role-modal').remove()" style="background: var(--background-accent); color: var(--text-normal);">Отмена</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  // Названы с префиксом Server — SPARouter.prototype.showAssignRoleModal/
+  // confirmAssignRole (без префикса) уже заняты каталогом АДМИНСКИХ ролей
+  // (вкладка "Пользователи", см. ниже в этом файле) — при совпадении имени
+  // метода в прототипе остаётся только объявленный позже, так что без
+  // переименования кнопка "Роль" здесь тянула бы за собой чужую модалку
+  // (#assign-role-modal из views/users-list.html), которой нет в DOM на
+  // странице /servers.
+  showServerAssignRoleModal(userId) {
+    const member = (this.currentServerData?.members || []).find(m => m.id === userId);
+    this.assignRoleTargetUserId = userId;
+    document.getElementById('server-assign-role-target-hint').textContent = member ? `Пользователь: ${member.username} (ID ${userId})` : `ID пользователя: ${userId}`;
+
+    const roles = this.currentServerData?.roles || [];
+    const select = document.getElementById('server-assign-role-select');
+    select.innerHTML = roles.map(r => `<option value="${r.id}">${this.escapeHtml(r.name)} (уровень ${r.hierarchy_level}${r.role_type === 'system' ? ', системная' : ''})</option>`).join('');
+    document.getElementById('server-assign-role-modal').hidden = false;
+  }
+  hideServerAssignRoleModal() {
+    document.getElementById('server-assign-role-modal').hidden = true;
+    this.assignRoleTargetUserId = null;
+  }
+  async confirmServerAssignRole() {
+    const roleId = document.getElementById('server-assign-role-select').value;
+    if (!roleId || !this.assignRoleTargetUserId) return;
+    try {
+      const result = await apiClient.assignRoleToUser(this.currentServerId, this.assignRoleTargetUserId, roleId);
+      if (result.success) {
+        showMessage('Роль назначена', 'success');
+        this.hideServerAssignRoleModal();
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Ошибка назначения роли: ${this.serverApiError(result)}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
   }
 
-  // Create role on server
-  async createRole(serverId) {
-    const name = document.getElementById('new-role-name').value.trim();
-    const code = document.getElementById('new-role-code').value.trim();
+  async removeMemberRole(userId, roleId) {
+    try {
+      const result = await apiClient.removeRoleFromUser(this.currentServerId, userId, roleId);
+      if (result.success) {
+        showMessage('Роль снята', 'success');
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Ошибка: ${this.serverApiError(result)}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
 
-    if (!name || !code) {
-      showMessage('Заполните все поля', 'error');
+  // --- Вкладка "Роли" ---
+  renderServerRolesTab() {
+    const { roles, isAdmin } = this.currentServerData;
+    const permLabels = {
+      read_messages: 'Чтение сообщений',
+      send_messages: 'Отправка сообщений',
+      manage_channels: 'Управление каналами',
+      manage_roles: 'Управление ролями',
+      ban_users: 'Блокировка пользователей'
+    };
+
+    const rows = roles.length === 0 ? `<tr class="server-empty-row"><td colspan="5">Нет ролей</td></tr>` : roles.map(role => {
+      const permsText = Object.entries(permLabels)
+        .filter(([key]) => role.permissions && role.permissions[key])
+        .map(([, label]) => label)
+        .join(', ') || '—';
+
+      const typeText = role.role_type === 'system' ? 'Системная' : 'Пользовательская';
+      const typeColor = role.role_type === 'system' ? '#5865f2' : '#eb459e';
+
+      let actions = '<span style="color: var(--text-muted); font-size: 12px;">Нельзя изменить</span>';
+      if (role.role_type === 'custom' && isAdmin) {
+        actions = `
+          <button class="btn btn-secondary btn-sm" onclick="spaRouter.showServerRoleEditorModal(${role.id})">Изменить</button>
+          <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServerRole(${role.id})">Удалить</button>
+        `;
+      }
+
+      return `
+        <tr>
+          <td><strong>${this.escapeHtml(role.name)}</strong></td>
+          <td><span class="role-tag" style="background: ${typeColor};">${typeText}</span></td>
+          <td>${role.hierarchy_level}</td>
+          <td style="font-size: 12px; color: var(--text-muted);">${permsText}</td>
+          <td>${actions}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      ${!isAdmin ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Создавать и изменять роли может только администратор этого сервера.</div>` : ''}
+      <div class="server-section-toolbar">
+        <h3 class="server-section-title">Роли (${roles.length})</h3>
+        ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="spaRouter.showServerRoleEditorModal()"><i class="fas fa-plus"></i> Создать роль</button>` : ''}
+      </div>
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Название</th><th>Тип</th><th>Уровень</th><th>Права</th><th>Действия</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Названы с префиксом Server — то же обоснование, что и у
+  // showServerAssignRoleModal выше: showRoleEditorModal/saveRoleEditor без
+  // префикса уже заняты каталогом административных ролей.
+  showServerRoleEditorModal(roleId) {
+    const role = roleId ? (this.currentServerData?.roles || []).find(r => r.id === roleId) : null;
+    this.roleEditorEditingId = role ? role.id : null;
+    document.getElementById('server-role-editor-title').textContent = role ? 'Изменить роль' : 'Создать роль';
+    document.getElementById('server-role-editor-name').value = role ? role.name : '';
+    document.getElementById('server-role-editor-hierarchy').value = role ? role.hierarchy_level : 0;
+    const perms = (role && role.permissions) || {};
+    ['read_messages', 'send_messages', 'manage_channels', 'manage_roles', 'ban_users'].forEach(key => {
+      const el = document.getElementById(`server-role-editor-perm-${key}`);
+      if (el) el.checked = !!perms[key];
+    });
+    document.getElementById('server-role-editor-modal').hidden = false;
+  }
+  hideServerRoleEditorModal() {
+    document.getElementById('server-role-editor-modal').hidden = true;
+    this.roleEditorEditingId = null;
+  }
+  async saveServerRoleEditor() {
+    const name = document.getElementById('server-role-editor-name').value.trim();
+    const hierarchy_level = parseInt(document.getElementById('server-role-editor-hierarchy').value, 10) || 0;
+    if (!name) {
+      showMessage('Название роли обязательно', 'error');
+      return;
+    }
+    const permissions = {};
+    ['read_messages', 'send_messages', 'manage_channels', 'manage_roles', 'ban_users'].forEach(key => {
+      permissions[key] = !!document.getElementById(`server-role-editor-perm-${key}`)?.checked;
+    });
+
+    try {
+      const result = this.roleEditorEditingId
+        ? await apiClient.updateServerRole(this.currentServerId, this.roleEditorEditingId, { name, hierarchy_level, permissions })
+        : await apiClient.createServerRole(this.currentServerId, { name, hierarchy_level, permissions });
+
+      if (result.success) {
+        showMessage(this.roleEditorEditingId ? 'Роль обновлена' : 'Роль создана', 'success');
+        this.hideServerRoleEditorModal();
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Ошибка сохранения роли: ${this.serverApiError(result)}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // Переименован из deleteRole(serverId, roleId) — то же имя метода уже
+  // занято каталогом административных ролей (SPARouter.prototype.deleteRole
+  // ниже в этом файле, вкладка "Пользователи"): при одинаковом имени в
+  // прототипе остаётся только объявленный позже, поэтому кнопка "Удалить"
+  // у пользовательской роли сервера на самом деле вызывала DELETE
+  // /api/admin-roles/:id с параметрами (serverId, roleName) вместо DELETE
+  // /api/servers/:serverId/roles/:roleId — здесь эта путаница устранена.
+  async deleteServerRole(roleId) {
+    const role = (this.currentServerData?.roles || []).find(r => r.id === roleId);
+    const roleName = role ? role.name : `#${roleId}`;
+    if (!confirm(`Удалить роль «${roleName}»? Действие необратимо.`)) return;
+
+    try {
+      const result = await apiClient.deleteServerRole(this.currentServerId, roleId);
+      if (result.success) {
+        showMessage('Роль удалена', 'success');
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Ошибка удаления роли: ${this.serverApiError(result)}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // --- Вкладка "Каналы" ---
+  // Таблица server_channels и её каскадное удаление вместе с сервером
+  // существовали и раньше (см. deleteServer в server-system-logic.js), но
+  // без единого маршрута/UI — управлять каналами было нечем. Сами
+  // сообщения внутри канала (server_messages) в этой панели не выводятся —
+  // канал здесь только именует раздел, честно об этом сказано в модалке.
+  renderServerChannelsTab() {
+    const { channels, isAdmin } = this.currentServerData;
+    const typeIcon = (t) => t === 'voice' ? 'fa-volume-high' : 'fa-hashtag';
+    const typeLabel = (t) => t === 'voice' ? 'Голосовой' : 'Текстовый';
+
+    const rows = channels.length === 0 ? `<tr class="server-empty-row"><td colspan="4">Нет каналов</td></tr>` : channels.map(channel => `
+      <tr>
+        <td><i class="fas ${typeIcon(channel.channel_type)}" style="color: var(--text-muted); margin-right: 6px;"></i><strong>${this.escapeHtml(channel.name)}</strong></td>
+        <td>${typeLabel(channel.channel_type)}</td>
+        <td style="color: var(--text-muted); font-size: 13px;">${this.escapeHtml(channel.description || '—')}</td>
+        <td>
+          ${isAdmin ? `
+            <button class="btn btn-secondary btn-sm" onclick="spaRouter.showChannelEditorModal(${channel.id})">Изменить</button>
+            <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServerChannel(${channel.id})">Удалить</button>
+          ` : '<span style="color: var(--text-muted); font-size: 12px;">—</span>'}
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      ${!isAdmin ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Создавать и изменять каналы может только администратор этого сервера.</div>` : ''}
+      <div class="server-section-toolbar">
+        <h3 class="server-section-title">Каналы (${channels.length})</h3>
+        ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="spaRouter.showChannelEditorModal()"><i class="fas fa-plus"></i> Создать канал</button>` : ''}
+      </div>
+      <div class="table-container">
+        <table>
+          <thead><tr><th>Название</th><th>Тип</th><th>Описание</th><th>Действия</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  showChannelEditorModal(channelId) {
+    const channel = channelId ? (this.currentServerData?.channels || []).find(c => c.id === channelId) : null;
+    this.channelEditorEditingId = channel ? channel.id : null;
+    document.getElementById('channel-editor-title').textContent = channel ? 'Изменить канал' : 'Создать канал';
+    document.getElementById('channel-editor-name').value = channel ? channel.name : '';
+    document.getElementById('channel-editor-type').value = channel ? channel.channel_type : 'text';
+    document.getElementById('channel-editor-description').value = channel ? (channel.description || '') : '';
+    document.getElementById('channel-editor-modal').hidden = false;
+  }
+  hideChannelEditorModal() {
+    document.getElementById('channel-editor-modal').hidden = true;
+    this.channelEditorEditingId = null;
+  }
+  async saveChannelEditor() {
+    const name = document.getElementById('channel-editor-name').value.trim();
+    const channel_type = document.getElementById('channel-editor-type').value;
+    const description = document.getElementById('channel-editor-description').value.trim();
+    if (!name) {
+      showMessage('Название канала обязательно', 'error');
       return;
     }
 
     try {
-      const result = await apiClient.createServerRole(serverId, { name, code });
+      const result = this.channelEditorEditingId
+        ? await apiClient.updateServerChannel(this.currentServerId, this.channelEditorEditingId, { name, channel_type, description })
+        : await apiClient.createServerChannel(this.currentServerId, { name, channel_type, description });
+
       if (result.success) {
-        showMessage('Роль создана', 'success');
-        document.getElementById('create-role-modal').remove();
-        await this.viewServerDetails(serverId); // Refresh
+        showMessage(this.channelEditorEditingId ? 'Канал обновлён' : 'Канал создан', 'success');
+        this.hideChannelEditorModal();
+        await this.refreshServerWorkspace();
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка сохранения канала: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Delete role from server
-  async deleteRole(serverId, roleId) {
-    if (!confirm('Удалить эту роль?')) return;
+  async deleteServerChannel(channelId) {
+    const channel = (this.currentServerData?.channels || []).find(c => c.id === channelId);
+    if (!confirm(`Удалить канал «${channel ? channel.name : '#' + channelId}»?`)) return;
 
     try {
-      const result = await apiClient.deleteServerRole(serverId, roleId);
+      const result = await apiClient.deleteServerChannel(this.currentServerId, channelId);
       if (result.success) {
-        showMessage('Роль удалена', 'success');
-        await this.viewServerDetails(serverId); // Refresh
+        showMessage('Канал удалён', 'success');
+        await this.refreshServerWorkspace();
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка удаления канала: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Update server settings
-  async updateServer(serverId) {
-    const name = document.getElementById('edit-server-name').value.trim();
-    const description = document.getElementById('edit-server-description').value.trim();
+  // --- Вкладка "Настройки" ---
+  renderServerSettingsTab() {
+    const { server, isOwner, isRoot } = this.currentServerData;
+    const canEdit = isOwner || isRoot; // PUT /servers/:id — владелец сервера или root (см. бэкенд)
+    const canDelete = isOwner || isRoot; // DELETE /servers/:id — владелец или root
 
+    return `
+      ${!canEdit ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Изменять настройки сервера может только его владелец.</div>` : ''}
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label class="form-label" for="server-settings-name">Название сервера</label>
+        <input type="text" id="server-settings-name" class="form-input" value="${this.escapeHtml(server.name)}" maxlength="100" ${canEdit ? '' : 'disabled'}>
+      </div>
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label class="form-label" for="server-settings-description">Описание</label>
+        <textarea id="server-settings-description" class="form-input" rows="3" maxlength="500" ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
+      </div>
+      ${canEdit ? `<button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button>` : ''}
+
+      ${isRoot ? `
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--background-accent);">
+          <h4 class="server-section-title" style="margin-bottom: 10px;">Владение</h4>
+          <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 10px;">Доступно только владельцу системы.</p>
+          <button class="btn btn-secondary btn-sm" onclick="spaRouter.showChangeOwnerModal()"><i class="fas fa-user-shield"></i> Передать другому пользователю</button>
+        </div>
+      ` : ''}
+
+      ${canDelete ? `
+        <div class="server-danger-zone">
+          <h4>Опасная зона</h4>
+          <p>Удаление сервера безвозвратно сотрёт его роли, участников и каналы.</p>
+          <button class="btn btn-danger" onclick="spaRouter.deleteServer(${server.id}, true)"><i class="fas fa-trash"></i> Удалить сервер</button>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  async saveServerSettings() {
+    const name = document.getElementById('server-settings-name').value.trim();
+    const description = document.getElementById('server-settings-description').value.trim();
     if (!name) {
       showMessage('Название сервера обязательно', 'error');
       return;
     }
-
     try {
-      const result = await apiClient.updateServer(serverId, { name, description });
+      const result = await apiClient.updateServer(this.currentServerId, { name, description });
       if (result.success) {
-        showMessage('Сервер обновлен', 'success');
-        await this.viewServerDetails(serverId); // Refresh
-        await this.loadServersList(); // Refresh main list
+        showMessage('Сервер обновлён', 'success');
+        await this.refreshServerWorkspace();
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка обновления: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
     }
   }
 
-  // Delete server
-  async deleteServer(serverId, fromDetails = false) {
+  async deleteServer(serverId, fromWorkspace = false) {
     if (!confirm('Вы уверены, что хотите удалить этот сервер? Это действие нельзя отменить!')) return;
 
     try {
       const result = await apiClient.deleteServer(serverId);
       if (result.success) {
-        showMessage('Сервер удален', 'success');
-        if (fromDetails) {
-          this.closeServerDetailsModal();
+        showMessage('Сервер удалён', 'success');
+        if (fromWorkspace) {
+          this.closeServerWorkspace(); // само перезагрузит каталог
+        } else {
+          await this.loadServersDirectory();
         }
-        await this.loadServersList(); // Refresh main list
       } else {
-        showMessage(`Ошибка: ${result.error}`, 'error');
+        showMessage(`Ошибка удаления: ${this.serverApiError(result)}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Ошибка: ${error.message}`, 'error');
+    }
+  }
+
+  // --- Смена владельца сервера (root only) ---
+  async showChangeOwnerModal() {
+    try {
+      const result = await apiClient.getAllUsersForOwnerTransfer();
+      // GET /api/users (root only) сам оборачивает ответ в {success, data},
+      // а makeAuthenticatedRequest оборачивает его ещё раз — поэтому список
+      // пользователей лежит в result.data.data, а не в result.data.
+      const users = (result.success && result.data && Array.isArray(result.data.data)) ? result.data.data : [];
+      const select = document.getElementById('change-owner-select');
+      select.innerHTML = users.map(u => `<option value="${u.id}">${this.escapeHtml(u.username)} (ID ${u.id})</option>`).join('');
+      document.getElementById('change-owner-modal').hidden = false;
+    } catch (error) {
+      showMessage(`Ошибка загрузки пользователей: ${error.message}`, 'error');
+    }
+  }
+  hideChangeOwnerModal() {
+    document.getElementById('change-owner-modal').hidden = true;
+  }
+  async confirmChangeOwner() {
+    const newOwnerId = document.getElementById('change-owner-select').value;
+    if (!newOwnerId) return;
+    try {
+      const result = await apiClient.changeServerOwner(this.currentServerId, parseInt(newOwnerId, 10));
+      if (result.success) {
+        showMessage('Владелец сервера изменён', 'success');
+        this.hideChangeOwnerModal();
+        await this.refreshServerWorkspace();
+      } else {
+        showMessage(`Ошибка: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
       showMessage(`Ошибка: ${error.message}`, 'error');
@@ -2991,64 +3383,107 @@ class SPARouter {
     return div.innerHTML;
   }
 
-  // Settings methods
-  saveSettings() {
-    // Gather settings from form
+  // Settings methods — сохраняются на сервере (GET/PUT /api/system-settings,
+  // доступны только владельцу), а не в localStorage: раньше "Настройки" были
+  // просто заглушкой, ничего не менявшей на сервере ни для кого, кроме
+  // браузера того, кто их открыл.
+  async saveSettings() {
     const settings = {
-      systemName: document.getElementById('systemName')?.value,
-      systemDescription: document.getElementById('systemDescription')?.value,
       maxFileSize: document.getElementById('maxFileSize')?.value,
       allowRegistration: document.getElementById('allowRegistration')?.checked,
-      articlesPerPage: document.getElementById('articlesPerPage')?.value,
-      theme: document.getElementById('theme')?.value
+      sessionDurationHours: document.getElementById('sessionDurationHours')?.value
     };
 
-    // Save settings to local storage or server
-    localStorage.setItem('appSettings', JSON.stringify(settings));
-    showMessage('Настройки успешно сохранены!', 'success');
-  }
-
-  resetSettings() {
-    if (confirm('Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?')) {
-      // Reset form to default values
-      document.getElementById('systemName').value = 'BeginFind Admin Panel';
-      document.getElementById('systemDescription').value = 'Административная панель управления системой BeginFind';
-      document.getElementById('maxFileSize').value = '5';
-      document.getElementById('allowRegistration').checked = true;
-      document.getElementById('articlesPerPage').value = '20';
-      document.getElementById('theme').value = 'dark';
-
-      // Save to local storage
-      localStorage.removeItem('appSettings');
-      showMessage('Настройки сброшены к значениям по умолчанию!', 'success');
+    try {
+      const res = await fetch('/api/system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения настроек');
+      showMessage('Настройки успешно сохранены!', 'success');
+    } catch (error) {
+      showMessage(`Ошибка сохранения настроек: ${error.message}`, 'error');
     }
   }
 
-  // Initialize settings form with saved values
-  initSettingsForm() {
-    const savedSettings = localStorage.getItem('appSettings');
-    if (savedSettings) {
-      const settings = JSON.parse(savedSettings);
+  // Режим техобслуживания — отдельная кнопка/запрос, а не часть общего
+  // autoSaveInputs: включение затрагивает вообще всех остальных пользователей
+  // сайта немедленно, такое действие не должно срабатывать тихо по дебаунсу
+  // от одного клика по чекбоксу — только явным сохранением, с подтверждением
+  // при включении.
+  async saveMaintenanceSettings() {
+    const maintenanceMode = document.getElementById('maintenanceMode')?.checked;
+    const maintenanceMessage = document.getElementById('maintenanceMessage')?.value;
 
-      if (settings.systemName) document.getElementById('systemName').value = settings.systemName;
-      if (settings.systemDescription) document.getElementById('systemDescription').value = settings.systemDescription;
-      if (settings.maxFileSize) document.getElementById('maxFileSize').value = settings.maxFileSize;
+    if (maintenanceMode && !confirm('Включить режим техобслуживания?\n\nВсе, кроме вас, немедленно потеряют доступ к сайту (увидят это сообщение вместо панели).')) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maintenanceMode, maintenanceMessage })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения');
+      showMessage(maintenanceMode ? 'Режим техобслуживания включён' : 'Режим техобслуживания выключен', maintenanceMode ? 'error' : 'success');
+    } catch (error) {
+      showMessage(`Ошибка сохранения: ${error.message}`, 'error');
+    }
+  }
+
+  async resetSettings() {
+    if (!confirm('Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?')) return;
+
+    try {
+      const res = await fetch('/api/system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxFileSize: 5,
+          allowRegistration: true,
+          sessionDurationHours: 8,
+          maintenanceMode: false,
+          maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сброса настроек');
+      await this.initSettingsForm();
+      showMessage('Настройки сброшены к значениям по умолчанию!', 'success');
+    } catch (error) {
+      showMessage(`Ошибка сброса настроек: ${error.message}`, 'error');
+    }
+  }
+
+  // Initialize settings form with values loaded from the server
+  async initSettingsForm() {
+    try {
+      const res = await fetch('/api/system-settings');
+      if (!res.ok) throw new Error('Не удалось загрузить настройки');
+      const data = await res.json();
+      const settings = data.settings || {};
+
+      if (settings.maxFileSize != null) document.getElementById('maxFileSize').value = settings.maxFileSize;
       if (settings.allowRegistration !== undefined) document.getElementById('allowRegistration').checked = settings.allowRegistration;
-      if (settings.articlesPerPage) document.getElementById('articlesPerPage').value = settings.articlesPerPage;
-      if (settings.theme) document.getElementById('theme').value = settings.theme;
+      if (settings.sessionDurationHours != null) document.getElementById('sessionDurationHours').value = settings.sessionDurationHours;
+      if (settings.maintenanceMode !== undefined) document.getElementById('maintenanceMode').checked = settings.maintenanceMode;
+      if (settings.maintenanceMessage != null) document.getElementById('maintenanceMessage').value = settings.maintenanceMessage;
+    } catch (error) {
+      showMessage(`Ошибка загрузки настроек: ${error.message}`, 'error');
     }
   }
 
   // Set up settings form events with auto-save
-  setupSettingsFormEvents() {
-    // Initialize form with saved values
-    this.initSettingsForm();
+  async setupSettingsFormEvents() {
+    // Initialize form with values from the server
+    await this.initSettingsForm();
 
     // Set up auto-save for simple settings
-    const autoSaveInputs = [
-      'systemName', 'systemDescription', 'maxFileSize',
-      'articlesPerPage', 'theme', 'allowRegistration'
-    ];
+    const autoSaveInputs = ['maxFileSize', 'allowRegistration', 'sessionDurationHours'];
 
     autoSaveInputs.forEach(inputId => {
       const element = document.getElementById(inputId);
@@ -3070,6 +3505,7 @@ class SPARouter {
     // Explicit save button
     document.getElementById('save-settings-btn')?.addEventListener('click', () => this.saveSettings());
     document.getElementById('reset-settings-btn')?.addEventListener('click', () => this.resetSettings());
+    document.getElementById('save-maintenance-settings-btn')?.addEventListener('click', () => this.saveMaintenanceSettings());
   }
 
   // Dashboard stats with real data and weekly activity
@@ -3082,6 +3518,7 @@ class SPARouter {
         const totalArticles = document.getElementById('total-articles');
         if (totalArticles) totalArticles.textContent = articlesResult.data.length;
         articlesData = articlesResult.data;
+        this.renderTrendBadge('trend-articles', this.countLastDays(articlesData, 7));
       } else {
         console.error('Error loading articles count:', articlesResult.error);
       }
@@ -3100,10 +3537,13 @@ class SPARouter {
       }
 
       // Load messages count
+      let messagesData = [];
       const messagesResult = await apiClient.getMessages();
       if (messagesResult.success) {
+        messagesData = messagesResult.data;
         const totalMessages = document.getElementById('total-messages');
-        if (totalMessages) totalMessages.textContent = messagesResult.data.length;
+        if (totalMessages) totalMessages.textContent = messagesData.length;
+        this.renderTrendBadge('trend-messages', this.countLastDays(messagesData, 7));
       } else {
         console.error('Error loading messages count:', messagesResult.error);
       }
@@ -3125,6 +3565,29 @@ class SPARouter {
     } catch (error) {
       console.error('Unexpected error loading dashboard stats:', error);
     }
+  }
+
+  // Сколько элементов создано за последние N дней (для бейджа-тренда в сводке)
+  countLastDays(items, days, dateField = 'created_at') {
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    return items.filter(item => {
+      const t = new Date(item[dateField]).getTime();
+      return !Number.isNaN(t) && t >= cutoff;
+    }).length;
+  }
+
+  // Рисует бейдж "+N" рядом со значением метрики; при отсутствии прироста бейдж не показываем
+  renderTrendBadge(elementId, delta) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (!delta) {
+      el.textContent = '';
+      el.title = '';
+      return;
+    }
+    el.textContent = `▲+${delta}`;
+    el.classList.add('stat-chip-trend-up');
+    el.title = `+${delta} за последние 7 дней`;
   }
 
   // Load activity list with recent articles, servers, and messages
@@ -3211,7 +3674,7 @@ class SPARouter {
   initDashboardChartsWithData(articlesData) {
     // Check if Chart.js is available
     if (typeof Chart !== 'undefined') {
-      const ctx = document.getElementById('weeklyActivityChart');
+      const ctx = document.getElementById('articlesSparkline');
       if (ctx) {
         // Destroy existing chart if it exists
         if (ctx.chartInstance) {
@@ -3221,34 +3684,33 @@ class SPARouter {
         // Calculate weekly activity from real articles data
         const weeklyData = this.calculateWeeklyActivity(articlesData);
 
-        const chartData = {
-          labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          datasets: [{
-            label: 'Статей за неделю',
-            data: weeklyData,
-            borderColor: 'rgb(86, 101, 242)',
-            backgroundColor: 'rgba(86, 101, 242, 0.2)',
-            tension: 0.1
-          }]
-        };
-
+        // Компактный спарклайн внутри плашки "Статей" — без осей, легенды и точек,
+        // просто силуэт активности за текущую неделю (пн-вс)
         const config = {
           type: 'line',
-          data: chartData,
+          data: {
+            labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            datasets: [{
+              data: weeklyData,
+              borderColor: 'rgb(88, 101, 242)',
+              backgroundColor: 'rgba(88, 101, 242, 0.15)',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true
+            }]
+          },
           options: {
-            responsive: true,
+            responsive: false,
+            maintainAspectRatio: false,
+            animation: false,
             plugins: {
-              legend: {
-                position: 'top',
-              }
+              legend: { display: false },
+              tooltip: { enabled: false }
             },
             scales: {
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  stepSize: 1
-                }
-              }
+              x: { display: false },
+              y: { display: false, beginAtZero: true }
             }
           }
         };
@@ -3286,92 +3748,36 @@ class SPARouter {
     return dailyCounts;
   }
 
-  // Метод для получения тегов из формы
-  getTagsFromForm() {
-    // Получаем теги из контейнера тегов
-    const tagsContainer = document.getElementById('tagsContainer');
-    if (!tagsContainer) return [];
-
-    // Возвращаем массив тегов
-    const tagElements = tagsContainer.querySelectorAll('.tag-item');
-    const tags = [];
-
-    tagElements.forEach(tagElement => {
-      // Получаем текст тега, убирая символ удаления (×)
-      const tagText = tagElement.textContent.replace(/\s*×\s*$/, '').trim();
-      if (tagText) {
-        tags.push(tagText);
-      }
-    });
-
-    return tags;
-  }
-
-  // Load tags to the form when editing an article
-  loadTagsToForm(tags) {
-    const tagsContainer = document.getElementById('tagsContainer');
-    if (!tagsContainer) return;
-
-    // Clear existing tags
-    tagsContainer.innerHTML = '';
-
-    if (Array.isArray(tags) && tags.length > 0) {
-      tagsContainer.style.display = 'flex';
-      tagsContainer.style.flexWrap = 'wrap';
-      tagsContainer.style.gap = '4px';
-      tagsContainer.style.marginTop = '4px';
-
-      tags.forEach(tag => {
-        const tagElement = document.createElement('span');
-        tagElement.className = 'tag-item';
-        tagElement.style = `
-          background: var(--blurple);
-          color: white;
-          padding: 2px 6px;
-          border-radius: 10px;
-          font-size: 12px;
-          display: inline-flex;
-          align-items: center;
-          gap: 3px;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-        `;
-        tagElement.innerHTML = `
-          ${tag}
-          <span class="tag-remove" style="cursor: pointer; margin-left: 4px; font-weight: bold; opacity: 0.8;">×</span>
-        `;
-
-        // Add event listener to the remove button
-        const removeBtn = tagElement.querySelector('.tag-remove');
-        removeBtn.onclick = (e) => {
-          e.stopPropagation(); // Prevent event bubbling
-          tagElement.remove(); // Remove the tag element
-
-          // Hide the container if no tags remain
-          if (tagsContainer.children.length === 0) {
-            tagsContainer.style.display = 'none';
-          }
-        };
-
-        tagsContainer.appendChild(tagElement);
-      });
-    } else {
-      tagsContainer.style.display = 'none';
-    }
-  }
 }
 
 // Global router instance
 let spaRouter = null;
 
+// Владелец (is_root) проходит и во время техобслуживания — все остальные
+// (в т.ч. только что успешно вошедшие: /api/login открыт даже в
+// техобслуживание, см. src/middleware/maintenance.js, иначе владельцу
+// самому было бы некуда войти) видят заглушку вместо панели.
+function isMaintenanceBlockedForCurrentUser(maintenance) {
+  if (!maintenance || !maintenance.enabled) return false;
+  const user = authManager && authManager.isAuthenticated() ? authManager.getUser() : null;
+  return !(user && user.is_root);
+}
+
 // Initialize router after DOM is fully loaded
-document.addEventListener('DOMContentLoaded', () => {
-  // Create router instance only if authenticated
-  if (authManager && authManager.isAuthenticated()) {
+document.addEventListener('DOMContentLoaded', async () => {
+  const maintenance = typeof checkMaintenanceStatus === 'function' ? await checkMaintenanceStatus() : { enabled: false };
+
+  if (isMaintenanceBlockedForCurrentUser(maintenance)) {
+    showMaintenanceBlocker(maintenance.message);
+  } else if (authManager && authManager.isAuthenticated()) {
+    // Create router instance only if authenticated
     spaRouter = new SPARouter();
   } else {
     // If not authenticated, show login form
     showModalLogin();
   }
+
+  if (typeof startMaintenancePolling === 'function') startMaintenancePolling();
 });
 
 // Check on auth status change
@@ -3385,8 +3791,17 @@ window.addEventListener('authChanged', async () => {
     // Small delay for full status change
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (authManager && authManager.isAuthenticated() && !spaRouter) {
+    const maintenance = typeof checkMaintenanceStatus === 'function' ? await checkMaintenanceStatus() : { enabled: false };
+
+    if (isMaintenanceBlockedForCurrentUser(maintenance)) {
+      // Успешный логин во время техобслуживания (не владельцем) — /api/login
+      // пропускает кого угодно, но панель ему всё равно не откроем: показываем
+      // ту же заглушку, что видел бы неавторизованный посетитель.
+      spaRouter = null;
+      showMaintenanceBlocker(maintenance.message);
+    } else if (authManager && authManager.isAuthenticated() && !spaRouter) {
       // If user logged in and router not created yet
+      hideMaintenanceBlocker();
       spaRouter = new SPARouter();
     } else if (authManager && !authManager.isAuthenticated() && spaRouter) {
       // If user logged out, remove router
@@ -3414,15 +3829,14 @@ function debounce(func, wait) {
 
 // Export methods for global use
 window.spaRouter = {
-  navigateTo: (path) => {
+  // async + await (не просто "вызвать и забыть") — вызывающий код (graph-view.js,
+  // ibripedia.js) переходит на страницу редактора, а затем сразу открывает
+  // конкретную статью через editArticle(); без ожидания реальной навигации
+  // (fetch партиала, инициализация формы/редактора) editArticle() запускался
+  // бы до того, как нужные элементы формы вообще появятся в DOM.
+  navigateTo: async (path) => {
     if (spaRouter) {
-      spaRouter.navigateTo(path);
-    }
-  },
-
-  loadArticlesList: async () => {
-    if (spaRouter) {
-      await spaRouter.loadArticlesList();
+      await spaRouter.navigateTo(path);
     }
   },
 
@@ -3447,18 +3861,6 @@ window.spaRouter = {
   saveArticle: () => {
     if (spaRouter) {
       spaRouter.saveArticle();
-    }
-  },
-
-  addTag: () => {
-    if (spaRouter) {
-      spaRouter.addTag();
-    }
-  },
-
-  removeTag: (tagText) => {
-    if (spaRouter) {
-      spaRouter.removeTag(tagText);
     }
   },
 
@@ -3510,21 +3912,9 @@ window.spaRouter = {
     }
   },
 
-  searchArticles: async () => {
-    if (spaRouter) {
-      await spaRouter.searchArticles();
-    }
-  },
-
   editArticle: async (articleId) => {
     if (spaRouter) {
       await spaRouter.editArticle(articleId);
-    }
-  },
-
-  deleteArticle: async (articleId) => {
-    if (spaRouter) {
-      await spaRouter.deleteArticle(articleId);
     }
   }
 };
@@ -3586,28 +3976,23 @@ SPARouter.prototype.renderPendingUsers = async function() {
       if (countEl) countEl.textContent = users.length;
       if (tableEl) tableEl.style.display = 'block';
 
+      // Строка и ячейки больше не несут своих инлайн-стилей — .table-container
+      // уже стилизует table/th/td/tr, включая hover (см. "ENHANCED TABLE
+      // STYLES" в global-styles.css), а кнопки — канонические .btn-success/
+      // .btn-danger вместо зашитых #28a745/#dc3545.
       tbodyEl.innerHTML = '';
       users.forEach(user => {
         const tr = document.createElement('tr');
-        tr.style.cssText = 'border-bottom: 1px solid var(--background-accent, #4f545c); transition: background 0.15s;';
-        tr.onmouseenter = () => tr.style.background = 'rgba(255,255,255,0.03)';
-        tr.onmouseleave = () => tr.style.background = 'transparent';
 
         const date = user.created_at ? new Date(user.created_at).toLocaleString('ru-RU') : '—';
 
         tr.innerHTML = `
-          <td style="padding: 12px; color: var(--text-normal, #dcddde);">${user.display_name || user.username}</td>
-          <td style="padding: 12px; color: var(--text-muted, #b9bbbe); font-family: monospace;">${user.username}</td>
-          <td style="padding: 12px; color: var(--text-muted, #b9bbbe); font-size: 13px;">${date}</td>
-          <td style="padding: 12px; text-align: right;">
-            <button class="btn-approve" data-id="${user.id}" data-name="${user.display_name || user.username}" style="
-              background: #28a745; color: white; padding: 6px 14px; border: none; border-radius: 4px;
-              cursor: pointer; font-size: 13px; font-weight: 500; margin-right: 6px;
-            ">✓ Подтвердить</button>
-            <button class="btn-reject" data-id="${user.id}" data-name="${user.display_name || user.username}" style="
-              background: #dc3545; color: white; padding: 6px 14px; border: none; border-radius: 4px;
-              cursor: pointer; font-size: 13px; font-weight: 500;
-            ">✗ Отклонить</button>
+          <td>${user.display_name || user.username}</td>
+          <td style="font-family: monospace; color: var(--text-muted);">${user.username}</td>
+          <td style="font-size: 13px; color: var(--text-muted);">${date}</td>
+          <td class="text-right">
+            <button class="btn btn-success btn-sm btn-approve" data-id="${user.id}" data-name="${user.display_name || user.username}"><i class="fas fa-check"></i> Подтвердить</button>
+            <button class="btn btn-danger btn-sm btn-reject" data-id="${user.id}" data-name="${user.display_name || user.username}"><i class="fas fa-xmark"></i> Отклонить</button>
           </td>
         `;
         tbodyEl.appendChild(tr);
@@ -3702,13 +4087,10 @@ SPARouter.prototype.showPendingToast = function(message, type = 'success') {
   const container = document.getElementById('pending-toast-container');
   if (!container) return;
 
+  // Общий компонент тоста (.toast/.toast-success/.toast-error) — см. "TOAST
+  // COMPONENT" в global-styles.css, тот же, что и showUsersToast.
   const toast = document.createElement('div');
-  toast.style.cssText = `
-    padding: 12px 20px; border-radius: 6px; color: white; margin-bottom: 8px;
-    background: ${type === 'error' ? '#dc3545' : '#28a745'};
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 14px;
-    animation: slideIn 0.3s ease;
-  `;
+  toast.className = `toast toast-${type === 'error' ? 'error' : 'success'}`;
   toast.textContent = message;
   container.appendChild(toast);
 
@@ -3717,4 +4099,1066 @@ SPARouter.prototype.showPendingToast = function(message, type = 'success') {
     toast.style.transition = 'opacity 0.3s';
     setTimeout(() => toast.remove(), 300);
   }, 3500);
+};
+
+// ========================================
+// ПОЛЬЗОВАТЕЛИ — вкладка "Пользователи". Список читает GET /api/all-users
+// (уже отсортирован: владелец → админы по убыванию уровня роли → остальные
+// — см. auth.getAllUsers на сервере). Роль назначается из каталога
+// admin_roles (GET /api/admin-roles) — выпадающий список вместо голого
+// числа, само число (level) задаётся при редактировании роли, не
+// пользователя. Кнопки действий рендерятся по правам ТЕКУЩЕГО пользователя
+// (authManager.getUser().permissions) — это только подсказка интерфейса,
+// сервер каждое действие всё равно проверяет заново (см. checkPermission/
+// assertCanManage в src/middleware/auth.js).
+// ========================================
+
+const PERMISSION_LABELS = {
+  view_users_tab: 'Видеть вкладку «Пользователи»',
+  manage_pending_users: 'Одобрять/отклонять заявки на регистрацию',
+  manage_admin_roles: 'Выдавать/менять роли другим пользователям',
+  block_users: 'Блокировать пользователей',
+  rename_users: 'Переименовывать пользователей',
+  mute_users: 'Временно мутить пользователей',
+  moderate_stickers: 'Подтверждать/отклонять наборы стикеров'
+};
+
+SPARouter.prototype.loadUsersList = async function() {
+  this.showLoader();
+
+  try {
+    const response = await fetch('/views/users-list.html');
+    const html = await response.text();
+
+    const appContent = document.getElementById('app-content');
+    if (appContent) {
+      appContent.innerHTML = html;
+      const titleElement = document.getElementById('page-title');
+      if (titleElement) titleElement.textContent = 'Пользователи';
+    }
+
+    const me = authManager.getUser() || {};
+    const canManageRoleCatalog = !!(me.is_root || me.is_role_manager);
+    document.getElementById('roles-panel').style.display = canManageRoleCatalog ? 'block' : 'none';
+    document.getElementById('create-role-btn')?.addEventListener('click', () => this.showRoleEditorModal());
+
+    await this.loadRolesCache();
+    await this.renderUsersList();
+    if (canManageRoleCatalog) await this.renderRolesPanel();
+  } catch (error) {
+    console.error('Error loading users list:', error);
+    showMessage('Ошибка при загрузке списка пользователей', 'error');
+  } finally {
+    this.hideLoader();
+  }
+};
+
+// Кэш каталога ролей — используется и списком пользователей (подписи),
+// и модалкой назначения роли (выпадающий список).
+SPARouter.prototype.loadRolesCache = async function() {
+  try {
+    const res = await fetch('/api/admin-roles');
+    const data = await res.json();
+    this.rolesCache = data.roles || [];
+  } catch (error) {
+    this.rolesCache = [];
+  }
+};
+
+// Цвета — через уже существующие токены (var(--yellow)/--blurple/--green/
+// --red из :root в global-styles.css), а не зашитые hex: тот же жёлтый, что
+// и у .btn-warning, тот же blurple, что и у .btn-primary, и т.д. — раньше
+// тут был свой набор чуть отличающихся оттенков (#f5b642 вместо --yellow,
+// #f59e0b вместо тоже --yellow, и т.д.).
+SPARouter.prototype.roleLabelForUser = function(user) {
+  if (user.is_root) return { text: 'Владелец', color: 'var(--yellow)' };
+  if (user.role_name) return { text: user.role_name, color: 'var(--blurple)' };
+  return { text: 'Пользователь', color: 'var(--text-muted)' };
+};
+
+SPARouter.prototype.statusLabelForUser = function(user) {
+  const map = {
+    approved: { text: 'Подтверждён', color: 'var(--green)' },
+    pending: { text: 'Ожидает', color: 'var(--yellow)' },
+    rejected: { text: 'Отклонён', color: 'var(--red)' },
+    blocked: { text: 'Заблокирован', color: 'var(--red)' }
+  };
+  const base = map[user.status] || { text: user.status || '—', color: 'var(--text-muted)' };
+  if (this.isMuted(user)) {
+    const until = new Date(user.muted_until).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return { text: `${base.text} · 🔇 до ${until}`, color: 'var(--yellow)' };
+  }
+  return base;
+};
+
+SPARouter.prototype.isMuted = function(user) {
+  return !!(user.muted_until && new Date(user.muted_until).getTime() > Date.now());
+};
+
+SPARouter.prototype.renderUsersList = async function() {
+  const loadingEl = document.getElementById('users-loading');
+  const emptyEl = document.getElementById('users-empty');
+  const tableEl = document.getElementById('users-table');
+  const tbodyEl = document.getElementById('users-tbody');
+  const statsEl = document.getElementById('users-stats');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (tableEl) tableEl.style.display = 'none';
+  if (statsEl) statsEl.style.display = 'none';
+
+  const me = authManager.getUser() || {};
+  const myPerms = me.permissions || {};
+  const can = (key) => !!(me.is_root || myPerms[key]);
+
+  try {
+    const res = await fetch('/api/all-users');
+    if (!res.ok) throw new Error('Не удалось загрузить пользователей');
+    const data = await res.json();
+    const users = data.users || [];
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    if (users.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+
+    if (statsEl) statsEl.style.display = 'grid';
+    const totalEl = document.getElementById('users-count-total');
+    const adminsEl = document.getElementById('users-count-admins');
+    const blockedEl = document.getElementById('users-count-blocked');
+    const mutedEl = document.getElementById('users-count-muted');
+    if (totalEl) totalEl.textContent = users.length;
+    if (adminsEl) adminsEl.textContent = users.filter(u => u.role_name && !u.is_root).length;
+    if (blockedEl) blockedEl.textContent = users.filter(u => u.status === 'blocked').length;
+    if (mutedEl) mutedEl.textContent = users.filter(u => this.isMuted(u)).length;
+
+    if (tableEl) tableEl.style.display = 'block';
+    tbodyEl.innerHTML = '';
+
+    users.forEach(user => {
+      const tr = document.createElement('tr');
+      // Раньше подсветка строки при наведении делалась вручную (onmouseenter/
+      // leave + инлайн-фон) — убрано в пользу глобального tr:hover
+      // (global-styles.css), тот же эффект, что и в таблицах на вкладке
+      // "Сервера", без лишнего JS на каждую строку.
+
+      const role = this.roleLabelForUser(user);
+      const status = this.statusLabelForUser(user);
+      const date = user.created_at ? new Date(user.created_at).toLocaleString('ru-RU') : '—';
+      const displayName = this.escapeHtml(user.display_name || user.username);
+      const username = this.escapeHtml(user.username);
+      const muted = this.isMuted(user);
+
+      // Владельца через панель никто не трогает — действий для его строки нет
+      // (роль назначается только через scripts/make-owner.js в терминале).
+      let actionsHtml = '<span style="color: var(--text-muted);">—</span>';
+      if (!user.is_root) {
+        const buttons = [];
+        if (can('manage_admin_roles')) {
+          buttons.push(`<button class="btn btn-primary btn-sm btn-assign-role" data-id="${user.id}" data-name="${displayName}" data-role-id="${user.admin_role_id || ''}">${user.role_name ? 'Изменить роль' : 'Сделать админом'}</button>`);
+        }
+        if (can('rename_users')) {
+          buttons.push(`<button class="btn btn-secondary btn-sm btn-rename-user" data-id="${user.id}" data-name="${displayName}" data-username="${username}">Переименовать</button>`);
+        }
+        if (can('mute_users')) {
+          buttons.push(muted
+            ? `<button class="btn btn-success btn-sm btn-unmute-user" data-id="${user.id}" data-name="${displayName}">Снять мут</button>`
+            : `<button class="btn btn-warning btn-sm btn-mute-user" data-id="${user.id}" data-name="${displayName}">Мут</button>`);
+        }
+        if (can('block_users')) {
+          buttons.push(user.status === 'blocked'
+            ? `<button class="btn btn-success btn-sm btn-unblock-user" data-id="${user.id}" data-name="${displayName}">Разблокировать</button>`
+            : (user.status === 'approved'
+              ? `<button class="btn btn-danger btn-sm btn-block-user" data-id="${user.id}" data-name="${displayName}">Заблокировать</button>`
+              : ''));
+        }
+        if (me.is_root) {
+          buttons.push(user.is_role_manager
+            ? `<button class="users-btn-star btn-revoke-role-manager" data-id="${user.id}" data-name="${displayName}" title="Снять статус доверенного администратора">★ доверенный</button>`
+            : `<button class="users-btn-ghost btn-grant-role-manager" data-id="${user.id}" data-name="${displayName}" title="Назначить доверенным администратором (право редактировать роли)">☆ сделать доверенным</button>`);
+        }
+        actionsHtml = buttons.join(' ') || '<span style="color: var(--text-muted);">—</span>';
+      }
+
+      // data-label на каждой ячейке — используется только на мобильной
+      // раскладке (см. @media в public/views/users-list.html), где таблица
+      // превращается в список карточек и подписи колонок берутся отсюда
+      // через CSS content: attr(data-label), т.к. <thead> на мобильном скрыт.
+      tr.innerHTML = `
+        <td data-label="Имя"><span class="users-name-link profile-link" data-id="${user.id}" title="Открыть профиль">${displayName}</span></td>
+        <td data-label="Логин" style="color: var(--text-muted); font-family: monospace;">${username}</td>
+        <td data-label="Роль"><span class="users-role-pill" style="background: ${role.color};">${role.text}</span></td>
+        <td data-label="Статус"><span class="users-status-pill" style="background: ${status.color};">${status.text}</span></td>
+        <td data-label="Регистрация" style="color: var(--text-muted); font-size: 13px;">${date}</td>
+        <td data-label="Действия"><div class="users-actions-cell">${actionsHtml}</div></td>
+      `;
+      tbodyEl.appendChild(tr);
+    });
+
+    tbodyEl.querySelectorAll('.profile-link').forEach(el => {
+      el.addEventListener('click', () => window.spaRouter.navigateTo(`/profile/${el.dataset.id}`));
+    });
+    tbodyEl.querySelectorAll('.btn-assign-role').forEach(btn => {
+      btn.addEventListener('click', () => this.showAssignRoleModal(btn.dataset.id, btn.dataset.name, btn.dataset.roleId));
+    });
+    tbodyEl.querySelectorAll('.btn-rename-user').forEach(btn => {
+      btn.addEventListener('click', () => this.showRenameModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
+    });
+    tbodyEl.querySelectorAll('.btn-mute-user').forEach(btn => {
+      btn.addEventListener('click', () => this.showMuteUserModal(btn.dataset.id, btn.dataset.name));
+    });
+    tbodyEl.querySelectorAll('.btn-unmute-user').forEach(btn => {
+      btn.addEventListener('click', () => this.unmuteUser(btn.dataset.id, btn.dataset.name));
+    });
+    tbodyEl.querySelectorAll('.btn-block-user').forEach(btn => {
+      btn.addEventListener('click', () => this.showBlockUserModal(btn.dataset.id, btn.dataset.name));
+    });
+    tbodyEl.querySelectorAll('.btn-unblock-user').forEach(btn => {
+      btn.addEventListener('click', () => this.unblockUser(btn.dataset.id, btn.dataset.name));
+    });
+    tbodyEl.querySelectorAll('.btn-grant-role-manager').forEach(btn => {
+      btn.addEventListener('click', () => this.setRoleManager(btn.dataset.id, btn.dataset.name, true));
+    });
+    tbodyEl.querySelectorAll('.btn-revoke-role-manager').forEach(btn => {
+      btn.addEventListener('click', () => this.setRoleManager(btn.dataset.id, btn.dataset.name, false));
+    });
+  } catch (error) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    this.showUsersToast(error.message || 'Ошибка загрузки пользователей', 'error');
+  }
+};
+
+SPARouter.prototype.showAssignRoleModal = function(userId, userName, currentRoleId) {
+  const modal = document.getElementById('assign-role-modal');
+  const titleEl = document.getElementById('assign-role-modal-title');
+  const select = document.getElementById('assign-role-select');
+  if (titleEl) titleEl.textContent = `Роль администратора — «${userName}»`;
+
+  select.innerHTML = '<option value="">— Без роли (обычный пользователь) —</option>';
+  (this.rolesCache || [])
+    // Автомигрированные роли-заглушки ("Мигрированный ранг N", см.
+    // migrateLegacyAdminLevels) не предлагаем при выборе — они не для
+    // назначения новым людям, только чтобы не потерять прежний ранг тех,
+    // кому он уже был выдан. Текущую роль пользователя всё равно
+    // показываем, даже если это заглушка — иначе список выглядел бы так,
+    // будто у него роли нет вовсе.
+    .filter(role => !role.name.startsWith('Мигрированный ранг') || String(role.id) === String(currentRoleId))
+    .forEach(role => {
+      const opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name;
+      select.appendChild(opt);
+    });
+  select.value = currentRoleId || '';
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('assign-role-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('assign-role-confirm-btn');
+    const roleId = select.value || null;
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+    try {
+      const res = await fetch(`/api/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleId: roleId ? Number(roleId) : null })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения роли');
+      modal.style.display = 'none';
+      this.showUsersToast(roleId ? `«${userName}»: роль обновлена` : `«${userName}»: роль снята`, 'success');
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить';
+    }
+  };
+
+  document.getElementById('assign-role-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('assign-role-close-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.showRenameModal = function(userId, userName, username) {
+  const modal = document.getElementById('rename-modal');
+  const nameInput = document.getElementById('rename-display-name-input');
+  const usernameInput = document.getElementById('rename-username-input');
+  if (nameInput) nameInput.value = userName;
+  if (usernameInput) usernameInput.value = username;
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('rename-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('rename-confirm-btn');
+    const display_name = nameInput.value.trim();
+    const newUsername = usernameInput.value.trim();
+    if (!display_name) {
+      this.showUsersToast('Имя не может быть пустым', 'error');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+    try {
+      const res = await fetch(`/api/users/${userId}/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name, username: newUsername })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка переименования');
+      modal.style.display = 'none';
+      this.showUsersToast('Пользователь переименован', 'success');
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить';
+    }
+  };
+
+  document.getElementById('rename-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('rename-close-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.showBlockUserModal = function(userId, userName) {
+  const modal = document.getElementById('block-user-modal');
+  const reasonInput = document.getElementById('block-user-reason');
+  if (reasonInput) reasonInput.value = '';
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('block-user-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('block-user-confirm-btn');
+    const reason = reasonInput.value.trim();
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+    try {
+      const res = await fetch(`/api/users/${userId}/block`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка блокировки');
+      modal.style.display = 'none';
+      this.showUsersToast(`«${userName}» заблокирован`, 'success');
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Заблокировать';
+    }
+  };
+
+  document.getElementById('block-user-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('block-user-close-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.unblockUser = async function(userId, userName) {
+  try {
+    const res = await fetch(`/api/users/${userId}/unblock`, { method: 'PUT' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка разблокировки');
+    this.showUsersToast(`«${userName}» разблокирован`, 'success');
+    await this.renderUsersList();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
+  }
+};
+
+SPARouter.prototype.showMuteUserModal = function(userId, userName) {
+  const modal = document.getElementById('mute-user-modal');
+  const minutesInput = document.getElementById('mute-user-minutes');
+  const reasonInput = document.getElementById('mute-user-reason');
+  if (minutesInput) minutesInput.value = 60;
+  if (reasonInput) reasonInput.value = '';
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('mute-user-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('mute-user-confirm-btn');
+    const minutes = Number(minutesInput.value);
+    const reason = reasonInput.value.trim();
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      this.showUsersToast('Длительность должна быть положительным числом минут', 'error');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Обработка...';
+    try {
+      const res = await fetch(`/api/users/${userId}/mute`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes, reason: reason || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка мута');
+      modal.style.display = 'none';
+      this.showUsersToast(`«${userName}» замучен на ${minutes} мин.`, 'success');
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Замутить';
+    }
+  };
+
+  document.getElementById('mute-user-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('mute-user-close-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.unmuteUser = async function(userId, userName) {
+  try {
+    const res = await fetch(`/api/users/${userId}/unmute`, { method: 'PUT' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка снятия мута');
+    this.showUsersToast(`Мут «${userName}» снят`, 'success');
+    await this.renderUsersList();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
+  }
+};
+
+SPARouter.prototype.setRoleManager = async function(userId, userName, enabled) {
+  if (enabled && !confirm(`Сделать «${userName}» доверенным администратором? Он сможет редактировать каталог ролей (создавать/переименовывать роли, включать/выключать им права). Этот статус уникален — если он уже был у кого-то другого, тот его потеряет.`)) return;
+  try {
+    const res = await fetch(`/api/users/${userId}/role-manager`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка изменения статуса');
+    this.showUsersToast(enabled ? `«${userName}» теперь доверенный администратор` : `«${userName}»: статус доверенного администратора снят`, 'success');
+    await this.renderUsersList();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
+  }
+};
+
+// ========================================
+// РОЛИ АДМИНОВ — каталог (admin_roles). Видно и редактируемо только
+// владельцу и "доверенному админу" (is_role_manager) — см. checkRoleManager.
+// ========================================
+
+SPARouter.prototype.renderRolesPanel = async function() {
+  const listEl = document.getElementById('roles-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  (this.rolesCache || []).forEach(role => {
+    const card = document.createElement('div');
+    card.className = 'users-role-card';
+
+    const enabledPerms = Object.entries(role.permissions || {}).filter(([, v]) => v).map(([k]) => PERMISSION_LABELS[k] || k);
+
+    card.innerHTML = `
+      <div>
+        <div class="users-role-card-name">${this.escapeHtml(role.name)}</div>
+        <div class="users-role-card-perms">${enabledPerms.length ? enabledPerms.join(', ') : 'Без дополнительных прав'}</div>
+      </div>
+      <div class="users-role-card-actions">
+        <button class="btn btn-secondary btn-sm btn-edit-role" data-id="${role.id}">Изменить</button>
+        <button class="btn btn-danger btn-sm btn-delete-role" data-id="${role.id}" data-name="${this.escapeHtml(role.name)}">Удалить</button>
+      </div>
+    `;
+    listEl.appendChild(card);
+  });
+
+  listEl.querySelectorAll('.btn-edit-role').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const role = (this.rolesCache || []).find(r => String(r.id) === btn.dataset.id);
+      if (role) this.showRoleEditorModal(role);
+    });
+  });
+  listEl.querySelectorAll('.btn-delete-role').forEach(btn => {
+    btn.addEventListener('click', () => this.deleteRole(btn.dataset.id, btn.dataset.name));
+  });
+};
+
+SPARouter.prototype.showRoleEditorModal = function(role) {
+  const modal = document.getElementById('role-editor-modal');
+  const titleEl = document.getElementById('role-editor-title');
+  const nameInput = document.getElementById('role-editor-name');
+  const levelInput = document.getElementById('role-editor-level');
+  const permsContainer = document.getElementById('role-editor-permissions');
+
+  titleEl.textContent = role ? `Роль: ${role.name}` : 'Новая роль';
+  nameInput.value = role ? role.name : '';
+  levelInput.value = role ? role.level : 10;
+
+  permsContainer.innerHTML = '';
+  Object.entries(PERMISSION_LABELS).forEach(([key, label]) => {
+    const id = `role-perm-${key}`;
+    const checked = role && role.permissions && role.permissions[key];
+    const row = document.createElement('label');
+    row.innerHTML = `<input type="checkbox" id="${id}" data-perm-key="${key}" ${checked ? 'checked' : ''}> ${label}`;
+    permsContainer.appendChild(row);
+  });
+
+  if (modal) modal.style.display = 'flex';
+
+  document.getElementById('role-editor-confirm-btn').onclick = async () => {
+    const btn = document.getElementById('role-editor-confirm-btn');
+    const name = nameInput.value.trim();
+    const level = Number(levelInput.value);
+    if (!name) { this.showUsersToast('Название роли обязательно', 'error'); return; }
+    if (!Number.isInteger(level) || level < 0) { this.showUsersToast('Уровень должен быть целым числом ≥ 0', 'error'); return; }
+
+    const permissions = {};
+    permsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      permissions[cb.dataset.permKey] = cb.checked;
+    });
+
+    btn.disabled = true;
+    btn.textContent = 'Сохранение...';
+    try {
+      const url = role ? `/api/admin-roles/${role.id}` : '/api/admin-roles';
+      const res = await fetch(url, {
+        method: role ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, level, permissions })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения роли');
+      modal.style.display = 'none';
+      this.showUsersToast(role ? 'Роль обновлена' : 'Роль создана', 'success');
+      await this.loadRolesCache();
+      await this.renderRolesPanel();
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить';
+    }
+  };
+
+  document.getElementById('role-editor-cancel-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('role-editor-close-btn').onclick = () => {
+    modal.style.display = 'none';
+  };
+};
+
+SPARouter.prototype.deleteRole = async function(roleId, roleName) {
+  if (!confirm(`Удалить роль «${roleName}»? Действие необратимо. Роль нельзя удалить, пока она кому-то назначена.`)) return;
+  try {
+    const res = await fetch(`/api/admin-roles/${roleId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка удаления роли');
+    this.showUsersToast(`Роль «${roleName}» удалена`, 'success');
+    await this.loadRolesCache();
+    await this.renderRolesPanel();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
+  }
+};
+
+SPARouter.prototype.showUsersToast = function(message, type = 'success') {
+  const container = document.getElementById('users-toast-container');
+  if (!container) return;
+
+  // Общий компонент тоста (.toast/.toast-success/.toast-error) — см. "TOAST
+  // COMPONENT" в global-styles.css. Раньше цвет собирался через
+  // style.cssText с зашитым hex (#28a745/#dc3545).
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type === 'error' ? 'error' : 'success'}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+};
+
+// ========================================
+// ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ (/profile/:id) — свой (из шапки, "Мой профиль") или
+// чужой (клик по имени в списке пользователей / по автору статьи).
+// this.profileUserId выставляется в resolveRouteKey() из URL; без него —
+// профиль текущего пользователя.
+// ========================================
+
+SPARouter.prototype.loadProfile = async function() {
+  this.showLoader();
+
+  try {
+    const html = await this.loadTemplate('/views/profile.html');
+    const appContent = document.getElementById('app-content');
+    if (appContent) appContent.innerHTML = html;
+
+    const me = authManager.getUser() || {};
+    const targetId = this.profileUserId || me.id;
+
+    document.querySelectorAll('.profile-media-tab').forEach((btn) => {
+      btn.addEventListener('click', () => this.switchProfileMediaTab(btn.dataset.tab));
+    });
+
+    await this.renderProfile(targetId);
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    showMessage('Ошибка при загрузке профиля', 'error');
+  } finally {
+    this.hideLoader();
+  }
+};
+
+SPARouter.prototype.switchProfileMediaTab = function(tab) {
+  document.querySelectorAll('.profile-media-tab').forEach((btn) => {
+    const active = btn.dataset.tab === tab;
+    btn.classList.toggle('active', active);
+    btn.style.color = active ? 'var(--text-normal, #dcddde)' : 'var(--text-muted, #b9bbbe)';
+    btn.style.borderBottomColor = active ? '#5865f2' : 'transparent';
+  });
+  document.querySelectorAll('.profile-media-panel').forEach((panel) => {
+    panel.style.display = panel.id === `profile-media-${tab}` ? '' : 'none';
+  });
+};
+
+SPARouter.prototype.renderProfile = async function(targetId) {
+  const loadingEl = document.getElementById('profile-loading');
+  const errorEl = document.getElementById('profile-error');
+  const contentEl = document.getElementById('profile-content');
+
+  try {
+    const res = await fetch(`/api/users/${targetId}/profile`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Профиль не найден');
+    }
+    const { profile } = await res.json();
+
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    const displayName = profile.display_name || profile.username;
+    document.getElementById('profile-avatar').textContent = displayName.charAt(0).toUpperCase();
+    document.getElementById('profile-display-name').textContent = displayName;
+    document.getElementById('profile-username').textContent = `@${profile.username}`;
+
+    const role = this.roleLabelForUser(profile);
+    const roleBadge = document.getElementById('profile-role-badge');
+    roleBadge.textContent = role.text;
+    roleBadge.style.color = role.color;
+    roleBadge.style.background = 'rgba(255,255,255,0.08)';
+
+    // Статус (approved/pending/...) — деталь для админов, самому пользователю
+    // и так очевидно, что он вошёл в систему.
+    if (profile.can_edit_note) {
+      const status = this.statusLabelForUser(profile);
+      const statusBadge = document.getElementById('profile-status-badge');
+      statusBadge.style.display = 'inline-block';
+      statusBadge.textContent = status.text;
+      statusBadge.style.color = status.color;
+      statusBadge.style.background = 'rgba(255,255,255,0.08)';
+    }
+
+    document.getElementById('profile-created-at').textContent = profile.created_at
+      ? `На платформе с ${new Date(profile.created_at).toLocaleDateString('ru-RU')}`
+      : '';
+
+    // Сервера
+    const serversEl = document.getElementById('profile-servers');
+    const serversEmptyEl = document.getElementById('profile-servers-empty');
+    serversEl.innerHTML = '';
+    if ((profile.servers || []).length === 0) {
+      serversEmptyEl.style.display = 'block';
+    } else {
+      serversEmptyEl.style.display = 'none';
+      profile.servers.forEach((server) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'padding: 10px 14px; background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;';
+        const roles = server.roles.length ? server.roles.map((r) => this.escapeHtml(r)).join(', ') : 'без роли';
+        row.innerHTML = `
+          <span style="color: var(--text-normal, #dcddde); font-weight: 500;">${this.escapeHtml(server.name)}</span>
+          <span style="color: var(--text-muted, #b9bbbe); font-size: 12px;">${roles}</span>
+        `;
+        serversEl.appendChild(row);
+      });
+    }
+
+    this.setupProfileBio(targetId, profile);
+    this.setupProfileNote(targetId, profile);
+    await this.renderProfileArticles(targetId);
+    await this.renderProfileStickers(targetId);
+
+    const me = authManager.getUser() || {};
+    this.setupProfileBookmarks(String(targetId) === String(me.id));
+  } catch (error) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    document.getElementById('profile-error-text').textContent = error.message || '';
+  }
+};
+
+SPARouter.prototype.setupProfileBio = function(targetId, profile) {
+  const textEl = document.getElementById('profile-bio-text');
+  const editBtn = document.getElementById('profile-bio-edit-btn');
+  const editBlock = document.getElementById('profile-bio-edit');
+  const input = document.getElementById('profile-bio-input');
+
+  textEl.textContent = profile.bio || (profile.can_edit_bio ? 'Вы ещё ничего не написали о себе' : 'Пользователь ничего не написал о себе');
+
+  if (!profile.can_edit_bio) return;
+  editBtn.style.display = 'inline-block';
+
+  const startEdit = () => {
+    input.value = profile.bio || '';
+    textEl.style.display = 'none';
+    editBtn.style.display = 'none';
+    editBlock.style.display = 'block';
+    input.focus();
+  };
+  const stopEdit = () => {
+    textEl.style.display = 'block';
+    editBtn.style.display = 'inline-block';
+    editBlock.style.display = 'none';
+  };
+
+  editBtn.onclick = startEdit;
+  document.getElementById('profile-bio-cancel-btn').onclick = stopEdit;
+  document.getElementById('profile-bio-save-btn').onclick = async () => {
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bio: input.value })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось сохранить');
+      profile.bio = data.bio;
+      textEl.textContent = data.bio || 'Вы ещё ничего не написали о себе';
+      stopEdit();
+      showMessage('Профиль обновлён', 'success');
+    } catch (error) {
+      showMessage(error.message, 'error');
+    }
+  };
+};
+
+SPARouter.prototype.setupProfileNote = function(targetId, profile) {
+  const block = document.getElementById('profile-note-block');
+  if (!profile.can_edit_note) return;
+  block.style.display = 'block';
+
+  const textEl = document.getElementById('profile-note-text');
+  const editBtn = document.getElementById('profile-note-edit-btn');
+  const editBlock = document.getElementById('profile-note-edit');
+  const input = document.getElementById('profile-note-input');
+
+  textEl.textContent = profile.admin_note || 'Заметок пока нет';
+
+  const startEdit = () => {
+    input.value = profile.admin_note || '';
+    textEl.style.display = 'none';
+    editBtn.style.display = 'none';
+    editBlock.style.display = 'block';
+    input.focus();
+  };
+  const stopEdit = () => {
+    textEl.style.display = 'block';
+    editBtn.style.display = 'inline-block';
+    editBlock.style.display = 'none';
+  };
+
+  editBtn.onclick = startEdit;
+  document.getElementById('profile-note-cancel-btn').onclick = stopEdit;
+  document.getElementById('profile-note-save-btn').onclick = async () => {
+    try {
+      const res = await fetch(`/api/users/${targetId}/note`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: input.value })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось сохранить');
+      profile.admin_note = data.admin_note;
+      textEl.textContent = data.admin_note || 'Заметок пока нет';
+      stopEdit();
+      showMessage('Заметка сохранена', 'success');
+    } catch (error) {
+      showMessage(error.message, 'error');
+    }
+  };
+};
+
+// Статьи пользователя (авторство/соавторство уже есть в articles-store).
+// "Арты" пока остаётся заготовкой под будущую фичу (см. profile.html);
+// "Наборы стикеров" — см. renderProfileStickers ниже.
+SPARouter.prototype.renderProfileArticles = async function(targetId) {
+  const loadingEl = document.getElementById('profile-articles-loading');
+  const emptyEl = document.getElementById('profile-articles-empty');
+  const listEl = document.getElementById('profile-articles-list');
+
+  try {
+    const res = await fetch(`/api/articles?author=${encodeURIComponent(targetId)}`);
+    if (!res.ok) throw new Error('Не удалось загрузить статьи');
+    const articles = await res.json();
+
+    loadingEl.style.display = 'none';
+
+    if (!articles.length) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    articles.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+
+    listEl.innerHTML = '';
+    articles.forEach((article) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding: 12px 14px; background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;';
+      const date = article.created_at ? new Date(article.created_at).toLocaleDateString('ru-RU') : '';
+      const isCoAuthor = String(article.author?.id) !== String(targetId);
+      row.innerHTML = `
+        <div style="min-width: 0;">
+          <div style="color: var(--text-normal, #dcddde); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(article.title || article.id)}${isCoAuthor ? ' <span style="color: var(--text-muted, #b9bbbe); font-weight: 400; font-size: 12px;">(соавтор)</span>' : ''}</div>
+          <div style="color: var(--text-muted, #b9bbbe); font-size: 12px;">${this.escapeHtml(article.server || 'без сервера')}${date ? ' · ' + date : ''}</div>
+        </div>
+      `;
+      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,255,255,0.03)'; });
+      row.addEventListener('mouseleave', () => { row.style.background = 'var(--background-secondary, #2f3136)'; });
+      row.addEventListener('click', () => { window.spaRouter.editArticle(article.id); });
+      listEl.appendChild(row);
+    });
+  } catch (error) {
+    loadingEl.style.display = 'none';
+    showMessage(error.message || 'Ошибка загрузки статей профиля', 'error');
+  }
+};
+
+// Наборы стикеров пользователя (см. src/routes/stickers.routes.js) — себе
+// видны все статусы (включая "на модерации"/"отклонён", чтобы понимать, что
+// происходит с заявкой), в чужом профиле — только одобренные (публичная
+// витрина не должна светить чужие черновики). Клик по карточке открывает
+// набор целиком в общей модалке просмотра — там же можно добавить набор
+// себе или убрать (см. public/sticker-pack-view.js).
+SPARouter.prototype.renderProfileStickers = async function(targetId) {
+  const loadingEl = document.getElementById('profile-stickers-loading');
+  const emptyEl = document.getElementById('profile-stickers-empty');
+  const emptyHintEl = document.getElementById('profile-stickers-empty-hint');
+  const gridEl = document.getElementById('profile-stickers-grid');
+  if (!loadingEl || !gridEl) return;
+
+  const me = authManager.getUser() || {};
+  const isSelf = String(targetId) === String(me.id);
+  const statusLabels = { pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
+
+  try {
+    const result = await window.apiClient.getStickerPacksByUser(targetId);
+    const packs = result.success ? (result.data || []) : [];
+
+    loadingEl.style.display = 'none';
+
+    // "Добавленные наборы" (чужого авторства, чтобы не дублировать "созданные
+    // вами" выше) — только на своём профиле, с быстрым "Убрать" на карточке
+    // (задача "нет возможности убрать набор" — см. renderProfileAddedStickers).
+    if (isSelf) await this.renderProfileAddedStickers(targetId);
+
+    if (!packs.length) {
+      emptyEl.style.display = 'block';
+      if (emptyHintEl) {
+        emptyHintEl.textContent = isSelf
+          ? 'Создать свой набор или добавить чужой можно во вкладке «Стикеры»'
+          : 'Пользователь пока не создал и не подтвердил ни одного набора';
+      }
+      return;
+    }
+
+    gridEl.style.display = 'grid';
+    gridEl.innerHTML = '';
+    packs.forEach((pack) => {
+      const preview = (pack.stickers || []).slice(0, 3);
+      const count = pack.stickersCount ?? preview.length;
+      const card = document.createElement('div');
+      card.style.cssText = 'padding: 12px 14px; background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 8px;';
+      card.innerHTML = `
+        <div style="display: flex; gap: 6px; height: 40px; align-items: center;">
+          ${preview.length
+            ? preview.map((s) => `<img src="${this.escapeHtml(s.fileUrl)}" alt="" style="width: 36px; height: 36px; object-fit: contain; background: var(--background-tertiary, #36393f); border-radius: 6px;">`).join('')
+            : `<span style="color: var(--text-muted, #b9bbbe); font-size: 12px; font-style: italic;">Пусто</span>`}
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="color: var(--text-normal, #dcddde); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(pack.title)}</span>
+          ${isSelf && pack.status !== 'approved'
+            ? `<span style="flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: ${pack.status === 'rejected' ? 'var(--red)' : 'var(--yellow)'}; background: rgba(255,255,255,0.06);">${statusLabels[pack.status] || pack.status}</span>`
+            : ''}
+        </div>
+        <div style="color: var(--text-muted, #b9bbbe); font-size: 12px;">${count} шт.</div>
+      `;
+      card.addEventListener('mouseenter', () => { card.style.background = 'rgba(255,255,255,0.03)'; });
+      card.addEventListener('mouseleave', () => { card.style.background = 'var(--background-secondary, #2f3136)'; });
+      card.addEventListener('click', () => { window.stickerPackView?.open(pack.id); });
+      gridEl.appendChild(card);
+    });
+  } catch (error) {
+    loadingEl.style.display = 'none';
+    showMessage(error.message || 'Ошибка загрузки наборов стикеров', 'error');
+  }
+};
+
+// Наборы, добавленные пользователем себе (см. GET /api/stickers/subscribed),
+// ЗА ВЫЧЕТОМ собственных (те уже показаны в основной сетке выше — автор
+// автоматически подписан на свой же набор, см. createPack в
+// stickers-store.js). У каждой карточки — крестик "Убрать" прямо тут, без
+// похода в модалку просмотра набора (там переключатель тоже есть, но раньше
+// сюда попасть было нельзя — эти наборы вообще не отображались в профиле).
+SPARouter.prototype.renderProfileAddedStickers = async function(targetId) {
+  const sectionEl = document.getElementById('profile-stickers-added-section');
+  const emptyEl = document.getElementById('profile-stickers-added-empty');
+  const gridEl = document.getElementById('profile-stickers-added-grid');
+  if (!sectionEl || !gridEl) return;
+
+  sectionEl.style.display = 'block';
+  try {
+    const result = await window.apiClient.getSubscribedStickerPacks();
+    const packs = (result.success ? (result.data || []) : []).filter((p) => String(p.authorId) !== String(targetId));
+
+    if (!packs.length) {
+      emptyEl.style.display = 'block';
+      gridEl.style.display = 'none';
+      gridEl.innerHTML = '';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    gridEl.style.display = 'grid';
+    gridEl.innerHTML = '';
+    packs.forEach((pack) => {
+      const preview = (pack.stickers || []).slice(0, 3);
+      const card = document.createElement('div');
+      card.style.cssText = 'position: relative; padding: 12px 14px; background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 8px;';
+      card.innerHTML = `
+        <button type="button" title="Убрать набор" style="position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 20px; cursor: pointer;">&times;</button>
+        <div style="display: flex; gap: 6px; height: 40px; align-items: center;">
+          ${preview.length
+            ? preview.map((s) => `<img src="${this.escapeHtml(s.fileUrl)}" alt="" style="width: 36px; height: 36px; object-fit: contain; background: var(--background-tertiary, #36393f); border-radius: 6px;">`).join('')
+            : `<span style="color: var(--text-muted, #b9bbbe); font-size: 12px; font-style: italic;">Пусто</span>`}
+        </div>
+        <span style="color: var(--text-normal, #dcddde); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(pack.title)}</span>
+        <div style="color: var(--text-muted, #b9bbbe); font-size: 12px;">от ${this.escapeHtml(pack.authorName)} · ${pack.stickers.length} шт.</div>
+      `;
+      card.addEventListener('mouseenter', () => { card.style.background = 'rgba(255,255,255,0.03)'; });
+      card.addEventListener('mouseleave', () => { card.style.background = 'var(--background-secondary, #2f3136)'; });
+      card.querySelector('button').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await window.apiClient.unsubscribeStickerPack(pack.id);
+          await this.renderProfileAddedStickers(targetId);
+        } catch (err) {
+          showMessage('Не удалось убрать набор', 'error');
+        }
+      });
+      card.addEventListener('click', () => { window.stickerPackView?.open(pack.id); });
+      gridEl.appendChild(card);
+    });
+  } catch (error) {
+    showMessage(error.message || 'Ошибка загрузки добавленных наборов', 'error');
+  }
+};
+
+// Закладки Ibripedia (см. public/ibripedia.js) — личные, поэтому вкладка
+// видна только на СВОЁМ профиле (isSelf), не в чужом просмотре.
+SPARouter.prototype.setupProfileBookmarks = function(isSelf) {
+  const tabBtn = document.getElementById('profile-bookmarks-tab-btn');
+  if (!isSelf) {
+    if (tabBtn) tabBtn.style.display = 'none';
+    return;
+  }
+  if (tabBtn) tabBtn.style.display = '';
+  this.renderProfileBookmarks();
+};
+
+// Список закладок текущего пользователя по ВСЕМ статьям, сгруппированный
+// по статье — клик открывает статью в Ibripedia и скроллит к блоку
+// закладки (см. ibripediaManager.openArticleView/scrollToBlock).
+SPARouter.prototype.renderProfileBookmarks = async function() {
+  const loadingEl = document.getElementById('profile-bookmarks-loading');
+  const emptyEl = document.getElementById('profile-bookmarks-empty');
+  const listEl = document.getElementById('profile-bookmarks-list');
+  if (!loadingEl || !listEl) return;
+
+  try {
+    const result = await window.apiClient.getBookmarks();
+    if (!result.success) throw new Error(result.data?.error || result.error || 'Не удалось загрузить закладки');
+    const bookmarks = Array.isArray(result.data) ? result.data : [];
+
+    loadingEl.style.display = 'none';
+
+    if (!bookmarks.length) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    const bySlug = new Map();
+    bookmarks.forEach((b) => {
+      if (!bySlug.has(b.slug)) bySlug.set(b.slug, { title: b.title || b.slug, items: [] });
+      bySlug.get(b.slug).items.push(b);
+    });
+
+    listEl.innerHTML = '';
+    bySlug.forEach((group, slug) => {
+      const groupEl = document.createElement('div');
+      groupEl.style.cssText = 'background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 6px; padding: 12px 14px;';
+      groupEl.innerHTML = `
+        <div class="profile-bookmark-open" data-slug="${this.escapeHtml(slug)}" style="color: var(--text-normal, #dcddde); font-weight: 600; margin-bottom: 8px; cursor: pointer;">
+          <i class="fas fa-file-alt"></i> ${this.escapeHtml(group.title)}
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          ${group.items.map((b) => `
+            <div class="profile-bookmark-open" data-slug="${this.escapeHtml(slug)}" data-block-id="${this.escapeHtml(b.blockId || '')}" style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 4px 6px; border-radius: 4px;">
+              <span style="flex: 0 0 auto; width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: ${this.escapeHtml(b.color)};"></span>
+              <div style="min-width: 0;">
+                <div style="color: var(--text-normal, #dcddde); font-size: 13px; font-weight: 500;">${this.escapeHtml(b.name)}</div>
+                ${b.quote ? `<div style="color: var(--text-muted, #b9bbbe); font-size: 12px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(b.quote)}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      groupEl.querySelectorAll('.profile-bookmark-open').forEach((el) => {
+        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(255,255,255,0.04)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'transparent'; });
+        el.addEventListener('click', () => this.openBookmarkedArticle(el.getAttribute('data-slug'), el.getAttribute('data-block-id')));
+      });
+      listEl.appendChild(groupEl);
+    });
+  } catch (error) {
+    loadingEl.style.display = 'none';
+    showMessage(error.message || 'Ошибка загрузки закладок', 'error');
+  }
+};
+
+SPARouter.prototype.openBookmarkedArticle = async function(slug, blockId) {
+  if (!slug) return;
+  await this.navigateTo('/ibripedia');
+  await window.ibripediaManager?.openArticleView(slug);
+  if (blockId) {
+    // Панель/контент статьи дорисовываются асинхронно (блоки, закладки,
+    // оглавление) — небольшая задержка перед скроллом надёжнее, чем гонка
+    // с ещё не отрисованными data-block-id.
+    setTimeout(() => window.ibripediaManager?.scrollToBlock(blockId), 350);
+  }
 };

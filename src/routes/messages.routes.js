@@ -24,7 +24,7 @@ router.get('/messages', auth.authenticateToken, auth.checkApproved, (req, res) =
   });
 });
 
-router.post('/messages', auth.authenticateToken, auth.checkApproved, (req, res) => {
+router.post('/messages', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, (req, res) => {
   const { content } = req.body;
   if (!content || typeof content !== 'string' || !content.trim()) {
     return res.status(400).json({ error: 'Содержимое сообщения обязательно' });

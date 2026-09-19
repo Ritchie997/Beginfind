@@ -223,7 +223,7 @@ async function downloadBackup(fileName) {
 }
 
 async function restoreBackup(fileName) {
-    if (!confirm(`Вы уверены, что хотите восстановить базы данных из бэкапа "${fileName}"?\n\nЭто действие перезапишет текущие данные!`)) {
+    if (!confirm(`Вы уверены, что хотите восстановить данные из бэкапа "${fileName}"?\n\nБазы данных и настройки будут заменены целиком, статьи и загруженные файлы (в том числе стикеры) — перезаписаны поверх текущих.\nЭто действие перезапишет текущие данные!`)) {
         return;
     }
 
@@ -243,7 +243,14 @@ async function restoreBackup(fileName) {
             throw new Error(result.error);
         }
 
-        showBackupNotification(`Восстановлено ${result.data.restored.length} файл(ов)`, 'success');
+        const s = result.data.summary || {};
+        const details = `баз: ${s.databases || 0}, статей: ${s.articles || 0}, загруженных файлов: ${s.uploads || 0}`;
+        // Соединения с БД уже открыты — после подмены файлов на диске надёжнее перезапустить сервер.
+        const restartHint = s.databases ? ' Перезапустите сервер, чтобы он подхватил восстановленные базы.' : '';
+        showBackupNotification(`Восстановлено ${result.data.restored.length} файл(ов) (${details}).${restartHint}`, 'success');
+        if (result.data.errors && result.data.errors.length) {
+            console.warn('[Backup] Ошибки при восстановлении:', result.data.errors);
+        }
         loadBackupsList();
     } catch (error) {
         console.error('[Backup] Ошибка восстановления:', error);
@@ -349,13 +356,25 @@ function initBackupPage() {
     const refreshBtn = document.getElementById('refresh-backups-btn');
     const uploadBtn = document.getElementById('upload-backup-btn');
     const fileInput = document.getElementById('backup-file-input');
-    
+    const saveAutoBackupBtn = document.getElementById('save-auto-backup-settings-btn');
+
     console.log('[Backup] Кнопки:', {
         createBtn: !!createBtn,
         refreshBtn: !!refreshBtn,
         uploadBtn: !!uploadBtn,
-        fileInput: !!fileInput
+        fileInput: !!fileInput,
+        saveAutoBackupBtn: !!saveAutoBackupBtn
     });
+
+    // Раньше эта кнопка/обработчик отсутствовали вовсе — переключение
+    // "Включить автоматический бэкап" и правка интервала визуально менялись,
+    // но saveAutoBackupSettings() нигде не вызывалась, так что ничего не
+    // сохранялось на сервере (следующая перезагрузка страницы тихо откатывала
+    // оба поля обратно). См. requirement "проверить настройки на реальность
+    // функционала" — это ровно такой случай.
+    if (saveAutoBackupBtn) {
+        saveAutoBackupBtn.onclick = saveAutoBackupSettings;
+    }
     
     if (createBtn) {
         createBtn.onclick = () => {
