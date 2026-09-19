@@ -3538,9 +3538,9 @@ class SPARouter {
         console.error('Error loading servers count:', error);
       }
 
-      // Пользователи и сообщения — одной сводкой с сервера. "Сообщения" =
-      // мессенджер + комментарии статей Ibripedia (см. dashboard-stats.js);
-      // заодно приходят свежие события для ленты активности.
+      // Пользователи, сообщения мессенджера и комментарии статей Ibripedia —
+      // одной сводкой с сервера (см. dashboard-stats.js); заодно приходят
+      // свежие события для ленты активности.
       let summary = null;
       try {
         const summaryResult = await apiClient.getDashboardSummary();
@@ -3552,6 +3552,17 @@ class SPARouter {
           const totalMessages = document.getElementById('total-messages');
           if (totalMessages) totalMessages.textContent = summary.messages.total;
           this.renderTrendBadge('trend-messages', summary.messages.trend);
+
+          // Комментарии — своя статистика: всего, прирост и охват (в скольких статьях есть обсуждение)
+          const totalComments = document.getElementById('total-comments');
+          if (totalComments) totalComments.textContent = summary.comments.total;
+          this.renderTrendBadge('trend-comments', summary.comments.trend);
+          const commentsArticles = document.getElementById('comments-articles');
+          if (commentsArticles) {
+            const n = summary.comments.articles;
+            const one = n % 10 === 1 && n % 100 !== 11;
+            commentsArticles.textContent = n ? `в ${n} ${one ? 'статье' : 'статьях'}` : '';
+          }
         } else {
           console.error('Error loading dashboard summary:', summaryResult.data?.error || summaryResult.error);
         }
@@ -3572,7 +3583,7 @@ class SPARouter {
       this.loadActivityList({ articles: articlesData, servers: serversData, summary });
 
       // Initialize charts with real data
-      this.initDashboardChartsWithData(articlesData);
+      this.initDashboardChartsWithData(articlesData, summary);
     } catch (error) {
       console.error('Unexpected error loading dashboard stats:', error);
     }
@@ -3776,53 +3787,52 @@ class SPARouter {
   }
 
   // Initialize dashboard charts with real data
-  initDashboardChartsWithData(articlesData) {
-    // Check if Chart.js is available
-    if (typeof Chart !== 'undefined') {
-      const ctx = document.getElementById('articlesSparkline');
-      if (ctx) {
-        // Destroy existing chart if it exists
-        if (ctx.chartInstance) {
-          ctx.chartInstance.destroy();
-        }
+  initDashboardChartsWithData(articlesData, summary = null) {
+    // Статьи — силуэт активности за текущую неделю (пн-вс)
+    this.renderSparkline('articlesSparkline', this.calculateWeeklyActivity(articlesData));
+    // Сообщения мессенджера — последние 7 суток, по дням
+    this.renderSparkline('messagesSparkline', summary?.messages?.daily || []);
+  }
 
-        // Calculate weekly activity from real articles data
-        const weeklyData = this.calculateWeeklyActivity(articlesData);
+  // Компактный спарклайн внутри плашки — без осей, легенды и точек
+  renderSparkline(canvasId, data) {
+    if (typeof Chart === 'undefined') return;
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
 
-        // Компактный спарклайн внутри плашки "Статей" — без осей, легенды и точек,
-        // просто силуэт активности за текущую неделю (пн-вс)
-        const config = {
-          type: 'line',
-          data: {
-            labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-            datasets: [{
-              data: weeklyData,
-              borderColor: 'rgb(88, 101, 242)',
-              backgroundColor: 'rgba(88, 101, 242, 0.15)',
-              borderWidth: 1.5,
-              pointRadius: 0,
-              tension: 0.35,
-              fill: true
-            }]
-          },
-          options: {
-            responsive: false,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: { enabled: false }
-            },
-            scales: {
-              x: { display: false },
-              y: { display: false, beginAtZero: true }
-            }
-          }
-        };
-
-        ctx.chartInstance = new Chart(ctx, config);
-      }
+    // Destroy existing chart if it exists
+    if (ctx.chartInstance) {
+      ctx.chartInstance.destroy();
     }
+
+    ctx.chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i + 1),
+        datasets: [{
+          data,
+          borderColor: 'rgb(88, 101, 242)',
+          backgroundColor: 'rgba(88, 101, 242, 0.15)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.35,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: false,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        },
+        scales: {
+          x: { display: false },
+          y: { display: false, beginAtZero: true }
+        }
+      }
+    });
   }
 
   // Calculate weekly activity from articles data

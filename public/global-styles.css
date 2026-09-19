@@ -2067,6 +2067,16 @@ html {
     color: var(--text-muted);
 }
 
+.stat-chip-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.stat-chip-sub:empty {
+    display: none;
+}
+
 .stat-chip-sparkline {
     flex: 0 0 auto;
     width: 64px;

@@ -1,7 +1,7 @@
 // dashboard-stats.js — данные для страницы "Аналитика" (дашборда), которые
 // нельзя собрать на клиенте из уже существующих API: число пользователей,
-// общее число "сообщений" (мессенджер + комментарии статей Ibripedia) и
-// свежие события пользователей/комментариев/сообщений для ленты "Последняя
+// статистика сообщений мессенджера и отдельно комментариев статей Ibripedia,
+// а также свежие события пользователей/комментариев/сообщений для ленты "Последняя
 // активность". Статьи и серверы дашборд по-прежнему берёт из /api/articles и
 // /api/servers — они уже отфильтрованы по правам доступа.
 //
@@ -86,9 +86,27 @@ async function getMessengerSummary(recentLimit = 3) {
     'SELECT id, sender, content, timestamp FROM messages ORDER BY timestamp DESC, id DESC LIMIT ?',
     [recentLimit]
   );
+
+  // Сообщения по дням за последние TREND_DAYS суток (включая сегодня) для
+  // спарклайна на плашке; дни без сообщений добираем нулями. Дни — по UTC,
+  // как и сами метки времени в БД.
+  const perDayRows = await dbAll(
+    messengerDb,
+    `SELECT date(timestamp) AS day, COUNT(*) AS cnt
+       FROM messages WHERE date(timestamp) >= date('now', '-${TREND_DAYS - 1} days')
+      GROUP BY day`
+  );
+  const perDayMap = new Map(perDayRows.map((r) => [r.day, r.cnt]));
+  const daily = [];
+  for (let i = TREND_DAYS - 1; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    daily.push(perDayMap.get(day) || 0);
+  }
+
   return {
     total: counts.total,
     trend: counts.recent,
+    daily,
     recent: recent.map((m) => ({
       id: m.id,
       sender: m.sender,

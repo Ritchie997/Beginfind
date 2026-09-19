@@ -982,8 +982,9 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
   }
 });
 
-// Сводка для дашборда: пользователи, "сообщения" (мессенджер + комментарии
-// статей Ibripedia) и свежие события для ленты "Последняя активность". Здесь
+// Сводка для дашборда: пользователи, сообщения мессенджера, комментарии
+// статей Ibripedia (отдельная статистика) и свежие события для ленты
+// "Последняя активность". Здесь
 // (рядом с articles-graph), а не в отдельном роутере, потому что комментарии
 // нужно отфильтровать по canAccessArticle — иначе текст комментариев к
 // закрытым статьям утёк бы на дашборд тем, кому сама статья недоступна.
@@ -1000,10 +1001,12 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
     // Комментарии удалённых статей остаются в БД — в счётчик не берём.
     let commentsTotal = 0;
     let commentsTrend = 0;
+    let commentedArticles = 0;
     for (const row of comments.perArticle) {
       if (!articlesBySlug.has(row.slug)) continue;
       commentsTotal += row.total;
       commentsTrend += row.recent;
+      commentedArticles += 1;
     }
 
     const recentComments = [];
@@ -1020,8 +1023,14 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
     res.json({
       users: { total: users.total, trend: users.trend },
       messages: {
-        total: messenger.total + commentsTotal,
-        trend: messenger.trend + commentsTrend
+        total: messenger.total,
+        trend: messenger.trend,
+        daily: messenger.daily
+      },
+      comments: {
+        total: commentsTotal,
+        trend: commentsTrend,
+        articles: commentedArticles
       },
       recent: {
         users: users.recent,
