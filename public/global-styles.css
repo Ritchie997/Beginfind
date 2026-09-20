@@ -4,7 +4,7 @@
        браузер не знает об этом и рисует нативные элементы управления
        (выпадающий список <select>, скроллбары, системные подсказки) в своей
        светлой теме по умолчанию — из-за этого, например, текст в выпадающем
-       списке категории читался почти нечитаемым (тёмный на светлом вместо
+       списке читался почти нечитаемым (тёмный на светлом вместо
        ожидаемого светлого на тёмном текущей темы страницы). */
     color-scheme: dark;
 
@@ -115,7 +115,7 @@
     }
 }
 
-/* Card layout for mobile (servers and categories) */
+/* Card layout for mobile (servers) */
 .card-layout {
     display: flex;
     flex-direction: column;
@@ -1161,6 +1161,192 @@ tr:hover td::before {
 }
 
 /* ========================================
+   TABLE CARDS — раскладка "карточка на строку" (телефон и ПК)
+   ========================================
+   Класс .table-cards вешается на .table-container. Используется во вкладках
+   "Пользователи" (users-list.html) и во внутренних таблицах сервера
+   (Участники/Роли/Каналы/Журнал — render*Tab в spa-router.js).
+
+   Раньше на телефоне это была карточка на строку, а на ПК — обычная широкая
+   таблица с крупными кнопками, и мобильная версия выглядела заметно лучше.
+   Теперь вид один и тот же везде: шапка скрыта, каждая строка — компактная
+   карточка, подписи колонок берутся из data-label на <td> через
+   content: attr(). На широком экране карточки выстраиваются сеткой в
+   несколько колонок (на телефоне сетка сама схлопывается в одну), журнал
+   действий (.table-cards-list) остаётся одной колонкой — это хронологический
+   список. Особые ячейки:
+     .cell-primary — ключевая (имя/название/"кто"): заголовок карточки, без
+                     подписи, всегда первой (order:-1);
+     .cell-actions — кнопки: отдельная строка внизу карточки (прижата к
+                     низу — в сетке кнопки соседних карточек на одном уровне);
+     .cell-chips   — обёртка для нескольких чипов внутри обычной ячейки.
+
+   Компактные кнопки (.btn) — те же и на телефоне, и на ПК, в карточках и в
+   тулбарах над ними (см. список селекторов ниже). Глобальное правило для
+   touch-экранов (@media (hover:none) and (pointer:coarse): min-height 48px,
+   padding 16px 20px) и на ≤480px (.btn {width:100%}) превращало ряд кнопок
+   действий в стопку гигантских блоков во всю ширину. Внешний вид (цвета,
+   градиенты, тени, скругление) не меняется — только габариты и расположение:
+   кнопки идут компактным рядом с переносом. */
+/* .table-container.table-cards (две классa), а не просто .table-cards: ниже в
+   файле есть ещё одно определение .table-container (фон/рамка/overflow:hidden/
+   margin-bottom:30px), которое при равной специфичности идёт позже и
+   возвращало карточкам внешнюю рамку. */
+.table-container.table-cards {
+    overflow: visible;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    margin-bottom: 0;
+}
+.table-container.table-cards:hover {
+    box-shadow: none;
+}
+
+.table-cards table {
+    min-width: 0;
+}
+.table-cards table,
+.table-cards tbody {
+    display: block;
+    width: 100%;
+}
+.table-cards thead {
+    display: none;
+}
+
+/* min(100%, 300px) — на узком экране колонка не шире контейнера, поэтому на
+   телефоне сетка сама даёт одну колонку без горизонтального скролла. */
+.table-cards tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 10px;
+}
+.table-cards.table-cards-list tbody {
+    grid-template-columns: 1fr;
+}
+
+.table-cards tbody tr {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+}
+/* Глобальный tr:hover (масштаб + подсветка строки таблицы) для карточки не
+   нужен — на телефоне он вдобавок "залипает" после тапа. Вместо него — лёгкая
+   подсветка рамки только там, где есть настоящий hover. */
+.table-cards tbody tr:hover {
+    transform: none;
+    background-color: var(--background-tertiary);
+}
+@media (hover: hover) {
+    .table-cards tbody tr:hover {
+        border-color: var(--blurple);
+    }
+}
+
+.table-cards td {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    width: auto;
+    padding: 0;
+    border-bottom: none;
+    font-size: 13px;
+    line-height: 1.4;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Подпись колонки. Сброс свойств глобальной hover-полоски
+   (tr:hover td::before: absolute/3px/синий фон): после тапа :hover
+   залипает, и без сброса подпись превращалась в узкую синюю полоску. */
+.table-cards td::before,
+.table-cards tr:hover td::before {
+    content: attr(data-label);
+    flex: 0 0 84px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    position: static;
+    transform: none;
+    width: 84px; /* ширина подписи — из-за самого длинного слова ("РЕГИСТРАЦИЯ") */
+    height: auto;
+    background: none;
+    border-radius: 0;
+    opacity: 1;
+    transition: none;
+}
+.table-cards td.cell-primary {
+    order: -1;
+    display: block;
+    font-size: 14px;
+    padding-bottom: 5px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--background-accent);
+}
+.table-cards td.cell-primary::before,
+.table-cards tr:hover td.cell-primary::before {
+    display: none;
+}
+
+.table-cards td.cell-actions {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding-top: 6px;
+    margin-top: auto;
+    border-top: 1px solid var(--background-accent);
+}
+.table-cards td.cell-actions::before,
+.table-cards tr:hover td.cell-actions::before {
+    display: none;
+}
+
+.table-cards .cell-chips {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Компактные кнопки — перебивают и базовый .btn, и touch-версию
+   (min-height:48px), и width:100% на ≤480px. Высота ~28px — ещё комфортно
+   попасть пальцем, но ряд из 4-5 кнопок больше не раздувает карточку.
+   Список: кнопки в карточках-таблицах; тулбары над ними
+   (.server-section-toolbar — "Добавить по ID"/"Вступить"/"Создать роль"/
+   "Создать канал"; .users-section-toolbar; .servers-toolbar — "Создать
+   сервер" в каталоге серверов; .server-settings-actions — "Сохранить
+   изменения"/"Передать" в настройках сервера, кнопка "Удалить сервер" в
+   опасной зоне намеренно остаётся крупной); .btns-compact — универсальный
+   хук: повесьте этот класс на любой контейнер с кнопками, например в
+   разделе "Стикеры". */
+.table-cards .btn,
+.server-section-toolbar .btn,
+.users-section-toolbar .btn,
+.servers-toolbar .btn,
+.server-settings-actions .btn,
+.btns-compact .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 28px;
+    padding: 4px 10px;
+    gap: 5px;
+    font-size: 12px;
+    line-height: 1.3;
+    border-radius: 6px;
+}
+
+/* ========================================
    BUTTON COMPONENT (канонический .btn — единственное определение)
    ======================================== */
 
@@ -1317,12 +1503,11 @@ tr:hover td::before {
 }
 
 /* ========================================
-   ENHANCED CARD ITEMS (Articles, Categories, Servers)
+   ENHANCED CARD ITEMS (Articles, Servers)
    ======================================== */
 
 .card-item-unified,
 .article-item,
-.category-item,
 .server-card-item {
     background-color: var(--background-secondary);
     border-radius: 8px;
@@ -1337,7 +1522,6 @@ tr:hover td::before {
 
 .card-item-unified::before,
 .article-item::before,
-.category-item::before,
 .server-card-item::before {
     content: '';
     position: absolute;
@@ -1351,14 +1535,12 @@ tr:hover td::before {
 
 .card-item-unified:hover::before,
 .article-item:hover::before,
-.category-item:hover::before,
 .server-card-item:hover::before {
     height: 100%;
 }
 
 .card-item-unified:hover,
 .article-item:hover,
-.category-item:hover,
 .server-card-item:hover {
     border-color: var(--blurple);
     box-shadow: 0 8px 16px rgba(88, 101, 242, 0.2);
@@ -1975,8 +2157,7 @@ html {
     
     .card-item-unified:hover,
     .article-item:hover,
-    .category-item:hover,
-    .server-card-item:hover {
+        .server-card-item:hover {
         transform: none;
     }
     
@@ -2524,7 +2705,7 @@ tr:hover {
 
 /* ========================================
    UNIFIED CARD ITEM STYLE
-   Единый стиль для всех карточек (статьи, категории, серверы)
+   Единый стиль для всех карточек (статьи, серверы)
    ======================================== */
 .card-item-unified {
     background-color: var(--background-secondary);
@@ -2544,7 +2725,6 @@ tr:hover {
 
 /* Legacy support - старые классы теперь используют единый стиль */
 .article-item,
-.category-item,
 .server-card-item {
     background-color: var(--background-secondary);
     border-radius: 8px;
@@ -2556,7 +2736,6 @@ tr:hover {
 }
 
 .article-item:hover,
-.category-item:hover,
 .server-card-item:hover {
     border-color: var(--blurple);
     box-shadow: 0 4px 8px rgba(88, 101, 242, 0.15);
@@ -2655,54 +2834,6 @@ tr:hover {
    вариантом — кружок оказывался мельче своей дорожки и просто "плавал"
    не по центру. Мёртвый .toggle-switch отсюда убран целиком, а не
    переименован — он нигде не использовался ни разу. */
-
-/* Categories list */
-.categories-list {
-    background-color: var(--background-secondary);
-    border-radius: 8px;
-    padding: 20px;
-}
-
-.category-item {
-    background-color: var(--background-secondary);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 16px;
-    border: 1px solid var(--background-accent);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.category-item:hover {
-    border-color: var(--blurple);
-    box-shadow: 0 4px 8px rgba(88, 101, 242, 0.15);
-    transform: translateY(-2px);
-}
-
-.category-info {
-    flex: 1;
-}
-
-.category-name {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: var(--header-primary);
-}
-
-.category-meta {
-    display: flex;
-    gap: 20px;
-    font-size: 14px;
-    color: var(--text-muted);
-}
-
-.category-meta strong {
-    color: var(--text-normal);
-}
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
@@ -2975,16 +3106,6 @@ body.articles-page .content-body {
 
 /* Адаптивные стили для контейнеров с кнопками */
 @media (max-width: 768px) {
-    .category-input-container {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .category-input-container input,
-    .category-input-container button {
-        width: 100%;
-    }
 }
 
 /* Было: "Enhanced editor styles for mobile" — .editor-wrapper/.editor-
@@ -3133,7 +3254,7 @@ body.articles-page .content-body {
 }
 
 /* === Чиповый мультивыбор (public/chip-field.js) ===
-   Раньше эти стили жили только под .articles-page (форма статьи: Категория/
+   Раньше эти стили жили только под .articles-page (форма статьи: 
    Доступ для/Теги) — вынесены сюда без привязки к странице, т.к. компонент
    общий и используется также фильтрами страницы Ibripedia. */
 .chip-field {
@@ -3155,7 +3276,7 @@ body.articles-page .content-body {
   gap: 6px;
   min-height: 38px;
   /* Раньше блок рос по высоте без ограничений вместе с числом выбранных
-     чипов — при большом количестве категорий/тегов это раздвигало и
+     чипов — при большом количестве тегов/ролей это раздвигало и
      ломало окружающую вёрстку (форму статьи, панель фильтров Ibripedia).
      Теперь после ~2 строк чипов появляется свой внутренний скролл, а
      высота самого поля больше не растёт — окружающий layout стабилен. */

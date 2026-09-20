@@ -22,13 +22,14 @@
     }[c]));
   }
 
-  const STATUS_LABELS = { pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
+  const STATUS_LABELS = { draft: 'Черновик', pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
 
   const STYLES = `
     .spv-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
     .spv-description { color: var(--text-normal); font-size: 14px; line-height: 1.5; margin: -6px 0 14px; }
     .spv-description:empty { display: none; }
     .spv-badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .spv-badge.draft { background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
     .spv-badge.pending { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
     .spv-badge.approved { background: rgba(59, 165, 93, 0.18); color: var(--green); }
     .spv-badge.rejected { background: rgba(237, 66, 69, 0.18); color: var(--red); }
@@ -131,6 +132,7 @@
       els.meta.innerHTML = `
         <span class="spv-badge ${pack.status}">${STATUS_LABELS[pack.status] || pack.status}</span>
         <span>Автор: ${escapeHtml(pack.authorName)}</span>
+        ${(pack.coAuthors && pack.coAuthors.length) ? `<span>Соавторы: ${pack.coAuthors.map((c) => escapeHtml(c.name)).join(', ')}</span>` : ''}
         <span>Стикеров: ${pack.stickers.length}</span>
       `;
       els.description.textContent = pack.description || '';

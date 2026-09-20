@@ -1,10 +1,30 @@
 // stickers-store.js — наборы стикеров (аналог стикерпаков Telegram).
 //
-// Жизненный цикл набора: любой одобренный пользователь создаёт набор и
-// загружает в него стикеры — набор рождается в статусе 'pending' и НЕ
-// работает как шорткод, пока владелец/админ с правом moderate_stickers
-// (см. PERMISSION_KEYS в src/db/migrate-users-schema.js) его не одобрит
-// ('approved') или не отклонит ('rejected', с причиной).
+// Жизненный цикл набора: создание и публикация — два разных шага.
+//   1. Любой одобренный пользователь создаёт набор и загружает в него
+//      стикеры — набор рождается в статусе 'draft' (черновик): виден только
+//      автору, в очередь модерации и в каталог не попадает, работать как
+//      шорткод не может. Держать набор черновиком можно сколько угодно.
+//   2. Когда набор готов, автор явно публикует его (publishPack) — статус
+//      становится 'pending' ("на модерации"). Пока он там, автор может
+//      передумать и вернуть его в черновики (unpublishPack).
+//   3. Владелец/админ с правом moderate_stickers (см. PERMISSION_KEYS в
+//      src/db/migrate-users-schema.js) одобряет набор ('approved') или
+//      отклоняет ('rejected', с причиной); отклонённый автор правит и
+//      отправляет повторно (resubmitPack).
+// Столбец status — обычный TEXT без CHECK, поэтому новое значение 'draft' не
+// требует миграции; ранее созданные наборы остаются в своих статусах.
+//
+// Коллаборации: зайдя в ЧУЖОЙ одобренный набор, пользователь может собрать
+// свои стикеры (они хранятся отдельно, см. sticker_collab_stickers) и
+// предложить автору коллаборацию. Автор видит предложение в разделе
+// "Стикеры" и принимает или отклоняет его:
+//   - принял — стикеры вливаются в набор (при совпадении имени получают
+//     числовой суффикс), автор заявки становится соавтором набора;
+//   - отклонил (или сам автор заявки отозвал) — стикеры удаляются, набор не
+//     меняется, "всё отменяется".
+// Заявка имеет статусы draft → pending → accepted | declined (см. комментарий
+// у таблицы в src/db/connections.js).
 //
 // Использование: набор нужно "добавить себе" (см. sticker_subscriptions) —
 // только из добавленных наборов пикер клиента предлагает стикеры при
@@ -110,6 +130,8 @@ async function makeUniquePackSlug(title) {
   }
 }
 
+// Новый набор — всегда черновик (см. жизненный цикл выше): публикация — отдельное
+// осознанное действие автора, а не побочный эффект создания.
 async function createPack(userId, userName, title, description) {
   const trimmedTitle = String(title || '').trim().slice(0, MAX_TITLE_LEN);
   if (!trimmedTitle) throw new Error('Название набора не может быть пустым');
@@ -118,7 +140,7 @@ async function createPack(userId, userName, title, description) {
   const slug = await makeUniquePackSlug(trimmedTitle);
   const result = await run(
     'INSERT INTO sticker_packs (slug, title, description, author_id, author_name, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [slug, trimmedTitle, trimmedDescription || null, userId, userName, 'pending']
+    [slug, trimmedTitle, trimmedDescription || null, userId, userName, 'draft']
   );
   // Автор автоматически "добавляет себе" собственный набор — не приходится
   // отдельно искать его в каталоге сразу после создания; на возможность
@@ -132,11 +154,28 @@ async function getPack(packId) {
   return row ? rowToPack(row) : null;
 }
 
+// Довешивает на наборы список соавторов (coAuthors: [{userId, name}]) —
+// появляются после принятой коллаборации, см. acceptCollab ниже.
+async function attachCoAuthors(packs) {
+  if (!packs.length) return packs;
+  const rows = await all(
+    `SELECT pack_id, user_id, user_name FROM sticker_pack_coauthors WHERE pack_id IN (${packs.map(() => '?').join(',')}) ORDER BY created_at ASC`,
+    packs.map((p) => p.id)
+  );
+  const byPack = new Map();
+  rows.forEach((r) => {
+    if (!byPack.has(r.pack_id)) byPack.set(r.pack_id, []);
+    byPack.get(r.pack_id).push({ userId: r.user_id, name: r.user_name });
+  });
+  return packs.map((p) => ({ ...p, coAuthors: byPack.get(p.id) || [] }));
+}
+
 async function getPackWithStickers(packId) {
   const pack = await getPack(packId);
   if (!pack) return null;
   const stickerRows = await all('SELECT * FROM stickers WHERE pack_id = ? ORDER BY position ASC, id ASC', [packId]);
-  return { ...pack, stickers: stickerRows.map(rowToSticker) };
+  const [withCoAuthors] = await attachCoAuthors([pack]);
+  return { ...withCoAuthors, stickers: stickerRows.map(rowToSticker) };
 }
 
 async function attachStickerCounts(packs) {
@@ -170,12 +209,31 @@ async function attachStickerPreviews(packs, limit = 4) {
 // видит все свои наборы, включая pending/rejected (includeAllStatuses),
 // посторонним показываем только то, что прошло модерацию — публичная
 // витрина чужого профиля не должна выдавать черновики.
-async function listPacksByAuthor(authorId, includeAllStatuses) {
+//
+// includeCoAuthored — добавить одобренные наборы, где пользователь СОАВТОР
+// (помечены isCoAuthor) — для витрины профиля. В "Мои наборы"
+// (listMyPacks) их не добавляем: управлять чужим набором (загружать/
+// удалять/переименовывать) соавтор не может.
+async function listPacksByAuthor(authorId, includeAllStatuses, includeCoAuthored = false) {
   const rows = includeAllStatuses
     ? await all('SELECT * FROM sticker_packs WHERE author_id = ? ORDER BY created_at DESC', [authorId])
     : await all("SELECT * FROM sticker_packs WHERE author_id = ? AND status = 'approved' ORDER BY created_at DESC", [authorId]);
-  const packs = await attachStickerCounts(rows.map(rowToPack));
-  return attachStickerPreviews(packs);
+  let packs = rows.map(rowToPack);
+
+  if (includeCoAuthored) {
+    const coRows = await all(
+      `SELECT p.* FROM sticker_packs p
+       JOIN sticker_pack_coauthors c ON c.pack_id = p.id AND c.user_id = ?
+       WHERE p.status = 'approved' AND p.author_id != ?
+       ORDER BY p.created_at DESC`,
+      [authorId, authorId]
+    );
+    packs = packs.concat(coRows.map((r) => ({ ...rowToPack(r), isCoAuthor: true })));
+  }
+
+  const counted = await attachStickerCounts(packs);
+  const withPreviews = await attachStickerPreviews(counted);
+  return attachCoAuthors(withPreviews);
 }
 
 // Наборы, загруженные самим пользователем (любого статуса — свои pending и
@@ -199,7 +257,7 @@ async function listCatalog(userId, search) {
   }
   const counted = await attachStickerCounts(rows.map(rowToPack));
   if (!counted.length) return counted;
-  const packs = await attachStickerPreviews(counted);
+  const packs = await attachCoAuthors(await attachStickerPreviews(counted));
 
   const subRows = await all(
     `SELECT pack_id FROM sticker_subscriptions WHERE user_id = ? AND pack_id IN (${packs.map(() => '?').join(',')})`,
@@ -339,7 +397,7 @@ async function addSticker(packId, userId, { alias, fileUrl, isAnimated }) {
 // отдельного запроса ходить в JOIN stickers+sticker_packs самому.
 async function getStickerWithPackAuthor(stickerId) {
   const row = await get(
-    `SELECT s.id, s.pack_id as packId, p.author_id as authorId
+    `SELECT s.id, s.pack_id as packId, p.author_id as authorId, p.status as status
      FROM stickers s JOIN sticker_packs p ON p.id = s.pack_id
      WHERE s.id = ?`,
     [stickerId]
@@ -390,6 +448,11 @@ async function deletePack(packId) {
   await run('DELETE FROM sticker_favorites WHERE sticker_id IN (SELECT id FROM stickers WHERE pack_id = ?)', [packId]);
   await run('DELETE FROM stickers WHERE pack_id = ?', [packId]);
   await run('DELETE FROM sticker_subscriptions WHERE pack_id = ?', [packId]);
+  // Заявки коллабораций и их стикеры (файлы лежат в той же папке набора и
+  // уходят вместе с ней ниже), а также соавторы.
+  await run('DELETE FROM sticker_collab_stickers WHERE request_id IN (SELECT id FROM sticker_collab_requests WHERE pack_id = ?)', [packId]);
+  await run('DELETE FROM sticker_collab_requests WHERE pack_id = ?', [packId]);
+  await run('DELETE FROM sticker_pack_coauthors WHERE pack_id = ?', [packId]);
   await run('DELETE FROM sticker_packs WHERE id = ?', [packId]);
   fs.rm(packDir(packId), { recursive: true, force: true }, () => {}); // не критично, если папки уже нет
   return true;
@@ -409,6 +472,7 @@ async function listPending() {
 async function approvePack(packId, moderatorName) {
   const pack = await getPack(packId);
   if (!pack) throw new Error('Набор не найден');
+  if (pack.status === 'draft') throw new Error('Набор ещё не опубликован автором');
   const stickerCount = await get('SELECT COUNT(*) as count FROM stickers WHERE pack_id = ?', [packId]);
   if (!stickerCount?.count) throw new Error('Нельзя подтвердить пустой набор — в нём нет ни одного стикера');
   await run(
@@ -421,6 +485,7 @@ async function approvePack(packId, moderatorName) {
 async function rejectPack(packId, moderatorName, reason) {
   const pack = await getPack(packId);
   if (!pack) throw new Error('Набор не найден');
+  if (pack.status === 'draft') throw new Error('Набор ещё не опубликован автором');
   await run(
     "UPDATE sticker_packs SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?",
     [String(reason || '').trim().slice(0, 500) || null, moderatorName, packId]
@@ -449,6 +514,32 @@ async function revokePack(packId, moderatorName, reason) {
   return getPackWithStickers(packId);
 }
 
+// Автор публикует готовый набор: черновик уходит на модерацию. Пустой набор
+// публиковать нельзя — approvePack всё равно отказал бы ему, так что
+// говорим об этом сразу, а не после ожидания в очереди.
+async function publishPack(userId, packId) {
+  const pack = await getPack(packId);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.authorId !== userId) throw new Error('Опубликовать набор может только его автор');
+  if (pack.status !== 'draft') throw new Error('Опубликовать можно только черновик');
+  const stickerCount = await get('SELECT COUNT(*) as count FROM stickers WHERE pack_id = ?', [packId]);
+  if (!stickerCount?.count) throw new Error('Добавьте в набор хотя бы один стикер, прежде чем публиковать его');
+  await run("UPDATE sticker_packs SET status = 'pending', reject_reason = NULL WHERE id = ?", [packId]);
+  return getPackWithStickers(packId);
+}
+
+// Автор забирает набор из очереди модерации обратно в черновики — например,
+// вспомнил, что не доделал. Одобренный набор так не отозвать: на него уже
+// могли подписаться и использовать в комментариях (для этого — удаление).
+async function unpublishPack(userId, packId) {
+  const pack = await getPack(packId);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.authorId !== userId) throw new Error('Вернуть набор в черновики может только его автор');
+  if (pack.status !== 'pending') throw new Error('В черновики можно вернуть только набор, ожидающий модерации');
+  await run("UPDATE sticker_packs SET status = 'draft' WHERE id = ?", [packId]);
+  return getPackWithStickers(packId);
+}
+
 // Автор возвращает отклонённый набор на повторную модерацию — например,
 // после того как заменил спорный стикер.
 async function resubmitPack(userId, packId) {
@@ -458,6 +549,266 @@ async function resubmitPack(userId, packId) {
   if (pack.status !== 'rejected') throw new Error('На повторную модерацию можно отправить только отклонённый набор');
   await run("UPDATE sticker_packs SET status = 'pending', reject_reason = NULL WHERE id = ?", [packId]);
   return getPackWithStickers(packId);
+}
+
+// ===== Коллаборации =====
+
+const MAX_COLLAB_MESSAGE_LEN = 300;
+
+function rowToCollabRequest(row) {
+  return {
+    id: row.id,
+    packId: row.pack_id,
+    proposerId: row.proposer_id,
+    proposerName: row.proposer_name,
+    status: row.status,
+    message: row.message || '',
+    stickersCount: row.stickers_count || 0,
+    createdAt: row.created_at,
+    submittedAt: row.submitted_at,
+    resolvedAt: row.resolved_at
+  };
+}
+
+async function getCollabStickers(requestId) {
+  const rows = await all('SELECT * FROM sticker_collab_stickers WHERE request_id = ? ORDER BY position ASC, id ASC', [requestId]);
+  return rows.map(rowToSticker);
+}
+
+async function getCollabRequestRow(requestId) {
+  return get('SELECT * FROM sticker_collab_requests WHERE id = ?', [requestId]);
+}
+
+// Текущая (draft/pending) заявка пользователя на этот набор со стикерами —
+// у пользователя на один набор одновременно не больше одной активной заявки.
+async function getMyCollab(userId, packId) {
+  const row = await get(
+    "SELECT * FROM sticker_collab_requests WHERE pack_id = ? AND proposer_id = ? AND status IN ('draft', 'pending') ORDER BY id DESC LIMIT 1",
+    [packId, userId]
+  );
+  if (!row) return null;
+  return { ...rowToCollabRequest(row), stickers: await getCollabStickers(row.id) };
+}
+
+// Добавить свой стикер в "черновик коллаборации" чужого набора. Заявка
+// создаётся при первом же стикере; пока она draft, стикеры можно добавлять и
+// убирать. В сам набор они не попадают — только после принятия автором.
+async function stageCollabSticker(userId, userName, packId, { alias, fileUrl, isAnimated }) {
+  const pack = await getPack(packId);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.status !== 'approved') throw new Error('Предлагать коллаборацию можно только к опубликованному набору');
+  if (pack.authorId === userId) throw new Error('Это ваш набор — добавляйте стикеры в него напрямую');
+
+  let request = await get(
+    "SELECT * FROM sticker_collab_requests WHERE pack_id = ? AND proposer_id = ? AND status IN ('draft', 'pending') ORDER BY id DESC LIMIT 1",
+    [packId, userId]
+  );
+  if (request && request.status === 'pending') {
+    throw new Error('Предложение уже отправлено автору — чтобы изменить стикеры, сначала отзовите его');
+  }
+
+  const aliasSlug = slugify(alias || '');
+  if (!aliasSlug) throw new Error('Укажите имя стикера (латиницей/цифрами)');
+
+  const packCount = await get('SELECT COUNT(*) as count FROM stickers WHERE pack_id = ?', [packId]);
+  const stagedCount = request
+    ? await get('SELECT COUNT(*) as count FROM sticker_collab_stickers WHERE request_id = ?', [request.id])
+    : { count: 0 };
+  if ((packCount?.count || 0) + (stagedCount?.count || 0) >= MAX_STICKERS_PER_PACK) {
+    throw new Error(`В наборе не может быть больше ${MAX_STICKERS_PER_PACK} стикеров — места для новых уже нет`);
+  }
+
+  if (request) {
+    const dup = await get('SELECT id FROM sticker_collab_stickers WHERE request_id = ? AND alias = ?', [request.id, aliasSlug]);
+    if (dup) throw new Error(`В вашем предложении уже есть стикер с именем «${aliasSlug}»`);
+  }
+
+  if (!request) {
+    const created = await run(
+      'INSERT INTO sticker_collab_requests (pack_id, proposer_id, proposer_name, status) VALUES (?, ?, ?, ?)',
+      [packId, userId, userName, 'draft']
+    );
+    request = await getCollabRequestRow(created.lastID);
+  }
+
+  const posRow = await get('SELECT COALESCE(MAX(position), -1) as maxPos FROM sticker_collab_stickers WHERE request_id = ?', [request.id]);
+  const result = await run(
+    'INSERT INTO sticker_collab_stickers (request_id, alias, file_url, is_animated, position) VALUES (?, ?, ?, ?, ?)',
+    [request.id, aliasSlug, fileUrl, isAnimated ? 1 : 0, (posRow?.maxPos ?? -1) + 1]
+  );
+  const row = await get('SELECT * FROM sticker_collab_stickers WHERE id = ?', [result.lastID]);
+  return rowToSticker(row);
+}
+
+// Убрать свой стикер из ЧЕРНОВИКА заявки (после отправки — только отозвать
+// заявку целиком, см. cancelCollab).
+async function removeCollabSticker(userId, stickerId) {
+  const sticker = await get('SELECT * FROM sticker_collab_stickers WHERE id = ?', [stickerId]);
+  if (!sticker) throw new Error('Стикер не найден');
+  const request = await getCollabRequestRow(sticker.request_id);
+  if (!request || request.proposer_id !== userId) throw new Error('Это не ваш стикер');
+  if (request.status !== 'draft') throw new Error('Предложение уже отправлено — чтобы изменить стикеры, сначала отзовите его');
+
+  await run('DELETE FROM sticker_collab_stickers WHERE id = ?', [stickerId]);
+  unlinkQuietly(sticker.file_url);
+  return true;
+}
+
+// Отправить собранные стикеры автору набора на рассмотрение.
+async function submitCollab(userId, packId, message) {
+  const pack = await getPack(packId);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.status !== 'approved') throw new Error('Предлагать коллаборацию можно только к опубликованному набору');
+
+  const request = await get(
+    "SELECT * FROM sticker_collab_requests WHERE pack_id = ? AND proposer_id = ? AND status = 'draft' ORDER BY id DESC LIMIT 1",
+    [packId, userId]
+  );
+  if (!request) throw new Error('Сначала добавьте свои стикеры');
+  const staged = await get('SELECT COUNT(*) as count FROM sticker_collab_stickers WHERE request_id = ?', [request.id]);
+  if (!staged?.count) throw new Error('Сначала добавьте хотя бы один свой стикер');
+
+  const trimmed = String(message || '').trim().slice(0, MAX_COLLAB_MESSAGE_LEN);
+  await run(
+    "UPDATE sticker_collab_requests SET status = 'pending', message = ?, stickers_count = ?, submitted_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [trimmed || null, staged.count, request.id]
+  );
+  return getMyCollab(userId, packId);
+}
+
+// Стёрать стикеры заявки с диска и из БД (при отзыве/отклонении).
+async function discardCollabStickers(requestId) {
+  const rows = await all('SELECT file_url FROM sticker_collab_stickers WHERE request_id = ?', [requestId]);
+  rows.forEach((r) => unlinkQuietly(r.file_url));
+  await run('DELETE FROM sticker_collab_stickers WHERE request_id = ?', [requestId]);
+}
+
+// Автор заявки отзывает её (draft или pending): всё, что он собрал,
+// удаляется, сама заявка — тоже.
+async function cancelCollab(userId, requestId) {
+  const request = await getCollabRequestRow(requestId);
+  if (!request) throw new Error('Предложение не найдено');
+  if (request.proposer_id !== userId) throw new Error('Отозвать предложение может только его автор');
+  if (request.status !== 'draft' && request.status !== 'pending') throw new Error('Это предложение уже рассмотрено');
+
+  await discardCollabStickers(requestId);
+  await run('DELETE FROM sticker_collab_requests WHERE id = ?', [requestId]);
+  return true;
+}
+
+// Довешивает на заявки название набора/slug и стикеры (первые previewLimit —
+// для превью карточки, либо все при previewLimit = null).
+async function decorateCollabRequests(requests, previewLimit = null) {
+  const result = [];
+  for (const r of requests) {
+    const pack = await getPack(r.packId);
+    const stickers = await getCollabStickers(r.id);
+    result.push({
+      ...r,
+      packTitle: pack ? pack.title : 'Набор удалён',
+      packSlug: pack ? pack.slug : null,
+      packAuthorName: pack ? pack.authorName : null,
+      stickers: previewLimit ? stickers.slice(0, previewLimit) : stickers,
+      stickersCount: r.status === 'draft' || r.status === 'pending' ? stickers.length : r.stickersCount
+    });
+  }
+  return result;
+}
+
+// Входящие: ожидающие решения заявки на МОИ наборы (для раздела "Стикеры").
+async function listIncomingCollabs(authorId) {
+  const rows = await all(
+    `SELECT r.* FROM sticker_collab_requests r
+     JOIN sticker_packs p ON p.id = r.pack_id
+     WHERE p.author_id = ? AND r.status = 'pending'
+     ORDER BY r.submitted_at ASC, r.id ASC`,
+    [authorId]
+  );
+  return decorateCollabRequests(rows.map(rowToCollabRequest));
+}
+
+async function countIncomingCollabs(authorId) {
+  const row = await get(
+    `SELECT COUNT(*) as count FROM sticker_collab_requests r
+     JOIN sticker_packs p ON p.id = r.pack_id
+     WHERE p.author_id = ? AND r.status = 'pending'`,
+    [authorId]
+  );
+  return row?.count || 0;
+}
+
+// Исходящие: мои заявки любого статуса (свежие сверху) — чтобы видеть, что
+// с ними стало (ждёт / принято / отклонено).
+async function listMyCollabs(userId) {
+  const rows = await all('SELECT * FROM sticker_collab_requests WHERE proposer_id = ? ORDER BY COALESCE(resolved_at, submitted_at, created_at) DESC, id DESC LIMIT 50', [userId]);
+  return decorateCollabRequests(rows.map(rowToCollabRequest), 6);
+}
+
+// Автор принимает заявку: стикеры вливаются в набор, автор заявки становится
+// соавтором. Совпавшие по имени стикеры не теряем — получают суффикс -2, -3…
+async function acceptCollab(authorId, requestId) {
+  const request = await getCollabRequestRow(requestId);
+  if (!request) throw new Error('Предложение не найдено');
+  const pack = await getPack(request.pack_id);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.authorId !== authorId) throw new Error('Принять предложение может только автор набора');
+  if (request.status !== 'pending') throw new Error('Это предложение уже рассмотрено');
+  if (pack.status !== 'approved') throw new Error('Набор сейчас не опубликован — принять предложение нельзя');
+
+  const staged = await all('SELECT * FROM sticker_collab_stickers WHERE request_id = ? ORDER BY position ASC, id ASC', [requestId]);
+  if (!staged.length) throw new Error('В предложении не осталось стикеров');
+
+  const packCount = await get('SELECT COUNT(*) as count FROM stickers WHERE pack_id = ?', [pack.id]);
+  if ((packCount?.count || 0) + staged.length > MAX_STICKERS_PER_PACK) {
+    throw new Error(`В наборе не хватит места: максимум ${MAX_STICKERS_PER_PACK} стикеров`);
+  }
+
+  const takenRows = await all('SELECT alias FROM stickers WHERE pack_id = ?', [pack.id]);
+  const taken = new Set(takenRows.map((r) => r.alias));
+  const posRow = await get('SELECT COALESCE(MAX(position), -1) as maxPos FROM stickers WHERE pack_id = ?', [pack.id]);
+  let position = (posRow?.maxPos ?? -1) + 1;
+
+  for (const s of staged) {
+    let alias = s.alias;
+    let n = 2;
+    while (taken.has(alias)) alias = `${s.alias}-${n++}`;
+    taken.add(alias);
+    await run(
+      'INSERT INTO stickers (pack_id, alias, file_url, is_animated, position) VALUES (?, ?, ?, ?, ?)',
+      [pack.id, alias, s.file_url, s.is_animated, position++]
+    );
+  }
+
+  // Файлы остаются на месте — они уже лежат в папке набора (см. multer-config
+  // и stageCollabSticker), поэтому удаляем только строки "черновика".
+  await run('DELETE FROM sticker_collab_stickers WHERE request_id = ?', [requestId]);
+  if (request.proposer_id !== pack.authorId) {
+    await run(
+      'INSERT OR IGNORE INTO sticker_pack_coauthors (pack_id, user_id, user_name) VALUES (?, ?, ?)',
+      [pack.id, request.proposer_id, request.proposer_name]
+    );
+  }
+  await run(
+    "UPDATE sticker_collab_requests SET status = 'accepted', stickers_count = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [staged.length, requestId]
+  );
+  return getPackWithStickers(pack.id);
+}
+
+// Автор отклоняет заявку: стикеры предложившего удаляются, набор не
+// меняется — "всё отменяется". Сама запись остаётся в истории "Мои
+// предложения" предложившего со статусом declined.
+async function declineCollab(authorId, requestId) {
+  const request = await getCollabRequestRow(requestId);
+  if (!request) throw new Error('Предложение не найдено');
+  const pack = await getPack(request.pack_id);
+  if (!pack) throw new Error('Набор не найден');
+  if (pack.authorId !== authorId) throw new Error('Отклонить предложение может только автор набора');
+  if (request.status !== 'pending') throw new Error('Это предложение уже рассмотрено');
+
+  await discardCollabStickers(requestId);
+  await run("UPDATE sticker_collab_requests SET status = 'declined', resolved_at = CURRENT_TIMESTAMP WHERE id = ?", [requestId]);
+  return true;
 }
 
 function extractShortcodes(content) {
@@ -596,7 +947,20 @@ module.exports = {
   approvePack,
   rejectPack,
   revokePack,
+  publishPack,
+  unpublishPack,
   resubmitPack,
+  MAX_COLLAB_MESSAGE_LEN,
+  getMyCollab,
+  stageCollabSticker,
+  removeCollabSticker,
+  submitCollab,
+  cancelCollab,
+  listIncomingCollabs,
+  countIncomingCollabs,
+  listMyCollabs,
+  acceptCollab,
+  declineCollab,
   extractShortcodes,
   isStandaloneShortcode,
   validateContentForPosting,

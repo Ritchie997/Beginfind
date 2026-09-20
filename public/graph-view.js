@@ -41,35 +41,19 @@
     }[c]));
   }
 
-  // Палитра для раскраски узлов по категории — намеренно не пересекается с
-  // семантическими цветами темы (--blurple/--green/--yellow/--red уже заняты
-  // под обычный узел/центр/hover/недостающую ссылку в другом месте UI).
-  const CATEGORY_PALETTE = ['#eb459e', '#f57e42', '#2dd4bf', '#a78bfa', '#84cc16', '#38bdf8', '#f472b6', '#fbbf24', '#22c55e', '#f87171'];
-  const NO_CATEGORY_COLOR = '#8e9297';
-
-  function buildCategoryColorMap(nodes) {
-    const names = [...new Set(nodes.flatMap((n) => n.categories || []).map((c) => c.trim()).filter(Boolean))].sort();
-    const map = new Map();
-    names.forEach((name, i) => map.set(name, CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]));
-    return map;
-  }
-
   /**
    * Отрисовывает граф в переданный контейнер.
    * @param {HTMLElement} container — куда монтировать SVG (заполняет его целиком)
-   * @param {{nodes: {slug,title,server?,categories?}[], edges: {from,to}[]}} data
-   * @param {{onNodeClick?: (slug:string)=>void, centerSlug?: string, compact?: boolean, colorByCategory?: boolean}} options
+   * @param {{nodes: {slug,title,server?,tags?}[], edges: {from,to}[]}} data
+   * @param {{onNodeClick?: (slug:string)=>void, centerSlug?: string, compact?: boolean}} options
    *   centerSlug — если задан, этот узел закрепляется в центре и подсвечивается
    *   (используется локальной панелью графа в редакторе).
    *   compact — уменьшенные подписи/радиусы для маленькой панели.
-   *   colorByCategory — красить узлы по категории статьи вместо однотонного
-   *   --blurple (используется полной картой на дашборде, не локальной панелью
-   *   — там всегда включён centerSlug, а не colorByCategory, конфликта нет).
-   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, categoryColors: Map<string,string>}>}
+   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void}>}
    */
   async function renderGraph(container, data, options = {}) {
     const d3 = await loadD3();
-    const { onNodeClick, centerSlug, compact, colorByCategory } = options;
+    const { onNodeClick, centerSlug, compact } = options;
 
     container.innerHTML = '';
     const width = container.clientWidth || 400;
@@ -80,16 +64,8 @@
       empty.className = 'graph-empty';
       empty.textContent = 'Пока нет статей для отображения графа.';
       container.appendChild(empty);
-      return { destroy() {}, setSearchHighlight() {}, categoryColors: new Map() };
+      return { destroy() {}, setSearchHighlight() {} };
     }
-
-    const categoryColors = colorByCategory ? buildCategoryColorMap(data.nodes) : new Map();
-    const colorFor = (n) => {
-      // Статья может состоять в нескольких категориях — красим по первой
-      // (см. requirement "выбор нескольких категорий" в articles.html).
-      const cat = ((n.categories || [])[0] || '').trim();
-      return cat ? (categoryColors.get(cat) || NO_CATEGORY_COLOR) : NO_CATEGORY_COLOR;
-    };
 
     // Степень узла (кол-во связей) — влияет на радиус точки
     const degree = new Map(data.nodes.map(n => [n.slug, 0]));
@@ -152,8 +128,8 @@
           if (!event.active) simulation.alphaTarget(0);
           // Отпускаем узел обратно в свободную симуляцию (fx/fy = null).
           // Раньше держали его зафиксированным навсегда — это было нужно
-          // только чтобы противостоять пружине кластеризации по категориям
-          // (её больше нет, см. выше). Постоянный пин сам стал багом: у
+          // только чтобы противостоять пружине кластеризации (её больше
+          // нет). Постоянный пин сам стал багом: у
           // forceLink в d3 коррекция связи распределяется между двумя её
           // концами по степени узла (bias по count(source)/count(target)),
           // и это НЕ отключается через strength() — при связи с более
@@ -169,8 +145,7 @@
 
     node.append('circle')
       .attr('r', radiusFor)
-      .attr('class', 'graph-node-circle')
-      .style('fill', (n) => (colorByCategory && n.slug !== centerSlug) ? colorFor(n) : null);
+      .attr('class', 'graph-node-circle');
 
     node.append('text')
       .attr('class', 'graph-node-label')
@@ -212,16 +187,15 @@
     }
 
     // Поиск с "#" ищет по тегам вместо названия — объединяем теги статьи
-    // (поле "Теги" в форме статьи, заполняется вместе с категорией) и
-    // #хэштеги прямо в тексте (см. extractHashtags на сервере), плюс
-    // категории — их названия так же ожидаемо находить через "#название".
-    // Без "#" — обычный поиск по подстроке в названии, как раньше.
+    // (поле "Теги" в форме статьи) и #хэштеги прямо в тексте (см.
+    // extractHashtags на сервере). Без "#" — обычный поиск по подстроке в
+    // названии, как раньше.
     function nodeMatchesQuery(n) {
       if (!activeSearchQuery) return false;
       if (activeSearchQuery.startsWith('#')) {
         const term = activeSearchQuery.slice(1).trim();
         if (!term) return false;
-        const tags = [...(n.tags || []), ...(n.categories || [])].map((t) => String(t).toLowerCase());
+        const tags = (n.tags || []).map((t) => String(t).toLowerCase());
         return tags.some((t) => t.includes(term));
       }
       return n.title.toLowerCase().includes(activeSearchQuery);
@@ -258,15 +232,6 @@
       .force('y', d3.forceY(height / 2).strength(0.03))
       .force('collide', d3.forceCollide((n) => radiusFor(n) + 12));
 
-    // Кластеризацию по категориям через пружину к фиксированному якорю
-    // пробовали и отказались: любая пружина к статичной точке (закон Гука)
-    // тянет тем сильнее, чем дальше от неё увести узел — то есть чем дальше
-    // тащишь связанный узел в сторону, тем злее она сопротивляется и рвёт
-    // связь "рогаткой" назад. Безопасной силы для этого не существует ни
-    // при каком значении strength. Группировка по категориям здесь остаётся
-    // только визуальной — через цвет (colorFor/colorByCategory), без
-    // навязанной раскладки.
-
     if (centerSlug && nodeBySlug.has(centerSlug)) {
       const c = nodeBySlug.get(centerSlug);
       c.fx = width / 2;
@@ -294,8 +259,7 @@
         activeSearchQuery = (query || '').trim().toLowerCase();
         node.classed('graph-node-search-match', nodeMatchesQuery);
         applyHighlight(searchMatches());
-      },
-      categoryColors
+      }
     };
   }
 
@@ -385,15 +349,10 @@
     }
   }
 
-  function renderCategoryLegend(container, categoryColors) {
+  function renderGraphLegend(container) {
     const legend = document.createElement('div');
     legend.className = 'graph-legend';
-    const swatches = [...categoryColors.entries()]
-      .map(([name, color]) => `<span><span class="dot" style="background:${color}"></span>${escapeHtml(name)}</span>`)
-      .join('');
     legend.innerHTML = `
-      ${swatches}
-      <span><span class="dot" style="background:${NO_CATEGORY_COLOR}"></span>Без категории</span>
       <span>Наведите/ищите (# — по тегам) — подсветка связей · Клик — открыть · Колесо — масштаб · Перетаскивание — сдвинуть</span>
     `;
     container.appendChild(legend);
@@ -401,7 +360,7 @@
 
   // Инициализация графовой карточки на дашборде (public/views/dashboard.html):
   // ищет #graphContainer/#graphNodeCount и панель фильтров (#graphServerFilter,
-  // #graphCategoryFilter, #graphSearchInput/#graphSearchClear, #graphHideIsolated,
+  // #graphSearchInput/#graphSearchClear, #graphHideIsolated,
   // #graphHideLabels, #graphExportPng) в уже вставленной разметке страницы.
   // Вызывается из spa-router.js (loadDashboard).
   async function initGraphPage() {
@@ -425,15 +384,6 @@
         + servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
     }
 
-    const categorySelect = document.getElementById('graphCategoryFilter');
-    if (categorySelect) {
-      const categories = [...new Set(
-        fullData.nodes.flatMap((n) => n.categories || []).map((c) => c.trim()).filter(Boolean)
-      )].sort();
-      categorySelect.innerHTML = '<option value="">Все категории</option>'
-        + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-    }
-
     const hideIsolatedEl = document.getElementById('graphHideIsolated');
     const hideLabelsEl = document.getElementById('graphHideLabels');
     const countEl = document.getElementById('graphNodeCount');
@@ -455,13 +405,9 @@
 
     function visibleData() {
       const serverVal = serverSelect?.value || '';
-      const categoryVal = categorySelect?.value || '';
       let nodes = fullData.nodes;
       if (serverVal) {
         nodes = nodes.filter((n) => String(n.server ?? '') === serverVal);
-      }
-      if (categoryVal) {
-        nodes = nodes.filter((n) => (n.categories || []).some((c) => c.trim() === categoryVal));
       }
       let slugSet = new Set(nodes.map((n) => n.slug));
       let edges = fullData.edges.filter((e) => slugSet.has(e.from) && slugSet.has(e.to));
@@ -480,13 +426,12 @@
       if (instance) { instance.destroy(); instance = null; }
       const data = visibleData();
       if (countEl) countEl.textContent = `Статей: ${data.nodes.length} · Связей: ${data.edges.length}`;
-      instance = await renderGraph(container, data, { onNodeClick: navigateToArticle, colorByCategory: true });
+      instance = await renderGraph(container, data, { onNodeClick: navigateToArticle });
       if (searchInput?.value.trim()) instance.setSearchHighlight(searchInput.value);
-      if (data.nodes.length) renderCategoryLegend(container, instance.categoryColors);
+      if (data.nodes.length) renderGraphLegend(container);
     }
 
     serverSelect?.addEventListener('change', rerender);
-    categorySelect?.addEventListener('change', rerender);
     hideIsolatedEl?.addEventListener('change', rerender);
 
     searchInput?.addEventListener('input', () => {
@@ -507,11 +452,7 @@
     await rerender();
   }
 
-  // CATEGORY_PALETTE/buildCategoryColorMap экспортированы, чтобы страница
-  // Ibripedia красила бейджи категорий теми же цветами, что и граф связей —
-  // единая палитра во всём приложении вместо второй копии этих же цветов.
   window.GraphView = {
-    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng,
-    CATEGORY_PALETTE, buildCategoryColorMap
+    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng
   };
 })();

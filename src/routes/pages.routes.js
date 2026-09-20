@@ -14,7 +14,7 @@ const SPA_PAGES = [
   '/admin-panel.html',
   '/dashboard.html',
   '/articles.html',
-  '/categories.html',
+  '/tags.html',
   '/roles.html',
   '/settings.html'
 ];

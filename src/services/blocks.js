@@ -368,7 +368,10 @@ function mapImages(doc, mapFn) {
 
 // Те же части, что и в WIKILINK_RE, но с якорем и алиасом вместе с их
 // разделителями (#/|) — чтобы заменить ссылку целиком, ничего не потеряв.
-const WIKILINK_PARTS_RE = /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\]/g;
+// Последняя группа — своё имя ссылки в круглых скобках сразу после ]]:
+// [[статья]](Имя) (см. blocks-renderer.js); оно входит в совпадение целиком
+// (со скобками), чтобы при удалении статьи не оставался хвост "(Имя)".
+const WIKILINK_PARTS_RE = /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\](\([^()\n]+\))?/g;
 
 /**
  * Переписывает [[wiki-ссылки]] во всех markdown-строках документа.
@@ -376,18 +379,20 @@ const WIKILINK_PARTS_RE = /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]*)?\]\]/g;
  * не по точному тексту, поэтому [[Дракон]], [[дракон]] и [[drakon]] — одна
  * и та же ссылка.
  *
- * rewrite({ slug, target, anchor, alias }) получает slug цели, исходный
- * текст цели, а также якорь ("#раздел") и алиас ("|текст") с разделителями
- * (или пустые строки) и возвращает строку-замену всей ссылки либо null,
- * если ссылку менять не нужно. Возвращает { doc, changed }.
+ * rewrite({ slug, target, anchor, alias, name }) получает slug цели, исходный
+ * текст цели, а также якорь ("#раздел"), алиас ("|текст") и своё имя
+ * ("(Имя)" сразу после ]]) — все с разделителями (или пустые строки) — и
+ * возвращает строку-замену ссылки ЦЕЛИКОМ, включая "(Имя)", либо null, если
+ * ссылку менять не нужно (поэтому переименование статьи само дописывает name
+ * обратно, а удаление — нет). Возвращает { doc, changed }.
  */
 function rewriteWikiLinksInDocument(doc, slugify, rewrite) {
   let changed = false;
 
   const rewriteText = (text) => {
     if (!text) return text;
-    return text.replace(WIKILINK_PARTS_RE, (full, target, anchor, alias) => {
-      const replacement = rewrite({ slug: slugify(target.trim()), target, anchor: anchor || '', alias: alias || '' });
+    return text.replace(WIKILINK_PARTS_RE, (full, target, anchor, alias, name) => {
+      const replacement = rewrite({ slug: slugify(target.trim()), target, anchor: anchor || '', alias: alias || '', name: name || '' });
       if (replacement == null || replacement === full) return full;
       changed = true;
       return replacement;

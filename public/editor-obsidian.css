@@ -878,8 +878,8 @@
   fill: var(--green);
 }
 /* Наведение и попадание в поиск — одинаковое "кольцо" вместо смены заливки:
-   так подсветка работает поверх любой заливки, в т.ч. цвета категории
-   (см. colorByCategory в graph-view.js), а не только однотонного --blurple. */
+   так подсветка работает поверх любой заливки, в т.ч. любой заливки, а не только
+   однотонного --blurple. */
 .graph-node-hover .graph-node-circle,
 .graph-node-search-match .graph-node-circle {
   stroke: var(--yellow);
@@ -940,7 +940,7 @@
 .graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .graph-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
-/* === Панель фильтров графа (дашборд) — сервер / категория / поиск / изолированные / подписи / PNG === */
+/* === Панель фильтров графа (дашборд) — сервер / поиск / изолированные / подписи / PNG === */
 .graph-controls {
   display: flex;
   flex-wrap: wrap;

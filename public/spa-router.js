@@ -7,7 +7,7 @@ class SPARouter {
       '/dashboard': this.loadDashboard,
       '/ibripedia': this.loadIbripedia,
       '/articles': this.loadArticles,
-      '/categories': this.loadCategories,
+      '/tags': this.loadTags,
       '/stickers': this.loadStickers,
       '/servers': this.loadServers,
       '/pending-users': this.loadPendingUsers,
@@ -26,10 +26,9 @@ class SPARouter {
     this.templateCache = new Map(); // Cache for fetched templates
     this.currentDraftId = null; // Track the currently loaded draft ID
 
-    // Экземпляры ChipField для формы статьи (Категория/Доступ для/Теги) —
+    // Экземпляры ChipField для формы статьи (Доступ для/Теги) —
     // создаются заново в initArticleChipFields() при каждом заходе на
     // страницу статей, т.к. разметка перезагружается через fetch партиала.
-    this.categoryField = null;
     this.rolesField = null;
     this.tagsField = null;
 
@@ -298,7 +297,7 @@ class SPARouter {
       '/dashboard': 'Аналитика - Админ-панель BeginFind',
       '/ibripedia': 'Ibripedia - Админ-панель BeginFind',
       '/articles': 'Редактор - Админ-панель BeginFind',
-      '/categories': 'Категории - Админ-панель BeginFind',
+      '/tags': 'Теги - Админ-панель BeginFind',
       '/servers': 'Сервера - Админ-панель BeginFind',
       '/pending-users': 'Заявки - Админ-панель BeginFind',
       '/users': 'Пользователи - Админ-панель BeginFind',
@@ -438,32 +437,28 @@ class SPARouter {
     }
   }
 
-  // Load categories content
-  async loadCategories() {
+  // Load tags content — вкладка "Теги" (глобальный список тегов)
+  async loadTags() {
     this.showLoader();
 
     try {
-      // Load partial HTML for categories
-      const response = await fetch('/views/categories.html');
+      const response = await fetch('/views/tags.html');
       const html = await response.text();
 
-      // Set content to app container
       const appContent = document.getElementById('app-content');
       if (appContent) {
         appContent.innerHTML = html;
 
-        // Update page title
         const titleElement = document.getElementById('page-title');
         if (titleElement) {
-          titleElement.textContent = 'Категории';
+          titleElement.textContent = 'Теги';
         }
       }
 
-      // Initialize categories page functionality
-      await this.initCategoriesPage();
+      await this.initTagsPage();
     } catch (error) {
-      console.error('Error loading categories:', error);
-      showMessage('Ошибка при загрузке категорий', 'error');
+      console.error('Error loading tags:', error);
+      showMessage('Ошибка при загрузке тегов', 'error');
     } finally {
       this.hideLoader();
     }
@@ -591,14 +586,13 @@ class SPARouter {
 
   // Initialize articles page with all functionality
   async initArticlesPage() {
-    // Чиповые поля должны существовать до загрузки категорий/серверов —
+    // Чиповые поля должны существовать до загрузки серверов —
     // им передаются варианты выбора сразу после создания.
     this.initArticleChipFields();
     this.resetArticleAuthorInfo();
     this.setupArticleAuthorsAdmin();
 
     // Load all required data
-    await this.loadCategoriesForArticles();
     await this.loadServersForArticles();
 
     // Initialize editor
@@ -628,19 +622,12 @@ class SPARouter {
     this.checkAndOfferDraft();
   }
 
-  // Создаёт экземпляры ChipField для Категории/Доступа/Тегов заново — вызывается
+  // Создаёт экземпляры ChipField для Доступа/Тегов заново — вызывается
   // при каждом заходе на страницу статей, т.к. её разметка каждый раз
   // перезагружается через fetch партиала (см. loadTemplate/initArticlesPage),
   // поэтому старые DOM-узлы, на которые ссылались бы прежние экземпляры,
   // к этому моменту уже заменены новыми.
   initArticleChipFields() {
-    const categoryRoot = document.getElementById('articleCategoryField');
-    this.categoryField = categoryRoot ? new ChipField(categoryRoot, {
-      freeText: false,
-      placeholder: 'Выберите категории...',
-      emptyText: 'Категории не найдены'
-    }) : null;
-
     const rolesRoot = document.getElementById('articleRolesField');
     this.rolesField = rolesRoot ? new ChipField(rolesRoot, {
       freeText: false,
@@ -958,7 +945,6 @@ class SPARouter {
     const addAsCoauthorCheckbox = document.getElementById('addAsCoauthorCheckbox');
     return {
       title: document.getElementById('articleTitle').value,
-      categories: this.categoryField ? this.categoryField.getValues() : [],
       server: document.getElementById('articleServer').value,
       content: document.getElementById('articleContent').innerHTML,
       image: document.getElementById('articleImageFile')?.value || '',
@@ -1123,9 +1109,23 @@ class SPARouter {
 
     // Add beforeunload event listener to warn user about unsaved changes
     window.addEventListener('beforeunload', (e) => {
+      // Слушатель живёт на window и переживает уход со страницы статей —
+      // если формы в DOM уже нет, предупреждать и сохранять нечего.
+      const titleEl = document.getElementById('articleTitle');
+      const contentEl = document.getElementById('articleContent');
+      if (!titleEl || !contentEl) return;
+
       // Check if there's content in the form that hasn't been saved
-      const title = document.getElementById('articleTitle').value;
-      const content = document.getElementById('articleContent').innerHTML;
+      const title = titleEl.value;
+      const content = contentEl.innerHTML;
+
+      // Открыта уже существующая статья (editArticle() пишет её id в
+      // data-article-id кнопки сохранения). Черновик из неё не делаем: он не
+      // помнит, что относится к статье, и после перезагрузки подставился бы
+      // в режиме создания — "Опубликовать" породило бы дубликат статьи.
+      // Сама статья на сервере при этом цела; несохранённые правки лишь
+      // предупреждаем о потере.
+      const isEditingExistingArticle = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
 
       // If there's content, warn the user about potential data loss
       if (title.trim() || content.trim()) {
@@ -1135,7 +1135,7 @@ class SPARouter {
         // пустое, мы не отправляем её в черновик при выходе"): иначе
         // checkAndOfferDraft() при следующем заходе на страницу подставлял
         // бы пустую "статью" из одного заголовка.
-        if (content.trim()) {
+        if (content.trim() && !isEditingExistingArticle) {
           try {
             const articleData = {
               id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
@@ -1178,39 +1178,6 @@ class SPARouter {
         e.returnValue = 'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу?';
       }
     });
-  }
-
-  // Initialize categories page
-  async initCategoriesPage() {
-    await this.loadCategoriesList();
-    this.setupCategoryFormEvents();
-  }
-
-  // Set up category form events
-  setupCategoryFormEvents() {
-    // Set up create category button
-    document.getElementById('create-new-category-btn')?.addEventListener('click', () => this.createCategory());
-
-    // Add Enter key support for the input field
-    document.getElementById('newCategoryName')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.createCategory();
-      }
-    });
-
-    // Поиск по названию — фильтрация на клиенте (список категорий обычно
-    // небольшой, отдельный API-эндпоинт под поиск не нужен).
-    document.getElementById('categoriesSearchInput')?.addEventListener('input', (e) => {
-      this.renderCategoriesGrid(e.target.value);
-    });
-
-    // Модалка подтверждения удаления — вместо window.confirm()
-    document.getElementById('delete-category-cancel-btn')?.addEventListener('click', () => this.hideDeleteCategoryModal());
-    document.getElementById('delete-category-close-btn')?.addEventListener('click', () => this.hideDeleteCategoryModal());
-    document.getElementById('delete-category-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'delete-category-modal') this.hideDeleteCategoryModal();
-    });
-    document.getElementById('delete-category-confirm-btn')?.addEventListener('click', () => this.confirmDeleteCategory());
   }
 
   // Initialize servers page
@@ -1427,8 +1394,8 @@ class SPARouter {
 
   // Additional methods for handling articles functionality
   // (These would be implementations of the methods mentioned in setupArticleFormEvents)
-  // Теги/категория/роли теперь ведёт ChipField (см. public/chip-field.js,
-  // this.tagsField/this.categoryField/this.rolesField) — старые addTag/
+  // Теги/роли теперь ведёт ChipField (см. public/chip-field.js,
+  // this.tagsField/this.rolesField) — старые addTag/
   // removeTag и весь чекбоксовый UI ролей отсюда убраны.
 
   selectCoverFromFile() {
@@ -1656,7 +1623,6 @@ class SPARouter {
   clearArticleForm() {
     document.getElementById('articleTitle').value = '';
     document.getElementById('articleContent').innerHTML = '';
-    if (this.categoryField) this.categoryField.setValues([]);
     if (this.tagsField) this.tagsField.setValues([]);
     document.getElementById('articleImageFile').value = '';
     document.getElementById('articleImageFileInput').value = '';
@@ -1789,9 +1755,6 @@ class SPARouter {
       if (draft) {
         // Populate the form with draft data
         document.getElementById('articleTitle').value = draft.title || '';
-        if (this.categoryField) {
-          this.categoryField.setValues(draft.categories || (draft.category ? [draft.category] : []));
-        }
 
         // Handle server selection
         if (draft.server) {
@@ -1915,7 +1878,6 @@ class SPARouter {
       // Clear all form fields
       document.getElementById('articleTitle').value = '';
       document.getElementById('articleContent').innerHTML = '';
-      if (this.categoryField) this.categoryField.setValues([]);
       if (this.tagsField) this.tagsField.setValues([]);
       document.getElementById('articleImageFile').value = '';
       document.getElementById('articleImageFileInput').value = '';
@@ -2125,9 +2087,6 @@ class SPARouter {
       const imageFileInput = document.getElementById('articleImageFile');
 
       if (titleInput) titleInput.value = article.title || '';
-      if (this.categoryField) {
-        this.categoryField.setValues(article.categories || (article.category ? [article.category] : []));
-      }
 
       // API отдаёт уже разрешённое имя сервера (см. formatArticleResponse в
       // articles.routes.js), а не его id — ищем совпадающий по подписи option,
@@ -2258,21 +2217,6 @@ class SPARouter {
   }
 
   // Methods for loading data for articles page
-  async loadCategoriesForArticles() {
-    try {
-      const result = await apiClient.getCategories();
-      if (result.success) {
-        if (this.categoryField) {
-          this.categoryField.setOptions(result.data.map((category) => ({ value: category.name, label: category.name })));
-        }
-      } else {
-        showMessage(`Ошибка загрузки категорий: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Неожиданная ошибка загрузки категорий: ${error.message}`, 'error');
-    }
-  }
-
   async loadServersForArticles() {
     try {
       const result = await apiClient.makeAuthenticatedRequest('/api/servers');
@@ -2303,182 +2247,102 @@ class SPARouter {
     }
   }
 
-  // Category management methods
-  async loadCategoriesList() {
-    const loadingEl = document.getElementById('categoriesLoading');
-    const emptyEl = document.getElementById('categoriesEmpty');
-    const gridEl = document.getElementById('categoriesContainer');
+  // === Вкладка "Теги" — глобальный список тегов ===
+
+  async initTagsPage() {
+    await this.loadTagsList();
+    // Поиск по названию — фильтрация на клиенте: список уже целиком загружен.
+    document.getElementById('tagsSearchInput')?.addEventListener('input', (e) => {
+      this.renderTagsGrid(e.target.value);
+    });
+  }
+
+  async loadTagsList() {
+    const loadingEl = document.getElementById('tagsLoading');
+    const emptyEl = document.getElementById('tagsEmpty');
+    const gridEl = document.getElementById('tagsContainer');
     if (loadingEl) loadingEl.hidden = false;
     if (emptyEl) emptyEl.hidden = true;
     if (gridEl) gridEl.hidden = true;
 
     try {
-      const result = await apiClient.getCategories();
+      const result = await apiClient.getTags();
       if (result.success) {
-        // Сортировка по названию — тот же порядок, что и в чиповом поле
-        // "Категория" редактора статей (там их отдаёт бэкенд уже
-        // отсортированными, см. GET /categories в taxonomy.routes.js).
-        this.categoriesCache = Array.isArray(result.data) ? result.data : [];
-        // Сохраняем текущий текст поиска при перерисовке после создания/
-        // удаления категории — иначе поле оставалось бы заполненным, а
-        // сетка внезапно показывала бы уже не отфильтрованный список.
-        this.renderCategoriesGrid(document.getElementById('categoriesSearchInput')?.value || '');
+        // Дубли исключены уже на сервере (см. collectTags в articles-store.js);
+        // повторная свёртка по нижнему регистру здесь — страховка на случай
+        // рассинхрона, "строго без дублей" не должно зависеть от одного слоя.
+        const seen = new Map();
+        (Array.isArray(result.data) ? result.data : []).forEach((item) => {
+          const key = String(item.tag).toLowerCase();
+          if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0 });
+        });
+        this.tagsCache = [...seen.values()];
+        this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
       } else {
         if (loadingEl) loadingEl.hidden = true;
-        showMessage(`Ошибка загрузки категорий: ${result.error}`, 'error');
+        showMessage(`Ошибка загрузки тегов: ${result.error}`, 'error');
       }
     } catch (error) {
       if (loadingEl) loadingEl.hidden = true;
-      showMessage(`Неожиданная ошибка загрузки категорий: ${error.message}`, 'error');
+      showMessage(`Неожиданная ошибка загрузки тегов: ${error.message}`, 'error');
     }
   }
 
-  // Сетка карточек + поиск на клиенте + счётчик — единственный путь
-  // рендера (раньше здесь ещё дублировался отдельный #categories-card-layout
-  // под мобильные экраны; .categories-grid и так адаптивная, как и
-  // .servers-grid/.users-stats-grid, второй набор карточек был не нужен).
-  renderCategoriesGrid(filterText = '') {
-    const loadingEl = document.getElementById('categoriesLoading');
-    const emptyEl = document.getElementById('categoriesEmpty');
-    const gridEl = document.getElementById('categoriesContainer');
-    const countEl = document.getElementById('categoriesCount');
+  renderTagsGrid(filterText = '') {
+    const loadingEl = document.getElementById('tagsLoading');
+    const emptyEl = document.getElementById('tagsEmpty');
+    const gridEl = document.getElementById('tagsContainer');
+    const countEl = document.getElementById('tagsCount');
+    if (!gridEl) return;
+
+    const all = this.tagsCache || [];
+    const plural = (n, one, few, many) => {
+      const m10 = n % 10;
+      const m100 = n % 100;
+      if (m10 === 1 && m100 !== 11) return one;
+      if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+      return many;
+    };
+    if (countEl) countEl.textContent = all.length === 0 ? '' : `Всего тегов: ${all.length}`;
+
     if (loadingEl) loadingEl.hidden = true;
 
-    const all = this.categoriesCache || [];
-    if (countEl) countEl.textContent = all.length === 0 ? '' : all.length === 1 ? '1 категория' : `Категорий: ${all.length}`;
-
     if (all.length === 0) {
-      if (gridEl) gridEl.hidden = true;
-      if (emptyEl) {
-        emptyEl.hidden = false;
-        document.getElementById('categoriesEmptyTitle').textContent = 'Пока нет ни одной категории';
-        document.getElementById('categoriesEmptyText').textContent = 'Категории помогают группировать статьи по темам — их можно будет выбрать при создании или редактировании статьи.';
-      }
+      gridEl.hidden = true;
+      gridEl.innerHTML = '';
+      if (emptyEl) emptyEl.hidden = false;
       return;
     }
-
-    const query = filterText.trim().toLowerCase();
-    const filtered = query ? all.filter((c) => c.name.toLowerCase().includes(query)) : all;
-
-    if (!gridEl) return;
-    gridEl.hidden = false;
     if (emptyEl) emptyEl.hidden = true;
 
+    const q = String(filterText || '').trim().toLowerCase().replace(/^#/, '');
+    const filtered = q ? all.filter((t) => t.tag.toLowerCase().includes(q)) : all;
+
+    gridEl.hidden = false;
     if (filtered.length === 0) {
-      gridEl.innerHTML = `<div class="categories-no-results">Ничего не найдено по запросу «${this.escapeHtml(filterText)}»</div>`;
+      gridEl.innerHTML = `<div class="tags-no-results">Ничего не найдено по запросу «${this.escapeHtml(filterText)}»</div>`;
       return;
     }
 
-    gridEl.innerHTML = filtered.map((category) => {
-      const created = category.created_at ? new Date(category.created_at).toLocaleDateString('ru-RU') : null;
-      return `
-        <div class="category-card">
-          <div class="category-card-icon"><i class="fas fa-folder"></i></div>
-          <div class="category-card-body">
-            <div class="category-card-name">${this.escapeHtml(category.name)}</div>
-            ${created ? `<div class="category-card-meta">создана ${created}</div>` : ''}
-          </div>
-          <button type="button" class="category-card-delete-btn" title="Удалить категорию" onclick="spaRouter.showDeleteCategoryModal(${category.id}, '${this.escapeHtml(category.name).replace(/'/g, "\\'")}')">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      `;
-    }).join('');
+    gridEl.innerHTML = filtered.map((t) => `
+      <button type="button" class="tag-card" data-tag="${this.escapeHtml(t.tag)}" title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
+        <span class="tag-card-icon"><i class="fas fa-hashtag"></i></span>
+        <span class="tag-card-body">
+          <span class="tag-card-name">${this.escapeHtml(t.tag)}</span>
+          <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
+        </span>
+      </button>
+    `).join('');
+
+    gridEl.querySelectorAll('.tag-card').forEach((btn) => {
+      btn.addEventListener('click', () => this.openTagInIbripedia(btn.dataset.tag));
+    });
   }
 
-  showDeleteCategoryModal(id, name) {
-    this.pendingDeleteCategory = { id, name };
-    const textEl = document.getElementById('delete-category-text');
-    if (textEl) textEl.innerHTML = `<i class="fas fa-circle-info"></i> Категория «${this.escapeHtml(name)}» будет удалена. У статей, где она была выбрана, категория просто пропадёт из списка — сами статьи не затрагиваются.`;
-    const modal = document.getElementById('delete-category-modal');
-    if (modal) modal.hidden = false;
-  }
-
-  hideDeleteCategoryModal() {
-    this.pendingDeleteCategory = null;
-    const modal = document.getElementById('delete-category-modal');
-    if (modal) modal.hidden = true;
-  }
-
-  async confirmDeleteCategory() {
-    const pending = this.pendingDeleteCategory;
-    if (!pending) return;
-    await this.deleteCategory(pending.id, pending.name);
-    this.hideDeleteCategoryModal();
-  }
-
-  async createCategory() {
-    const inputElement = document.getElementById('newCategoryName');
-    if (!inputElement) {
-      showMessage('Поле ввода категории не найдено', 'error');
-      return;
-    }
-
-    const categoryName = inputElement.value;
-    if (!categoryName || categoryName.trim() === '') {
-      showMessage('Пожалуйста, введите название категории', 'error');
-      inputElement.focus();
-      return;
-    }
-
-    try {
-      const result = await apiClient.createCategory(categoryName.trim());
-      if (result.success) {
-        showMessage('Категория успешно создана!', 'success');
-        inputElement.value = ''; // Clear the input field
-        await this.loadCategoriesList(); // Reload list
-        // Also reload categories in article form if on articles page
-        if (this.categoryField) {
-          await this.loadCategoriesForArticles();
-        }
-      } else {
-        showMessage('Ошибка при создании категории: ' + result.error, 'error');
-      }
-    } catch (error) {
-      showMessage('Произошла ошибка при создании категории', 'error');
-    }
-  }
-
-  // Кнопка "+" рядом с полем "Категория" на странице статей — там нет
-  // отдельного поля ввода названия (оно есть только на странице
-  // /categories), поэтому спрашиваем название через prompt() и сразу
-  // выбираем созданную категорию в чиповом поле.
-  async createCategoryFromArticles() {
-    const categoryName = prompt('Введите название новой категории:');
-    if (!categoryName || !categoryName.trim()) return;
-
-    try {
-      const result = await apiClient.createCategory(categoryName.trim());
-      if (result.success) {
-        showMessage('Категория успешно создана!', 'success');
-        await this.loadCategoriesForArticles();
-        this.categoryField?.addValue(categoryName.trim());
-      } else {
-        showMessage('Ошибка при создании категории: ' + result.error, 'error');
-      }
-    } catch (error) {
-      showMessage('Произошла ошибка при создании категории', 'error');
-    }
-  }
-
-  // Подтверждение — модалкой #delete-category-modal (см.
-  // showDeleteCategoryModal/confirmDeleteCategory), а не window.confirm().
-  async deleteCategory(id, name) {
-    try {
-      const result = await apiClient.deleteCategory(id);
-      if (result.success) {
-        showMessage('Категория успешно удалена!', 'success');
-        await this.loadCategoriesList(); // Reload list
-        // Also reload categories in article form if on articles page
-        if (this.categoryField) {
-          await this.loadCategoriesForArticles();
-        }
-      } else {
-        showMessage('Ошибка при удалении категории: ' + result.data.error, 'error');
-      }
-    } catch (error) {
-      showMessage('Произошла ошибка при удалении категории', 'error');
-    }
+  // Клик по тегу — витрина Ibripedia с уже включённым фильтром по нему.
+  async openTagInIbripedia(tag) {
+    await this.navigateTo('/ibripedia');
+    window.ibripediaManager?.filterByTag(tag);
   }
 
   // === Server management — каталог + рабочая область открытого сервера ===
@@ -2702,6 +2566,7 @@ class SPARouter {
       case 'overview':
       default: body.innerHTML = this.renderServerOverviewTab(); break;
     }
+    body.querySelectorAll('textarea[data-autogrow]').forEach(el => this.autoGrowTextarea(el));
   }
 
   // --- Вкладка "Журнал" ---
@@ -2785,9 +2650,9 @@ class SPARouter {
       ? `<tr class="server-empty-row"><td colspan="3">Журнал пуст — действия на сервере появятся здесь</td></tr>`
       : entries.map(entry => `
           <tr>
-            <td style="white-space: nowrap; color: var(--text-muted); font-size: 12px;">${new Date(entry.created_at).toLocaleString('ru-RU')}</td>
-            <td><strong>${this.escapeHtml(entry.actor_username || `ID ${entry.actor_id}`)}</strong></td>
-            <td>${this.escapeHtml(this.auditActionLabel(entry.action))} ${this.escapeHtml(this.auditDetailsText(entry.action, entry.details))}</td>
+            <td data-label="Когда" style="white-space: nowrap; color: var(--text-muted); font-size: 12px;">${new Date(entry.created_at).toLocaleString('ru-RU')}</td>
+            <td data-label="Кто" class="cell-primary"><strong>${this.escapeHtml(entry.actor_username || `ID ${entry.actor_id}`)}</strong></td>
+            <td data-label="Действие">${this.escapeHtml(this.auditActionLabel(entry.action))} ${this.escapeHtml(this.auditDetailsText(entry.action, entry.details))}</td>
           </tr>
         `).join('');
 
@@ -2795,7 +2660,7 @@ class SPARouter {
       <div class="server-section-toolbar">
         <h3 class="server-section-title">Журнал действий (${entries.length})</h3>
       </div>
-      <div class="table-container">
+      <div class="table-container table-cards table-cards-list">
         <table>
           <thead><tr><th>Когда</th><th>Кто</th><th>Действие</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -2854,10 +2719,10 @@ class SPARouter {
 
           return `
             <tr>
-              <td>${member.id}</td>
-              <td><strong>${this.escapeHtml(member.username)}</strong>${isSelf ? ' <span style="color: var(--text-muted); font-size: 11px;">(вы)</span>' : ''}</td>
-              <td>${rolesHtml}</td>
-              <td>${actions}</td>
+              <td data-label="ID">${member.id}</td>
+              <td data-label="Пользователь" class="cell-primary"><strong>${this.escapeHtml(member.display_name)}</strong>${isSelf ? ' <span style="color: var(--text-muted); font-size: 11px;">(вы)</span>' : ''}</td>
+              <td data-label="Роли"><div class="cell-chips">${rolesHtml}</div></td>
+              <td data-label="Действия" class="cell-actions">${actions}</td>
             </tr>
           `;
         }).join('');
@@ -2871,7 +2736,7 @@ class SPARouter {
           ${!amMember ? `<button class="btn btn-success btn-sm" onclick="spaRouter.joinCurrentServer()"><i class="fas fa-right-to-bracket"></i> Вступить</button>` : ''}
         </div>
       </div>
-      <div class="table-container">
+      <div class="table-container table-cards">
         <table>
           <thead><tr><th>ID</th><th>Пользователь</th><th>Роли</th><th>Действия</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -2933,7 +2798,7 @@ class SPARouter {
         dropdown.innerHTML = `<div class="chip-field-dropdown-empty">Никого не найдено</div>`;
       } else {
         dropdown.innerHTML = users.map(u => `
-          <div class="chip-field-dropdown-item" data-user-id="${u.id}" data-username="${this.escapeHtml(u.username)}">${this.escapeHtml(u.username)} <span style="color: var(--text-muted);">(ID ${u.id})</span></div>
+          <div class="chip-field-dropdown-item" data-user-id="${u.id}" data-username="${this.escapeHtml(u.display_name)}">${this.escapeHtml(u.display_name)} <span style="color: var(--text-muted);">(ID ${u.id})</span></div>
         `).join('');
         dropdown.querySelectorAll('[data-user-id]').forEach(item => {
           item.addEventListener('click', () => {
@@ -2971,7 +2836,7 @@ class SPARouter {
 
   async removeMember(userId) {
     const member = (this.currentServerData?.members || []).find(m => m.id === userId);
-    const label = member ? member.username : `ID ${userId}`;
+    const label = member ? member.display_name : `ID ${userId}`;
     const isSelf = (authManager.getUser() || {}).id === userId;
     if (!confirm(isSelf ? 'Покинуть этот сервер?' : `Удалить участника «${label}» с сервера?`)) return;
 
@@ -2998,7 +2863,7 @@ class SPARouter {
   showServerAssignRoleModal(userId) {
     const member = (this.currentServerData?.members || []).find(m => m.id === userId);
     this.assignRoleTargetUserId = userId;
-    document.getElementById('server-assign-role-target-hint').textContent = member ? `Пользователь: ${member.username} (ID ${userId})` : `ID пользователя: ${userId}`;
+    document.getElementById('server-assign-role-target-hint').textContent = member ? `Пользователь: ${member.display_name} (ID ${userId})` : `ID пользователя: ${userId}`;
 
     const roles = this.currentServerData?.roles || [];
     const select = document.getElementById('server-assign-role-select');
@@ -3070,11 +2935,11 @@ class SPARouter {
 
       return `
         <tr>
-          <td><strong>${this.escapeHtml(role.name)}</strong></td>
-          <td><span class="role-tag" style="background: ${typeColor};">${typeText}</span></td>
-          <td>${role.hierarchy_level}</td>
-          <td style="font-size: 12px; color: var(--text-muted);">${permsText}</td>
-          <td>${actions}</td>
+          <td data-label="Название" class="cell-primary"><strong>${this.escapeHtml(role.name)}</strong></td>
+          <td data-label="Тип"><span class="role-tag" style="background: ${typeColor};">${typeText}</span></td>
+          <td data-label="Уровень">${role.hierarchy_level}</td>
+          <td data-label="Права" style="font-size: 12px; color: var(--text-muted);">${permsText}</td>
+          <td data-label="Действия" class="cell-actions">${actions}</td>
         </tr>
       `;
     }).join('');
@@ -3085,7 +2950,7 @@ class SPARouter {
         <h3 class="server-section-title">Роли (${roles.length})</h3>
         ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="spaRouter.showServerRoleEditorModal()"><i class="fas fa-plus"></i> Создать роль</button>` : ''}
       </div>
-      <div class="table-container">
+      <div class="table-container table-cards">
         <table>
           <thead><tr><th>Название</th><th>Тип</th><th>Уровень</th><th>Права</th><th>Действия</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -3181,10 +3046,10 @@ class SPARouter {
 
     const rows = channels.length === 0 ? `<tr class="server-empty-row"><td colspan="4">Нет каналов</td></tr>` : channels.map(channel => `
       <tr>
-        <td><i class="fas ${typeIcon(channel.channel_type)}" style="color: var(--text-muted); margin-right: 6px;"></i><strong>${this.escapeHtml(channel.name)}</strong></td>
-        <td>${typeLabel(channel.channel_type)}</td>
-        <td style="color: var(--text-muted); font-size: 13px;">${this.escapeHtml(channel.description || '—')}</td>
-        <td>
+        <td data-label="Название" class="cell-primary"><i class="fas ${typeIcon(channel.channel_type)}" style="color: var(--text-muted); margin-right: 6px;"></i><strong>${this.escapeHtml(channel.name)}</strong></td>
+        <td data-label="Тип">${typeLabel(channel.channel_type)}</td>
+        <td data-label="Описание" style="color: var(--text-muted); font-size: 13px;">${this.escapeHtml(channel.description || '—')}</td>
+        <td data-label="Действия" class="cell-actions">
           ${isAdmin ? `
             <button class="btn btn-secondary btn-sm" onclick="spaRouter.showChannelEditorModal(${channel.id})">Изменить</button>
             <button class="btn btn-danger btn-sm" onclick="spaRouter.deleteServerChannel(${channel.id})">Удалить</button>
@@ -3199,7 +3064,7 @@ class SPARouter {
         <h3 class="server-section-title">Каналы (${channels.length})</h3>
         ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="spaRouter.showChannelEditorModal()"><i class="fas fa-plus"></i> Создать канал</button>` : ''}
       </div>
-      <div class="table-container">
+      <div class="table-container table-cards">
         <table>
           <thead><tr><th>Название</th><th>Тип</th><th>Описание</th><th>Действия</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -3271,6 +3136,7 @@ class SPARouter {
     const canDelete = isOwner || isRoot; // DELETE /servers/:id — владелец или root
 
     return `
+      <div class="server-settings">
       ${!canEdit ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Изменять настройки сервера может только его владелец.</div>` : ''}
       <div class="form-group" style="margin-bottom: 18px;">
         <label class="form-label" for="server-settings-name">Название сервера</label>
@@ -3278,15 +3144,15 @@ class SPARouter {
       </div>
       <div class="form-group" style="margin-bottom: 18px;">
         <label class="form-label" for="server-settings-description">Описание</label>
-        <textarea id="server-settings-description" class="form-input" rows="3" maxlength="500" ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
+        <textarea id="server-settings-description" class="form-input server-settings-textarea" rows="3" maxlength="500" data-autogrow oninput="spaRouter.autoGrowTextarea(this)" ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
       </div>
-      ${canEdit ? `<button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button>` : ''}
+      ${canEdit ? `<div class="server-settings-actions"><button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button></div>` : ''}
 
       ${isRoot ? `
         <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--background-accent);">
           <h4 class="server-section-title" style="margin-bottom: 10px;">Владение</h4>
           <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 10px;">Доступно только владельцу системы.</p>
-          <button class="btn btn-secondary btn-sm" onclick="spaRouter.showChangeOwnerModal()"><i class="fas fa-user-shield"></i> Передать другому пользователю</button>
+          <div class="server-settings-actions"><button class="btn btn-secondary btn-sm" onclick="spaRouter.showChangeOwnerModal()"><i class="fas fa-user-shield"></i> Передать другому пользователю</button></div>
         </div>
       ` : ''}
 
@@ -3297,7 +3163,17 @@ class SPARouter {
           <button class="btn btn-danger" onclick="spaRouter.deleteServer(${server.id}, true)"><i class="fas fa-trash"></i> Удалить сервер</button>
         </div>
       ` : ''}
+      </div>
     `;
+  }
+
+  // Подгоняет высоту textarea под текст — на мобильном у textarea нет
+  // ручки resize, и описание сервера (до 500 символов) приходилось листать
+  // внутри трёх строк. Вызывается на input и после рендера вкладки.
+  autoGrowTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
   }
 
   async saveServerSettings() {
@@ -3349,7 +3225,7 @@ class SPARouter {
       // пользователей лежит в result.data.data, а не в result.data.
       const users = (result.success && result.data && Array.isArray(result.data.data)) ? result.data.data : [];
       const select = document.getElementById('change-owner-select');
-      select.innerHTML = users.map(u => `<option value="${u.id}">${this.escapeHtml(u.username)} (ID ${u.id})</option>`).join('');
+      select.innerHTML = users.map(u => `<option value="${u.id}">${this.escapeHtml(u.display_name || u.username)} (ID ${u.id})</option>`).join('');
       document.getElementById('change-owner-modal').hidden = false;
     } catch (error) {
       showMessage(`Ошибка загрузки пользователей: ${error.message}`, 'error');
@@ -3570,13 +3446,13 @@ class SPARouter {
         console.error('Error loading dashboard summary:', error);
       }
 
-      // Load categories count
-      const categoriesResult = await apiClient.getCategories();
-      if (categoriesResult.success) {
-        const totalCategories = document.getElementById('total-categories');
-        if (totalCategories) totalCategories.textContent = categoriesResult.data.length;
+      // Load tags count
+      const tagsResult = await apiClient.getTags();
+      if (tagsResult.success) {
+        const totalTags = document.getElementById('total-tags');
+        if (totalTags) totalTags.textContent = tagsResult.data.length;
       } else {
-        console.error('Error loading categories count:', categoriesResult.error);
+        console.error('Error loading tags count:', tagsResult.error);
       }
 
       // Load activity list with recent items
@@ -3952,24 +3828,6 @@ window.spaRouter = {
   navigateTo: async (path) => {
     if (spaRouter) {
       await spaRouter.navigateTo(path);
-    }
-  },
-
-  createCategory: async () => {
-    if (spaRouter) {
-      await spaRouter.createCategory();
-    }
-  },
-
-  createCategoryFromArticles: async () => {
-    if (spaRouter) {
-      await spaRouter.createCategoryFromArticles();
-    }
-  },
-
-  deleteCategory: async (id, name) => {
-    if (spaRouter) {
-      await spaRouter.deleteCategory(id, name);
     }
   },
 
@@ -4398,16 +4256,18 @@ SPARouter.prototype.renderUsersList = async function() {
       }
 
       // data-label на каждой ячейке — используется только на мобильной
-      // раскладке (см. @media в public/views/users-list.html), где таблица
-      // превращается в список карточек и подписи колонок берутся отсюда
-      // через CSS content: attr(data-label), т.к. <thead> на мобильном скрыт.
+      // раскладке (общий компонент .table-cards в global-styles.css), где
+      // таблица превращается в список карточек и подписи колонок берутся
+      // отсюда через CSS content: attr(data-label), т.к. <thead> скрыт.
+      // cell-primary — заголовок карточки (без подписи), cell-actions —
+      // строка кнопок внизу.
       tr.innerHTML = `
-        <td data-label="Имя"><span class="users-name-link profile-link" data-id="${user.id}" title="Открыть профиль">${displayName}</span></td>
+        <td data-label="Имя" class="cell-primary"><span class="users-name-link profile-link" data-id="${user.id}" title="Открыть профиль">${displayName}</span></td>
         <td data-label="Логин" style="color: var(--text-muted); font-family: monospace;">${username}</td>
         <td data-label="Роль"><span class="users-role-pill" style="background: ${role.color};">${role.text}</span></td>
         <td data-label="Статус"><span class="users-status-pill" style="background: ${status.color};">${status.text}</span></td>
         <td data-label="Регистрация" style="color: var(--text-muted); font-size: 13px;">${date}</td>
-        <td data-label="Действия"><div class="users-actions-cell">${actionsHtml}</div></td>
+        <td data-label="Действия" class="cell-actions"><div class="users-actions-cell">${actionsHtml}</div></td>
       `;
       tbodyEl.appendChild(tr);
     });
@@ -4868,10 +4728,19 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     loadingEl.style.display = 'none';
     contentEl.style.display = 'block';
 
-    const displayName = profile.display_name || profile.username;
+    const displayName = profile.display_name || profile.username || '?';
     document.getElementById('profile-avatar').textContent = displayName.charAt(0).toUpperCase();
     document.getElementById('profile-display-name').textContent = displayName;
-    document.getElementById('profile-username').textContent = `@${profile.username}`;
+
+    // Логин приходит только самому пользователю и админам (см.
+    // auth.getUserProfile) — у остальных блок просто не показывается.
+    const loginEl = document.getElementById('profile-username');
+    if (profile.username) {
+      loginEl.textContent = `Логин: ${profile.username}`;
+      loginEl.style.display = '';
+    } else {
+      loginEl.style.display = 'none';
+    }
 
     const role = this.roleLabelForUser(profile);
     const roleBadge = document.getElementById('profile-role-badge');
@@ -4914,6 +4783,7 @@ SPARouter.prototype.renderProfile = async function(targetId) {
       });
     }
 
+    this.setupProfileName(profile);
     this.setupProfileBio(targetId, profile);
     this.setupProfileNote(targetId, profile);
     await this.renderProfileArticles(targetId);
@@ -4926,6 +4796,71 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     errorEl.style.display = 'block';
     document.getElementById('profile-error-text').textContent = error.message || '';
   }
+};
+
+// Смена своего имени (никнейма) в личном профиле. Логин не меняется — вход
+// продолжает работать по нему; на сервере смена идёт через PUT /api/profile.
+SPARouter.prototype.setupProfileName = function(profile) {
+  const editBtn = document.getElementById('profile-name-edit-btn');
+  const editBlock = document.getElementById('profile-name-edit');
+  const nameEl = document.getElementById('profile-display-name');
+  const input = document.getElementById('profile-name-input');
+  if (!editBtn || !editBlock || !input) return;
+
+  editBtn.style.display = 'none';
+  editBlock.style.display = 'none';
+  if (!profile.can_edit_name) return;
+  editBtn.style.display = 'inline-block';
+
+  const startEdit = () => {
+    input.value = profile.display_name || '';
+    editBtn.style.display = 'none';
+    editBlock.style.display = 'flex';
+    input.focus();
+    input.select();
+  };
+  const stopEdit = () => {
+    editBlock.style.display = 'none';
+    editBtn.style.display = 'inline-block';
+  };
+  const save = async () => {
+    const name = input.value.trim();
+    if (!name) {
+      showMessage('Имя не может быть пустым', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось сохранить имя');
+
+      profile.display_name = data.display_name;
+      nameEl.textContent = data.display_name;
+      document.getElementById('profile-avatar').textContent = data.display_name.charAt(0).toUpperCase();
+
+      // Имя закэшировано в браузере (шапка/аватар) — обновляем и там.
+      const me = authManager.getUser();
+      if (me) authManager.setUser({ ...me, display_name: data.display_name });
+      if (typeof window.updateUserInfo === 'function') window.updateUserInfo();
+
+      stopEdit();
+      showMessage('Имя обновлено', 'success');
+    } catch (error) {
+      showMessage(error.message, 'error');
+    }
+  };
+
+  editBtn.onclick = startEdit;
+  document.getElementById('profile-name-cancel-btn').onclick = stopEdit;
+  document.getElementById('profile-name-save-btn').onclick = save;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') stopEdit();
+  };
 };
 
 SPARouter.prototype.setupProfileBio = function(targetId, profile) {
@@ -5079,7 +5014,7 @@ SPARouter.prototype.renderProfileStickers = async function(targetId) {
 
   const me = authManager.getUser() || {};
   const isSelf = String(targetId) === String(me.id);
-  const statusLabels = { pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
+  const statusLabels = { draft: 'Черновик', pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
 
   try {
     const result = await window.apiClient.getStickerPacksByUser(targetId);
@@ -5118,10 +5053,10 @@ SPARouter.prototype.renderProfileStickers = async function(targetId) {
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
           <span style="color: var(--text-normal, #dcddde); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(pack.title)}</span>
           ${isSelf && pack.status !== 'approved'
-            ? `<span style="flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: ${pack.status === 'rejected' ? 'var(--red)' : 'var(--yellow)'}; background: rgba(255,255,255,0.06);">${statusLabels[pack.status] || pack.status}</span>`
+            ? `<span style="flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: ${pack.status === 'rejected' ? 'var(--red)' : pack.status === 'draft' ? 'var(--text-muted)' : 'var(--yellow)'}; background: rgba(255,255,255,0.06);">${statusLabels[pack.status] || pack.status}</span>`
             : ''}
         </div>
-        <div style="color: var(--text-muted, #b9bbbe); font-size: 12px;">${count} шт.</div>
+        <div style="color: var(--text-muted, #b9bbbe); font-size: 12px;">${count} шт.${pack.isCoAuthor ? ' · соавтор' : ''}</div>
       `;
       card.addEventListener('mouseenter', () => { card.style.background = 'rgba(255,255,255,0.03)'; });
       card.addEventListener('mouseleave', () => { card.style.background = 'var(--background-secondary, #2f3136)'; });

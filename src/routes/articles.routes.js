@@ -410,21 +410,20 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
 });
 
 // Витрина статей (Ibripedia) — комбинация текстового поиска, фильтров
-// (категории/теги/сервер/статус/диапазон дат) и сортировки, с постраничной
+// (теги/сервер/статус/диапазон дат) и сортировки, с постраничной
 // подгрузкой. Зарегистрирован ДО "/articles/:id" — иначе Express принял бы
 // "browse" за значение :id и сюда бы запрос вообще не долетал.
 router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const {
-      q = '', category = '', tag = '', server = '', locked, dateFrom = '', dateTo = '',
+      q = '', tag = '', server = '', locked, dateFrom = '', dateTo = '',
       sort = '', limit = 30, offset = 0
     } = req.query;
 
-    const categories = category ? String(category).split(',').map((s) => s.trim()).filter(Boolean) : [];
     const tags = tag ? String(tag).split(',').map((s) => s.trim()).filter(Boolean) : [];
     const lockedFilter = locked === 'true' ? true : locked === 'false' ? false : undefined;
 
-    const filtered = store.filterArticles({ q, categories, tags, server, locked: lockedFilter, dateFrom, dateTo, sort });
+    const filtered = store.filterArticles({ q, tags, server, locked: lockedFilter, dateFrom, dateTo, sort });
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический
     // размер страницы врали бы из-за статей, закрытых по ролям для этого
@@ -521,13 +520,13 @@ router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, as
 
 router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, (req, res) => {
   try {
-    const { title, content, views, locked, role, roles, categories, tags, image, attachments, server } = req.body;
+    const { title, content, views, locked, role, roles, tags, image, attachments, server } = req.body;
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'Заголовок статьи обязателен' });
     }
 
     const article = store.createArticle({
-      title, content, views, locked, role, roles, categories, tags, image, attachments,
+      title, content, views, locked, role, roles, tags, image, attachments,
       // Автор — всегда реальный создатель (из токена), а не то, что прислал
       // клиент — поле "Автор" в форме вырезано именно поэтому.
       author_id: req.user.id,
@@ -940,6 +939,23 @@ router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async 
   }
 });
 
+// Глобальный список всех тегов — без дублей (регистр и ведущий "#" не
+// различаются), с числом статей у каждого тега. Учитываются и теги из поля
+// "Теги", и #хэштеги в тексте статей; берутся только статьи, доступные
+// текущему пользователю (так же, как в articles-index и графе), чтобы список
+// не выдавал теги закрытых от него статей. Используется вкладкой "Теги".
+router.get('/tags', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const accessible = [];
+    for (const article of store.listArticles()) {
+      if (await canAccessArticle(req.user, article)) accessible.push(article);
+    }
+    res.json(store.collectTags(accessible));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Данные для графа связей: статьи (узлы) + wiki-ссылки между ними (рёбра).
 router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -949,8 +965,8 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     }
     const slugs = new Set(accessible.map(a => a.slug));
 
-    // server/category — для клиентских фильтров графа (выбор сервера,
-    // раскраска узлов по категории), см. public/graph-view.js.
+    // server — для клиентского фильтра графа (выбор сервера), см.
+    // public/graph-view.js.
     // tags — для поиска по #тегу в графе: объединяем теги, заданные в форме
     // статьи (a.tags), и #хэштеги прямо в тексте (Obsidian-стиль, см.
     // extractHashtags) — так же, как это уже устроено в filterArticles()
@@ -963,7 +979,6 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
         slug: a.slug,
         title: a.title,
         server: a.server ?? null,
-        categories: a.categories || [],
         tags: [...new Set([...ownTags, ...hashtags])]
       };
     });

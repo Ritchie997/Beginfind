@@ -1,53 +1,16 @@
-// taxonomy.routes.js — категории и роли статей (глобальный справочник,
-// используемый формой создания/редактирования статьи). Изменение
-// справочника — root only: раньше POST/DELETE были доступны любому
-// approved-пользователю.
+// taxonomy.routes.js — роли статей (глобальный справочник, используемый
+// формой создания/редактирования статьи). Изменение справочника — root only:
+// раньше POST/DELETE были доступны любому approved-пользователю. Справочника
+// категорий здесь больше нет — сущность "Категории" убрана из проекта, у
+// статей остались только теги (список всех тегов — GET /api/tags в
+// articles.routes.js).
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const auth = require('../middleware/auth');
-const { articlesDb } = require('../db/connections');
 const { dbPath } = require('../config/paths');
 
 const router = express.Router();
-
-// === Категории ===
-
-router.get('/categories', auth.authenticateToken, auth.checkApproved, (req, res) => {
-  articlesDb.all('SELECT * FROM categories ORDER BY name', (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
-});
-
-router.post('/categories', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
-  const { name } = req.body;
-  articlesDb.run('INSERT INTO categories (name) VALUES (?)', [name], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ id: this.lastID, name });
-  });
-});
-
-router.delete('/categories/:id', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
-  const { id } = req.params;
-  articlesDb.run('DELETE FROM categories WHERE id = ?', [id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
-      res.status(404).json({ error: 'Category not found' });
-      return;
-    }
-    res.json({ deleted: this.changes });
-  });
-});
 
 // === Роли (глобальный справочник пользователей, users.db) ===
 

@@ -15,9 +15,20 @@
             <div id="profile-avatar" style="flex-shrink: 0; width: 72px; height: 72px; border-radius: 50%; background: #5865f2; color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;"></div>
             <div style="flex: 1; min-width: 200px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;">
-                    <h2 id="profile-display-name" style="color: var(--header-primary, #fff); margin: 0;"></h2>
+                    <h2 id="profile-display-name" style="color: var(--header-primary, #fff); margin: 0; overflow-wrap: anywhere;"></h2>
+                    <!-- Только на СВОЁМ профиле (profile.can_edit_name, см. setupProfileName в spa-router.js) -->
+                    <button id="profile-name-edit-btn" type="button" title="Изменить имя" style="display: none; background: transparent; border: 1px solid var(--background-accent, #4f545c); color: var(--text-muted, #b9bbbe); padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class="fas fa-pen"></i> Изменить имя</button>
                     <span id="profile-role-badge" style="padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
                     <span id="profile-status-badge" style="display: none; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;"></span>
+                </div>
+                <div id="profile-name-edit" style="display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px;">
+                    <input type="text" id="profile-name-input" maxlength="32" placeholder="Имя" style="
+                        flex: 1 1 180px; min-width: 0; padding: 7px 10px; box-sizing: border-box;
+                        background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c);
+                        border-radius: 4px; color: var(--text-normal, #dcddde); font-size: 15px; font-family: inherit;
+                    ">
+                    <button id="profile-name-save-btn" type="button" style="background: #5865f2; color: white; padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">Сохранить</button>
+                    <button id="profile-name-cancel-btn" type="button" style="background: var(--background-accent, #4f545c); color: var(--text-normal, #dcddde); padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Отмена</button>
                 </div>
                 <div id="profile-username" style="color: var(--text-muted, #b9bbbe); font-family: monospace; font-size: 13px; margin-bottom: 8px;"></div>
                 <div id="profile-created-at" style="color: var(--text-muted, #b9bbbe); font-size: 12px;"></div>

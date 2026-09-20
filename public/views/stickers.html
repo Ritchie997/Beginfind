@@ -1,12 +1,24 @@
 <div class="stickers-page">
-    <div class="stickers-toolbar">
+    <div class="stickers-toolbar btns-compact">
         <h2 class="stickers-heading"><i class="fas fa-icons"></i> Стикеры</h2>
         <button class="btn btn-primary" id="stickersCreateBtn"><i class="fas fa-plus"></i> Создать набор</button>
+    </div>
+
+    <!-- Уведомление автору: ему предложили коллаборацию (показывается при заходе
+         в раздел, пока есть нерассмотренные предложения) -->
+    <div class="stickers-collab-banner btns-compact" id="stickersCollabBanner" hidden>
+        <i class="fas fa-handshake"></i>
+        <span id="stickersCollabBannerText"></span>
+        <button type="button" class="btn btn-primary btn-sm" id="stickersCollabBannerBtn">Посмотреть</button>
     </div>
 
     <div class="editor-mode-tabs stickers-tabs" id="stickersTabs">
         <button type="button" class="editor-mode-tab active" data-stickers-tab="catalog"><i class="fas fa-grip"></i> Каталог</button>
         <button type="button" class="editor-mode-tab" data-stickers-tab="mine"><i class="fas fa-user"></i> Мои наборы</button>
+        <button type="button" class="editor-mode-tab" data-stickers-tab="collab">
+            <i class="fas fa-handshake"></i> Коллаборации
+            <span class="stickers-badge" id="stickersCollabBadge" hidden>0</span>
+        </button>
         <button type="button" class="editor-mode-tab" data-stickers-tab="pending" id="stickersPendingTabBtn" hidden>
             <i class="fas fa-clock"></i> На модерации
             <span class="stickers-badge" id="stickersPendingBadge" hidden>0</span>
@@ -23,7 +35,7 @@
         <div class="empty-state" id="stickersCatalogEmpty" hidden>
             <i class="fas fa-icons"></i>
             <h3>Пока нет одобренных наборов</h3>
-            <p>Загрузите свой набор во вкладке «Мои наборы» — после подтверждения администратором он появится здесь, и любой сможет добавить его себе.</p>
+            <p>Создайте свой набор во вкладке «Мои наборы» и опубликуйте его — после подтверждения администратором он появится здесь, и любой сможет добавить его себе.</p>
         </div>
         <div class="stickers-pack-grid" id="stickersCatalogGrid" hidden></div>
     </div>
@@ -34,10 +46,24 @@
         <div class="empty-state" id="stickersMineEmpty" hidden>
             <i class="fas fa-icons"></i>
             <h3>У вас пока нет наборов стикеров</h3>
-            <p>Создайте набор и загрузите в него картинки или GIF (для анимации) — после подтверждения администратором набор можно будет добавить себе и использовать в комментариях.</p>
+            <p>Создайте набор и загрузите в него картинки или GIF (для анимации) — он сохранится как черновик, который видите только вы. Опубликуйте его, когда будет готов: после подтверждения администратором набор можно будет добавить себе и использовать в комментариях.</p>
             <button class="btn btn-primary" id="stickersMineEmptyCreateBtn"><i class="fas fa-plus"></i> Создать набор</button>
         </div>
         <div class="stickers-pack-grid" id="stickersMineGrid" hidden></div>
+    </div>
+
+    <!-- ============ Коллаборации: предложения вам и ваши предложения ============ -->
+    <div class="stickers-panel" id="stickersPanelCollab" hidden>
+        <div class="loading-pulse" id="stickersCollabLoading">Загрузка предложений...</div>
+        <div id="stickersCollabContent" hidden>
+            <h3 class="stickers-section-title">Предложения вам</h3>
+            <div class="stickers-collab-empty" id="stickersCollabIncomingEmpty" hidden>Пока никто не предлагал коллаборацию в ваших наборах. Когда это случится, предложение появится здесь.</div>
+            <div class="stickers-collab-list" id="stickersCollabIncomingList"></div>
+
+            <h3 class="stickers-section-title">Ваши предложения</h3>
+            <div class="stickers-collab-empty" id="stickersCollabOutgoingEmpty" hidden>Вы ещё не предлагали коллаборацию. Откройте чужой набор во вкладке «Каталог», добавьте свои стикеры и нажмите «Предложить коллаборацию».</div>
+            <div class="stickers-collab-list" id="stickersCollabOutgoingList"></div>
+        </div>
     </div>
 
     <!-- ============ На модерации: видно только с правом moderate_stickers ============ -->
@@ -67,7 +93,7 @@
                     <label class="form-label">Описание (необязательно)</label>
                     <textarea id="stickersCreateDescription" class="form-textarea" maxlength="200" placeholder="Коротко, до 200 символов — покажется в пикере стикеров при выборе набора"></textarea>
                 </div>
-                <div class="modal-hint"><i class="fas fa-circle-info"></i> После создания набор появится во вкладке «Мои наборы» со статусом «На модерации» — добавьте в него стикеры и дождитесь подтверждения администратором.</div>
+                <div class="modal-hint"><i class="fas fa-circle-info"></i> Набор сохранится черновиком во вкладке «Мои наборы» — его видите только вы. Добавьте стикеры и опубликуйте набор, когда он будет готов: тогда он уйдёт на проверку администратору.</div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="stickersCreateCancelBtn">Отмена</button>
@@ -86,14 +112,16 @@
             <div class="modal-body">
                 <div class="stickers-pack-modal-meta" id="stickersPackModalMeta"></div>
                 <div class="stickers-grid" id="stickersPackModalGrid"></div>
-                <div class="stickers-upload-row" id="stickersPackModalUploadRow" hidden>
+                <!-- Коллаборация — только в чужом опубликованном наборе (см. renderCollabSection) -->
+                <div class="stickers-collab-box btns-compact" id="stickersPackModalCollab" hidden></div>
+                <div class="stickers-upload-row btns-compact" id="stickersPackModalUploadRow" hidden>
                     <input type="file" id="stickersUploadFileInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
                     <button type="button" class="btn btn-secondary" id="stickersUploadPickBtn"><i class="fas fa-image"></i> <span id="stickersUploadFileName">Выбрать файл</span></button>
                     <input type="text" id="stickersUploadAliasInput" class="form-input" placeholder="Имя стикера латиницей, напр. wave" maxlength="60">
                     <button type="button" class="btn btn-primary" id="stickersUploadConfirmBtn"><i class="fas fa-upload"></i> Добавить</button>
                 </div>
             </div>
-            <div class="modal-footer" id="stickersPackModalFooter"></div>
+            <div class="modal-footer btns-compact" id="stickersPackModalFooter"></div>
         </div>
     </div>
 
@@ -119,10 +147,83 @@
 </div>
 
 <style>
+/* Всё, чему JS ставит el.hidden = true, обязано реально скрыться: [hidden] из
+   UA-стилей и авторские display:flex/grid (.stickers-upload-row,
+   .editor-mode-tab, .stickers-collab-*) имеют равный приоритет, и побеждает
+   авторское правило — из-за этого вкладка "На модерации" была видна всем, а
+   строка загрузки "своего" набора — и в чужом наборе. Тот же приём, что у
+   .servers-page [hidden] в servers.html. */
+.stickers-page [hidden] { display: none !important; }
+
 .stickers-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .stickers-heading { margin: 0; font-size: 20px; color: var(--text-normal); display: flex; align-items: center; gap: 10px; }
 .stickers-tabs { margin-bottom: 18px; }
 .stickers-badge { background: var(--red); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; margin-left: 4px; }
+
+.stickers-section-title { margin: 18px 0 10px; font-size: 15px; font-weight: 700; color: var(--text-normal); }
+.stickers-section-title:first-child { margin-top: 0; }
+
+/* Уведомление о предложении коллаборации */
+.stickers-collab-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: rgba(88, 101, 242, 0.12);
+    border: 1px solid rgba(88, 101, 242, 0.4);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-normal);
+}
+.stickers-collab-banner[hidden] { display: none; }
+.stickers-collab-banner i { color: var(--blurple); font-size: 16px; }
+.stickers-collab-banner span { flex: 1 1 200px; }
+
+.stickers-collab-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 10px; }
+.stickers-collab-empty { color: var(--text-muted); font-size: 13px; padding: 4px 0 8px; }
+.stickers-collab-empty[hidden] { display: none; }
+.stickers-collab-card {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 10px;
+    padding: 12px;
+}
+.stickers-collab-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.stickers-collab-title { font-size: 13.5px; color: var(--text-normal); line-height: 1.4; overflow-wrap: anywhere; }
+.stickers-collab-title i { color: var(--blurple); margin-right: 4px; }
+.stickers-collab-date { flex-shrink: 0; font-size: 12px; color: var(--text-muted); }
+.stickers-collab-message {
+    font-size: 13px; color: var(--text-normal); line-height: 1.45;
+    background: var(--background-tertiary); border-left: 3px solid var(--blurple);
+    border-radius: 4px; padding: 6px 10px; overflow-wrap: anywhere;
+}
+.stickers-collab-thumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.stickers-collab-thumbs img { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; background: var(--background-tertiary); border: 1px solid var(--background-accent); }
+.stickers-collab-thumbs-more { color: var(--text-muted); font-size: 12px; }
+.stickers-collab-hint { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.stickers-collab-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+
+/* Блок "Коллаборация" в окне чужого набора */
+.stickers-collab-box {
+    border-top: 1px solid var(--background-accent);
+    margin-top: 4px;
+    padding-top: 12px;
+}
+.stickers-collab-box[hidden] { display: none; }
+.stickers-collab-box-title { font-weight: 700; font-size: 14px; color: var(--text-normal); margin-bottom: 4px; }
+.stickers-collab-box-title i { color: var(--blurple); margin-right: 4px; }
+.stickers-collab-explain { font-size: 13px; color: var(--text-muted); line-height: 1.45; margin: 0 0 10px; }
+.stickers-collab-staged-empty { font-size: 13px; color: var(--text-muted); font-style: italic; margin-bottom: 10px; }
+.stickers-collab-box .stickers-grid { max-height: 220px; }
+.stickers-collab-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.stickers-collab-row .form-input { flex: 1; min-width: 160px; }
+.stickers-collab-sent {
+    background: rgba(250, 168, 26, 0.1);
+    border: 1px solid rgba(250, 168, 26, 0.35);
+    color: var(--text-normal);
+    border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.45; margin-bottom: 10px;
+}
+.stickers-collab-sent i { color: var(--yellow); }
 
 .stickers-search-wrap { position: relative; max-width: 360px; margin-bottom: 16px; }
 .stickers-search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
@@ -155,6 +256,8 @@
     transition: border-color 0.15s, transform 0.15s;
 }
 .stickers-pack-card:hover { border-color: var(--blurple); transform: translateY(-2px); }
+/* Черновик — пунктирная рамка: сразу видно, что набор ещё не опубликован. */
+.stickers-pack-card.is-draft { border-style: dashed; }
 
 .stickers-pack-preview { display: flex; gap: 6px; height: 56px; align-items: center; }
 .stickers-pack-preview img { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; background: var(--background-tertiary); }
@@ -166,6 +269,7 @@
 .stickers-pack-card-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
 
 .stickers-status-badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.stickers-status-badge.draft { background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
 .stickers-status-badge.pending { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
 .stickers-status-badge.approved { background: rgba(59, 165, 93, 0.18); color: var(--green); }
 .stickers-status-badge.rejected { background: rgba(237, 66, 69, 0.18); color: var(--red); }
@@ -174,6 +278,17 @@
 .stickers-pack-card-actions .btn { flex: 1; }
 
 .stickers-pack-modal-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
+.stickers-draft-box {
+    background: rgba(88, 101, 242, 0.1);
+    border: 1px solid rgba(88, 101, 242, 0.35);
+    color: var(--text-normal);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 14px;
+}
+.stickers-draft-box i { color: var(--blurple); }
 .stickers-reject-reason-box {
     background: rgba(237, 66, 69, 0.1);
     border: 1px solid rgba(237, 66, 69, 0.35);
@@ -197,8 +312,47 @@
 .stickers-upload-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 12px; border-top: 1px solid var(--background-accent); }
 .stickers-upload-row .form-input { flex: 1; min-width: 180px; }
 
+/* --- Компактный вид (телефон и ПК): тот же язык, что у вкладок "Сервера" и
+   "Пользователи" — компактная шапка (заголовок и кнопка в одной строке),
+   вкладки с переносом, карточки плотнее, кнопки маленькие (.btns-compact →
+   общее правило в global-styles.css, "TABLE CARDS"), без больших пустых
+   отступов у пустых состояний. Раньше это работало только на ≤768px, и на ПК
+   раздел выглядел старее мобильной версии. --- */
+.stickers-toolbar { gap: 8px; margin-bottom: 12px; }
+.stickers-heading { font-size: 18px; gap: 8px; }
+
+/* Вкладки: у .editor-mode-tab на ≤1024px стоит flex:1; min-width:0 (под 2-3
+   вкладки редактора статей), и текст вылезает за рамку — здесь, как и у
+   вкладок сервера, каждая держит свой размер и переносится на новую строку,
+   если не помещается. */
+.stickers-tabs { flex-wrap: wrap; margin-bottom: 12px; }
+.stickers-tabs .editor-mode-tab { flex: none; }
+
+.stickers-page .empty-state { padding: 28px 12px; }
+.stickers-page .empty-state i { font-size: 40px; margin-bottom: 12px; }
+.stickers-page .empty-state h3 { font-size: 17px; margin-bottom: 8px; }
+.stickers-page .empty-state p { font-size: 13px; }
+
+.stickers-pack-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.stickers-pack-card { padding: 12px; gap: 8px; }
+.stickers-pack-preview { height: 48px; overflow: hidden; }
+.stickers-pack-preview img { width: 40px; height: 40px; }
+.stickers-pack-card-actions { flex-wrap: wrap; }
+
+.stickers-grid { max-height: 45vh; }
+
+@media (max-width: 768px) {
+    .stickers-toolbar { flex-wrap: nowrap; }
+    .stickers-search-wrap { max-width: none; margin-bottom: 12px; }
+    .stickers-tile-remove { width: 24px; height: 24px; line-height: 24px; top: -8px; right: -8px; }
+    .stickers-page .modal-footer { justify-content: flex-start; gap: 6px; }
+}
+
 @media (max-width: 600px) {
-    .stickers-pack-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-    .stickers-upload-row .btn, .stickers-upload-row .form-input { width: 100%; }
+    .stickers-collab-row .form-input { order: -1; flex: 1 1 100%; width: 100%; min-width: 0; }
+    /* Загрузка стикера: имя — на всю ширину сверху, ниже в ряд "файл" и
+       "Добавить" — маленькими кнопками, а не тремя блоками во всю ширину. */
+    .stickers-upload-row { gap: 8px; }
+    .stickers-upload-row .form-input { order: -1; flex: 1 1 100%; width: 100%; min-width: 0; }
 }
 </style>

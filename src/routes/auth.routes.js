@@ -14,10 +14,12 @@ router.post('/register', auth.rateLimitLimiter('registration'), async (req, res)
       return res.status(403).json({ error: 'Регистрация новых пользователей временно отключена' });
     }
 
+    // username — логин (для входа, публично не показывается), display_name —
+    // имя (никнейм), его видят все; проверка формата обоих — в auth.register.
     const { display_name, password, username } = req.body;
 
-    if (!display_name || !password) {
-      return res.status(400).json({ error: 'Имя и пароль обязательны' });
+    if (!username || !display_name || !password) {
+      return res.status(400).json({ error: 'Логин, имя и пароль обязательны' });
     }
 
     if (password.length < 6) {
@@ -28,9 +30,9 @@ router.post('/register', auth.rateLimitLimiter('registration'), async (req, res)
       return res.status(400).json({ error: 'Пароли не совпадают' });
     }
 
-    console.log('Registration attempt for:', display_name);
+    console.log('Registration attempt for login:', username);
 
-    const user = await auth.register(display_name, password, username);
+    const user = await auth.register(username, display_name, password);
 
     console.log('Registration pending for user:', user.username);
 
@@ -55,7 +57,7 @@ router.post('/login', auth.rateLimitLimiter('login'), async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ error: 'Имя пользователя и пароль обязательны' });
+      return res.status(400).json({ error: 'Логин и пароль обязательны' });
     }
 
     console.log('Login attempt for username:', username);
@@ -94,12 +96,21 @@ router.get('/profile', auth.authenticateToken, auth.checkApproved, async (req, r
   }
 });
 
-// PUT /api/profile — обновить своё публичное описание (bio). Роль/сервера/
+// PUT /api/profile — обновить своё публичное описание (bio) и/или имя
+// (display_name; логин отсюда не меняется). Обновляются только переданные
+// поля — иначе смена имени стирала бы bio и наоборот. Роль/сервера/
 // админ-заметка отсюда не меняются — заметка правится через /users/:id/note,
 // роль и сервера пользователь себе назначить не может.
 router.put('/profile', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const result = await auth.updateOwnBio(req.user.id, req.body.bio);
+    const { bio, display_name } = req.body;
+    if (bio === undefined && display_name === undefined) {
+      return res.status(400).json({ error: 'Нечего обновлять' });
+    }
+
+    const result = {};
+    if (display_name !== undefined) Object.assign(result, await auth.updateOwnDisplayName(req.user.id, display_name));
+    if (bio !== undefined) Object.assign(result, await auth.updateOwnBio(req.user.id, bio));
     res.json({ message: 'Профиль обновлён', ...result });
   } catch (error) {
     res.status(400).json({ error: error.message });

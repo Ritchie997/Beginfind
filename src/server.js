@@ -232,6 +232,15 @@ function initializeAutoCleanup() {
   console.log('[Cleanup] Система автоматической очистки мусора инициализирована');
 }
 
+// Сущность "Категории" удалена — вычищаем устаревшее поле categories из
+// файлов статей (идемпотентно: уже чистые файлы не трогаются).
+try {
+  const cleaned = require('./services/articles-store').stripLegacyCategoryFields();
+  if (cleaned > 0) console.log(`[articles] Убрано устаревшее поле categories из статей: ${cleaned}`);
+} catch (e) {
+  console.error('[articles] Не удалось убрать устаревшее поле categories:', e);
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`Server is running on http://${HOST}:${PORT}`);
   console.log(`Access locally: http://localhost:${PORT}`);

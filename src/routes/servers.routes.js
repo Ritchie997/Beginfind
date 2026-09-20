@@ -54,7 +54,7 @@ router.post('/servers', auth.authenticateToken, auth.checkApproved, async (req, 
     if (adminRole) {
       await serverSystem.assignRoleToUserOnServer(req.user.id, server.id, adminRole.id);
     }
-    await serverSystem.logServerAction(server.id, req.user.id, req.user.username, 'server_created', { name });
+    await serverSystem.logServerAction(server.id, req.user.id, (req.user.display_name || req.user.username), 'server_created', { name });
     res.json(server);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -93,7 +93,7 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
       if (result.changes === 0) {
         res.status(404).json({ error: 'Server not found' });
       } else {
-        await serverSystem.logServerAction(id, req.user.id, req.user.username, 'server_updated', { name, description });
+        await serverSystem.logServerAction(id, req.user.id, (req.user.display_name || req.user.username), 'server_updated', { name, description });
         res.json({ updated: result.changes, serverId: id });
       }
       serversDb.close();
@@ -142,7 +142,7 @@ router.delete('/servers/:id', auth.authenticateToken, auth.checkApproved, async 
         // но сама запись в server_audit_log остаётся историческим следом
         // ("сервер X удалён пользователем Y") — таблицу журнала
         // deleteServer намеренно не трогает.
-        await serverSystem.logServerAction(id, req.user.id, req.user.username, 'server_deleted', { name: row.name });
+        await serverSystem.logServerAction(id, req.user.id, (req.user.display_name || req.user.username), 'server_deleted', { name: row.name });
         const result = await serverSystem.deleteServer(id);
         if (result.changes === 0) {
           res.status(404).json({ error: 'Server not found' });
@@ -193,7 +193,7 @@ router.post('/servers/:id/roles', auth.authenticateToken, auth.checkApproved, as
     }
 
     const role = await serverSystem.createRoleOnServer(id, name, hierarchy_level, permissions);
-    await serverSystem.logServerAction(id, userId, req.user.username, 'role_created', { name, hierarchy_level });
+    await serverSystem.logServerAction(id, userId, (req.user.display_name || req.user.username), 'role_created', { name, hierarchy_level });
     res.json(role);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -216,7 +216,7 @@ router.post('/servers/:serverId/users/:userId', auth.authenticateToken, auth.che
     }
 
     const result = await serverSystem.addUserToServer(userId, serverId);
-    await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'member_added', { targetUserId: parseInt(userId), self: parseInt(userId) === currentUserId });
+    await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'member_added', { targetUserId: parseInt(userId), self: parseInt(userId) === currentUserId });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -276,7 +276,7 @@ router.delete('/servers/:serverId/users/:userId', auth.authenticateToken, auth.c
               return res.status(500).json({ error: err.message });
             }
             const isSelf = parseInt(userId) === currentUserId;
-            await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'member_removed', { targetUserId: parseInt(userId), self: isSelf });
+            await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'member_removed', { targetUserId: parseInt(userId), self: isSelf });
             res.json({ deleted: this.changes, userId, serverId });
           });
         });
@@ -304,7 +304,7 @@ router.post('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateT
     }
 
     const result = await serverSystem.assignRoleToUserOnServer(userId, serverId, roleId);
-    await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_assigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
+    await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'role_assigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -333,7 +333,7 @@ router.delete('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticat
         if (err) {
           res.status(500).json({ error: err.message });
         } else {
-          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_unassigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
+          await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'role_unassigned', { targetUserId: parseInt(userId), roleId: parseInt(roleId) });
           res.json({ deleted: this.changes, userId, serverId, roleId });
         }
         serversDb.close();
@@ -380,7 +380,7 @@ router.delete('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.c
         if (err) {
           res.status(500).json({ error: err.message });
         } else {
-          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_deleted', { roleId: parseInt(roleId), name: row.name });
+          await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'role_deleted', { roleId: parseInt(roleId), name: row.name });
           res.json({ deleted: this.changes, roleId, serverId });
         }
         serversDb.close();
@@ -413,7 +413,7 @@ router.put('/servers/:serverId/roles/:roleId', auth.authenticateToken, auth.chec
         } else if (this.changes === 0) {
           res.status(404).json({ error: 'Role not found or does not belong to this server' });
         } else {
-          await serverSystem.logServerAction(serverId, currentUserId, req.user.username, 'role_updated', { roleId: parseInt(roleId), name, hierarchy_level });
+          await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'role_updated', { roleId: parseInt(roleId), name, hierarchy_level });
           res.json({ updated: this.changes, roleId, serverId, name, hierarchy_level, permissions });
         }
         serversDb.close();
@@ -458,7 +458,7 @@ router.post('/servers/:id/channels', auth.authenticateToken, auth.checkApproved,
     }
 
     const channel = await serverSystem.createChannelOnServer(id, name.trim(), channel_type, description);
-    await serverSystem.logServerAction(id, req.user.id, req.user.username, 'channel_created', { name: channel.name, channel_type: channel.channel_type });
+    await serverSystem.logServerAction(id, req.user.id, (req.user.display_name || req.user.username), 'channel_created', { name: channel.name, channel_type: channel.channel_type });
     res.json(channel);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -487,7 +487,7 @@ router.put('/servers/:serverId/channels/:channelId', auth.authenticateToken, aut
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Channel not found' });
     }
-    await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'channel_updated', { channelId: parseInt(channelId), name: name.trim() });
+    await serverSystem.logServerAction(serverId, req.user.id, (req.user.display_name || req.user.username), 'channel_updated', { channelId: parseInt(channelId), name: name.trim() });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -508,7 +508,7 @@ router.delete('/servers/:serverId/channels/:channelId', auth.authenticateToken, 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Channel not found' });
     }
-    await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'channel_deleted', { channelId: parseInt(channelId) });
+    await serverSystem.logServerAction(serverId, req.user.id, (req.user.display_name || req.user.username), 'channel_deleted', { channelId: parseInt(channelId) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -540,7 +540,7 @@ router.put('/servers/:serverId/owner', auth.authenticateToken, auth.checkApprove
       } else if (this.changes === 0) {
         res.status(404).json({ error: 'Server not found' });
       } else {
-        await serverSystem.logServerAction(serverId, req.user.id, req.user.username, 'owner_changed', { newOwnerId: parseInt(newOwnerId), newOwnerUsername: newOwner.username });
+        await serverSystem.logServerAction(serverId, req.user.id, (req.user.display_name || req.user.username), 'owner_changed', { newOwnerId: parseInt(newOwnerId), newOwnerUsername: newOwner.display_name || newOwner.username });
         res.json({ updated: this.changes, serverId, newOwnerId });
       }
       serversDb.close();
@@ -555,7 +555,9 @@ router.put('/servers/:serverId/owner', auth.authenticateToken, auth.checkApprove
 router.get('/users', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
   try {
     const usersDb = new sqlite3.Database(dbPath('users.db'));
-    usersDb.all('SELECT id, username FROM users ORDER BY username', [], (err, rows) => {
+    // Отдаём и имя, и логин: эндпоинт только для владельца (выбор нового
+    // владельца сервера), display_name — то, что показывается в списке.
+    usersDb.all("SELECT id, username, COALESCE(NULLIF(display_name, ''), username) AS display_name FROM users ORDER BY display_name", [], (err, rows) => {
       if (err) {
         res.status(500).json({ error: err.message });
       } else {
@@ -570,10 +572,10 @@ router.get('/users', auth.authenticateToken, auth.checkApproved, auth.checkRoot,
 
 // Быстрый поиск пользователей по имени — используется в модалке "Добавить
 // участника" вместо ручного ввода ID. Не root-only, в отличие от GET /users
-// выше: отдаёт только id+username, ровно то же самое, что уже видно любому
-// approved-пользователю в списке участников любого сервера
-// (GET /servers/:id/users) — более широкий доступ здесь не раскрывает
-// ничего сверх уже открытого, только упрощает поиск.
+// выше: отдаёт только id+имя (display_name), ровно то же самое, что уже видно
+// любому approved-пользователю в списке участников любого сервера
+// (GET /servers/:id/users). Ищем и отдаём именно имя, а не логин: логин —
+// часть учётных данных и не должен подбираться через публичный поиск.
 router.get('/users/search', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
@@ -581,8 +583,8 @@ router.get('/users/search', auth.authenticateToken, auth.checkApproved, async (r
 
     const usersDb = new sqlite3.Database(dbPath('users.db'));
     usersDb.all(
-      "SELECT id, username, display_name FROM users WHERE status = 'approved' AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 10",
-      [`%${q}%`, `%${q}%`],
+      "SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name FROM users WHERE status = 'approved' AND COALESCE(NULLIF(display_name, ''), username) LIKE ? ORDER BY display_name LIMIT 10",
+      [`%${q}%`],
       (err, rows) => {
         usersDb.close();
         if (err) {

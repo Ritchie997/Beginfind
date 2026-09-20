@@ -283,9 +283,7 @@
 
   class IbripediaManager {
     constructor() {
-      this.categoryField = null;
       this.tagField = null;
-      this.categoryColors = new Map();
       this.articlesIndex = [];
       this.articlesIndexBySlug = new Map();
       this.viewMode = 'grid';
@@ -410,7 +408,6 @@
       this.initChipFields();
 
       await Promise.all([
-        this.loadCategoryOptions(),
         this.loadServerOptions(),
         this.loadArticlesIndex()
       ]);
@@ -441,14 +438,6 @@
     }
 
     initChipFields() {
-      const categoryRoot = document.getElementById('ibripediaCategoryField');
-      this.categoryField = categoryRoot ? new ChipField(categoryRoot, {
-        freeText: false,
-        placeholder: 'Все категории...',
-        emptyText: 'Категории не найдены',
-        onChange: () => this.resetAndLoad()
-      }) : null;
-
       const tagRoot = document.getElementById('ibripediaTagField');
       this.tagField = tagRoot ? new ChipField(tagRoot, {
         freeText: false,
@@ -456,20 +445,6 @@
         emptyText: 'Теги не найдены',
         onChange: () => this.resetAndLoad()
       }) : null;
-    }
-
-    async loadCategoryOptions() {
-      try {
-        const result = await window.apiClient.getCategories();
-        if (!result.success) return;
-        const names = result.data.map((c) => c.name);
-        this.categoryField?.setOptions(names.map((n) => ({ value: n, label: n })));
-        if (window.GraphView?.buildCategoryColorMap) {
-          this.categoryColors = window.GraphView.buildCategoryColorMap([{ categories: names }]);
-        }
-      } catch (e) {
-        // Фильтр по категориям просто останется пустым — не критично для остального
-      }
     }
 
     async loadServerOptions() {
@@ -498,18 +473,16 @@
       }
       this.articlesIndexBySlug = new Map(this.articlesIndex.map((a) => [a.slug, a]));
 
-      const tagSet = new Set();
-      this.articlesIndex.forEach((a) => (a.tags || []).forEach((t) => tagSet.add(t)));
-      const tagOptions = [...tagSet].sort((a, b) => a.localeCompare(b, 'ru')).map((t) => ({ value: t, label: t }));
-      this.tagField?.setOptions(tagOptions);
-    }
-
-    colorForCategory(name) {
-      if (this.categoryColors.has(name)) return this.categoryColors.get(name);
-      const palette = window.GraphView?.CATEGORY_PALETTE || ['#5865f2'];
-      const color = palette[this.categoryColors.size % palette.length];
-      this.categoryColors.set(name, color);
-      return color;
+      // Подсказки фильтра по тегам — глобальный список тегов без дублей (тот
+      // же, что во вкладке "Теги"): и теги из поля "Теги", и #хэштеги из
+      // текста статей, чтобы по любому из них можно было отфильтровать витрину.
+      try {
+        const tagsResult = await window.apiClient.getTags();
+        const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
+        this.tagField?.setOptions(tags.map((t) => ({ value: t.tag, label: t.tag })));
+      } catch (e) {
+        // Фильтр по тегам просто останется без подсказок — не критично
+      }
     }
 
     bindEvents() {
@@ -540,12 +513,6 @@
 
       this.gridEl?.addEventListener('click', (e) => this.handleGridClick(e));
       document.getElementById('ibripediaViewContent')?.addEventListener('click', (e) => this.handleViewContentClick(e));
-      document.getElementById('ibripediaViewBadges')?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action="filter-category"]');
-        if (!btn) return;
-        this.closeArticleView();
-        this.filterByCategory(btn.getAttribute('data-value'));
-      });
       document.getElementById('ibripediaViewMeta')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (!btn) return;
@@ -662,7 +629,6 @@
       if (!this.filtersCountEl) return;
       const f = this.getFilters();
       let n = 0;
-      if (f.category.length) n++;
       if (f.tag.length) n++;
       if (f.server) n++;
       if (f.locked) n++;
@@ -672,7 +638,6 @@
     }
 
     resetFilters() {
-      this.categoryField?.setValues([]);
       this.tagField?.setValues([]);
       if (this.serverFilterEl) this.serverFilterEl.value = '';
       if (this.statusFilterEl) this.statusFilterEl.value = '';
@@ -699,7 +664,6 @@
     getFilters() {
       return {
         q: this.searchEl?.value.trim() || '',
-        category: this.categoryField?.getValues() || [],
         tag: this.tagField?.getValues() || [],
         server: this.serverFilterEl?.value || '',
         locked: this.statusFilterEl?.value || '',
@@ -786,7 +750,6 @@
       el.className = 'ibripedia-card';
       el.dataset.slug = article.slug || article.id;
 
-      const categories = article.categories || [];
       const tags = article.tags || [];
       const authorName = article.author ? article.author.display_name : 'Не указан';
 
@@ -803,9 +766,6 @@
           </div>
         </div>` : ''}
         <div class="ibripedia-card-body">
-          ${categories.length ? `<div class="ibripedia-card-categories">${categories.map((c) =>
-            `<span class="ibripedia-badge" data-action="filter-category" data-value="${escapeHtml(c)}" style="background:${this.colorForCategory(c)}">${escapeHtml(c)}</span>`
-          ).join('')}</div>` : ''}
           <h3 class="ibripedia-card-title">${escapeHtml(article.title)}</h3>
           <p class="ibripedia-card-excerpt">${escapeHtml(makeExcerpt(article))}</p>
           ${tags.length ? `<div class="ibripedia-card-tags">${tags.map((t) =>
@@ -869,7 +829,6 @@
         const action = actionBtn.getAttribute('data-action');
         if (action === 'edit') { this.editArticleBySlug(slug); return; }
         if (action === 'delete') { this.deleteArticle(slug); return; }
-        if (action === 'filter-category') { this.filterByCategory(actionBtn.getAttribute('data-value')); return; }
         if (action === 'filter-tag') { this.filterByTag(actionBtn.getAttribute('data-value')); return; }
         if (action === 'open-profile') { window.spaRouter?.navigateTo(`/profile/${actionBtn.getAttribute('data-value')}`); return; }
         if (action === 'toggle-like') { this.toggleCardLike(actionBtn, slug); return; }
@@ -880,7 +839,6 @@
       this.openArticleView(slug);
     }
 
-    filterByCategory(name) { this.categoryField?.addValue(name); }
     filterByTag(name) { this.tagField?.addValue(name); }
 
     // Лайк прямо с карточки витрины — без открытия статьи (см. кнопку
@@ -1057,9 +1015,7 @@
       const metaEl = document.getElementById('ibripediaViewMeta');
       if (metaEl) metaEl.innerHTML = metaParts.join('');
 
-      const badges = (article.categories || []).map((c) =>
-        `<span class="ibripedia-badge" data-action="filter-category" data-value="${escapeHtml(c)}" style="background:${this.colorForCategory(c)}">${escapeHtml(c)}</span>`
-      );
+      const badges = [];
       if (article.locked) badges.push('<span class="ibripedia-badge" style="background:var(--yellow-hover)"><i class="fas fa-lock"></i> Закрытая</span>');
       const badgesEl = document.getElementById('ibripediaViewBadges');
       if (badgesEl) badgesEl.innerHTML = badges.join('');

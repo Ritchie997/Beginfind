@@ -105,7 +105,6 @@ function parseArticleFile(filePath, slug) {
     locked: !!fm.locked,
     role: Array.isArray(fm.roles) && fm.roles.length > 0 ? JSON.stringify(fm.roles) : null,
     roles: Array.isArray(fm.roles) ? fm.roles : [],
-    categories: Array.isArray(fm.categories) ? fm.categories : (fm.category ? [fm.category] : []),
     tags: Array.isArray(fm.tags) ? fm.tags : [],
     // author_id/co_author_ids — id пользователей (числа), имена резолвятся
     // на лету в articles.routes.js::formatArticleResponse, а не хранятся
@@ -137,7 +136,6 @@ function writeArticleFile(slug, article) {
     author_id: article.author_id ?? null,
     co_author_ids: article.co_author_ids || [],
     tags: article.tags || [],
-    categories: article.categories || [],
     excerpt: article.excerpt || '',
     server: article.server ?? null,
     locked: !!article.locked,
@@ -233,7 +231,6 @@ function createArticle(fields) {
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: normalizeRoles(fields.role, fields.roles),
-    categories: Array.isArray(fields.categories) ? fields.categories : [],
     tags: fields.tags || [],
     // Автор — всегда пользователь, реально создавший статью (проставляется
     // маршрутом из req.user.id, а не из тела запроса) — см. articles.routes.js.
@@ -265,7 +262,6 @@ function importArticle(slug, fields) {
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: fields.roles || [],
-    categories: Array.isArray(fields.categories) ? fields.categories : (fields.category ? [fields.category] : []),
     tags: fields.tags || [],
     author_id: fields.author_id ?? null,
     co_author_ids: Array.isArray(fields.co_author_ids) ? fields.co_author_ids : [],
@@ -294,7 +290,6 @@ function updateArticle(slug, fields) {
     roles: (fields.role !== undefined || fields.roles !== undefined)
       ? normalizeRoles(fields.role, fields.roles)
       : existing.roles,
-    categories: Array.isArray(fields.categories) ? fields.categories : existing.categories,
     tags: fields.tags ?? existing.tags,
     // author_id намеренно не берётся из req.body (маршрут его туда даже не
     // пропускает) — закреплён за статьёй с момента создания и не меняется
@@ -356,12 +351,13 @@ function mentionTarget(title, slug) {
  * Статья была переименована (oldSlug → newSlug, заголовок newTitle):
  * упоминания [[oldSlug]] / [[Старый заголовок]] / [[oldSlug|текст]] /
  * [[oldSlug#якорь]] в других статьях указывают на новое имя. Свой алиас
- * ("|текст") сохраняется — его задал автор упоминания.
+ * ("|текст") и своё имя ("[[статья]](Имя)") сохраняются — их задал автор
+ * упоминания.
  */
 function refreshMentions(oldSlug, newSlug, newTitle) {
   const target = mentionTarget(newTitle, newSlug);
-  return rewriteMentions(({ slug, anchor, alias }) =>
-    slug === oldSlug ? `[[${target}${anchor}${alias}]]` : null);
+  return rewriteMentions(({ slug, anchor, alias, name }) =>
+    slug === oldSlug ? `[[${target}${anchor}${alias}]]${name}` : null);
 }
 
 // Что подставляется вместо упоминания удалённой статьи.
@@ -370,7 +366,8 @@ const DELETED_MENTION_TEXT = 'Удалено';
 /**
  * "Удаляет" статью, перемещая файл в content/.trash/ вместо безвозвратного
  * удаления. Упоминания [[wiki-ссылками]] в остальных статьях заменяются на
- * текст "Удалено" (вместе с алиасом и якорем — ссылаться больше не на что).
+ * текст "Удалено" (вместе с алиасом, якорем и своим именем "(Имя)" —
+ * ссылаться больше не на что).
  */
 function deleteArticle(slug) {
   if (!isSafeSlug(slug)) return false;
@@ -413,6 +410,77 @@ function renameArticle(oldSlug, newTitle) {
   return { oldSlug, newSlug, updatedArticles };
 }
 
+/**
+ * Глобальный список тегов по переданным статьям — БЕЗ дублей. Тег статьи —
+ * это и то, что вписано в поле "Теги" формы (article.tags), и #хэштеги прямо
+ * в тексте (см. extractHashtags): фильтр витрины и граф связей уже считают их
+ * одним и тем же, поэтому и здесь они сливаются. Дубли определяются без учёта
+ * регистра и без ведущего "#" ("Дракон", "дракон" и "#дракон" — один тег);
+ * показывается написание из поля "Теги" (в нём регистр задал автор), а если
+ * тег встречается только как #хэштег в тексте — его строчная форма.
+ * count — сколько разных статей отмечено этим тегом.
+ * @param {object[]} articles — статьи (уже отфильтрованные по доступу)
+ * @returns {{tag: string, count: number}[]} по алфавиту
+ */
+function collectTags(articles) {
+  const byKey = new Map(); // ключ (нижний регистр) -> { tag, fromField, slugs:Set }
+
+  const add = (raw, slug, fromField) => {
+    const name = String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { tag: name, fromField, slugs: new Set() };
+      byKey.set(key, entry);
+    } else if (fromField && !entry.fromField) {
+      entry.tag = name; // явное написание из поля "Теги" главнее хэштега из текста
+      entry.fromField = true;
+    }
+    entry.slugs.add(slug);
+  };
+
+  for (const article of articles) {
+    (article.tags || []).forEach((t) => add(t, article.slug, true));
+    extractHashtags(article.content).forEach((t) => add(t, article.slug, false));
+  }
+
+  return [...byKey.values()]
+    .map((e) => ({ tag: e.tag, count: e.slugs.size }))
+    .sort((a, b) => a.tag.localeCompare(b.tag, 'ru'));
+}
+
+/**
+ * Разовая (и идемпотентная) чистка: убирает устаревшее поле categories/category
+ * из файлов статей (и из корзины) — сущность "Категории" удалена из проекта.
+ * Файлы, где этих полей нет, не трогаются; updated_at не меняется — это
+ * служебная правка формата, а не работа автора над статьёй.
+ * @returns {number} сколько файлов было переписано
+ */
+function stripLegacyCategoryFields() {
+  let rewritten = 0;
+  for (const dir of [CONTENT_DIR, TRASH_DIR]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith(FILE_EXT)) continue;
+      const filePath = path.join(dir, name);
+      try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (!data || typeof data !== 'object') continue;
+        if (!('categories' in data) && !('category' in data)) continue;
+        delete data.categories;
+        delete data.category;
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+        rewritten += 1;
+      } catch (e) {
+        console.error(`[articles-store] Не удалось убрать categories из ${filePath}:`, e.message);
+      }
+    }
+  }
+  if (rewritten > 0) invalidateCache();
+  return rewritten;
+}
+
 function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   const q = query.trim().toLowerCase();
   const all = listArticles();
@@ -442,7 +510,7 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
 // === Ibripedia: фильтрация/сортировка витрины статей ===
 //
 // В отличие от searchArticles() (только текстовый поиск, с ранжированием
-// по вхождению) — здесь произвольная комбинация фильтров (категории, теги,
+// по вхождению) — здесь произвольная комбинация фильтров (теги,
 // сервер, статус, диапазон дат) плюс сортировка. Пагинацию (limit/offset)
 // сюда сознательно не добавляем — её накладывает уже вызывающий код в
 // routes ПОСЛЕ проверки доступа (canAccessArticle) к каждой статье: иначе
@@ -451,7 +519,6 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
 function filterArticles(opts = {}) {
   const {
     q = '',
-    categories = [],
     tags = [],
     server = '',
     locked, // true | false | undefined — фильтр не применяется
@@ -475,11 +542,6 @@ function filterArticles(opts = {}) {
       if (rank > 0) scoreBySlug.set(a.slug, rank);
       return rank > 0;
     });
-  }
-
-  if (categories.length) {
-    const set = new Set(categories.map((c) => c.toLowerCase()));
-    list = list.filter((a) => (a.categories || []).some((c) => set.has(String(c).toLowerCase())));
   }
 
   if (tags.length) {
@@ -616,6 +678,8 @@ module.exports = {
   renameArticle,
   searchArticles,
   filterArticles,
+  collectTags,
+  stripLegacyCategoryFields,
   extractWikiLinks,
   extractHashtags,
   getBacklinks,

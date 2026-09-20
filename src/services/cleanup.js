@@ -210,7 +210,16 @@ async function findOrphanStickerFiles(minOrphanAgeHours) {
     let usedNames = new Set();
     if (packExists) {
       const rows = await dbAll(stickersDb, 'SELECT file_url FROM stickers WHERE pack_id = ?', [packIdNum]);
-      usedNames = new Set(rows.map((r) => path.basename(String(r.file_url || ''))));
+      // Стикеры коллабораций, ещё не влитые в набор (draft/pending), лежат в
+      // той же папке — это не мусор, пока заявка жива.
+      const stagedRows = await dbAll(
+        stickersDb,
+        `SELECT cs.file_url FROM sticker_collab_stickers cs
+         JOIN sticker_collab_requests cr ON cr.id = cs.request_id
+         WHERE cr.pack_id = ?`,
+        [packIdNum]
+      );
+      usedNames = new Set([...rows, ...stagedRows].map((r) => path.basename(String(r.file_url || ''))));
     }
 
     for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {

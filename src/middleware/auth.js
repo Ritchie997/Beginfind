@@ -217,27 +217,62 @@ function requirePermission(actingUser, key) {
 // РЕГИСТРАЦИЯ
 // ========================================
 
+// Ограничения для НОВЫХ аккаунтов (ранее созданные логины — например, с
+// пробелами — продолжают работать: при входе формат логина не проверяется).
+const LOGIN_MIN_LENGTH = 3;
+const LOGIN_MAX_LENGTH = 32;
+const DISPLAY_NAME_MAX_LENGTH = 32;
+
+/**
+ * Проверка и нормализация логина для регистрации. Бросает Error с текстом
+ * для пользователя.
+ */
+function normalizeLogin(username) {
+  const login = String(username == null ? '' : username).trim();
+  if (!login) throw new Error('Логин обязателен');
+  if (login.length < LOGIN_MIN_LENGTH || login.length > LOGIN_MAX_LENGTH) {
+    throw new Error(`Логин должен быть от ${LOGIN_MIN_LENGTH} до ${LOGIN_MAX_LENGTH} символов`);
+  }
+  if (/\s/.test(login)) throw new Error('Логин не должен содержать пробелов');
+  return login;
+}
+
+/**
+ * Проверка и нормализация отображаемого имени (регистрация и смена в
+ * профиле). Уникальным имя быть не обязано — это никнейм, а не идентификатор.
+ */
+function normalizeDisplayName(display_name) {
+  const name = String(display_name == null ? '' : display_name).replace(/\s+/g, ' ').trim();
+  if (!name) throw new Error('Имя обязательно');
+  if (name.length > DISPLAY_NAME_MAX_LENGTH) {
+    throw new Error(`Имя не должно быть длиннее ${DISPLAY_NAME_MAX_LENGTH} символов`);
+  }
+  return name;
+}
+
 /**
  * Регистрация нового пользователя
- * @param {string} display_name - Отображаемое имя
+ * @param {string} username - Уникальный логин (для входа; публично не показывается)
+ * @param {string} display_name - Отображаемое имя (никнейм)
  * @param {string} password - Пароль (открытый текст)
- * @param {string} username - Уникальный логин (опционально, по умолчанию = display_name)
  * @returns {Promise<{id, username, display_name, status}>}
  */
-async function register(display_name, password, username = null) {
+async function register(username, display_name, password) {
+  const loginName = normalizeLogin(username);
+  const displayName = normalizeDisplayName(display_name);
   const hashedPassword = await bcrypt.hash(password, 12);
-  const loginName = username || display_name;
 
   return new Promise((resolve, reject) => {
-    // Проверяем, существует ли пользователь
-    db.get('SELECT * FROM users WHERE username = ?', [loginName], (err, row) => {
+    // Логин сравниваем без учёта регистра — чтобы "Ivan" и "ivan" не
+    // считались разными аккаунтами (вход по-прежнему точный, как раньше).
+    db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [loginName], (err, row) => {
       if (err) {
         reject(err);
         return;
       }
 
       if (row) {
-        reject(new Error('Имя пользователя уже занято'));
+        reject(new Error('Логин уже занят'));
         return;
       }
 
@@ -245,7 +280,7 @@ async function register(display_name, password, username = null) {
       db.run(
         `INSERT INTO users (username, display_name, password, role_id, status, is_root)
          VALUES (?, ?, ?, 4, 'pending', 0)`,
-        [loginName, display_name, hashedPassword],
+        [loginName, displayName, hashedPassword],
         function (err) {
           if (err) {
             reject(err);
@@ -255,7 +290,7 @@ async function register(display_name, password, username = null) {
           resolve({
             id: this.lastID,
             username: loginName,
-            display_name: display_name,
+            display_name: displayName,
             status: 'pending',
             is_root: false
           });
@@ -284,7 +319,7 @@ async function login(username, password) {
       }
 
       if (!row) {
-        reject(new Error('Неверное имя пользователя или пароль'));
+        reject(new Error('Неверный логин или пароль'));
         return;
       }
 
@@ -301,7 +336,7 @@ async function login(username, password) {
       }
 
       if (!isValid) {
-        reject(new Error('Неверное имя пользователя или пароль'));
+        reject(new Error('Неверный логин или пароль'));
         return;
       }
 
@@ -569,7 +604,6 @@ async function getUserProfile(targetId, viewer) {
 
       const profile = {
         id: target.id,
-        username: target.username,
         display_name: target.display_name,
         is_root: target.is_root,
         admin_role_id: target.admin_role_id,
@@ -579,8 +613,13 @@ async function getUserProfile(targetId, viewer) {
         status: target.status,
         created_at: target.created_at,
         bio: (row && row.bio) || '',
-        can_edit_bio: isSelf
+        can_edit_bio: isSelf,
+        can_edit_name: isSelf
       };
+
+      // Логин — половина учётных данных, поэтому публично в профиле не
+      // светится: его видит сам пользователь и админы с view_users_tab/владелец.
+      if (isSelf || canSeeNote) profile.username = target.username;
 
       if (canSeeNote) {
         profile.admin_note = (row && row.admin_note) || '';
@@ -604,6 +643,25 @@ function updateOwnBio(userId, bio) {
   return new Promise((resolve, reject) => {
     db.run('UPDATE users SET bio = ? WHERE id = ?', [trimmed, userId], (err) => {
       if (err) reject(err); else resolve({ bio: trimmed });
+    });
+  });
+}
+
+/**
+ * Сменить своё отображаемое имя (никнейм) — только сам пользователь. Логин
+ * при этом не меняется, вход продолжает работать по нему.
+ */
+function updateOwnDisplayName(userId, display_name) {
+  return new Promise((resolve, reject) => {
+    let name;
+    try {
+      name = normalizeDisplayName(display_name);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    db.run('UPDATE users SET display_name = ? WHERE id = ?', [name, userId], (err) => {
+      if (err) reject(err); else resolve({ display_name: name });
     });
   });
 }
@@ -1081,6 +1139,7 @@ module.exports = {
   getUserById,
   getUserProfile,
   updateOwnBio,
+  updateOwnDisplayName,
   updateAdminNote,
   getPendingUsers,
   approveUser,

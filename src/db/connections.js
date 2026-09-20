@@ -29,6 +29,14 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
   } else {
     console.log('Connected to articles SQLite database');
     articlesDb.run("PRAGMA encoding = 'UTF-8'");
+    // Сущность "Категории" полностью убрана из проекта (остались только
+    // теги) — справочник categories в articles.db больше не нужен. DROP TABLE
+    // IF EXISTS безопасно вызывать на каждом старте: там, где таблицы уже нет,
+    // ничего не происходит. Поле categories в самих файлах статей вычищает
+    // articles-store.stripLegacyCategoryFields (см. server.js).
+    articlesDb.run('DROP TABLE IF EXISTS categories', (dropErr) => {
+      if (dropErr) console.error('Не удалось удалить устаревшую таблицу categories:', dropErr);
+    });
   }
 });
 
@@ -203,9 +211,11 @@ const stickersDb = new sqlite3.Database(dbPath('stickers.db'), (err) => {
     console.log('Connected to stickers SQLite database');
     stickersDb.run("PRAGMA encoding = 'UTF-8'");
     stickersDb.serialize(() => {
-      // status: 'pending' | 'approved' | 'rejected'. Набор нельзя
-      // использовать (см. validateContentForPosting), пока он не approved —
-      // даже автору, пока модератор явно не подтвердил набор.
+      // status: 'draft' | 'pending' | 'approved' | 'rejected'. 'draft' —
+      // только что созданный, ещё не опубликованный автором набор (см.
+      // жизненный цикл в stickers-store.js). Набор нельзя использовать (см.
+      // validateContentForPosting), пока он не approved — даже автору, пока
+      // модератор явно не подтвердил набор.
       stickersDb.run(`CREATE TABLE IF NOT EXISTS sticker_packs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         slug TEXT NOT NULL UNIQUE,
@@ -276,6 +286,56 @@ const stickersDb = new sqlite3.Database(dbPath('stickers.db'), (err) => {
         UNIQUE(user_id, sticker_id)
       )`);
       stickersDb.run('CREATE INDEX IF NOT EXISTS idx_sticker_favorites_user ON sticker_favorites (user_id)');
+
+      // Коллаборации (см. жизненный цикл в stickers-store.js): другой
+      // пользователь добавляет СВОИ стикеры к чужому одобренному набору не
+      // напрямую, а через заявку. Пока заявка не принята, его стикеры лежат
+      // отдельно (sticker_collab_stickers) и в самом наборе не видны.
+      // status заявки: 'draft' — собирает стикеры, ещё не отправил автору;
+      // 'pending' — отправлена, ждёт решения; 'accepted' — стикеры влиты в
+      // набор, автор заявки стал соавтором; 'declined' — автор отказал,
+      // стикеры удалены. stickers_count — снимок числа стикеров на момент
+      // отправки (после решения самих строк в sticker_collab_stickers уже
+      // нет, а в истории "Мои предложения" число показать нужно).
+      stickersDb.run(`CREATE TABLE IF NOT EXISTS sticker_collab_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pack_id INTEGER NOT NULL REFERENCES sticker_packs(id),
+        proposer_id INTEGER NOT NULL,
+        proposer_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        message TEXT,
+        stickers_count INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        submitted_at DATETIME,
+        resolved_at DATETIME
+      )`);
+      stickersDb.run('CREATE INDEX IF NOT EXISTS idx_collab_requests_pack ON sticker_collab_requests (pack_id, status)');
+      stickersDb.run('CREATE INDEX IF NOT EXISTS idx_collab_requests_proposer ON sticker_collab_requests (proposer_id)');
+
+      stickersDb.run(`CREATE TABLE IF NOT EXISTS sticker_collab_stickers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_id INTEGER NOT NULL REFERENCES sticker_collab_requests(id),
+        alias TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        is_animated INTEGER NOT NULL DEFAULT 0,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(request_id, alias)
+      )`);
+      stickersDb.run('CREATE INDEX IF NOT EXISTS idx_collab_stickers_request ON sticker_collab_stickers (request_id)');
+
+      // Соавторы набора — появляются, когда автор принял чью-то заявку.
+      // user_name денормализован (users.db — отдельный файл, JOIN нельзя),
+      // как author_name в sticker_packs.
+      stickersDb.run(`CREATE TABLE IF NOT EXISTS sticker_pack_coauthors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pack_id INTEGER NOT NULL REFERENCES sticker_packs(id),
+        user_id INTEGER NOT NULL,
+        user_name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(pack_id, user_id)
+      )`);
+      stickersDb.run('CREATE INDEX IF NOT EXISTS idx_pack_coauthors_user ON sticker_pack_coauthors (user_id)');
 
       // Разложить уже загруженные файлы по папкам наборов (см. комментарий в
       // самом модуле) — безопасно на каждом старте, трогает только ещё не

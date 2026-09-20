@@ -153,23 +153,29 @@
   // старой версии editor-manager.js — DOMPurify вырезает нестандартные
   // href, поэтому подмена на <a> происходит уже ПОСЛЕ санитайзинга) =====
 
-  const WIKILINK_PARSE_RE_G = () => /\[\[([^\]|#]+)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g;
+  // После закрывающих ]] сразу (без пробела) может идти своё имя ссылки в
+  // круглых скобках: [[статья]](Анатолий) — ссылка на "статью", но на экране
+  // подписана "Анатолий". Классические markdown-ссылки [текст](url) сюда не
+  // попадают — они начинаются с одной скобки, а не с [[. Пустые скобки
+  // [[статья]]() именем не считаются и остаются обычным текстом.
+  const WIKILINK_PARSE_RE_G = () => /\[\[([^\]|#]+)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\](?:\(([^()\n]+)\))?/g;
   const HASHTAG_RE_G = () => /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
   const WIKILINK_MARK_START = String.fromCharCode(0xE000);
   const WIKILINK_MARK_SEP = String.fromCharCode(0xE001);
   const WIKILINK_MARK_END = String.fromCharCode(0xE002);
-  // Стоит первым символом подписи, если у ссылки нет своего алиаса ([[цель]],
-  // а не [[цель|текст]]): подпись такой ссылки — актуальное название статьи
+  // Стоит первым символом подписи, если у ссылки нет своего имени ([[цель]],
+  // а не [[цель|текст]] и не [[цель]](текст)): подпись такой ссылки — актуальное название статьи
   // (если она есть), а не то, что было набрано в тексте. Так упоминание не
   // отстаёт от переименования статьи. Сам набранный текст остаётся запасным
   // вариантом — для ссылок на ещё не созданные статьи.
   const WIKILINK_MARK_AUTO = String.fromCharCode(0xE003);
 
   function markWikilinks(md) {
-    return String(md || '').replace(WIKILINK_PARSE_RE_G(), (full, target, _anchor, alias) => {
+    return String(md || '').replace(WIKILINK_PARSE_RE_G(), (full, target, _anchor, alias, name) => {
       const slug = slugify(target.trim());
-      const hasAlias = !!(alias && alias.trim());
-      const text = hasAlias ? alias.trim() : WIKILINK_MARK_AUTO + target.trim();
+      // Своё имя: [[цель]](имя) главнее, чем [[цель|имя]], если заданы оба.
+      const ownLabel = (name && name.trim()) || (alias && alias.trim());
+      const text = ownLabel ? ownLabel : WIKILINK_MARK_AUTO + target.trim();
       return `${WIKILINK_MARK_START}${slug}${WIKILINK_MARK_SEP}${text}${WIKILINK_MARK_END}`;
     });
   }
@@ -454,7 +460,8 @@
   function blocksToExcerptText(doc, maxLen = 180) {
     const blockList = doc && Array.isArray(doc.blocks) ? doc.blocks : [];
     const raw = collectExcerptText(blockList)
-      .replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (m, slug, alias) => alias || slug)
+      // своё имя [[статья]](Имя) главнее алиаса [[статья|текст]] и slug'а
+      .replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\](?:\(([^()\n]+)\))?/g, (m, slug, alias, name) => name || alias || slug)
       .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/^[ \t]*[-*+][ \t]+/gm, '')
       .replace(/^[ \t]*\d+\.[ \t]+/gm, '')

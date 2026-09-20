@@ -1,6 +1,7 @@
 // notifications.routes.js — сводка "на что стоит обратить внимание" для
 // шапки/сайдбара: сколько заявок на регистрацию и наборов стикеров ждут
-// решения. Владелец видит обе цифры всегда; админ — только те, на которые
+// решения (плюс предложения коллабораций на собственные наборы — они
+// адресованы конкретному автору и приходят всем). Владелец видит обе цифры всегда; админ — только те, на которые
 // у его роли есть право (manage_pending_users / moderate_stickers, см.
 // PERMISSION_KEYS в src/db/migrate-users-schema.js). Если права нет — поле
 // в ответе не приходит вовсе (не 0), клиент по этому отличает "нечего
@@ -26,6 +27,9 @@ router.get('/notifications/summary', auth.authenticateToken, auth.checkApproved,
       const pending = await stickersStore.listPending();
       summary.pendingStickerPacks = pending.length;
     }
+    // Предложения коллабораций на МОИ наборы стикеров — видны любому автору
+    // (не зависят от прав), поэтому поле приходит всем.
+    summary.incomingStickerCollabs = await stickersStore.countIncomingCollabs(req.user.id);
 
     res.json(summary);
   } catch (error) {

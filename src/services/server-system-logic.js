@@ -27,12 +27,15 @@ function createServer(name, description, ownerId) {
   });
 }
 
-// Получение сервера по ID
+// Получение сервера по ID.
+// owner_username здесь (и в списках/деталях серверов ниже) — ОТОБРАЖАЕМОЕ ИМЯ
+// владельца, а не логин: логин публично не показывается (см. разделение
+// username/display_name в auth.js). Ключ назван так исторически.
 function getServerById(serverId) {
   return new Promise((resolve, reject) => {
     const db = getDatabaseConnection();
     const query = `
-      SELECT s.*, u.username as owner_username
+      SELECT s.*, COALESCE(NULLIF(u.display_name, ''), u.username) as owner_username
       FROM servers s
       JOIN users u ON s.owner_id = u.id
       WHERE s.id = ?
@@ -260,7 +263,7 @@ function getUsersOnServer(serverId) {
       
       // Теперь получаем информацию о пользователях из базы пользователей
       usersDb.all(`
-        SELECT id, username
+        SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name
         FROM users
         WHERE id IN (${placeholders})
       `, userIds, (err, userRows) => {
@@ -276,7 +279,7 @@ function getUsersOnServer(serverId) {
         userRows.forEach(userRow => {
           users[userRow.id] = {
             id: userRow.id,
-            username: userRow.username,
+            display_name: userRow.display_name,
             roles: []
           };
         });
@@ -371,7 +374,7 @@ function getAllServersWithUserCount() {
             const userIds = result.map(server => server.owner_id);
             if (userIds.length > 0) {
               const placeholders = userIds.map(() => '?').join(',');
-              usersDb.all(`SELECT id, username FROM users WHERE id IN (${placeholders})`, userIds, (err, userRows) => {
+              usersDb.all(`SELECT id, COALESCE(NULLIF(display_name, ''), username) AS username FROM users WHERE id IN (${placeholders})`, userIds, (err, userRows) => {
                 if (err) {
                   console.error('Error fetching owner usernames:', err);
                   // Добавляем пустые имена владельцев
@@ -447,7 +450,7 @@ function getServerWithDetails(serverId) {
           }
           
           // Получаем имя владельца
-          usersDb.get('SELECT username FROM users WHERE id = ?', [serverRow.owner_id], (err, userRow) => {
+          usersDb.get("SELECT COALESCE(NULLIF(display_name, ''), username) AS username FROM users WHERE id = ?", [serverRow.owner_id], (err, userRow) => {
             if (err) {
               console.error('Error fetching owner username:', err);
               serverRow.owner_username = 'Unknown';

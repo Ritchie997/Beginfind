@@ -7,7 +7,7 @@
         <h2 class="servers-heading"><i class="fas fa-server"></i> Сервера</h2>
         <div class="servers-search-wrap">
           <i class="fas fa-search"></i>
-          <input type="text" id="servers-search-input" class="servers-search-input" placeholder="Поиск по названию, описанию или владельцу...">
+          <input type="text" id="servers-search-input" class="servers-search-input" placeholder="Поиск">
         </div>
         <select id="servers-sort-select" class="form-select servers-sort-select">
           <option value="created_desc">Сначала новые</option>
@@ -752,14 +752,33 @@
 
 /* Поиск пользователя в модалке "Добавить участника" — выпадашка переиспользует
    .chip-field-dropdown* (global-styles.css), тот же вид, что у полей
-   Категория/Теги/Доступ для в редакторе статей, только якорь свой. */
+   Теги/Доступ для в редакторе статей, только якорь свой. */
 .servers-user-search {
   position: relative;
 }
 
+/* Настройки сервера: описание растёт по мере ввода (autoGrowTextarea в
+   spa-router.js), на десктопе — ещё и тянется за ручку. */
+.server-settings-textarea {
+  resize: vertical;
+  min-height: 84px;
+  max-height: 60vh;
+}
+
 @media (max-width: 640px) {
-  .servers-toolbar-row-main { flex-direction: column; align-items: stretch; }
-  .servers-sort-select { width: 100%; }
+  /* Шапка каталога: заголовок и "Создать сервер" — в одной строке, поиск и
+     сортировка — каждый на всю ширину ниже. Раньше строка переключалась в
+     flex-direction:column, и у .servers-search-wrap (flex: 1 1 220px) эти
+     220px превращались в ВЫСОТУ — между заголовком и сортировкой оставался
+     большой пустой блок. */
+  .servers-toolbar { padding: 12px; gap: 10px; }
+  .servers-toolbar-row-main { gap: 8px; }
+  .servers-heading { order: 1; flex: 1 1 auto; font-size: 18px; }
+  #create-server-btn { order: 2; }
+  .servers-search-wrap { order: 3; flex: 1 1 100%; }
+  .servers-sort-select { order: 4; flex: 1 1 100%; width: 100%; min-width: 0; }
+  .servers-toolbar-row-status { padding-top: 8px; }
+  .servers-empty { padding: 28px 16px; }
   .server-workspace-header { flex-direction: column; }
   .servers-permissions-grid { grid-template-columns: 1fr; }
 }
@@ -780,6 +799,38 @@
   }
   .server-workspace-tabs .editor-mode-tab {
     flex: none;
+  }
+}
+
+/* --- Таблицы внутри сервера (Участники/Роли/Каналы/Журнал) ---
+   Раскладка "карточка на строку" и компактные кнопки — общий компонент
+   .table-cards (см. "TABLE CARDS" в global-styles.css), тот же, что у вкладки
+   "Пользователи", и на телефоне, и на ПК: .table-cards на .table-container,
+   .cell-primary/.cell-actions/.cell-chips и data-label на ячейках
+   (render*Tab в spa-router.js). Здесь остались только правила, специфичные
+   для сервера. */
+.table-cards .cell-chips .server-role-chip {
+  margin: 0 4px 2px 0;
+}
+
+/* Пустая таблица ("Нет участников" и т.п.) — одна ячейка без подписи на всю
+   ширину сетки. */
+.table-cards .server-empty-row {
+  grid-column: 1 / -1;
+}
+.table-cards .server-empty-row td {
+  display: block;
+  text-align: center;
+  padding: 14px 8px !important;
+}
+.table-cards .server-empty-row td::before,
+.table-cards .server-empty-row:hover td::before {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .server-workspace-body {
+    padding: 12px;
   }
 }
 </style>

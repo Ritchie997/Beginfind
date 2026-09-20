@@ -176,8 +176,8 @@ class ApiClient {
 
   // Витрина статей (Ibripedia) — поиск + фильтры + сортировка + постраничная
   // подгрузка, см. GET /api/articles/browse. filters — любое подмножество
-  // {q, category, tag, server, locked, dateFrom, dateTo, sort}; category/tag
-  // принимают массив (склеивается через запятую) или готовую CSV-строку.
+  // {q, tag, server, locked, dateFrom, dateTo, sort}; tag принимает массив
+  // (склеивается через запятую) или готовую CSV-строку.
   async getArticlesBrowse(filters = {}, limit = 24, offset = 0) {
     const params = new URLSearchParams({ limit, offset });
     Object.entries(filters).forEach(([key, value]) => {
@@ -340,6 +340,17 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/subscribe`, 'DELETE');
   }
 
+  // Публикация набора — отдельный шаг после создания: черновик уходит на
+  // модерацию (publish) или возвращается из неё обратно в черновики
+  // (unpublish). См. жизненный цикл в src/services/stickers-store.js.
+  async publishStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/publish`, 'POST');
+  }
+
+  async unpublishStickerPack(packId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/unpublish`, 'POST');
+  }
+
   async resubmitStickerPack(packId) {
     return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/resubmit`, 'POST');
   }
@@ -364,6 +375,20 @@ class ApiClient {
 
   // Загрузка файла стикера — как uploadImage, но своё поле формы и эндпоинт.
   async uploadSticker(packId, file, alias) {
+    return this.postStickerFile(`/api/stickers/packs/${packId}/stickers`, file, alias);
+  }
+
+  // Коллаборации (см. src/routes/stickers.routes.js): чужой одобренный набор
+  // -> свои стикеры в "черновик коллаборации" -> предложить автору; автор
+  // принимает (стикеры вливаются, предложивший становится соавтором) или
+  // отклоняет (всё удаляется).
+  async uploadCollabSticker(packId, file, alias) {
+    return this.postStickerFile(`/api/stickers/packs/${packId}/collab/stickers`, file, alias);
+  }
+
+  // Общая часть загрузки файла стикера (как uploadImage, но своё поле формы):
+  // multipart с файлом и именем стикера на указанный эндпоинт.
+  async postStickerFile(endpoint, file, alias) {
     if (!authManager || !authManager.isAuthenticated()) {
       return { success: false, error: 'Authentication required. Please log in.' };
     }
@@ -381,7 +406,7 @@ class ApiClient {
     };
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/stickers/packs/${packId}/stickers`, options);
+      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
       if (response.status === 401) {
         authManager.logout();
@@ -395,17 +420,38 @@ class ApiClient {
     }
   }
 
-  // Methods for categories
-  async getCategories() {
-    return this.makeAuthenticatedRequest('/api/categories');
+  async deleteCollabSticker(stickerId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/collab/stickers/${stickerId}`, 'DELETE');
   }
 
-  async createCategory(name) {
-    return this.makeAuthenticatedRequest('/api/categories', 'POST', { name });
+  async submitStickerCollab(packId, message) {
+    return this.makeAuthenticatedRequest(`/api/stickers/packs/${packId}/collab/submit`, 'POST', { message });
   }
 
-  async deleteCategory(id) {
-    return this.makeAuthenticatedRequest(`/api/categories/${id}`, 'DELETE');
+  async cancelStickerCollab(requestId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/collab/${requestId}/cancel`, 'POST');
+  }
+
+  async getIncomingStickerCollabs() {
+    return this.makeAuthenticatedRequest('/api/stickers/collab/incoming');
+  }
+
+  async getMyStickerCollabs() {
+    return this.makeAuthenticatedRequest('/api/stickers/collab/outgoing');
+  }
+
+  async acceptStickerCollab(requestId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/collab/${requestId}/accept`, 'POST');
+  }
+
+  async declineStickerCollab(requestId) {
+    return this.makeAuthenticatedRequest(`/api/stickers/collab/${requestId}/decline`, 'POST');
+  }
+
+  // Глобальный список всех тегов без дублей: [{tag, count}] — вкладка "Теги"
+  // и подсказки фильтра Ibripedia (см. GET /api/tags в articles.routes.js).
+  async getTags() {
+    return this.makeAuthenticatedRequest('/api/tags');
   }
 
   // Methods for roles
@@ -650,7 +696,7 @@ window.initPageAnimations = function() {
   }
 
   // Add stagger animation to list items
-  const lists = document.querySelectorAll('.article-item, .category-item, .server-card-item, .activity-item');
+  const lists = document.querySelectorAll('.article-item, .server-card-item, .activity-item');
   lists.forEach((item, index) => {
     item.style.animationDelay = `${index * 0.05}s`;
     item.classList.add('stagger-item');
@@ -765,7 +811,11 @@ window.initMaintenanceBanner = async function() {
 // "уведомили" бы о недельной давности бэклоге при первом открытии панели.
 const NOTIF_BADGE_TARGETS = {
   pendingUsers: { elementId: 'sidebar-pending-users', seenKey: 'beginfind_notif_seen_users', toastText: (n) => `Новая заявка на регистрацию (всего ${n})` },
-  pendingStickerPacks: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_stickers', toastText: (n) => `Новый набор стикеров на модерации (всего ${n})` }
+  pendingStickerPacks: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_stickers', toastText: (n) => `Новый набор стикеров на модерации (всего ${n})` },
+  // Предложения коллабораций на СВОИ наборы — приходят всем авторам, а не
+  // только модераторам; бейдж у пункта "Стикеры" общий с модерацией (см.
+  // суммирование по elementId в refreshNotificationBadges).
+  incomingStickerCollabs: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_sticker_collabs', toastText: (n) => `Новое предложение коллаборации для вашего набора стикеров (всего ${n})` }
 };
 
 function renderNavBadge(elementId, count) {
@@ -792,16 +842,18 @@ async function refreshNotificationBadges() {
     if (!res.ok) return;
     const summary = await res.json();
 
+    // Несколько категорий могут делить один пункт меню (см. sidebar-stickers) —
+    // считаем сумму по элементу и рисуем бейдж один раз после цикла.
+    const totals = {};
+
     Object.entries(NOTIF_BADGE_TARGETS).forEach(([key, target]) => {
       const count = summary[key];
+      totals[target.elementId] = (totals[target.elementId] || 0) + (count || 0);
       if (count === undefined) {
         // Категория не пришла в ответе — этому пользователю она не видна
-        // (нет права даже на просмотр) — бейдж не рисуем вовсе, не 0.
-        renderNavBadge(target.elementId, 0);
+        // (нет права даже на просмотр) — её вклада в бейдж нет.
         return;
       }
-
-      renderNavBadge(target.elementId, count);
 
       const seen = parseInt(localStorage.getItem(target.seenKey), 10);
       if (Number.isFinite(seen) && count > seen && typeof window.showMessage === 'function') {
@@ -809,6 +861,8 @@ async function refreshNotificationBadges() {
       }
       localStorage.setItem(target.seenKey, String(count));
     });
+
+    Object.entries(totals).forEach(([elementId, total]) => renderNavBadge(elementId, total));
   } catch (e) {
     console.error('Error refreshing notification badges:', e);
   }

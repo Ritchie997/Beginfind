@@ -171,7 +171,8 @@ class AuthManager {
     this.dispatchAuthEvent('logout');
   }
 
-  async register(displayName, password, passwordConfirm, username) {
+  // username — логин (для входа), displayName — имя (никнейм, его видят все).
+  async register(username, displayName, password, passwordConfirm) {
     try {
       const response = await fetch('/api/register', {
         method: 'POST',
@@ -180,7 +181,7 @@ class AuthManager {
           display_name: displayName,
           password: password,
           password_confirm: passwordConfirm,
-          username: username || displayName
+          username: username
         })
       });
       const data = await response.json();
@@ -249,7 +250,7 @@ function showModalLogin() {
       <!-- Форма входа -->
       <form id="auth-form" style="display: flex; flex-direction: column;">
         <div style="margin-bottom: 15px;">
-          <label for="auth-username" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Имя пользователя:</label>
+          <label for="auth-username" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Логин:</label>
           <input type="text" id="auth-username" autocomplete="username" required style="
             width:100%; padding:12px; box-sizing:border-box;
             background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
@@ -274,12 +275,22 @@ function showModalLogin() {
       <!-- Форма регистрации (скрыта по умолчанию) -->
       <form id="register-form" style="display:none; flex-direction:column;">
         <div style="margin-bottom: 15px;">
-          <label for="reg-displayname" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Имя:</label>
-          <input type="text" id="reg-displayname" autocomplete="username" required style="
+          <label for="reg-username" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Логин:</label>
+          <input type="text" id="reg-username" autocomplete="username" required minlength="3" maxlength="32" pattern="\S{3,32}" title="От 3 до 32 символов, без пробелов" style="
             width:100%; padding:12px; box-sizing:border-box;
             background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
             border-radius:4px; color:var(--text-normal, #dcddde); font-size:15px;
           ">
+          <div style="margin-top:6px; color:var(--text-muted, #b9bbbe); font-size:12px;">Нужен для входа. Другим пользователям не показывается.</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label for="reg-displayname" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Имя:</label>
+          <input type="text" id="reg-displayname" autocomplete="nickname" required maxlength="32" style="
+            width:100%; padding:12px; box-sizing:border-box;
+            background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
+            border-radius:4px; color:var(--text-normal, #dcddde); font-size:15px;
+          ">
+          <div style="margin-top:6px; color:var(--text-muted, #b9bbbe); font-size:12px;">Так вас увидят другие. Позже его можно сменить в профиле.</div>
         </div>
         <div style="margin-bottom: 15px;">
           <label for="reg-password" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Пароль:</label>
@@ -396,6 +407,7 @@ function showModalLogin() {
   // РЕГИСТРАЦИЯ
   const regForm = document.getElementById('register-form');
   const regSubmit = document.getElementById('reg-submit');
+  const regUsername = document.getElementById('reg-username');
   const regDisplayname = document.getElementById('reg-displayname');
   const regPassword = document.getElementById('reg-password');
   const regPasswordConfirm = document.getElementById('reg-password-confirm');
@@ -417,10 +429,10 @@ function showModalLogin() {
 
     try {
       const result = await authManager.register(
-        regDisplayname.value,
+        regUsername.value.trim(),
+        regDisplayname.value.trim(),
         regPassword.value,
-        regPasswordConfirm.value,
-        regDisplayname.value
+        regPasswordConfirm.value
       );
 
       if (result.success) {

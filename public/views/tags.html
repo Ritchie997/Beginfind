@@ -1,0 +1,199 @@
+<!-- Вкладка "Теги": глобальный список всех тегов, существующих в системе, без
+     дублей (регистр и ведущий "#" не различаются). Заменила прежнюю вкладку
+     "Категории" — сущности "Категория" в проекте больше нет. Список только для
+     чтения: теги создаются и правятся в самих статьях (поле "Теги" в
+     редакторе или #тег прямо в тексте), см. GET /api/tags. -->
+<div class="tags-page">
+
+  <div class="tags-toolbar">
+    <div class="tags-toolbar-row">
+      <h2 class="tags-heading"><i class="fas fa-tags"></i> Теги</h2>
+      <div class="tags-search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="tagsSearchInput" class="tags-search-input" placeholder="Поиск">
+      </div>
+    </div>
+    <div class="tags-toolbar-row tags-toolbar-row-status">
+      <span class="tags-count" id="tagsCount"></span>
+    </div>
+  </div>
+
+  <div class="tags-loading" id="tagsLoading">
+    <div class="tags-skeleton-card"></div>
+    <div class="tags-skeleton-card"></div>
+    <div class="tags-skeleton-card"></div>
+  </div>
+
+  <div class="tags-empty" id="tagsEmpty" hidden>
+    <i class="fas fa-tags"></i>
+    <h3 id="tagsEmptyTitle">Пока нет ни одного тега</h3>
+    <p id="tagsEmptyText">Теги появляются, когда вы добавляете их к статье в редакторе (поле «Теги») или пишете #тег прямо в тексте.</p>
+  </div>
+
+  <div class="tags-grid" id="tagsContainer" hidden></div>
+</div>
+
+<style>
+/* === TAGS PAGE — тот же язык дизайна, что у вкладок "Сервера"/"Пользователи":
+   тулбар-карточка, компактные плитки. === */
+
+.tags-page { padding: 0; }
+
+/* [hidden] должен реально прятать элементы страницы — .tags-loading{display:grid}
+   и .tags-grid{display:grid} с той же специфичностью иначе побеждали бы его. */
+.tags-page [hidden] { display: none !important; }
+
+.tags-toolbar {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tags-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tags-toolbar-row-status {
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-accent);
+}
+
+.tags-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.tags-heading i { color: var(--blurple); }
+
+.tags-search-wrap {
+  flex: 1 1 220px;
+  min-width: 160px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tags-search-wrap i {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+.tags-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 34px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+.tags-search-input:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+
+.tags-count { font-size: 13px; color: var(--header-secondary); }
+
+.tags-loading {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+.tags-skeleton-card {
+  height: 56px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--background-secondary) 25%, var(--background-tertiary) 37%, var(--background-secondary) 63%);
+  background-size: 400% 100%;
+  animation: tags-skeleton-shimmer 1.4s ease infinite;
+  border: 1px solid var(--background-accent);
+}
+@keyframes tags-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.tags-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-accent);
+  border-radius: 10px;
+}
+.tags-empty i { font-size: 40px; color: var(--blurple); margin-bottom: 12px; display: block; }
+.tags-empty h3 { color: var(--text-normal); margin: 0 0 8px; }
+.tags-empty p { max-width: 480px; margin: 0 auto; line-height: 1.5; font-size: 13px; }
+
+.tags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+
+.tag-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-normal);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+@media (hover: hover) {
+  .tag-card:hover { border-color: var(--blurple); transform: translateY(-1px); }
+}
+.tag-card-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(88, 101, 242, 0.15);
+  color: var(--blurple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+.tag-card-body { min-width: 0; flex: 1; }
+.tag-card-name,
+.tag-card-meta { display: block; }
+.tag-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+.tags-no-results { grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 14px; }
+
+@media (max-width: 640px) {
+  .tags-toolbar { padding: 12px; gap: 10px; }
+  .tags-heading { font-size: 18px; }
+  .tags-search-wrap { flex: 1 1 100%; }
+  .tags-toolbar-row-status { padding-top: 8px; }
+}
+</style>

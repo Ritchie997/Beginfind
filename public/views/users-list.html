@@ -38,7 +38,7 @@
       <h3>Пока нет ни одного пользователя</h3>
     </div>
 
-    <div class="table-container" id="users-table" style="display: none;">
+    <div class="table-container table-cards" id="users-table" style="display: none;">
       <table>
         <thead>
           <tr>
@@ -361,18 +361,6 @@
   flex-shrink: 0;
 }
 
-/* --- Таблица участников — компактнее глобальной .table-container:
-   меньше паддинги и чуть мельче шрифт в ячейках, чтобы строка с 5 кнопками
-   действий не раздувала таблицу по высоте. Сама структура (шапка + строки)
-   не меняется — это просто более плотная версия того же вида. --- */
-.users-list-page .table-container table th,
-.users-list-page .table-container table td {
-  padding: 10px 12px;
-}
-.users-list-page .table-container table td {
-  font-size: 13px;
-}
-
 /* --- Строки таблицы участников: бейджи роли/статуса и мелкие кнопки --- */
 .users-role-pill,
 .users-status-pill {
@@ -453,78 +441,32 @@
   .users-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* --- Таблица участников на мобильном — не влезает по ширине (логин,
-   роль, статус, дата и до 5 кнопок действий в одной строке), а глобальный
-   .table-container на мобильном (см. "Mobile table display" в
-   global-styles.css) просто даёт таблице min-width:600px и горизонтальный
-   скролл — тогда кнопки действий уезжают за край экрана и до части из них
-   вообще не дотянуться. Вместо скролла — раскладка "карточка на
-   пользователя": шапка скрыта, каждая строка становится блоком, а подписи
-   колонок берутся из data-label (см. renderUsersList в spa-router.js) через
-   content: attr(). Кнопки действий при этом получают всю ширину экрана и
-   переносятся по строкам вместо обрезания. */
-@media (max-width: 768px) {
-  .users-list-page .table-container {
-    overflow: visible;
-  }
-  .users-list-page .table-container table {
-    min-width: 0;
-  }
-  .users-list-page table,
-  .users-list-page tbody,
-  .users-list-page tr,
-  .users-list-page td {
-    display: block;
-    width: 100%;
-  }
-  .users-list-page thead {
-    display: none;
-  }
-  .users-list-page tbody tr {
-    padding: 10px 12px;
-    border-bottom: 8px solid var(--background-primary);
-  }
-  .users-list-page tbody tr:last-child {
-    border-bottom: none;
-  }
-  .users-list-page .table-container table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 0;
-    border-bottom: none;
-  }
-  .users-list-page .table-container table td::before {
-    content: attr(data-label);
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .users-list-page .table-container table td[data-label="Действия"] {
-    display: block;
-  }
-  .users-list-page .table-container table td[data-label="Действия"]::before {
-    display: block;
-    margin-bottom: 6px;
-  }
-  .users-actions-cell {
-    justify-content: flex-start;
-  }
-  /* Тоньше, чем на десктопе (5px 10px/12px) — на мобильном в карточке
-     может оказаться сразу 4-5 кнопок подряд, слегка уменьшаем высоту и
-     шрифт, чтобы ряд оставался компактным. */
-  .users-actions-cell .btn {
-    padding: 3px 8px;
-    font-size: 11px;
-  }
-  .users-btn-ghost,
-  .users-btn-star {
-    padding: 3px 8px;
-    font-size: 11px;
-  }
+/* --- Таблица участников ---
+   Раскладка "карточка на строку" и компактные кнопки — общий компонент
+   .table-cards (см. "TABLE CARDS" в global-styles.css), тот же, что у
+   таблиц внутри сервера, и на телефоне, и на ПК (на широком экране карточки
+   встают сеткой): .table-cards на .table-container, .cell-primary (имя) /
+   .cell-actions (кнопки) и data-label на ячейках (renderUsersList в
+   spa-router.js). Здесь остались только правила, специфичные для страницы. */
+.users-actions-cell {
+  justify-content: flex-start;
+  flex: 1;
+  gap: 6px;
+}
+/* Десктопный .users-actions-cell .btn (5px 10px) по специфичности равен
+   .table-cards .btn и идёт позже — выравниваем под компактный размер. */
+.users-actions-cell .btn {
+  padding: 4px 10px;
+}
+/* Кнопки-"не .btn" (★ доверенный / ☆ сделать доверенным) — тот же габарит,
+   что у .btn внутри .table-cards, чтобы ряд выглядел ровно. */
+.users-btn-ghost,
+.users-btn-star {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 </style>

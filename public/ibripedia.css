@@ -327,12 +327,6 @@
   padding: 14px 16px;
 }
 
-.ibripedia-card-categories {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .ibripedia-badge {
   display: inline-block;
   padding: 2px 9px;

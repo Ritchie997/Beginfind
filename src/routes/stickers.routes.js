@@ -5,6 +5,7 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const auth = require('../middleware/auth');
 const store = require('../services/stickers-store');
 const { uploadSticker } = require('../uploads/multer-config');
@@ -34,8 +35,8 @@ async function canModerateOtherUsersPack(actingUser, authorId) {
   return (author.admin_level || 0) < myLevel;
 }
 
-// GET /api/stickers/mine — свои наборы (любого статуса — pending/rejected
-// тоже показываем автору, чтобы он видел, что происходит с заявкой).
+// GET /api/stickers/mine — свои наборы (любого статуса — draft/pending/
+// rejected тоже показываем автору, чтобы он видел, что происходит с ними).
 router.get('/stickers/mine', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     res.json(await store.listMyPacks(req.user.id));
@@ -52,7 +53,7 @@ router.get('/stickers/mine', auth.authenticateToken, auth.checkApproved, async (
 router.get('/stickers/by-user/:userId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const isSelf = String(req.params.userId) === String(req.user.id);
-    res.json(await store.listPacksByAuthor(req.params.userId, isSelf));
+    res.json(await store.listPacksByAuthor(req.params.userId, isSelf, true));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -88,6 +89,11 @@ router.get('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved, as
 
     const isOwner = pack.authorId === req.user.id;
     const isModerator = req.user.is_root || !!(req.user.permissions && req.user.permissions.moderate_stickers);
+    // Черновик приватен — его не видит никто, кроме автора (даже модераторы:
+    // им набор доступен только после публикации, из очереди "На модерации").
+    if (pack.status === 'draft' && !isOwner) {
+      return res.status(403).json({ error: 'Этот набор ещё не опубликован' });
+    }
     if (pack.status !== 'approved' && !isOwner && !isModerator) {
       return res.status(403).json({ error: 'Этот набор ещё не подтверждён' });
     }
@@ -101,13 +107,19 @@ router.get('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved, as
     pack.subscribed = await store.isSubscribed(req.user.id, pack.id);
     pack.isOwn = isOwner;
     pack.canModerate = !isOwner && await canModerateOtherUsersPack(req.user, pack.authorId);
+    // myCollab — моя текущая (draft/pending) заявка на коллаборацию с этим
+    // набором со стикерами, если есть (см. раздел "Коллаборации" в
+    // stickers-store.js); автору собственного набора заявка ни к чему.
+    pack.myCollab = (!isOwner && pack.status === 'approved') ? await store.getMyCollab(req.user.id, pack.id) : null;
     res.json(pack);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/stickers/packs — создать новый набор (уходит в модерацию).
+// POST /api/stickers/packs — создать новый набор. Он рождается черновиком и
+// в модерацию не уходит, пока автор сам не опубликует его (POST
+// .../publish ниже) — см. жизненный цикл в stickers-store.js.
 router.post('/stickers/packs', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
     const pack = await store.createPack(req.user.id, displayName(req.user), req.body.title, req.body.description);
@@ -125,6 +137,9 @@ router.put('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved, au
   try {
     const pack = await store.getPack(req.params.id);
     if (!pack) return res.status(404).json({ error: 'Набор не найден' });
+    if (pack.status === 'draft' && pack.authorId !== req.user.id) {
+      return res.status(403).json({ error: 'Этот набор ещё не опубликован' });
+    }
     if (pack.authorId !== req.user.id && !(await canModerateOtherUsersPack(req.user, pack.authorId))) {
       return res.status(403).json({ error: 'Недостаточно прав для изменения этого набора' });
     }
@@ -142,6 +157,9 @@ router.delete('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved,
   try {
     const pack = await store.getPack(req.params.id);
     if (!pack) return res.status(404).json({ error: 'Набор не найден' });
+    if (pack.status === 'draft' && pack.authorId !== req.user.id) {
+      return res.status(403).json({ error: 'Этот набор ещё не опубликован' });
+    }
     if (pack.authorId !== req.user.id && !(await canModerateOtherUsersPack(req.user, pack.authorId))) {
       return res.status(403).json({ error: 'Недостаточно прав для удаления этого набора' });
     }
@@ -187,6 +205,9 @@ router.delete('/stickers/stickers/:id', auth.authenticateToken, auth.checkApprov
   try {
     const info = await store.getStickerWithPackAuthor(req.params.id);
     if (!info) return res.status(404).json({ error: 'Стикер не найден' });
+    if (info.status === 'draft' && info.authorId !== req.user.id) {
+      return res.status(403).json({ error: 'Этот набор ещё не опубликован' });
+    }
     if (info.authorId !== req.user.id && !(await canModerateOtherUsersPack(req.user, info.authorId))) {
       return res.status(403).json({ error: 'Недостаточно прав для удаления этого стикера' });
     }
@@ -195,6 +216,113 @@ router.delete('/stickers/stickers/:id', auth.authenticateToken, auth.checkApprov
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Коллаборации ---
+// Зайдя в чужой одобренный набор, пользователь собирает СВОИ стикеры
+// (POST .../collab/stickers), затем предлагает коллаборацию (POST
+// .../collab/submit). Автор набора принимает (стикеры вливаются в набор,
+// предложивший становится соавтором) или отклоняет (всё удаляется). Подробнее
+// — в начале src/services/stickers-store.js.
+
+// POST /api/stickers/packs/:id/collab/stickers — добавить свой стикер в
+// черновик коллаборации (multipart, поле "sticker" + alias). Файл ложится в
+// папку набора (multer берёт :id из URL), но в сам набор не попадает.
+router.post(
+  '/stickers/packs/:id/collab/stickers',
+  auth.authenticateToken,
+  auth.checkApproved,
+  auth.checkNotMuted,
+  uploadSticker.single('sticker'),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'Файл стикера не загружен' });
+      try {
+        const isAnimated = path.extname(req.file.filename).toLowerCase() === '.gif';
+        const sticker = await store.stageCollabSticker(req.user.id, displayName(req.user), req.params.id, {
+          alias: req.body.alias,
+          fileUrl: `/uploads/stickers/${req.params.id}/${req.file.filename}`,
+          isAnimated
+        });
+        res.status(201).json(sticker);
+      } catch (err) {
+        // Файл уже записан multer'ом до проверок — не оставляем его сиротой.
+        fs.unlink(req.file.path, () => {});
+        throw err;
+      }
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+// DELETE /api/stickers/collab/stickers/:id — убрать свой стикер из черновика.
+router.delete('/stickers/collab/stickers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await store.removeCollabSticker(req.user.id, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/packs/:id/collab/submit — предложить коллаборацию
+// (необязательное сопроводительное сообщение автору).
+router.post('/stickers/packs/:id/collab/submit', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    res.json(await store.submitCollab(req.user.id, req.params.id, req.body.message));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/collab/:id/cancel — отозвать свою заявку (черновик или
+// уже отправленную) — все её стикеры удаляются.
+router.post('/stickers/collab/:id/cancel', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await store.cancelCollab(req.user.id, Number(req.params.id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/stickers/collab/incoming — ожидающие решения заявки на МОИ наборы.
+router.get('/stickers/collab/incoming', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await store.listIncomingCollabs(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stickers/collab/outgoing — мои заявки любого статуса.
+router.get('/stickers/collab/outgoing', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await store.listMyCollabs(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/collab/:id/accept — автор принимает заявку: стикеры
+// вливаются в набор, предложивший становится соавтором.
+router.post('/stickers/collab/:id/accept', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    res.json(await store.acceptCollab(req.user.id, Number(req.params.id)));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/collab/:id/decline — автор отклоняет: всё отменяется.
+router.post('/stickers/collab/:id/decline', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await store.declineCollab(req.user.id, Number(req.params.id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -244,6 +372,26 @@ router.delete('/stickers/packs/:id/subscribe', auth.authenticateToken, auth.chec
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/packs/:id/publish — опубликовать готовый набор:
+// черновик уходит в очередь модерации (сам автор).
+router.post('/stickers/packs/:id/publish', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    res.json(await store.publishPack(req.user.id, req.params.id));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/stickers/packs/:id/unpublish — забрать набор из очереди
+// модерации обратно в черновики (сам автор, пока набор ещё не одобрен).
+router.post('/stickers/packs/:id/unpublish', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await store.unpublishPack(req.user.id, req.params.id));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
