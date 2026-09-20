@@ -1078,7 +1078,7 @@
         panel.innerHTML = '<h3>Ссылки на эту статью</h3>' + (
           backlinks.length
             ? `<ul>${backlinks.map((b) => `<li><a href="javascript:void(0)" data-slug="${escapeHtml(b.slug)}">${escapeHtml(b.title)}</a></li>`).join('')}</ul>`
-            : '<div class="backlinks-empty">Пока никто не сослался на эту статью через [[wiki-ссылку]]</div>'
+            : '<div class="backlinks-empty">Пока никто не сослался на эту статью через wiki-ссылку [текст]((статья))</div>'
         );
         panel.querySelectorAll('a[data-slug]').forEach((a) => {
           a.addEventListener('click', () => this.openArticleView(a.getAttribute('data-slug')));

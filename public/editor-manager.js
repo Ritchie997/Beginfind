@@ -2,7 +2,7 @@
 // src/services/blocks.js) вместо одного Markdown-документа с самодельным
 // {width=...}-синтаксисом для картинок/рамок. Текст ВНУТРИ блока
 // (paragraph/heading/quote/callout/пункт списка/ячейка таблицы) остаётся
-// обычным markdown-текстом (**жирный**, [[wiki-ссылка]], #тег, новый
+// обычным markdown-текстом (**жирный**, [wiki-ссылка]((статья)), #тег, новый
 // ++подчёркнутый++/==выделение==/||спойлер||) — тулбар оборачивает
 // выделение нужными символами (см. applyInlineFormat), полноценного
 // WYSIWYG-редактирования HTML нет по решению "оставить инлайн markdown +
@@ -55,7 +55,7 @@
       .slice(0, 80) || 'article';
   }
 
-  const WIKILINK_OPEN_RE = /\[\[([^\]|#]*)$/; // "[[частичный текст" перед курсором, без закрытия
+  const WIKILINK_OPEN_RE = /\]\(\(([^()#\n]*)$/; // "[подпись]((частичный текст" перед курсором, без закрытия
   const DEFAULT_FRAME_COLOR = '#5865f2';
 
   // Цвет выделения "по умолчанию" (без (#hex) в markdown — см. .mk-hl в
@@ -387,7 +387,7 @@
 
     // ===== Текстовое markdown-поле (paragraph/heading/quote/callout-текст/
     // пункт списка/ячейка таблицы) — общая логика авторазмера, привязки
-    // фокуса к тулбару и автодополнения [[wiki-ссылок]] =====
+    // фокуса к тулбару и автодополнения wiki-ссылок [текст]((статья)) =====
 
     makeTextArea(value, { placeholder, className, autofocus, splitOnEnter, onInput, list, block } = {}) {
       const ta = document.createElement('textarea');
@@ -508,10 +508,20 @@
     insertWikilinkInline() {
       const target = this._activeTextInput;
       if (!target) { window.showMessage?.('Сначала кликните в текстовый блок', 'warning'); return; }
-      this.applyInlineFormat('[[', ']]');
+      const el = target.el;
+      // Выделенный текст становится подписью — [выделение]((, без выделения
+      // подпись остаётся пустой (тогда ссылка показывает название статьи).
+      // Курсор — внутри (( )), чтобы сразу сработало автодополнение статьи.
+      const start = el.selectionStart, end = el.selectionEnd;
+      const label = el.value.slice(start, end);
+      const insert = `[${label}]((`;
+      el.value = el.value.slice(0, start) + insert + '))' + el.value.slice(end);
+      el.selectionStart = el.selectionEnd = start + insert.length;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.focus();
     }
 
-    // ===== Автодополнение [[wiki-ссылок]] =====
+    // ===== Автодополнение wiki-ссылок [текст]((статья)) =====
 
     ensureSuggestEl() {
       if (this._suggestEl) return this._suggestEl;
@@ -541,6 +551,7 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = a.title;
+        btn.dataset.slug = a.slug;
         if (i === 0) btn.classList.add('eb-suggest-active');
         // Активный пункт по умолчанию — первый (для Enter/Tab), поэтому клик
         // обязан передавать именно нажатую кнопку, а не искать "активную":
@@ -581,8 +592,11 @@
       if (!m) { this.closeSuggest(); return; }
       const openStart = ta.selectionStart - m[1].length;
       const after = ta.value.slice(ta.selectionStart);
-      const closeAlready = after.startsWith(']]');
-      const insert = title + (closeAlready ? '' : ']]');
+      const closeAlready = after.startsWith('))');
+      // Название с ( ) # в ссылку не записать — ими ссылка разбирается
+      // (см. mentionTarget в articles-store.js), поэтому вместо него slug.
+      const target = /[()#]/.test(title) && active.dataset.slug ? active.dataset.slug : title;
+      const insert = target + (closeAlready ? '' : '))');
       ta.value = ta.value.slice(0, openStart) + insert + after;
       const pos = openStart + insert.length;
       ta.selectionStart = ta.selectionEnd = pos;
@@ -1646,7 +1660,7 @@
       panel.innerHTML = '<h3>Ссылки на эту статью</h3>' + (
         backlinks.length
           ? `<ul>${backlinks.map(b => `<li><a href="javascript:void(0)" data-slug="${b.slug}">${escapeHtml(b.title)}</a></li>`).join('')}</ul>`
-          : '<div class="backlinks-empty">Пока никто не сослался на эту статью через [[wiki-ссылку]]</div>'
+          : '<div class="backlinks-empty">Пока никто не сослался на эту статью через wiki-ссылку [текст]((статья))</div>'
       );
       panel.querySelectorAll('a[data-slug]').forEach((a) => {
         a.addEventListener('click', () => window.spaRouter?.editArticle(a.getAttribute('data-slug')));

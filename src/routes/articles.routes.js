@@ -671,7 +671,7 @@ router.get('/search-articles', auth.authenticateToken, auth.checkApproved, async
   }
 });
 
-// Backlinks — статьи, ссылающиеся на данную через [[wiki-ссылку]] (используется
+// Backlinks — статьи, ссылающиеся на данную через wiki-ссылку [подпись]((slug)) (используется
 // панелью обратных ссылок редактора, см. Этап 4).
 router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -928,7 +928,7 @@ router.delete('/articles/:id/comments/:commentId', auth.authenticateToken, auth.
 });
 
 // Облегчённый индекс статей (без содержимого) — для автодополнения
-// [[wiki-ссылок]] и проверки "существует ли статья" в редакторе.
+// wiki-ссылок и проверки "существует ли статья" в редакторе.
 router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const index = [];
@@ -1119,7 +1119,7 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
 });
 
 // Переименование статьи: меняет заголовок и slug, автоматически обновляет
-// [[wiki-ссылки]] на неё в остальных статьях.
+// wiki-ссылки на неё в остальных статьях.
 router.put('/articles/:id/rename', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
     const { title } = req.body;
