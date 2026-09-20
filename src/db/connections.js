@@ -37,6 +37,17 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
     articlesDb.run('DROP TABLE IF EXISTS categories', (dropErr) => {
       if (dropErr) console.error('Не удалось удалить устаревшую таблицу categories:', dropErr);
     });
+
+    // Цвет тега (граф связей, вкладка "Теги") — один на тег во всей системе, см.
+    // src/services/tag-colors.js. tag_key — название тега в нижнем регистре и
+    // без ведущего "#" (одно название = один цвет), tag_name — как оно
+    // написано в первый раз (для подписей), color — #rrggbb.
+    articlesDb.run(`CREATE TABLE IF NOT EXISTS tag_colors (
+      tag_key TEXT PRIMARY KEY,
+      tag_name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
   }
 });
 

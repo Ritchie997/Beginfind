@@ -149,20 +149,29 @@
 .tag-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
+  gap: 6px;
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--text-normal);
-  font: inherit;
-  cursor: pointer;
+  padding: 4px 8px 4px 4px;
   transition: border-color 0.15s, transform 0.15s;
 }
 @media (hover: hover) {
   .tag-card:hover { border-color: var(--blurple); transform: translateY(-1px); }
+}
+.tag-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 6px;
+  color: var(--text-normal);
+  font: inherit;
+  cursor: pointer;
 }
 .tag-card-icon {
   flex: 0 0 auto;
@@ -187,6 +196,38 @@
   white-space: nowrap;
 }
 .tag-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+/* Круглый переключатель цвета: настоящий <input type="color"> лежит под
+   кружком невидимым слоем на всю его площадь — клик открывает системный
+   выбор цвета. */
+.tag-card-color {
+  position: relative;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+.tag-card-color input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+}
+.tag-card-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--background-accent);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.tag-card-color:hover .tag-card-swatch,
+.tag-card-color:focus-within .tag-card-swatch { border-color: var(--text-normal); }
 
 .tags-no-results { grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 14px; }
 

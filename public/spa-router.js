@@ -2274,7 +2274,7 @@ class SPARouter {
         const seen = new Map();
         (Array.isArray(result.data) ? result.data : []).forEach((item) => {
           const key = String(item.tag).toLowerCase();
-          if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0 });
+          if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0, color: item.color || '#5865f2' });
         });
         this.tagsCache = [...seen.values()];
         this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
@@ -2324,19 +2324,63 @@ class SPARouter {
       return;
     }
 
+    // Цвет тега — один на тег во всей системе (граф связей красит узлы им же).
+    // Плитка = кнопка "показать статьи с тегом" + круглый переключатель цвета
+    // (нативный <input type="color"> под кружком): изменить цвет на свой можно
+    // прямо здесь.
     gridEl.innerHTML = filtered.map((t) => `
-      <button type="button" class="tag-card" data-tag="${this.escapeHtml(t.tag)}" title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
-        <span class="tag-card-icon"><i class="fas fa-hashtag"></i></span>
-        <span class="tag-card-body">
-          <span class="tag-card-name">${this.escapeHtml(t.tag)}</span>
-          <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
-        </span>
-      </button>
+      <div class="tag-card" data-tag="${this.escapeHtml(t.tag)}">
+        <button type="button" class="tag-card-main" data-open-tag title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
+          <span class="tag-card-icon" style="background:${t.color}26;color:${t.color}"><i class="fas fa-hashtag"></i></span>
+          <span class="tag-card-body">
+            <span class="tag-card-name">${this.escapeHtml(t.tag)}</span>
+            <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
+          </span>
+        </button>
+        <label class="tag-card-color" title="Изменить цвет тега">
+          <input type="color" value="${t.color}" data-tag-color="${this.escapeHtml(t.tag)}" aria-label="Цвет тега «${this.escapeHtml(t.tag)}»">
+          <span class="tag-card-swatch" style="background:${t.color}"></span>
+        </label>
+      </div>
     `).join('');
 
-    gridEl.querySelectorAll('.tag-card').forEach((btn) => {
-      btn.addEventListener('click', () => this.openTagInIbripedia(btn.dataset.tag));
+    gridEl.querySelectorAll('[data-open-tag]').forEach((btn) => {
+      btn.addEventListener('click', () => this.openTagInIbripedia(btn.closest('.tag-card').dataset.tag));
     });
+    gridEl.querySelectorAll('input[data-tag-color]').forEach((input) => {
+      const card = input.closest('.tag-card');
+      // Пока тянут ползунок в пикере — просто перекрашиваем плитку (без
+      // запросов); сохраняем один раз, когда цвет выбран (change).
+      input.addEventListener('input', () => this.paintTagCard(card, input.value));
+      input.addEventListener('change', () => this.saveTagColor(input.dataset.tagColor, input.value, card));
+    });
+  }
+
+  paintTagCard(card, color) {
+    if (!card) return;
+    const icon = card.querySelector('.tag-card-icon');
+    if (icon) { icon.style.background = `${color}26`; icon.style.color = color; }
+    const swatch = card.querySelector('.tag-card-swatch');
+    if (swatch) swatch.style.background = color;
+  }
+
+  async saveTagColor(tag, color, card) {
+    const item = (this.tagsCache || []).find((t) => t.tag === tag);
+    const previous = item ? item.color : null;
+    try {
+      const result = await apiClient.setTagColor(tag, color);
+      if (!result.success) throw new Error(result.data?.error || result.error || 'не удалось сохранить цвет');
+      if (item) item.color = result.data.color || color;
+      showMessage(`Цвет тега «${tag}» обновлён`, 'success');
+    } catch (error) {
+      // Откатываем плитку к прежнему цвету, чтобы не показывать несохранённое.
+      if (previous) {
+        this.paintTagCard(card, previous);
+        const input = card?.querySelector('input[data-tag-color]');
+        if (input) input.value = previous;
+      }
+      showMessage(`Ошибка смены цвета: ${error.message}`, 'error');
+    }
   }
 
   // Клик по тегу — витрина Ibripedia с уже включённым фильтром по нему.

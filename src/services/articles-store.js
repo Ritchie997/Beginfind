@@ -411,6 +411,14 @@ function renameArticle(oldSlug, newTitle) {
 }
 
 /**
+ * Ключ тега для сравнения и хранения цвета: без ведущего "#", без учёта
+ * регистра ("Дракон", "дракон" и "#ДРАКОН" — один и тот же тег).
+ */
+function tagKey(raw) {
+  return String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim().toLowerCase();
+}
+
+/**
  * Глобальный список тегов по переданным статьям — БЕЗ дублей. Тег статьи —
  * это и то, что вписано в поле "Теги" формы (article.tags), и #хэштеги прямо
  * в тексте (см. extractHashtags): фильтр витрины и граф связей уже считают их
@@ -418,9 +426,10 @@ function renameArticle(oldSlug, newTitle) {
  * регистра и без ведущего "#" ("Дракон", "дракон" и "#дракон" — один тег);
  * показывается написание из поля "Теги" (в нём регистр задал автор), а если
  * тег встречается только как #хэштег в тексте — его строчная форма.
- * count — сколько разных статей отмечено этим тегом.
+ * key — нормализованное название (tagKey), count — сколько разных статей
+ * отмечено этим тегом.
  * @param {object[]} articles — статьи (уже отфильтрованные по доступу)
- * @returns {{tag: string, count: number}[]} по алфавиту
+ * @returns {{tag: string, key: string, count: number}[]} по алфавиту
  */
 function collectTags(articles) {
   const byKey = new Map(); // ключ (нижний регистр) -> { tag, fromField, slugs:Set }
@@ -428,7 +437,7 @@ function collectTags(articles) {
   const add = (raw, slug, fromField) => {
     const name = String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim();
     if (!name) return;
-    const key = name.toLowerCase();
+    const key = tagKey(name);
     let entry = byKey.get(key);
     if (!entry) {
       entry = { tag: name, fromField, slugs: new Set() };
@@ -446,7 +455,7 @@ function collectTags(articles) {
   }
 
   return [...byKey.values()]
-    .map((e) => ({ tag: e.tag, count: e.slugs.size }))
+    .map((e) => ({ tag: e.tag, key: tagKey(e.tag), count: e.slugs.size }))
     .sort((a, b) => a.tag.localeCompare(b.tag, 'ru'));
 }
 
@@ -679,6 +688,7 @@ module.exports = {
   searchArticles,
   filterArticles,
   collectTags,
+  tagKey,
   stripLegacyCategoryFields,
   extractWikiLinks,
   extractHashtags,

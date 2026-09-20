@@ -11,6 +11,7 @@ const auth = require('../middleware/auth');
 const store = require('../services/articles-store');
 const social = require('../services/social-store');
 const stickers = require('../services/stickers-store');
+const tagColors = require('../services/tag-colors');
 const dashboardStats = require('../services/dashboard-stats');
 const { serversDb } = require('../db/connections');
 const { isAdminOnServer } = require('../services/server-permissions');
@@ -518,7 +519,7 @@ router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, as
   }
 });
 
-router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, (req, res) => {
+router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
     const { title, content, views, locked, role, roles, tags, image, attachments, server } = req.body;
     if (!title || !String(title).trim()) {
@@ -533,6 +534,7 @@ router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkN
       // Сервер статьи берём только из тела запроса — без фоллбэка на заголовок Host.
       server: server || null
     });
+    await assignColorsForArticle(article);
     res.json({ id: article.slug, slug: article.slug });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -606,6 +608,7 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
       co_author_ids: coAuthorIds,
       ...(claimedAuthorId !== undefined ? { author_id: claimedAuthorId } : {})
     });
+    await assignColorsForArticle(updated);
     res.json({ updated: 1, slug: updated.slug });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -939,8 +942,30 @@ router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async 
   }
 });
 
+// Список тегов доступных статей + цвет каждого. Теги, у которых цвета ещё нет
+// (в том числе все уже существовавшие до появления цветов), получают
+// случайный и сохраняют его — см. src/services/tag-colors.js.
+async function collectTagsWithColors(articles) {
+  const list = store.collectTags(articles);
+  const colors = await tagColors.ensureColors(list.map((t) => ({ key: t.key, name: t.tag })));
+  return list.map((t) => ({ tag: t.tag, count: t.count, color: (colors.get(t.key) || {}).color || null }));
+}
+
+// Новому тегу статьи цвет выдаётся сразу при сохранении: тег, впервые
+// появившийся в этой статье ("тег-родитель"), получает случайный цвет, а все
+// последующие теги с тем же названием — уже выданный. Ошибка здесь не должна
+// ронять сохранение самой статьи.
+async function assignColorsForArticle(article) {
+  try {
+    const list = store.collectTags([article]);
+    await tagColors.ensureColors(list.map((t) => ({ key: t.key, name: t.tag })));
+  } catch (err) {
+    console.error('[tags] Не удалось выдать цвет тегам статьи:', err.message);
+  }
+}
+
 // Глобальный список всех тегов — без дублей (регистр и ведущий "#" не
-// различаются), с числом статей у каждого тега. Учитываются и теги из поля
+// различаются), с числом статей и цветом у каждого тега. Учитываются и теги из поля
 // "Теги", и #хэштеги в тексте статей; берутся только статьи, доступные
 // текущему пользователю (так же, как в articles-index и графе), чтобы список
 // не выдавал теги закрытых от него статей. Используется вкладкой "Теги".
@@ -950,7 +975,35 @@ router.get('/tags', auth.authenticateToken, auth.checkApproved, async (req, res)
     for (const article of store.listArticles()) {
       if (await canAccessArticle(req.user, article)) accessible.push(article);
     }
-    res.json(store.collectTags(accessible));
+    res.json(await collectTagsWithColors(accessible));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/tags/color { tag, color } — сменить цвет тега на собственный
+// (#rrggbb). Цвет один на тег во всей системе: граф и вкладка "Теги" сразу
+// показывают новый цвет всем. Менять можно только существующие (доступные
+// пользователю) теги — чтобы таблица цветов не обрастала произвольными
+// названиями.
+router.put('/tags/color', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const { tag, color } = req.body || {};
+    const key = store.tagKey(tag);
+    if (!key) return res.status(400).json({ error: 'Не указан тег' });
+    if (!tagColors.HEX_RE.test(String(color || ''))) {
+      return res.status(400).json({ error: 'Цвет должен быть в формате #rrggbb' });
+    }
+
+    const accessible = [];
+    for (const article of store.listArticles()) {
+      if (await canAccessArticle(req.user, article)) accessible.push(article);
+    }
+    const existing = store.collectTags(accessible).find((t) => t.key === key);
+    if (!existing) return res.status(404).json({ error: 'Такого тега нет' });
+
+    const saved = await tagColors.setColor(key, existing.tag, color);
+    res.json({ tag: existing.tag, color: saved });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -972,16 +1025,23 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     // extractHashtags) — так же, как это уже устроено в filterArticles()
     // для витрины Ibripedia, только тут результат отдаётся клиенту, а не
     // используется для серверной фильтрации.
+    // Теги узла нормализованы (store.tagKey) и идут в порядке: сначала из поля
+    // "Теги", затем #хэштеги из текста — ПЕРВЫЙ из них определяет цвет узла на
+    // клиенте (tagColors ниже, см. renderGraph в public/graph-view.js).
     const nodes = accessible.map(a => {
-      const ownTags = (a.tags || []).map(t => String(t).toLowerCase());
-      const hashtags = store.extractHashtags(a.content);
+      const ownTags = (a.tags || []).map(t => store.tagKey(t));
+      const hashtags = store.extractHashtags(a.content).map(t => store.tagKey(t));
       return {
         slug: a.slug,
         title: a.title,
         server: a.server ?? null,
-        tags: [...new Set([...ownTags, ...hashtags])]
+        tags: [...new Set([...ownTags, ...hashtags])].filter(Boolean)
       };
     });
+    const tagList = store.collectTags(accessible);
+    const colorMap = await tagColors.ensureColors(tagList.map((t) => ({ key: t.key, name: t.tag })));
+    const tagColorsOut = {};
+    colorMap.forEach((v, key) => { tagColorsOut[key] = { name: v.name, color: v.color }; });
     const edges = [];
     for (const article of accessible) {
       for (const target of store.extractWikiLinks(article.content)) {
@@ -991,7 +1051,7 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
       }
     }
 
-    res.json({ nodes, edges });
+    res.json({ nodes, edges, tagColors: tagColorsOut });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -454,6 +454,12 @@ class ApiClient {
     return this.makeAuthenticatedRequest('/api/tags');
   }
 
+  // Сменить цвет тега на собственный (#rrggbb) — один цвет на тег во всей
+  // системе (граф связей, вкладка "Теги"), см. PUT /api/tags/color.
+  async setTagColor(tag, color) {
+    return this.makeAuthenticatedRequest('/api/tags/color', 'PUT', { tag, color });
+  }
+
   // Methods for roles
   async getRoles() {
     return this.makeAuthenticatedRequest('/api/roles');

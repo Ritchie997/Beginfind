@@ -41,19 +41,37 @@
     }[c]));
   }
 
+  // Цвет узла без тегов (и тегов, для которых цвет не пришёл).
+  const NO_TAG_COLOR = '#8e9297';
+
+  function primaryTagOf(node, tagColors) {
+    const map = tagColors || {};
+    const key = (node.tags || []).find((t) => map[t]);
+    return key ? { key, name: map[key].name || key, color: map[key].color } : null;
+  }
+
+  function tagNodeColor(node, tagColors) {
+    const primary = primaryTagOf(node, tagColors);
+    return primary ? primary.color : NO_TAG_COLOR;
+  }
+
   /**
    * Отрисовывает граф в переданный контейнер.
    * @param {HTMLElement} container — куда монтировать SVG (заполняет его целиком)
    * @param {{nodes: {slug,title,server?,tags?}[], edges: {from,to}[]}} data
-   * @param {{onNodeClick?: (slug:string)=>void, centerSlug?: string, compact?: boolean}} options
+   * @param {{onNodeClick?: (slug:string)=>void, centerSlug?: string, compact?: boolean, colorByTag?: boolean, tagColors?: Object<string,{name:string,color:string}>}} options
    *   centerSlug — если задан, этот узел закрепляется в центре и подсвечивается
    *   (используется локальной панелью графа в редакторе).
    *   compact — уменьшенные подписи/радиусы для маленькой панели.
+   *   colorByTag — красить узлы цветом тега статьи (первый тег узла, цвет из
+   *   tagColors: { "тег": {name, color} }) вместо однотонного --blurple; статья
+   *   без тегов — нейтрально-серая. Используется полной картой на дашборде, не
+   *   локальной панелью редактора (там всегда включён centerSlug).
    * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void}>}
    */
   async function renderGraph(container, data, options = {}) {
     const d3 = await loadD3();
-    const { onNodeClick, centerSlug, compact } = options;
+    const { onNodeClick, centerSlug, compact, colorByTag, tagColors } = options;
 
     container.innerHTML = '';
     const width = container.clientWidth || 400;
@@ -66,6 +84,12 @@
       container.appendChild(empty);
       return { destroy() {}, setSearchHighlight() {} };
     }
+
+    // Цвет узла — цвет ПЕРВОГО тега статьи (порядок тегов задаёт сервер: сперва
+    // поле "Теги", затем #хэштеги из текста). У одного названия тега один цвет
+    // во всей системе (см. src/services/tag-colors.js), поэтому статьи с одним
+    // тегом окрашены одинаково.
+    const colorFor = (n) => tagNodeColor(n, tagColors);
 
     // Степень узла (кол-во связей) — влияет на радиус точки
     const degree = new Map(data.nodes.map(n => [n.slug, 0]));
@@ -145,7 +169,8 @@
 
     node.append('circle')
       .attr('r', radiusFor)
-      .attr('class', 'graph-node-circle');
+      .attr('class', 'graph-node-circle')
+      .style('fill', (n) => (colorByTag && n.slug !== centerSlug) ? colorFor(n) : null);
 
     node.append('text')
       .attr('class', 'graph-node-label')
@@ -349,11 +374,36 @@
     }
   }
 
-  function renderGraphLegend(container) {
+  // Легенда: цвет узла = цвет его первого тега. Перечисляются самые частые
+  // "первые" теги среди показанных узлов (не больше 12 — иначе легенда сама
+  // заняла бы пол-графа), остальные сворачиваются в "+N".
+  function renderGraphLegend(container, nodes, tagColors) {
     const legend = document.createElement('div');
     legend.className = 'graph-legend';
+
+    const counts = new Map();
+    let untagged = 0;
+    nodes.forEach((n) => {
+      const primary = primaryTagOf(n, tagColors);
+      if (!primary) { untagged += 1; return; }
+      const entry = counts.get(primary.key) || { ...primary, count: 0 };
+      entry.count += 1;
+      counts.set(primary.key, entry);
+    });
+
+    const LIMIT = 12;
+    const sorted = [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
+    const swatches = sorted.slice(0, LIMIT)
+      .map((e) => `<span><span class="dot" style="background:${e.color}"></span>${escapeHtml(e.name)}</span>`)
+      .join('');
+    const more = sorted.length > LIMIT ? `<span>+${sorted.length - LIMIT} тегов</span>` : '';
+    const noTag = untagged
+      ? `<span><span class="dot" style="background:${NO_TAG_COLOR}"></span>Без тегов</span>`
+      : '';
+
     legend.innerHTML = `
-      <span>Наведите/ищите (# — по тегам) — подсветка связей · Клик — открыть · Колесо — масштаб · Перетаскивание — сдвинуть</span>
+      ${swatches}${more}${noTag}
+      <span>Цвет узла — цвет его первого тега (меняется во вкладке «Теги») · Наведите/ищите (# — по тегам) — подсветка связей · Клик — открыть · Колесо — масштаб · Перетаскивание — сдвинуть</span>
     `;
     container.appendChild(legend);
   }
@@ -426,9 +476,9 @@
       if (instance) { instance.destroy(); instance = null; }
       const data = visibleData();
       if (countEl) countEl.textContent = `Статей: ${data.nodes.length} · Связей: ${data.edges.length}`;
-      instance = await renderGraph(container, data, { onNodeClick: navigateToArticle });
+      instance = await renderGraph(container, data, { onNodeClick: navigateToArticle, colorByTag: true, tagColors: fullData.tagColors });
       if (searchInput?.value.trim()) instance.setSearchHighlight(searchInput.value);
-      if (data.nodes.length) renderGraphLegend(container);
+      if (data.nodes.length) renderGraphLegend(container, data.nodes, fullData.tagColors);
     }
 
     serverSelect?.addEventListener('change', rerender);
