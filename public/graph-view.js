@@ -686,14 +686,7 @@
     // тегом окрашены одинаково.
     const colorFor = (n) => tagNodeColor(n, tagColors);
 
-    // Степень узла (кол-во связей) — влияет на радиус точки
-    const degree = new Map(data.nodes.map(n => [n.slug, 0]));
-    data.edges.forEach(e => {
-      degree.set(e.from, (degree.get(e.from) || 0) + 1);
-      degree.set(e.to, (degree.get(e.to) || 0) + 1);
-    });
-
-    const nodes = data.nodes.map(n => ({ ...n, degree: degree.get(n.slug) || 0 }));
+    const nodes = data.nodes.map(n => ({ ...n, degree: 0 }));
     const nodeBySlug = new Map(nodes.map(n => [n.slug, n]));
     const links = data.edges
       .filter(e => nodeBySlug.has(e.from) && nodeBySlug.has(e.to))
@@ -705,6 +698,13 @@
       neighbors.get(l.source)?.add(l.target);
       neighbors.get(l.target)?.add(l.source);
     });
+
+    // Степень узла — число РАЗНЫХ соседей; влияет на радиус точки. Считается по
+    // соседям, а не по рёбрам: статьи часто ссылаются друг на друга взаимно
+    // (A→B и B→A), и по рёбрам такой лист получал бы "две связи" и рос, хотя
+    // на графе у него одна линия. Ссылка на себя (соседями узел уже включён
+    // сам) и связи с отсутствующими узлами не в счёт.
+    nodes.forEach(n => { n.degree = neighbors.get(n.slug).size - 1; });
 
     // Уникальные связи (без дублей A→B и B→A) — для поиска пересечений ниже.
     const pairs = [];
