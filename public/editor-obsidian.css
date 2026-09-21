@@ -887,21 +887,32 @@
 }
 .graph-node-dim { opacity: 0.15; }
 
-/* Подписи узлов — мелкие в покое, увеличиваются "как через лупу" при наведении */
+/* Подписи узлов — рисуются отдельным слоем ПОВЕРХ всех точек (.graph-labels
+   в graph-view.js), размер шрифта задаётся инлайном по числу связей узла.
+   Обводка цветом фона (paint-order: stroke) — "ореол": подпись читается,
+   даже когда под ней проходит линия связи или чужая точка. Классы состояния
+   (hover/dim/search-match/center) стоят на обёртке .graph-label, поэтому
+   селекторы ниже те же, что и для точек. Увеличение при наведении — "как
+   через лупу": scale (а не font-size), чтобы не съезжал layout; коэффициент
+   считается для каждой подписи отдельно (--label-hover-scale). */
+.graph-label { transition: opacity 0.15s; }
 .graph-node-label {
   fill: var(--text-muted);
   font-size: 9px;
+  stroke: var(--background-tertiary);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
   pointer-events: none;
   transform-box: fill-box;
   transform-origin: center bottom;
-  transition: font-size 0.18s ease, fill 0.18s ease, transform 0.18s ease;
+  transition: fill 0.18s ease, transform 0.18s ease;
   user-select: none;
 }
 .graph-node-hover .graph-node-label,
 .graph-node-search-match .graph-node-label {
   fill: var(--text-normal);
-  font-size: 9px; /* базовый размер не меняем — масштабируем через transform, чтобы не съезжал layout */
-  transform: scale(1.9);
+  transform: scale(var(--label-hover-scale, 1.9));
   font-weight: 600;
 }
 .graph-node-center .graph-node-label {

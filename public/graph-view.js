@@ -67,11 +67,14 @@
    *   tagColors: { "тег": {name, color} }) вместо однотонного --blurple; статья
    *   без тегов — нейтрально-серая. Используется полной картой на дашборде, не
    *   локальной панелью редактора (там всегда включён centerSlug).
-   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void}>}
+   *   uniformSize — все точки (и подписи) одного размера; по умолчанию false:
+   *   размер точки и подписи растёт со степенью узла (см. SIZE ниже).
+   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, setUniformSize: (flag: boolean) => void}>}
    */
   async function renderGraph(container, data, options = {}) {
     const d3 = await loadD3();
     const { onNodeClick, centerSlug, compact, colorByTag, tagColors } = options;
+    let uniformSize = !!options.uniformSize;
 
     container.innerHTML = '';
     const width = container.clientWidth || 400;
@@ -82,7 +85,7 @@
       empty.className = 'graph-empty';
       empty.textContent = 'Пока нет статей для отображения графа.';
       container.appendChild(empty);
-      return { destroy() {}, setSearchHighlight() {} };
+      return { destroy() {}, setSearchHighlight() {}, setUniformSize() {} };
     }
 
     // Цвет узла — цвет ПЕРВОГО тега статьи (порядок тегов задаёт сервер: сперва
@@ -111,12 +114,32 @@
       neighbors.get(l.target)?.add(l.source);
     });
 
+    // Размеры точек и подписей. Рост логарифмический: каждая следующая связь
+    // прибавляет всё меньше (первая связь — заметный шаг, сотая — почти
+    // незаметный), плюс жёсткий потолок max. Так хаб с десятками связей
+    // остаётся "солнцем" среди "звёзд" (~4× крупнее листа), а не раздувается
+    // до гигантского пятна при сотнях связей. Ориентиры для полной карты:
+    //   связей 1 → 8px, 5 → 13px, 10 → 16px, 30 → 20px, 100 → 26px, потолок 30px.
+    const SIZE = compact
+      ? { base: 4, k: 1.8, max: 12, uniform: 5, center: 3, labelBase: 8, labelK: 1, labelMax: 11, labelHover: 15 }
+      : { base: 5, k: 4.5, max: 30, uniform: 7, center: 5, labelBase: 9, labelK: 2.2, labelMax: 17, labelHover: 17 };
+
     const radiusFor = (n) => {
-      const base = compact ? 4 : 6;
-      const bonus = Math.min(n.degree * (compact ? 1 : 1.5), compact ? 6 : 14);
-      const centerBonus = n.slug === centerSlug ? (compact ? 3 : 5) : 0;
-      return base + bonus + centerBonus;
+      const grown = uniformSize
+        ? SIZE.uniform
+        : Math.min(SIZE.base + SIZE.k * Math.log(1 + n.degree), SIZE.max);
+      return grown + (n.slug === centerSlug ? SIZE.center : 0);
     };
+
+    // Размер подписи растёт со степенью узла так же плавно, как и точка.
+    const labelSizeFor = (n) => (uniformSize
+      ? SIZE.labelBase
+      : Math.min(SIZE.labelBase + SIZE.labelK * Math.log(1 + n.degree), SIZE.labelMax));
+
+    // При наведении/поиске подпись увеличивается "лупой" примерно до одного
+    // и того же размера (labelHover), а не в фиксированное число раз — иначе
+    // уже крупная подпись хаба раздувалась бы до гигантской.
+    const labelHoverScaleFor = (n) => Math.max(1.2, SIZE.labelHover / labelSizeFor(n));
 
     const svg = d3.select(container)
       .append('svg')
@@ -167,18 +190,55 @@
           n.fx = null; n.fy = null;
         }));
 
-    node.append('circle')
+    // Текущий поисковый запрос (в нижнем регистре) — нужен уже при первой
+    // раскраске точек (fillFor), поэтому объявлен здесь, до создания кружков.
+    let activeSearchQuery = '';
+
+    // Цвет заливки: при активном поиске узел с тегом, подходящим под запрос,
+    // красится цветом ЭТОГО тега (а не первого тега статьи); без поиска — как
+    // раньше, цвет первого тега. null — заливка из CSS (центр локального графа
+    // и однотонный режим без colorByTag).
+    const fillFor = (n) => {
+      if (!colorByTag || n.slug === centerSlug) return null;
+      const matched = matchingTagOf(n);
+      return matched ? tagColors[matched].color : colorFor(n);
+    };
+
+    const circle = node.append('circle')
       .attr('r', radiusFor)
       .attr('class', 'graph-node-circle')
-      .style('fill', (n) => (colorByTag && n.slug !== centerSlug) ? colorFor(n) : null);
+      .style('fill', fillFor);
 
-    node.append('text')
+    node.append('title').text((n) => n.title);
+
+    // Подписи — отдельным слоем ПОВЕРХ всех точек (а не внутри группы своего
+    // узла): иначе кружок соседнего узла, нарисованный позже в DOM, закрывал
+    // бы подпись. Слой не принимает мышь — hover/клик идут на точки под ним.
+    // Порядок — по возрастанию степени, чтобы подпись хаба была над мелкими.
+    // Каждая подпись — группа-обёртка с translate (CSS-scale на самом text
+    // иначе перебил бы translate-атрибут) и теми же классами состояния
+    // (hover/dim/search-match/center), что и у её узла — см. setNodeClass.
+    const label = root.append('g')
+      .attr('class', 'graph-labels')
+      .style('pointer-events', 'none')
+      .selectAll('g')
+      .data([...nodes].sort((a, b) => a.degree - b.degree))
+      .join('g')
+      .attr('class', (n) => 'graph-label' + (n.slug === centerSlug ? ' graph-node-center' : ''));
+
+    const labelText = label.append('text')
       .attr('class', 'graph-node-label')
       .attr('text-anchor', 'middle')
       .attr('dy', (n) => -(radiusFor(n) + 4))
+      .style('font-size', (n) => `${labelSizeFor(n)}px`)
+      .style('--label-hover-scale', labelHoverScaleFor)
       .text((n) => n.title);
 
-    node.append('title').text((n) => n.title);
+    // Состояние подсветки живёт и на точке, и на её подписи.
+    const setNodeClass = (name, predicate) => {
+      node.classed(name, predicate);
+      label.classed(name, predicate);
+    };
 
     node.style('cursor', onNodeClick ? 'pointer' : 'default');
     if (onNodeClick) {
@@ -191,11 +251,9 @@
     // мышью hover не сбрасывает подсветку "в ноль", а возвращается к текущему
     // активному поиску (если он есть) — иначе наведение мышью на граф во
     // время поиска сбивало бы результат при каждом movemove.
-    let activeSearchQuery = '';
-
     function applyHighlight(primarySlugs) {
       if (!primarySlugs || !primarySlugs.size) {
-        node.classed('graph-node-dim', false);
+        setNodeClass('graph-node-dim', false);
         link.classed('graph-link-dim', false).classed('graph-link-active', false);
         return;
       }
@@ -206,24 +264,38 @@
           related.add(l.target.slug);
         }
       });
-      node.classed('graph-node-dim', (d) => !related.has(d.slug));
+      setNodeClass('graph-node-dim', (d) => !related.has(d.slug));
       link.classed('graph-link-dim', (l) => !(primarySlugs.has(l.source.slug) || primarySlugs.has(l.target.slug)));
       link.classed('graph-link-active', (l) => primarySlugs.has(l.source.slug) || primarySlugs.has(l.target.slug));
     }
 
-    // Поиск с "#" ищет по тегам вместо названия — объединяем теги статьи
-    // (поле "Теги" в форме статьи) и #хэштеги прямо в тексте (см.
-    // extractHashtags на сервере). Без "#" — обычный поиск по подстроке в
-    // названии, как раньше.
+    // Поиск. Запрос с "#" ищет только по тегам, без "#" — по названию статьи
+    // ИЛИ по тегу (набрал имя тега — видно все статьи с ним). Теги статьи —
+    // это и поле "Теги" в форме, и #хэштеги прямо в тексте (см. extractHashtags
+    // на сервере). Тег подходит, если запрос — часть его ключа или названия.
+    function searchTerm() {
+      return (activeSearchQuery.startsWith('#') ? activeSearchQuery.slice(1) : activeSearchQuery).trim();
+    }
+
+    function tagMatchesTerm(key, term) {
+      if (String(key).toLowerCase().includes(term)) return true;
+      const name = tagColors?.[key]?.name;
+      return !!name && name.toLowerCase().includes(term);
+    }
+
+    // Первый (в порядке тегов статьи) тег узла, подходящий под запрос, — его
+    // цвет получает точка, пока идёт поиск. Только теги с известным цветом.
+    function matchingTagOf(n) {
+      const term = searchTerm();
+      if (!term) return null;
+      return (n.tags || []).find((t) => tagColors?.[t] && tagMatchesTerm(t, term)) ?? null;
+    }
+
     function nodeMatchesQuery(n) {
-      if (!activeSearchQuery) return false;
-      if (activeSearchQuery.startsWith('#')) {
-        const term = activeSearchQuery.slice(1).trim();
-        if (!term) return false;
-        const tags = (n.tags || []).map((t) => String(t).toLowerCase());
-        return tags.some((t) => t.includes(term));
-      }
-      return n.title.toLowerCase().includes(activeSearchQuery);
+      const term = searchTerm();
+      if (!term) return false;
+      if ((n.tags || []).some((t) => tagMatchesTerm(t, term))) return true;
+      return !activeSearchQuery.startsWith('#') && n.title.toLowerCase().includes(term);
     }
 
     function searchMatches() {
@@ -232,12 +304,14 @@
     }
 
     node.on('mouseenter', function (event, n) {
-      node.classed('graph-node-hover', (d) => d.slug === n.slug);
+      setNodeClass('graph-node-hover', (d) => d.slug === n.slug);
+      // Увеличенная подпись — поверх соседних подписей.
+      label.filter((d) => d.slug === n.slug).raise();
       applyHighlight(new Set([n.slug]));
     });
 
     node.on('mouseleave', function () {
-      node.classed('graph-node-hover', false);
+      setNodeClass('graph-node-hover', false);
       applyHighlight(searchMatches());
     });
 
@@ -249,13 +323,32 @@
     // взаимное отталкивание на большой дистанции, а слабые forceX/forceY
     // добавляют каждому узлу индивидуальную "гравитацию" к центру — весь граф
     // становится заметно компактнее, особенно изолированные точки.
+    //
+    // Крупные узлы физически "весомее": чем больше точка, тем сильнее она
+    // отталкивает соседей, тем длиннее её связи (чтобы звёзды не садились на
+    // само "солнце") и тем сильнее её тянет к центру — хаб оказывается в
+    // середине, а листья раскидываются вокруг. Для однотонного режима все
+    // радиусы равны SIZE.uniform, и формулы дают исходные значения.
+    const linkDistanceFor = (l) => (compact ? 40 : 60)
+      + Math.max(0, radiusFor(l.source) - SIZE.uniform)
+      + Math.max(0, radiusFor(l.target) - SIZE.uniform);
+    const chargeFor = (n) => -((compact ? 60 : 110) + Math.max(0, radiusFor(n) - SIZE.uniform) * (compact ? 3 : 8));
+    const gravityFor = (n) => (uniformSize ? 0.03 : 0.025 + 0.012 * Math.log(1 + n.degree));
+    const collideFor = (n) => radiusFor(n) + 12;
+
+    const linkForce = d3.forceLink(links).id((n) => n.slug).distance(linkDistanceFor).strength(0.7);
+    const chargeForce = d3.forceManyBody().strength(chargeFor).distanceMax(compact ? 220 : 380);
+    const xForce = d3.forceX(width / 2).strength(gravityFor);
+    const yForce = d3.forceY(height / 2).strength(gravityFor);
+    const collideForce = d3.forceCollide(collideFor);
+
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id((n) => n.slug).distance(compact ? 40 : 60).strength(0.7))
-      .force('charge', d3.forceManyBody().strength(compact ? -60 : -110).distanceMax(compact ? 220 : 380))
+      .force('link', linkForce)
+      .force('charge', chargeForce)
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('x', d3.forceX(width / 2).strength(0.03))
-      .force('y', d3.forceY(height / 2).strength(0.03))
-      .force('collide', d3.forceCollide((n) => radiusFor(n) + 12));
+      .force('x', xForce)
+      .force('y', yForce)
+      .force('collide', collideForce);
 
     if (centerSlug && nodeBySlug.has(centerSlug)) {
       const c = nodeBySlug.get(centerSlug);
@@ -270,6 +363,7 @@
         .attr('x2', (l) => l.target.x)
         .attr('y2', (l) => l.target.y);
       node.attr('transform', (n) => `translate(${n.x},${n.y})`);
+      label.attr('transform', (n) => `translate(${n.x},${n.y})`);
     });
 
     return {
@@ -282,8 +376,31 @@
       // что поиск отработал, а не завис/сломался.
       setSearchHighlight(query) {
         activeSearchQuery = (query || '').trim().toLowerCase();
-        node.classed('graph-node-search-match', nodeMatchesQuery);
+        setNodeClass('graph-node-search-match', nodeMatchesQuery);
+        // Перекраска под цвет найденного тега — только пока в поиске что-то
+        // введено; пустой запрос возвращает цвет первого тега.
+        circle.style('fill', fillFor);
         applyHighlight(searchMatches());
+      },
+      // Переключение "растущие / одинаковые" точки на лету, без пересоздания
+      // графа: пересчитываем радиусы, подписи и физику (force-аксессоры
+      // нужно переустановить, иначе d3 держит кэш старых значений) и слегка
+      // "встряхиваем" симуляцию, чтобы узлы разошлись под новые размеры.
+      setUniformSize(flag) {
+        const next = !!flag;
+        if (next === uniformSize) return;
+        uniformSize = next;
+        circle.attr('r', radiusFor);
+        labelText
+          .attr('dy', (n) => -(radiusFor(n) + 4))
+          .style('font-size', (n) => `${labelSizeFor(n)}px`)
+          .style('--label-hover-scale', labelHoverScaleFor);
+        linkForce.distance(linkDistanceFor);
+        chargeForce.strength(chargeFor);
+        xForce.strength(gravityFor);
+        yForce.strength(gravityFor);
+        collideForce.radius(collideFor);
+        simulation.alpha(0.6).restart();
       }
     };
   }
@@ -319,7 +436,7 @@
     const clone = svgEl.cloneNode(true);
     const originals = svgEl.querySelectorAll('*');
     const clones = clone.querySelectorAll('*');
-    const STYLE_PROPS = ['fill', 'stroke', 'stroke-width', 'opacity', 'font-size', 'font-weight', 'font-family', 'text-anchor'];
+    const STYLE_PROPS = ['fill', 'stroke', 'stroke-width', 'stroke-linejoin', 'paint-order', 'opacity', 'font-size', 'font-weight', 'font-family', 'text-anchor'];
     originals.forEach((origEl, i) => {
       const cs = getComputedStyle(origEl);
       let styleStr = '';
@@ -403,7 +520,7 @@
 
     legend.innerHTML = `
       ${swatches}${more}${noTag}
-      <span>Цвет узла — цвет его первого тега (меняется во вкладке «Теги») · Наведите/ищите (# — по тегам) — подсветка связей · Клик — открыть · Колесо — масштаб · Перетаскивание — сдвинуть</span>
+      <span>Цвет узла — цвет его первого тега (меняется во вкладке «Теги»), при поиске — цвет найденного тега · Размер — число связей · Наведите/ищите (# — только по тегам) — подсветка связей · Клик — открыть · Колесо — масштаб · Перетаскивание — сдвинуть</span>
     `;
     container.appendChild(legend);
   }
@@ -411,7 +528,7 @@
   // Инициализация графовой карточки на дашборде (public/views/dashboard.html):
   // ищет #graphContainer/#graphNodeCount и панель фильтров (#graphServerFilter,
   // #graphSearchInput/#graphSearchClear, #graphHideIsolated,
-  // #graphHideLabels, #graphExportPng) в уже вставленной разметке страницы.
+  // #graphHideLabels, #graphUniformSize, #graphExportPng) в уже вставленной разметке страницы.
   // Вызывается из spa-router.js (loadDashboard).
   async function initGraphPage() {
     const container = document.getElementById('graphContainer');
@@ -436,6 +553,7 @@
 
     const hideIsolatedEl = document.getElementById('graphHideIsolated');
     const hideLabelsEl = document.getElementById('graphHideLabels');
+    const uniformSizeEl = document.getElementById('graphUniformSize');
     const countEl = document.getElementById('graphNodeCount');
     const searchInput = document.getElementById('graphSearchInput');
     const searchClearBtn = document.getElementById('graphSearchClear');
@@ -476,13 +594,19 @@
       if (instance) { instance.destroy(); instance = null; }
       const data = visibleData();
       if (countEl) countEl.textContent = `Статей: ${data.nodes.length} · Связей: ${data.edges.length}`;
-      instance = await renderGraph(container, data, { onNodeClick: navigateToArticle, colorByTag: true, tagColors: fullData.tagColors });
+      instance = await renderGraph(container, data, {
+        onNodeClick: navigateToArticle,
+        colorByTag: true,
+        tagColors: fullData.tagColors,
+        uniformSize: !!uniformSizeEl?.checked
+      });
       if (searchInput?.value.trim()) instance.setSearchHighlight(searchInput.value);
       if (data.nodes.length) renderGraphLegend(container, data.nodes, fullData.tagColors);
     }
 
     serverSelect?.addEventListener('change', rerender);
     hideIsolatedEl?.addEventListener('change', rerender);
+    uniformSizeEl?.addEventListener('change', () => instance?.setUniformSize(uniformSizeEl.checked));
 
     searchInput?.addEventListener('input', () => {
       const q = searchInput.value.trim();

@@ -10,7 +10,7 @@
         </select>
         <div class="graph-search-wrap">
             <i class="fas fa-search"></i>
-            <input type="text" id="graphSearchInput" class="form-input" placeholder="Поиск по названию или #тегу…">
+            <input type="text" id="graphSearchInput" class="form-input" placeholder="Название или тег (#тег — только теги)…">
             <button type="button" id="graphSearchClear" class="graph-search-clear" title="Очистить поиск" hidden>&times;</button>
         </div>
         <label class="graph-controls-checkbox">
@@ -20,6 +20,10 @@
         <label class="graph-controls-checkbox">
             <input type="checkbox" id="graphHideLabels">
             Подписи только при наведении
+        </label>
+        <label class="graph-controls-checkbox" title="Выключено: чем больше связей, тем крупнее точка и подпись. Включено: все точки одного размера">
+            <input type="checkbox" id="graphUniformSize">
+            Одинаковый размер точек
         </label>
         <button type="button" id="graphExportPng" class="btn btn-secondary btn-sm graph-controls-export">
             <i class="fas fa-download"></i> PNG
