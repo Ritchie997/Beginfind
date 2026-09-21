@@ -811,18 +811,27 @@
   cursor: pointer;
 }
 
-/* Планшет (≤1024px): поля секций — в одну колонку (полям есть куда расти),
-   тулбар не липнет к верху — с обычными многострочными группами он
-   заметно выше, чем однострочный, и постоянно съедать экран при скролле
-   длинной статьи уже не оправдано (на десктопе sticky остаётся). */
+/* Планшет и телефон (≤1024px): поля секций — в одну колонку (полям есть куда
+   расти). Панель форматирования липнет к верху экрана, как и на ПК (тулбар
+   иначе остаётся далеко наверху длинной статьи, а выделять текст и
+   применять формат приходится в разных местах страницы). Чтобы липкая
+   панель не съедала экран, лента форматирования тут — ОДИН прокручиваемый
+   ряд (см. ниже), а не несколько строк кнопок. */
 @media (max-width: 1024px) {
   .articles-page .form-section-grid {
     grid-template-columns: 1fr;
   }
 
-  .articles-page .editor-toolbar-sticky {
-    position: relative;
-    top: 0;
+  .articles-page .toolbar-row-format {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .articles-page .toolbar-row-format::-webkit-scrollbar { height: 4px; }
+  .articles-page .toolbar-group-wrap,
+  .articles-page .toolbar-group {
+    flex-shrink: 0;
   }
 }
 
@@ -841,17 +850,6 @@
    скрыты — остаются только иконки, тень+стрелка с краю (см. .toolbar-fade
    выше) подсказывает, что есть что прокрутить. */
 @media (max-width: 640px) {
-  .articles-page .toolbar-row-format {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 2px;
-  }
-  .articles-page .toolbar-row-format::-webkit-scrollbar { height: 4px; }
-  .articles-page .toolbar-group-wrap,
-  .articles-page .toolbar-group {
-    flex-shrink: 0;
-  }
   .articles-page .toolbar-group-label {
     display: none;
   }
@@ -918,8 +916,14 @@ html:has(body.articles-page) {
     margin: 0 -8px;
   }
   .articles-page .editor-toolbar-sticky {
-    padding: 8px 6px;
+    padding: 6px;
+    gap: 6px;
     border-radius: 0;
+    /* Липкая панель перекрывает контент при прокрутке — лёгкая тень отделяет её. */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+  .articles-page .toolbar-row-modes {
+    padding-top: 6px;
   }
 }
 </style>
