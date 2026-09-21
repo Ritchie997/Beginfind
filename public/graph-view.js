@@ -719,26 +719,31 @@
     }
 
     // Размеры точек и подписей. Рост логарифмический: каждая следующая связь
-    // прибавляет всё меньше (первая связь — заметный шаг, сотая — почти
+    // прибавляет всё меньше (вторая связь — заметный шаг, сотая — почти
     // незаметный), плюс жёсткий потолок max. Так хаб с десятками связей
     // остаётся "солнцем" среди "звёзд" (~4× крупнее листа), а не раздувается
-    // до гигантского пятна при сотнях связей. Ориентиры для полной карты:
-    //   связей 1 → 8px, 5 → 13px, 10 → 16px, 30 → 20px, 100 → 26px, потолок 30px.
+    // до гигантского пятна при сотнях связей. Точка без связей и крайняя
+    // точка (одна связь) одного размера — base; рост идёт от него и начинается
+    // со второй связи. Ориентиры для полной карты:
+    //   связей 0–1 → 5px, 2 → 8px, 5 → 12px, 10 → 15px, 30 → 20px, 100 → 26px, потолок 30px.
     const SIZE = compact
       ? { base: 4, k: 1.8, max: 12, uniform: 5, center: 3, labelBase: 8, labelK: 1, labelMax: 11, labelHover: 15 }
       : { base: 5, k: 4.5, max: 30, uniform: 7, center: 5, labelBase: 9, labelK: 2.2, labelMax: 17, labelHover: 17 };
 
+    // Рост размера по числу связей: 0 при 0 и 1 связи, дальше логарифмически.
+    const growthOf = (n) => Math.log(Math.max(1, n.degree));
+
     const radiusFor = (n) => {
       const grown = uniformSize
         ? SIZE.uniform
-        : Math.min(SIZE.base + SIZE.k * Math.log(1 + n.degree), SIZE.max);
+        : Math.min(SIZE.base + SIZE.k * growthOf(n), SIZE.max);
       return grown + (n.slug === centerSlug ? SIZE.center : 0);
     };
 
     // Размер подписи растёт со степенью узла так же плавно, как и точка.
     const labelSizeFor = (n) => (uniformSize
       ? SIZE.labelBase
-      : Math.min(SIZE.labelBase + SIZE.labelK * Math.log(1 + n.degree), SIZE.labelMax));
+      : Math.min(SIZE.labelBase + SIZE.labelK * growthOf(n), SIZE.labelMax));
 
     // При наведении/поиске подпись увеличивается "лупой" примерно до одного
     // и того же размера (labelHover), а не в фиксированное число раз — иначе
