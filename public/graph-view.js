@@ -267,6 +267,377 @@
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Висячие цепочки: поиск и распутывание
+  // ---------------------------------------------------------------------------
+  // "Висячая цепочка" — хвост из нескольких узлов, который держится на графе
+  // ровно одной связью (мост) и сам не содержит циклов — точка на конце
+  // цепочки, цепочка из двух-трёх точек и т.п. Для каждой такой связи храним
+  // якорь (конец, что остаётся в графе), голову хвоста и сам хвост.
+  //
+  // Зачем: силовая раскладка d3 имеет локальные минимумы. Хвост может
+  // оказаться ВНУТРИ чужого цикла (типично: треугольник статей, от угла идёт
+  // точка, от неё ещё одна — и крайняя точка запирается внутри треугольника):
+  // отталкивание от вершин цикла давит на неё со всех сторон, а пружина
+  // связи слишком слаба, чтобы протолкнуть её через "барьер" между двумя
+  // вершинами. Такое положение физика сама не исправит, пока хвост не
+  // перенесут руками — это делает untangle().
+  //
+  // Куда переносить. Раньше хвост зеркально отражали через пересечённое ребро
+  // на то же расстояние. Пока запертый хвост один, это работает, но в плотном
+  // графе с несколькими треугольниками отражение падает в СОСЕДНИЙ цикл, хвост
+  // снова "пересекает" ребро, его отражают обратно — и так, пока не кончится
+  // общий лимит срабатываний; каждый перенос перезапускает всю симуляцию,
+  // поэтому граф дёргался, а часть хвостов так и оставалась запертой. Теперь
+  // для хвоста ищется заведомо СВОБОДНОЕ место: на кольцах вокруг якоря,
+  // начиная с направления "от остального графа", хвост целиком (все его
+  // связи и точки) не пересекает чужих рёбер и не налезает на чужие точки.
+  // Если хвост снова оказался запертым, следующая попытка начинается с
+  // кольца подальше — то есть хвост расселяется всё дальше от цикла, пока не
+  // найдёт место, и у каждого хвоста своё число попыток (а не общий лимит).
+  const PENDANT_MAX = 8; // длиннее — это уже не "хвост", а часть графа
+  const RELOCATE_RINGS = [0.6, 0.8, 1, 1.3, 1.7, 2.2, 3, 4, 5.5]; // радиус кольца в длинах связи
+  const RELOCATE_ANGLE_STEPS = 48;                    // 48 направлений (шаг 7.5°): просветы между рёбрами бывают узкими
+  const RELOCATE_MAX_ATTEMPTS = RELOCATE_RINGS.length;
+  const RELOCATE_MAX_FAILURES = 6;  // безуспешных поисков места, после чего хвост оставляем в покое
+  const NODE_GAP = 8;   // зазор между точкой хвоста и чужой точкой
+  const LINK_GAP = 4;   // зазор между связью хвоста и чужой точкой
+
+  // Пересечение отрезков p1p2 и p3p4. Проход ровно через конец чужого ребра
+  // (вершину цикла) тоже считается пересечением — иначе связь, идущая через
+  // угол треугольника, оставалась бы "незамеченной"; лежащие на одной прямой
+  // отрезки пропускаем.
+  const orient = (a, b, c) => {
+    const v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    return Math.abs(v) < 1e-6 ? 0 : v;
+  };
+  const segmentsCross = (p1, p2, p3, p4) => {
+    const d1 = orient(p3, p4, p1);
+    const d2 = orient(p3, p4, p2);
+    const d3 = orient(p1, p2, p3);
+    const d4 = orient(p1, p2, p4);
+    if (!d1 && !d2) return false;
+    return d1 * d2 <= 0 && d3 * d4 <= 0;
+  };
+
+  // Расстояние от точки p до отрезка ab.
+  const distToSegment = (p, a, b) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  };
+
+  /**
+   * @param {{nodeBySlug: Map, neighbors: Map<string, Set<string>>, pairs: {a, b}[],
+   *   linkLength: (a, b) => number, radiusFor: (n) => number}} ctx
+   *   pairs — уникальные связи (узлы, а не slug'и); узлы — те же объекты, что
+   *   в симуляции (x/y обновляются на месте).
+   * @returns {{pendants: object[], untangle: () => number, reset: () => void}}
+   *   untangle() переносит запертые хвосты и возвращает, сколько перенесено;
+   *   reset() возвращает хвостам все попытки (после ручного движения узлов).
+   */
+  function createPendantLayout({ nodeBySlug, neighbors, pairs, linkLength, radiusFor, pinnedSlug }) {
+    const allNodes = [...nodeBySlug.values()];
+
+    // Хвост за мостом anchor→head: Map slug→узел, либо null, если это не
+    // мост, хвост длиннее PENDANT_MAX или в нём есть свои циклы.
+    const pendantBeyond = (anchor, head) => {
+      const comp = new Map([[head.slug, head]]);
+      const stack = [head];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const s of neighbors.get(cur.slug)) {
+          if (s === cur.slug) continue;
+          if (cur === head && s === anchor.slug) continue; // сама связь-мост
+          if (s === anchor.slug) return null; // есть обход — это не мост
+          if (comp.has(s)) continue;
+          if (comp.size >= PENDANT_MAX) return null;
+          const next = nodeBySlug.get(s);
+          comp.set(s, next);
+          stack.push(next);
+        }
+      }
+      // Дерево (без своих циклов): рёбер внутри хвоста ровно "узлов − 1".
+      let inner = 0;
+      comp.forEach((n) => neighbors.get(n.slug).forEach((s) => { if (s !== n.slug && comp.has(s)) inner += 1; }));
+      return inner / 2 === comp.size - 1 ? comp : null;
+    };
+
+    let pendants = [];
+    pairs.forEach(({ a, b }) => {
+      const sides = [[a, b], [b, a]]
+        .map(([anchor, head]) => ({ anchor, head, comp: pendantBeyond(anchor, head) }))
+        .filter((s) => s.comp);
+      if (!sides.length) return;
+      sides.sort((x, y) => x.comp.size - y.comp.size);
+      pendants.push(sides[0]);
+    });
+    // Закреплённый узел (центр локального графа) никогда не переносится —
+    // хвостом его не считаем.
+    if (pinnedSlug) pendants = pendants.filter((p) => !p.comp.has(pinnedSlug));
+
+    // Все узлы, которые входят в какой-нибудь хвост. Остальное — "ядро" графа.
+    const tailSlugs = new Set();
+    pendants.forEach((p) => p.comp.forEach((_, slug) => tailSlugs.add(slug)));
+
+    pendants.forEach((p) => {
+      p.attempts = 0; // сколько раз хвост уже переносили: с каждым разом — на кольцо дальше
+      p.failures = 0; // сколько раз свободного места не нашлось
+      p.nodes = [...p.comp.values()];
+      // все связи хвоста: мост и то, что внутри
+      p.edges = [[p.anchor, p.head]];
+      p.nodes.forEach((n) => neighbors.get(n.slug).forEach((s) => {
+        if (s !== n.slug && n.slug < s && p.comp.has(s)) p.edges.push([n, nodeBySlug.get(s)]);
+      }));
+    });
+    // Сначала короткие хвосты: мелкую точку проще пристроить, чем сдвигать целую цепочку.
+    pendants.sort((x, y) => x.comp.size - y.comp.size);
+
+    const isPinned = (p) => p.nodes.some((n) => n.fx != null || n.fy != null);
+
+    // Мост хвоста пересекает чужое ребро — хвост оказался по ту сторону
+    // чужого ребра (внутри чужого цикла).
+    const isTrapped = (p) => {
+      const { anchor, head, comp } = p;
+      for (const { a, b } of pairs) {
+        if (a === anchor || b === anchor || comp.has(a.slug) || comp.has(b.slug)) continue;
+        if (segmentsCross(anchor, head, a, b)) return true;
+      }
+      return false;
+    };
+
+    // "Стоимость" положения хвоста в ТЕКУЩИХ координатах: 0 — место свободно.
+    // Штрафуются пересечения его связей с чужими рёбрами (главное), точки,
+    // налезающие на чужие точки, и чужие точки, лежащие на его связях. Счёт
+    // прерывается, как только стоимость дошла до limit — кандидат уже не лучше
+    // текущего лучшего, дальше считать незачем.
+    const COST_CROSS = 100; // жёсткий: пересечение важнее любой тесноты
+    const COST_NODE = 2;
+    const COST_LINK = 1;
+    const tailCost = (p, limit) => {
+      const { anchor, comp, nodes: tail, edges } = p;
+      let cost = 0;
+      for (const [u, v] of edges) {
+        for (const { a, b } of pairs) {
+          if (comp.has(a.slug) || comp.has(b.slug)) continue; // свои же связи
+          if (a === u || a === v || b === u || b === v) continue; // общий конец
+          if (a.x == null || b.x == null) continue; // ещё не расставлены
+          if (segmentsCross(u, v, a, b)) {
+            cost += COST_CROSS;
+            if (cost >= limit) return cost;
+          }
+        }
+      }
+      for (const other of allNodes) {
+        if (other === anchor || comp.has(other.slug) || other.x == null) continue;
+        const or = radiusFor(other);
+        for (const n of tail) {
+          if (Math.hypot(n.x - other.x, n.y - other.y) < radiusFor(n) + or + NODE_GAP) cost += COST_NODE;
+        }
+        for (const [u, v] of edges) {
+          if (u === other || v === other) continue;
+          if (distToSegment(other, u, v) < or + LINK_GAP) cost += COST_LINK;
+        }
+        if (cost >= limit) return cost;
+      }
+      return cost;
+    };
+
+    // Перенос хвоста на ближайшее лучшее место вокруг якоря — свободное, а
+    // если такого нет (плотный граф), то с меньшим числом пересечений, чем
+    // сейчас. Хвост переносится целиком, сохраняя форму (поворот вокруг якоря
+    // и растяжение). Кандидаты перебираются от близких колец к дальним и от
+    // направления "наружу" к противоположному, поэтому первое же свободное
+    // место — и есть ближайшее. initial — первичная расстановка хвоста:
+    // берётся лучший из кандидатов, даже если он не лучше текущего положения.
+    const relocate = (p, initial = false) => {
+      const { anchor, head, comp, nodes: tail } = p;
+
+      // "Наружу": от центра тяжести остальных соседей якоря.
+      let cx = 0;
+      let cy = 0;
+      let k = 0;
+      neighbors.get(anchor.slug).forEach((s) => {
+        if (s === anchor.slug || comp.has(s)) return;
+        const m = nodeBySlug.get(s);
+        if (m.x == null) return;
+        cx += m.x; cy += m.y; k += 1;
+      });
+      const base = k
+        ? Math.atan2(anchor.y - cy / k, anchor.x - cx / k)
+        : Math.atan2(head.y - anchor.y, head.x - anchor.x);
+
+      // Форма хвоста в системе координат "якорь в нуле, голова на оси X".
+      const L = Math.max(linkLength(anchor, head), 30);
+      const d = Math.max(Math.hypot(head.x - anchor.x, head.y - anchor.y), 1);
+      const phi = Math.atan2(head.y - anchor.y, head.x - anchor.x);
+      const cosP = Math.cos(-phi);
+      const sinP = Math.sin(-phi);
+      const shape = tail.map((n) => {
+        const ox = n.x - anchor.x;
+        const oy = n.y - anchor.y;
+        return { n, x0: n.x, y0: n.y, lx: ox * cosP - oy * sinP, ly: ox * sinP + oy * cosP };
+      });
+      const put = (theta, scale) => {
+        const c = Math.cos(theta);
+        const sn = Math.sin(theta);
+        shape.forEach((f) => {
+          f.n.x = anchor.x + scale * (f.lx * c - f.ly * sn);
+          f.n.y = anchor.y + scale * (f.lx * sn + f.ly * c);
+        });
+      };
+      const step = (2 * Math.PI) / RELOCATE_ANGLE_STEPS;
+
+      let best = null;
+      let bestCost = initial ? Infinity : tailCost(p, Infinity); // иначе — строго лучше, чем сейчас
+      // Каждая новая попытка стартует с кольца дальше предыдущей.
+      search:
+      for (let ring = initial ? 0 : Math.min(p.attempts, RELOCATE_RINGS.length - 1); ring < RELOCATE_RINGS.length; ring++) {
+        const scale = (L * RELOCATE_RINGS[ring]) / d;
+        for (let j = 0; j < RELOCATE_ANGLE_STEPS; j++) {
+          // 0, +1, −1, +2, −2 … шагов от направления "наружу"
+          const theta = base + Math.ceil(j / 2) * step * (j % 2 ? 1 : -1);
+          put(theta, scale);
+          const cost = tailCost(p, bestCost);
+          if (cost < bestCost) {
+            bestCost = cost;
+            best = { theta, scale };
+            if (!cost) break search; // свободное место — лучшего не бывает
+          }
+        }
+      }
+
+      // При починке (не первичной расстановке) полумеры не нужны: перенос на
+      // место, где хвост всё равно что-то пересекает, лишь перетряхивает
+      // раскладку, не давая ничего взамен. Теснота же (зазоры) не помеха —
+      // физика разведёт.
+      if (!best || (!initial && bestCost >= COST_CROSS)) {
+        shape.forEach((f) => { f.n.x = f.x0; f.n.y = f.y0; }); // свободного места не нашлось — оставляем как есть
+        p.failures += 1; // ничего не изменилось — попытка ("дальше") не тратится
+        return false;
+      }
+      put(best.theta, best.scale);
+      tail.forEach((n) => { n.vx = 0; n.vy = 0; });
+      if (!initial) p.attempts += 1;
+      return true;
+    };
+
+    // Заготовка формы хвоста "по лучу" от якоря: голова на расстоянии L,
+    // каждый следующий уровень — ещё на L дальше, ветви — веером в стороны.
+    // Нужна лишь как исходная форма для relocate (поворачивается и
+    // растягивается под найденное место), затем её доводит физика.
+    const layTemplate = (p) => {
+      const { anchor, head, comp } = p;
+      const L = Math.max(linkLength(anchor, head), 30);
+      const placed = new Map([[head.slug, { x: L, y: 0 }]]);
+      const queue = [head];
+      while (queue.length) {
+        const cur = queue.shift();
+        const at = placed.get(cur.slug);
+        const kids = [...neighbors.get(cur.slug)].filter((s) => s !== cur.slug && comp.has(s) && !placed.has(s));
+        kids.forEach((s, i) => {
+          placed.set(s, { x: at.x + L, y: at.y + (i - (kids.length - 1) / 2) * L * 0.8 });
+          queue.push(nodeBySlug.get(s));
+        });
+      }
+      placed.forEach((pt, slug) => {
+        const n = nodeBySlug.get(slug);
+        n.x = anchor.x + pt.x;
+        n.y = anchor.y + pt.y;
+        n.vx = 0;
+        n.vy = 0;
+      });
+    };
+
+    // Корни: хвосты, чей якорь — в ядре. Вложенные хвосты (цепочка, ветвь)
+    // расставляются вместе со своим корнем.
+    const roots = pendants.filter((p) => !tailSlugs.has(p.anchor.slug));
+
+    // Группа хвоста: корневой якорь и все узлы корневого хвоста. Связи внутри
+    // группы (и сам мост) хвостовой точке не "чужие" — от них она не отталкивается.
+    const groupOf = new Map();
+    roots.forEach((r) => {
+      const group = new Set(r.comp.keys());
+      group.add(r.anchor.slug);
+      r.comp.forEach((_, slug) => groupOf.set(slug, group));
+    });
+
+    // Сила "рёбра — стенки": точки хвостов отталкиваются от чужих связей.
+    // Связи для d3-физики не препятствие (она двигает только точки), поэтому
+    // хвост, поставленный на свободное место, отталкиванием от соседних
+    // точек мог сползти через ребро — и всё начиналось заново. Тут ребро
+    // держит хвост, пока тот не подошёл к нему ближе зазора.
+    const EDGE_GAP = 14;      // зазор от линии до края точки
+    const EDGE_PUSH = 5;      // "жёсткость" стенки, пикселей за тик у самой линии
+    const EDGE_FORCE_MAX_WORK = 4e6; // хвостов × связей: дороже — не считаем (страхуют перенос и untangle)
+    const tailNodes = [...tailSlugs].map((slug) => nodeBySlug.get(slug));
+    const edgeForce = (alpha) => {
+      if (tailNodes.length * pairs.length > EDGE_FORCE_MAX_WORK) return;
+      const push = EDGE_PUSH * (0.4 + alpha);
+      for (const n of tailNodes) {
+        if (n.x == null || n.fx != null) continue;
+        const group = groupOf.get(n.slug);
+        const gap = radiusFor(n) + EDGE_GAP;
+        for (const { a, b } of pairs) {
+          if (group.has(a.slug) || group.has(b.slug) || a.x == null || b.x == null) continue;
+          // грубая отсечка: точка далеко от отрезка по обеим осям
+          if (n.x < Math.min(a.x, b.x) - gap || n.x > Math.max(a.x, b.x) + gap) continue;
+          if (n.y < Math.min(a.y, b.y) - gap || n.y > Math.max(a.y, b.y) + gap) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const len2 = dx * dx + dy * dy || 1;
+          const t = Math.max(0, Math.min(1, ((n.x - a.x) * dx + (n.y - a.y) * dy) / len2));
+          let vx = n.x - (a.x + t * dx);
+          let vy = n.y - (a.y + t * dy);
+          const dist = Math.hypot(vx, vy);
+          if (dist >= gap) continue;
+          if (dist < 1e-6) { vx = -dy; vy = dx; } else { vx /= dist; vy /= dist; }
+          const norm = Math.hypot(vx, vy) || 1;
+          const k = (push * (gap - dist)) / gap / norm;
+          n.vx += vx * k;
+          n.vy += vy * k;
+        }
+      }
+    };
+    edgeForce.initialize = () => {};
+
+    return {
+      pendants,
+      // Сила для d3-симуляции: чужие рёбра отталкивают точки хвостов.
+      edgeForce,
+      // Узел входит в какой-нибудь висячий хвост (а не в ядро графа).
+      isTail: (n) => tailSlugs.has(n.slug),
+      // Первичная расстановка хвостов вокруг УЖЕ разложенного ядра (у узлов
+      // ядра есть координаты): каждый хвост сразу ставится на свободное место
+      // снаружи, а не выбирается физикой из случайного начального положения —
+      // так в ловушки внутри циклов он не попадает вообще. Короткие хвосты
+      // первыми: уже поставленные считаются препятствиями для следующих.
+      attach() {
+        [...roots].sort((x, y) => x.comp.size - y.comp.size).forEach((p) => {
+          layTemplate(p);
+          relocate(p, true);
+        });
+      },
+      untangle() {
+        let moved = 0;
+        for (const p of pendants) {
+          if (p.attempts >= RELOCATE_MAX_ATTEMPTS || p.failures >= RELOCATE_MAX_FAILURES) continue;
+          if (p.anchor.x == null || p.head.x == null) continue;
+          // закреплённые (в т.ч. перетаскиваемые) узлы не трогаем
+          if (isPinned(p)) continue;
+          if (!isTrapped(p)) continue;
+          if (relocate(p)) moved += 1;
+        }
+        return moved;
+      },
+      reset() {
+        pendants.forEach((p) => { p.attempts = 0; p.failures = 0; });
+      }
+    };
+  }
+
   // Счётчик экземпляров графа — для уникальных id градиентов свечения
   // (на странице одновременно может быть несколько графов).
   let graphInstanceCounter = 0;
@@ -346,50 +717,6 @@
         pairs.push({ a: nodeBySlug.get(l.source), b: nodeBySlug.get(l.target) });
       });
     }
-
-    // "Висячие цепочки": хвост из нескольких узлов, который держится на графе
-    // ровно одной связью (мост) и сам не содержит циклов — точка на конце
-    // цепочки, цепочка из двух-трёх точек и т.п. Для каждой такой связи храним
-    // якорь (конец, что остаётся в графе), голову хвоста и сам хвост.
-    //
-    // Зачем: силовая раскладка d3 имеет локальные минимумы. Хвост может
-    // оказаться ВНУТРИ чужого цикла (типично: треугольник статей, от угла идёт
-    // точка, от неё ещё одна — и крайняя точка запирается внутри треугольника):
-    // отталкивание от вершин цикла давит на неё со всех сторон, а пружина
-    // связи слишком слаба, чтобы протолкнуть её через "барьер" между двумя
-    // вершинами. Такое положение физика сама не исправит, пока цикл не
-    // сдвинут руками — см. untangle() ниже.
-    const PENDANT_MAX = 8; // длиннее — это уже не "хвост", а часть графа
-    const pendantBeyond = (anchor, head) => {
-      const comp = new Map([[head.slug, head]]);
-      const stack = [head];
-      while (stack.length) {
-        const cur = stack.pop();
-        for (const s of neighbors.get(cur.slug)) {
-          if (s === cur.slug) continue;
-          if (cur === head && s === anchor.slug) continue; // сама связь-мост
-          if (s === anchor.slug) return null; // есть обход — это не мост
-          if (comp.has(s)) continue;
-          if (comp.size >= PENDANT_MAX) return null;
-          const next = nodeBySlug.get(s);
-          comp.set(s, next);
-          stack.push(next);
-        }
-      }
-      // Дерево (без своих циклов): рёбер внутри хвоста ровно "узлов − 1".
-      let inner = 0;
-      comp.forEach((n) => neighbors.get(n.slug).forEach((s) => { if (s !== n.slug && comp.has(s)) inner += 1; }));
-      return inner / 2 === comp.size - 1 ? comp : null;
-    };
-    const pendants = [];
-    pairs.forEach(({ a, b }) => {
-      const sides = [[a, b], [b, a]]
-        .map(([anchor, head]) => ({ anchor, head, comp: pendantBeyond(anchor, head) }))
-        .filter((s) => s.comp);
-      if (!sides.length) return;
-      sides.sort((x, y) => x.comp.size - y.comp.size);
-      pendants.push(sides[0]);
-    });
 
     // Размеры точек и подписей. Рост логарифмический: каждая следующая связь
     // прибавляет всё меньше (первая связь — заметный шаг, сотая — почти
@@ -512,6 +839,7 @@
           if (!event.active) simulation.alphaTarget(0.3).restart();
           n.fx = n.x; n.fy = n.y;
           untangleBudget = UNTANGLE_BUDGET; // после ручного движения снова можно распутывать
+          pendantLayout.reset();
         })
         .on('drag', (event, n) => { n.fx = event.x; n.fy = event.y; })
         .on('end', (event, n) => {
@@ -666,19 +994,46 @@
     const gravityFor = (n) => (uniformSize ? 0.03 : 0.025 + 0.012 * Math.log(1 + n.degree));
     const collideFor = (n) => radiusFor(n) + 12;
 
-    const linkForce = d3.forceLink(links).id((n) => n.slug).distance(linkDistanceFor).strength(0.7);
+    // Висячие хвосты (см. createPendantLayout) расставляются отдельно, ПОСЛЕ
+    // ядра графа. Силовая раскладка из случайного начального положения даёт
+    // локальные минимумы: точка на конце хвоста запирается внутри чужого
+    // цикла (типично — внутри треугольника), и чем больше таких циклов, тем
+    // хуже. Поэтому сначала симуляция идёт только по ядру, хвосты пока скрыты;
+    // когда ядро в основном улеглось (alpha упала до TAILS_ATTACH_ALPHA),
+    // каждый хвост ставится на свободное место снаружи, а физика доводит всё
+    // вместе. Так хвосты в ловушки не попадают вовсе, а не выпутываются потом.
+    const pendantLayout = createPendantLayout({
+      nodeBySlug,
+      neighbors,
+      pairs,
+      linkLength: (a, b) => linkDistanceFor({ source: a, target: b }),
+      radiusFor,
+      pinnedSlug: centerSlug && nodeBySlug.has(centerSlug) ? centerSlug : null
+    });
+    const TAILS_ATTACH_ALPHA = 0.35;
+    const TAILS_ATTACH_KICK = 0.3;
+    let tailsPending = pendantLayout.pendants.length > 0;
+    // source/target связи — slug (до инициализации forceLink) или узел (после)
+    const endOf = (e) => (typeof e === 'object' ? e : nodeBySlug.get(e));
+    const linkHasTail = (l) => pendantLayout.isTail(endOf(l.source)) || pendantLayout.isTail(endOf(l.target));
+
+    const coreNodes = tailsPending ? nodes.filter((n) => !pendantLayout.isTail(n)) : nodes;
+    const coreLinks = tailsPending ? links.filter((l) => !linkHasTail(l)) : links;
+
+    const linkForce = d3.forceLink(coreLinks).id((n) => n.slug).distance(linkDistanceFor).strength(0.7);
     const chargeForce = d3.forceManyBody().strength(chargeFor).distanceMax(compact ? 220 : 380);
     const xForce = d3.forceX(width / 2).strength(gravityFor);
     const yForce = d3.forceY(height / 2).strength(gravityFor);
     const collideForce = d3.forceCollide(collideFor);
 
-    const simulation = d3.forceSimulation(nodes)
+    const simulation = d3.forceSimulation(coreNodes)
       .force('link', linkForce)
       .force('charge', chargeForce)
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('x', xForce)
       .force('y', yForce)
-      .force('collide', collideForce);
+      .force('collide', collideForce)
+      .force('tailEdges', pendantLayout.edgeForce);
 
     if (centerSlug && nodeBySlug.has(centerSlug)) {
       const c = nodeBySlug.get(centerSlug);
@@ -686,82 +1041,74 @@
       c.fy = height / 2;
     }
 
-    // Распутывание запертых хвостов (см. pendants выше). Если связь висячего
-    // хвоста пересекает чужое ребро — хвост оказался по ту сторону этого ребра
-    // (внутри чужого цикла). Зеркально переносим ВЕСЬ хвост через прямую этого
-    // ребра: он оказывается с той же стороны, что и якорь, т.е. снаружи, а
-    // симуляция тут же дожимает его на место. Проверка идёт периодически, пока
-    // раскладка остывает, и в конце; лимит срабатываний защищает от бесконечной
-    // "качели" (обновляется, когда пользователь двигает узлы).
-    const UNTANGLE_BUDGET = 12;
+    // Что рисовать на тике: пока хвосты не расставлены — только ядро (у хвостов
+    // ещё нет координат), потом всё.
+    const allView = { link, node, label, glow };
+    const coreView = tailsPending
+      ? {
+        link: link.filter((l) => !linkHasTail(l)),
+        node: node.filter((n) => !pendantLayout.isTail(n)),
+        label: label.filter((n) => !pendantLayout.isTail(n)),
+        glow: glow.filter((n) => !pendantLayout.isTail(n))
+      }
+      : allView;
+    let view = coreView;
+    if (tailsPending) {
+      const hide = (sel, pred) => sel.filter(pred).style('display', 'none');
+      hide(link, linkHasTail);
+      hide(node, pendantLayout.isTail);
+      hide(label, pendantLayout.isTail);
+      hide(glow, pendantLayout.isTail);
+    }
+
+    function attachTails() {
+      tailsPending = false;
+      pendantLayout.attach();
+      simulation.nodes(nodes);
+      linkForce.links(links);
+      view = allView;
+      // появляются плавно, а не "выскакивают"
+      const reveal = (sel, pred) => sel.filter(pred).style('display', null).classed('graph-tail-in', true);
+      reveal(link, linkHasTail);
+      reveal(node, pendantLayout.isTail);
+      reveal(label, pendantLayout.isTail);
+      reveal(glow, pendantLayout.isTail);
+      simulation.alpha(Math.max(simulation.alpha(), TAILS_ATTACH_KICK)).restart();
+    }
+
+    // Распутывание запертых хвостов — страховка на случай, когда хвост всё же
+    // оказался по ту сторону чужого ребра (ядро под ним сдвинулось). Проверка
+    // идёт периодически, пока раскладка остывает, и в конце. Все запертые
+    // хвосты переносятся за один проход и сразу на свободные места, поэтому
+    // проходов нужно немного; лимит — защита от бесконечных перезапусков
+    // (обновляется, когда пользователь двигает узлы).
+    const UNTANGLE_BUDGET = 30;
+    const UNTANGLE_KICK = 0.1;
     let untangleBudget = UNTANGLE_BUDGET;
     let untangleTicks = 0;
 
-    // Пересечение отрезков p1p2 и p3p4. Проход ровно через конец чужого ребра
-    // (вершину цикла) тоже считается пересечением — иначе связь, идущая через
-    // угол треугольника, оставалась бы "незамеченной"; лежащие на одной прямой
-    // отрезки пропускаем.
-    const orient = (a, b, c) => {
-      const v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-      return Math.abs(v) < 1e-6 ? 0 : v;
-    };
-    const segmentsCross = (p1, p2, p3, p4) => {
-      const d1 = orient(p3, p4, p1);
-      const d2 = orient(p3, p4, p2);
-      const d3 = orient(p1, p2, p3);
-      const d4 = orient(p1, p2, p4);
-      if (!d1 && !d2) return false;
-      return d1 * d2 <= 0 && d3 * d4 <= 0;
-    };
-
-    function untangle() {
-      let fixed = 0;
-      for (const { anchor, head, comp } of pendants) {
-        if (anchor.x == null || head.x == null) continue;
-        // закреплённые (в т.ч. перетаскиваемые) узлы не трогаем
-        if ([...comp.values()].some((n) => n.fx != null || n.fy != null)) continue;
-        for (const { a, b } of pairs) {
-          if (a === anchor || b === anchor || comp.has(a.slug) || comp.has(b.slug)) continue;
-          if (!segmentsCross(anchor, head, a, b)) continue;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const len2 = dx * dx + dy * dy || 1;
-          comp.forEach((n) => {
-            const t = ((n.x - a.x) * dx + (n.y - a.y) * dy) / len2;
-            const footX = a.x + t * dx;
-            const footY = a.y + t * dy;
-            n.x = 2 * footX - n.x;
-            n.y = 2 * footY - n.y;
-            n.vx = 0;
-            n.vy = 0;
-          });
-          fixed += 1;
-          break;
-        }
-      }
-      return fixed;
-    }
-
     function runUntangle() {
-      if (untangleBudget <= 0) return;
-      if (untangle()) {
+      if (untangleBudget <= 0 || tailsPending) return;
+      if (pendantLayout.untangle()) {
         untangleBudget -= 1;
-        // подбодрить симуляцию, чтобы перенесённые узлы разошлись и осели
-        simulation.alpha(Math.max(simulation.alpha(), 0.45)).restart();
+        // слегка подбодрить симуляцию, чтобы перенесённые узлы осели; сильный
+        // нагрев перетряхивал бы весь граф ради нескольких точек
+        simulation.alpha(Math.max(simulation.alpha(), UNTANGLE_KICK)).restart();
       }
     }
 
     simulation.on('tick', () => {
-      link
+      if (tailsPending && simulation.alpha() < TAILS_ATTACH_ALPHA) attachTails();
+      view.link
         .attr('x1', (l) => l.source.x)
         .attr('y1', (l) => l.source.y)
         .attr('x2', (l) => l.target.x)
         .attr('y2', (l) => l.target.y);
-      node.attr('transform', (n) => `translate(${n.x},${n.y})`);
-      label.attr('transform', (n) => `translate(${n.x},${n.y})`);
-      glow.attr('cx', (n) => n.x).attr('cy', (n) => n.y);
+      view.node.attr('transform', (n) => `translate(${n.x},${n.y})`);
+      view.label.attr('transform', (n) => `translate(${n.x},${n.y})`);
+      view.glow.attr('cx', (n) => n.x).attr('cy', (n) => n.y);
       // раз в ~0.5 с, пока раскладка уже подостыла (в начале узлы ещё летят)
-      if (pendants.length && ++untangleTicks % 30 === 0 && simulation.alpha() < 0.35) runUntangle();
+      if (pendantLayout.pendants.length && ++untangleTicks % 30 === 0 && simulation.alpha() < 0.35) runUntangle();
     });
     simulation.on('end', runUntangle);
 
@@ -1060,6 +1407,6 @@
   }
 
   window.GraphView = {
-    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng
+    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng, createPendantLayout
   };
 })();

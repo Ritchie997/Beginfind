@@ -924,6 +924,12 @@
 }
 .graph-node-dim { opacity: 0.15; }
 
+/* Хвосты графа появляются после раскладки ядра (см. attachTails в
+   graph-view.js). fill-mode backwards — только стартовый кадр: после анимации
+   opacity снова определяют обычные классы (dim/active). */
+.graph-tail-in { animation: graph-tail-in 0.6s ease-out backwards; }
+@keyframes graph-tail-in { from { opacity: 0; } }
+
 /* Подписи узлов — рисуются отдельным слоем ПОВЕРХ всех точек (.graph-labels
    в graph-view.js), размер шрифта задаётся инлайном по числу связей узла.
    Обводка цветом фона (paint-order: stroke) — "ореол": подпись читается,
