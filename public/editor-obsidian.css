@@ -810,9 +810,12 @@
 
 /* === Граф связей (полная страница и локальная панель в редакторе) === */
 .graph-container {
+  /* Цвет фона графа — переменной: в режиме "космос" он темнее, и обводка
+     подписей (см. .graph-node-label) должна следовать за ним. */
+  --graph-bg: var(--background-tertiary);
   width: 100%;
   height: 70vh;
-  background: var(--background-tertiary);
+  background: var(--graph-bg);
   border-radius: 8px;
   border: 1px solid var(--background-accent);
   position: relative;
@@ -847,7 +850,30 @@
   width: 100%;
   height: 100%;
   cursor: grab;
+  position: relative; /* выше звёздного canvas (он position:absolute и раньше в DOM) */
 }
+
+/* === "Космос" в графе на дашборде: глубокий тёмный фон, звёзды на canvas
+   под SVG (createStarfield в graph-view.js), свечение вокруг точек === */
+.graph-container.graph-cosmos {
+  --graph-bg: #0a0c16;
+  transition: background-color 0.3s;
+}
+.graph-starfield {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: none;
+}
+.graph-cosmos .graph-starfield { display: block; }
+.graph-node-glow {
+  display: none;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.graph-cosmos .graph-node-glow { display: inline; }
 
 .graph-empty {
   display: flex;
@@ -899,7 +925,7 @@
 .graph-node-label {
   fill: var(--text-muted);
   font-size: 9px;
-  stroke: var(--background-tertiary);
+  stroke: var(--graph-bg, var(--background-tertiary));
   stroke-width: 3px;
   stroke-linejoin: round;
   paint-order: stroke;

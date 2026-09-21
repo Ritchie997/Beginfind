@@ -55,6 +55,222 @@
     return primary ? primary.color : NO_TAG_COLOR;
   }
 
+  // ---------------------------------------------------------------------------
+  // Космический фон графа: мерцающие звёзды на <canvas> под SVG.
+  // Canvas, а не SVG-элементы: сотни постоянно меняющихся звёзд на SVG-узлах
+  // тормозили бы граф, а один requestAnimationFrame по canvas почти бесплатен.
+  // Звёзды не интерактивны (pointer-events: none) — клики/наведение идут в граф.
+  //
+  // Жизнь звезды: плавно загорается, (часть звёзд) мерцает, плавно гаснет до
+  // нуля и возрождается в другом месте — поле постоянно меняется. Цвета — как в
+  // реальном небе: больше всего белых, много голубых, немного красных.
+  // Параллакс: у каждой звезды своя "глубина"; при панорамировании/зуме графа
+  // звёзды смещаются медленнее его (далёкие — почти стоят), поэтому граф
+  // как будто парит перед бесконечностью.
+  // ---------------------------------------------------------------------------
+  const TAU = Math.PI * 2;
+
+  // [цвет "r,g,b", вес]: белые 50%, голубые 30%, красные 20%.
+  const STAR_COLORS = [
+    ['255,255,255', 34], ['235,242,255', 16],
+    ['170,200,255', 16], ['135,175,255', 14],
+    ['255,150,130', 12], ['255,110,95', 8]
+  ];
+  const STAR_COLOR_TOTAL = STAR_COLORS.reduce((sum, c) => sum + c[1], 0);
+
+  function pickStarColor() {
+    let r = Math.random() * STAR_COLOR_TOTAL;
+    for (const [rgb, w] of STAR_COLORS) {
+      r -= w;
+      if (r < 0) return rgb;
+    }
+    return STAR_COLORS[0][0];
+  }
+
+  function createStarfield(container) {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'graph-starfield';
+    container.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    // При "уменьшить движение" в системе звёзды рисуются статично (без мерцания
+    // и анимации), но параллакс при зуме/панораме остаётся.
+    const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    let W = 0;
+    let H = 0;
+    let FW = 0; // поле звёзд шире видимой области (в 1.6 раза) — запас под параллакс и зум-аут
+    let FH = 0;
+    let dpr = 1;
+    let stars = [];
+    let transform = { x: 0, y: 0, k: 1 };
+    let enabled = false;
+    let inView = true;
+    let rafId = 0;
+    let lastTs = 0;
+
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const wrap = (v, m) => ((v % m) + m) % m;
+
+    function spawn(s, initial) {
+      // Слой = глубина: 60% далёких мелких, 30% средних, 10% ближних.
+      const roll = Math.random();
+      const layer = roll < 0.6 ? 0 : (roll < 0.9 ? 1 : 2);
+      s.big = layer === 2 && Math.random() < 0.2; // единицы ярких звёзд со свечением и лучами
+      s.depth = [0.1, 0.22, 0.38][layer];
+      s.r = s.big ? rand(1.5, 2.1) : [rand(0.35, 0.7), rand(0.6, 1.0), rand(0.9, 1.4)][layer];
+      s.x = Math.random() * FW;
+      s.y = Math.random() * FH;
+      s.rgb = pickStarColor();
+      s.maxA = s.big ? rand(0.85, 1) : rand(0.35, 0.85);
+      s.dur = rand(6, 16);
+      s.age = initial ? Math.random() * s.dur : 0;
+      s.tw = Math.random() < 0.55 ? rand(0.25, 0.7) : 0; // ~55% звёзд мерцают
+      s.period = rand(0.9, 3.2);
+      s.phase = Math.random() * TAU;
+      return s;
+    }
+
+    function draw(dt) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const cx = W / 2;
+      const cy = H / 2;
+      const ox = (FW - W) / 2;
+      const oy = (FH - H) / 2;
+
+      for (const s of stars) {
+        if (dt) {
+          s.age += dt;
+          if (s.age >= s.dur) spawn(s, false);
+        }
+        const u = reduceMotion ? 0.5 : s.age / s.dur;
+        let a = s.maxA * Math.pow(Math.sin(Math.PI * u), 0.6);
+        if (s.tw && !reduceMotion) {
+          a *= 1 - s.tw * (0.5 + 0.5 * Math.sin(TAU * s.age / s.period + s.phase));
+        }
+        if (a < 0.02) continue;
+
+        const zs = 1 + (transform.k - 1) * s.depth * 0.6;
+        const px = cx + (wrap(s.x + transform.x * s.depth, FW) - ox - cx) * zs;
+        const py = cy + (wrap(s.y + transform.y * s.depth, FH) - oy - cy) * zs;
+        if (px < -12 || px > W + 12 || py < -12 || py > H + 12) continue;
+
+        ctx.globalAlpha = a;
+        if (s.big) {
+          const g = ctx.createRadialGradient(px, py, 0, px, py, s.r * 6);
+          g.addColorStop(0, `rgba(${s.rgb},0.45)`);
+          g.addColorStop(1, `rgba(${s.rgb},0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(px, py, s.r * 6, 0, TAU);
+          ctx.fill();
+          ctx.globalAlpha = a * 0.45;
+          ctx.strokeStyle = `rgb(${s.rgb})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(px - s.r * 5, py); ctx.lineTo(px + s.r * 5, py);
+          ctx.moveTo(px, py - s.r * 5); ctx.lineTo(px, py + s.r * 5);
+          ctx.stroke();
+          ctx.globalAlpha = a;
+        }
+        ctx.fillStyle = `rgb(${s.rgb})`;
+        ctx.beginPath();
+        ctx.arc(px, py, s.r, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function resize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (!w || !h) return;
+      W = w;
+      H = h;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      FW = W * 1.6;
+      FH = H * 1.6;
+      const count = Math.max(90, Math.min(700, Math.round((FW * FH) / 2600)));
+      stars = Array.from({ length: count }, () => spawn({}, true));
+      if (enabled) draw(0);
+    }
+
+    const shouldRun = () => enabled && inView && !document.hidden && !reduceMotion && container.isConnected;
+
+    function frame(ts) {
+      rafId = 0;
+      if (!shouldRun()) return;
+      const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.1) : 0;
+      lastTs = ts;
+      draw(dt);
+      rafId = requestAnimationFrame(frame);
+    }
+
+    // Цикл живёт только пока звёзды видны: выключен переключателем, вкладка
+    // скрыта или карточка вне экрана/убрана из DOM — анимация стоит.
+    function sync() {
+      if (shouldRun()) {
+        if (!rafId) { lastTs = 0; rafId = requestAnimationFrame(frame); }
+      } else if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    }
+
+    const onVisibility = () => sync();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    let intersectionObserver = null;
+    if (typeof IntersectionObserver !== 'undefined') {
+      intersectionObserver = new IntersectionObserver((entries) => {
+        inView = entries[entries.length - 1].isIntersecting;
+        sync();
+      });
+      intersectionObserver.observe(container);
+    }
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => resize());
+      resizeObserver.observe(container);
+    }
+    resize();
+
+    return {
+      setEnabled(flag) {
+        enabled = !!flag;
+        if (enabled) {
+          if (!stars.length) resize();
+          if (stars.length) draw(0);
+        } else if (W) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, W, H);
+        }
+        sync();
+      },
+      // Вызывается из d3.zoom при каждом зуме/панораме графа (параллакс).
+      setTransform(t) {
+        transform = { x: t.x, y: t.y, k: t.k };
+        if (enabled && !rafId && stars.length) draw(0);
+      },
+      destroy() {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = 0;
+        enabled = false;
+        document.removeEventListener('visibilitychange', onVisibility);
+        intersectionObserver?.disconnect();
+        resizeObserver?.disconnect();
+        canvas.remove();
+      }
+    };
+  }
+
+  // Счётчик экземпляров графа — для уникальных id градиентов свечения
+  // (на странице одновременно может быть несколько графов).
+  let graphInstanceCounter = 0;
+
   /**
    * Отрисовывает граф в переданный контейнер.
    * @param {HTMLElement} container — куда монтировать SVG (заполняет его целиком)
@@ -69,12 +285,17 @@
    *   локальной панелью редактора (там всегда включён centerSlug).
    *   uniformSize — все точки (и подписи) одного размера; по умолчанию false:
    *   размер точки и подписи растёт со степенью узла (см. SIZE ниже).
-   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, setUniformSize: (flag: boolean) => void}>}
+   *   cosmos — true/false включает "космос" (мерцающие звёзды на фоне с
+   *   параллаксом + свечение точек, растущее с их размером) и его
+   *   переключение через setCosmos; не передан — космоса нет вовсе (локальная
+   *   панель редактора). Только для полной карты на дашборде.
+   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, setUniformSize: (flag: boolean) => void, setCosmos: (flag: boolean) => void}>}
    */
   async function renderGraph(container, data, options = {}) {
     const d3 = await loadD3();
     const { onNodeClick, centerSlug, compact, colorByTag, tagColors } = options;
     let uniformSize = !!options.uniformSize;
+    const cosmosSupported = typeof options.cosmos === 'boolean';
 
     container.innerHTML = '';
     const width = container.clientWidth || 400;
@@ -85,7 +306,7 @@
       empty.className = 'graph-empty';
       empty.textContent = 'Пока нет статей для отображения графа.';
       container.appendChild(empty);
-      return { destroy() {}, setSearchHighlight() {}, setUniformSize() {} };
+      return { destroy() {}, setSearchHighlight() {}, setUniformSize() {}, setCosmos() {} };
     }
 
     // Цвет узла — цвет ПЕРВОГО тега статьи (порядок тегов задаёт сервер: сперва
@@ -141,6 +362,10 @@
     // уже крупная подпись хаба раздувалась бы до гигантской.
     const labelHoverScaleFor = (n) => Math.max(1.2, SIZE.labelHover / labelSizeFor(n));
 
+    // Звёздный canvas создаётся ДО svg — чтобы лежать под графом.
+    const starfield = cosmosSupported ? createStarfield(container) : null;
+    let cosmosOn = cosmosSupported && options.cosmos;
+
     const svg = d3.select(container)
       .append('svg')
       .attr('class', 'graph-svg')
@@ -150,7 +375,68 @@
 
     svg.call(d3.zoom()
       .scaleExtent([0.2, 4])
-      .on('zoom', (event) => root.attr('transform', event.transform)));
+      .on('zoom', (event) => {
+        root.attr('transform', event.transform);
+        starfield?.setTransform(event.transform);
+      }));
+
+    // Текущий поисковый запрос (в нижнем регистре) и цвет заливки точки нужны
+    // уже при первой отрисовке (кружки и свечение), поэтому объявлены здесь.
+    let activeSearchQuery = '';
+
+    // Цвет заливки: при активном поиске узел с тегом, подходящим под запрос,
+    // красится цветом ЭТОГО тега (а не первого тега статьи); без поиска — как
+    // раньше, цвет первого тега. null — заливка из CSS (центр локального графа
+    // и однотонный режим без colorByTag).
+    const fillFor = (n) => {
+      if (!colorByTag || n.slug === centerSlug) return null;
+      const matched = matchingTagOf(n);
+      return matched ? tagColors[matched].color : colorFor(n);
+    };
+
+    // Свечение точек ("космос"): мягкий радиальный градиент цвета точки под
+    // связями и узлами. Сила плавно растёт с размером точки (а не для
+    // "избранных" узлов): лист светится едва заметно, чем больше связей — тем
+    // шире и ярче гало, у самых крупных — заметное "солнце". Градиентом, а не
+    // SVG-фильтром blur — фильтр на сотнях узлов заметно просаживает FPS.
+    // Один градиент на цвет (а не на узел), т.к. цветов = числу тегов.
+    const glowUid = `graph-glow-${++graphInstanceCounter}`;
+    const defs = svg.append('defs');
+    const glowGradients = new Map();
+    const glowFillFor = (n) => {
+      const color = fillFor(n) || NO_TAG_COLOR;
+      let id = glowGradients.get(color);
+      if (!id) {
+        id = `${glowUid}-${color.replace(/[^0-9a-z]/gi, '')}`;
+        glowGradients.set(color, id);
+        const grad = defs.append('radialGradient').attr('id', id);
+        grad.append('stop').attr('offset', '0%').attr('stop-color', color).attr('stop-opacity', 0.85);
+        grad.append('stop').attr('offset', '30%').attr('stop-color', color).attr('stop-opacity', 0.45);
+        grad.append('stop').attr('offset', '65%').attr('stop-color', color).attr('stop-opacity', 0.14);
+        grad.append('stop').attr('offset', '100%').attr('stop-color', color).attr('stop-opacity', 0);
+      }
+      return `url(#${id})`;
+    };
+    // 0 (самая мелкая точка) … 1 (потолок размера)
+    const glowStrength = (n) => Math.min(1, Math.max(0, (radiusFor(n) - SIZE.base) / (SIZE.max - SIZE.base)));
+    const glowRadiusFor = (n) => radiusFor(n) * (1.7 + 1.5 * glowStrength(n));
+    const glowOpacityFor = (n) => 0.3 + 0.7 * glowStrength(n);
+
+    const glow = cosmosSupported
+      ? root.append('g')
+        .attr('class', 'graph-glows')
+        .style('pointer-events', 'none')
+        .selectAll('circle')
+        .data(nodes)
+        .join('circle')
+        .attr('class', 'graph-node-glow')
+        .attr('r', glowRadiusFor)
+        .attr('fill', glowFillFor)
+        .attr('fill-opacity', glowOpacityFor)
+      : d3.selectAll([]);
+
+    container.classList.toggle('graph-cosmos', cosmosOn);
+    starfield?.setEnabled(cosmosOn);
 
     const link = root.append('g')
       .attr('class', 'graph-links')
@@ -190,20 +476,6 @@
           n.fx = null; n.fy = null;
         }));
 
-    // Текущий поисковый запрос (в нижнем регистре) — нужен уже при первой
-    // раскраске точек (fillFor), поэтому объявлен здесь, до создания кружков.
-    let activeSearchQuery = '';
-
-    // Цвет заливки: при активном поиске узел с тегом, подходящим под запрос,
-    // красится цветом ЭТОГО тега (а не первого тега статьи); без поиска — как
-    // раньше, цвет первого тега. null — заливка из CSS (центр локального графа
-    // и однотонный режим без colorByTag).
-    const fillFor = (n) => {
-      if (!colorByTag || n.slug === centerSlug) return null;
-      const matched = matchingTagOf(n);
-      return matched ? tagColors[matched].color : colorFor(n);
-    };
-
     const circle = node.append('circle')
       .attr('r', radiusFor)
       .attr('class', 'graph-node-circle')
@@ -238,6 +510,7 @@
     const setNodeClass = (name, predicate) => {
       node.classed(name, predicate);
       label.classed(name, predicate);
+      glow.classed(name, predicate);
     };
 
     node.style('cursor', onNodeClick ? 'pointer' : 'default');
@@ -364,11 +637,14 @@
         .attr('y2', (l) => l.target.y);
       node.attr('transform', (n) => `translate(${n.x},${n.y})`);
       label.attr('transform', (n) => `translate(${n.x},${n.y})`);
+      glow.attr('cx', (n) => n.x).attr('cy', (n) => n.y);
     });
 
     return {
       destroy() {
         simulation.stop();
+        starfield?.destroy();
+        container.classList.remove('graph-cosmos');
         container.innerHTML = '';
       },
       // query='' снимает подсветку/приглушение целиком (обычный вид графа).
@@ -380,6 +656,7 @@
         // Перекраска под цвет найденного тега — только пока в поиске что-то
         // введено; пустой запрос возвращает цвет первого тега.
         circle.style('fill', fillFor);
+        glow.attr('fill', glowFillFor);
         applyHighlight(searchMatches());
       },
       // Переключение "растущие / одинаковые" точки на лету, без пересоздания
@@ -391,6 +668,7 @@
         if (next === uniformSize) return;
         uniformSize = next;
         circle.attr('r', radiusFor);
+        glow.attr('r', glowRadiusFor).attr('fill-opacity', glowOpacityFor);
         labelText
           .attr('dy', (n) => -(radiusFor(n) + 4))
           .style('font-size', (n) => `${labelSizeFor(n)}px`)
@@ -401,6 +679,13 @@
         yForce.strength(gravityFor);
         collideForce.radius(collideFor);
         simulation.alpha(0.6).restart();
+      },
+      // Космос (звёзды + свечение) вкл/выкл на лету; физика графа не трогается.
+      setCosmos(flag) {
+        if (!cosmosSupported) return;
+        cosmosOn = !!flag;
+        container.classList.toggle('graph-cosmos', cosmosOn);
+        starfield.setEnabled(cosmosOn);
       }
     };
   }
@@ -436,22 +721,29 @@
     const clone = svgEl.cloneNode(true);
     const originals = svgEl.querySelectorAll('*');
     const clones = clone.querySelectorAll('*');
-    const STYLE_PROPS = ['fill', 'stroke', 'stroke-width', 'stroke-linejoin', 'paint-order', 'opacity', 'font-size', 'font-weight', 'font-family', 'text-anchor'];
+    const STYLE_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-linejoin', 'paint-order', 'opacity', 'font-size', 'font-weight', 'font-family', 'text-anchor'];
     originals.forEach((origEl, i) => {
       const cs = getComputedStyle(origEl);
       let styleStr = '';
-      STYLE_PROPS.forEach((p) => { styleStr += `${p}:${cs.getPropertyValue(p)};`; });
+      STYLE_PROPS.forEach((p) => {
+        let v = cs.getPropertyValue(p);
+        // fill:url(#градиент-свечения) браузер отдаёт абсолютным адресом страницы —
+        // внутри отдельного SVG-файла такая ссылка не сработает, возвращаем локальную.
+        if (v.startsWith('url(')) v = v.replace(/url\(["']?[^"')#]*#([^"')]+)["']?\)/, 'url(#$1)');
+        styleStr += `${p}:${v};`;
+      });
       clones[i].setAttribute('style', styleStr);
     });
     clone.setAttribute('width', String(width));
     clone.setAttribute('height', String(height));
 
+    // Космос выключен — свечение в клон не берём (в живом SVG оно скрыто CSS-ом,
+    // а стили display в клон не копируются).
+    const cosmosOn = container.classList.contains('graph-cosmos');
+    if (!cosmosOn) clone.querySelectorAll('.graph-glows').forEach((el) => el.remove());
+
+    // Фон (и звёзды под графом) рисуются на самом canvas, а не rect-ом внутри SVG.
     const bg = getComputedStyle(container).backgroundColor || '#202225';
-    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bgRect.setAttribute('width', '100%');
-    bgRect.setAttribute('height', '100%');
-    bgRect.setAttribute('fill', bg);
-    clone.insertBefore(bgRect, clone.firstChild);
 
     const svgString = new XMLSerializer().serializeToString(clone);
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
@@ -471,6 +763,10 @@
       canvas.height = height * scale;
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+      const starsCanvas = container.querySelector('canvas.graph-starfield');
+      if (cosmosOn && starsCanvas && starsCanvas.width) ctx.drawImage(starsCanvas, 0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
 
       canvas.toBlob((blob) => {
@@ -528,7 +824,7 @@
   // Инициализация графовой карточки на дашборде (public/views/dashboard.html):
   // ищет #graphContainer/#graphNodeCount и панель фильтров (#graphServerFilter,
   // #graphSearchInput/#graphSearchClear, #graphHideIsolated,
-  // #graphHideLabels, #graphUniformSize, #graphExportPng) в уже вставленной разметке страницы.
+  // #graphHideLabels, #graphUniformSize, #graphCosmos, #graphExportPng) в уже вставленной разметке страницы.
   // Вызывается из spa-router.js (loadDashboard).
   async function initGraphPage() {
     const container = document.getElementById('graphContainer');
@@ -554,6 +850,7 @@
     const hideIsolatedEl = document.getElementById('graphHideIsolated');
     const hideLabelsEl = document.getElementById('graphHideLabels');
     const uniformSizeEl = document.getElementById('graphUniformSize');
+    const cosmosEl = document.getElementById('graphCosmos');
     const countEl = document.getElementById('graphNodeCount');
     const searchInput = document.getElementById('graphSearchInput');
     const searchClearBtn = document.getElementById('graphSearchClear');
@@ -567,6 +864,12 @@
       hideLabelsEl.addEventListener('change', () => {
         container.classList.toggle('graph-hide-labels', hideLabelsEl.checked);
       });
+    }
+
+    // Космос по умолчанию включён; выбор пользователя помним между визитами.
+    const COSMOS_STORAGE_KEY = 'beginfind.graphCosmos';
+    if (cosmosEl) {
+      try { cosmosEl.checked = localStorage.getItem(COSMOS_STORAGE_KEY) !== '0'; } catch (_) { /* storage недоступен — остаётся значение из разметки */ }
     }
 
     let instance = null;
@@ -598,7 +901,8 @@
         onNodeClick: navigateToArticle,
         colorByTag: true,
         tagColors: fullData.tagColors,
-        uniformSize: !!uniformSizeEl?.checked
+        uniformSize: !!uniformSizeEl?.checked,
+        cosmos: !!cosmosEl?.checked
       });
       if (searchInput?.value.trim()) instance.setSearchHighlight(searchInput.value);
       if (data.nodes.length) renderGraphLegend(container, data.nodes, fullData.tagColors);
@@ -607,6 +911,10 @@
     serverSelect?.addEventListener('change', rerender);
     hideIsolatedEl?.addEventListener('change', rerender);
     uniformSizeEl?.addEventListener('change', () => instance?.setUniformSize(uniformSizeEl.checked));
+    cosmosEl?.addEventListener('change', () => {
+      try { localStorage.setItem(COSMOS_STORAGE_KEY, cosmosEl.checked ? '1' : '0'); } catch (_) { /* не критично */ }
+      instance?.setCosmos(cosmosEl.checked);
+    });
 
     searchInput?.addEventListener('input', () => {
       const q = searchInput.value.trim();
