@@ -857,6 +857,14 @@
   }
 }
 
+/* На странице статей плавную прокрутку html (global-styles.css) отключаем:
+   при ней любой программный/браузерный скролл (перевод каретки в видимую
+   область при наборе, возврат позиции после перерисовки блоков) проигрывается
+   анимацией — на телефоне это и есть "экран дёргается" в редакторе. */
+html:has(body.articles-page) {
+  scroll-behavior: auto;
+}
+
 /* На ПК "рамка" формы (.form-container) — просторная карточка с закруглением
    и большими отступами поверх фона страницы, это нормально (см. requirement
    "на ПК страница довольно большая"). Именно эта рамка на телефоне и съедает
@@ -878,6 +886,40 @@
   }
   .articles-page .form-section-body {
     padding: 14px 12px 16px;
+  }
+}
+
+/* Телефон (≤640px): рабочая область редактора — на всю ширину. Слои рамок
+   (форма → секция → обёртка редактора) на 360px-экране съедали десятки
+   пикселей по бокам: убираем боковые рамки/скругления секции и обёртки
+   редактора, а саму обёртку выдвигаем на всю ширину секции (отрицательный
+   margin = боковой padding секции), чтобы текст шёл почти от края до края. */
+@media (max-width: 640px) {
+  .articles-page .form-container {
+    padding: 6px 0;
+    border-left: none;
+    border-right: none;
+  }
+  .articles-page .form-section {
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+  }
+  .articles-page .form-section > summary {
+    padding: 12px;
+  }
+  .articles-page .form-section-body {
+    padding: 10px 8px 12px;
+    gap: 14px;
+  }
+  .articles-page .editor-wrapper {
+    border: none;
+    border-radius: 0;
+    margin: 0 -8px;
+  }
+  .articles-page .editor-toolbar-sticky {
+    padding: 8px 6px;
+    border-radius: 0;
   }
 }
 </style>

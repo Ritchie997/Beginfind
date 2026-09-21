@@ -335,6 +335,62 @@
       neighbors.get(l.target)?.add(l.source);
     });
 
+    // Уникальные связи (без дублей A→B и B→A) — для поиска пересечений ниже.
+    const pairs = [];
+    {
+      const seen = new Set();
+      links.forEach((l) => {
+        const key = l.source < l.target ? `${l.source}\u0000${l.target}` : `${l.target}\u0000${l.source}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        pairs.push({ a: nodeBySlug.get(l.source), b: nodeBySlug.get(l.target) });
+      });
+    }
+
+    // "Висячие цепочки": хвост из нескольких узлов, который держится на графе
+    // ровно одной связью (мост) и сам не содержит циклов — точка на конце
+    // цепочки, цепочка из двух-трёх точек и т.п. Для каждой такой связи храним
+    // якорь (конец, что остаётся в графе), голову хвоста и сам хвост.
+    //
+    // Зачем: силовая раскладка d3 имеет локальные минимумы. Хвост может
+    // оказаться ВНУТРИ чужого цикла (типично: треугольник статей, от угла идёт
+    // точка, от неё ещё одна — и крайняя точка запирается внутри треугольника):
+    // отталкивание от вершин цикла давит на неё со всех сторон, а пружина
+    // связи слишком слаба, чтобы протолкнуть её через "барьер" между двумя
+    // вершинами. Такое положение физика сама не исправит, пока цикл не
+    // сдвинут руками — см. untangle() ниже.
+    const PENDANT_MAX = 8; // длиннее — это уже не "хвост", а часть графа
+    const pendantBeyond = (anchor, head) => {
+      const comp = new Map([[head.slug, head]]);
+      const stack = [head];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const s of neighbors.get(cur.slug)) {
+          if (s === cur.slug) continue;
+          if (cur === head && s === anchor.slug) continue; // сама связь-мост
+          if (s === anchor.slug) return null; // есть обход — это не мост
+          if (comp.has(s)) continue;
+          if (comp.size >= PENDANT_MAX) return null;
+          const next = nodeBySlug.get(s);
+          comp.set(s, next);
+          stack.push(next);
+        }
+      }
+      // Дерево (без своих циклов): рёбер внутри хвоста ровно "узлов − 1".
+      let inner = 0;
+      comp.forEach((n) => neighbors.get(n.slug).forEach((s) => { if (s !== n.slug && comp.has(s)) inner += 1; }));
+      return inner / 2 === comp.size - 1 ? comp : null;
+    };
+    const pendants = [];
+    pairs.forEach(({ a, b }) => {
+      const sides = [[a, b], [b, a]]
+        .map(([anchor, head]) => ({ anchor, head, comp: pendantBeyond(anchor, head) }))
+        .filter((s) => s.comp);
+      if (!sides.length) return;
+      sides.sort((x, y) => x.comp.size - y.comp.size);
+      pendants.push(sides[0]);
+    });
+
     // Размеры точек и подписей. Рост логарифмический: каждая следующая связь
     // прибавляет всё меньше (первая связь — заметный шаг, сотая — почти
     // незаметный), плюс жёсткий потолок max. Так хаб с десятками связей
@@ -455,6 +511,7 @@
         .on('start', (event, n) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
           n.fx = n.x; n.fy = n.y;
+          untangleBudget = UNTANGLE_BUDGET; // после ручного движения снова можно распутывать
         })
         .on('drag', (event, n) => { n.fx = event.x; n.fy = event.y; })
         .on('end', (event, n) => {
@@ -629,6 +686,71 @@
       c.fy = height / 2;
     }
 
+    // Распутывание запертых хвостов (см. pendants выше). Если связь висячего
+    // хвоста пересекает чужое ребро — хвост оказался по ту сторону этого ребра
+    // (внутри чужого цикла). Зеркально переносим ВЕСЬ хвост через прямую этого
+    // ребра: он оказывается с той же стороны, что и якорь, т.е. снаружи, а
+    // симуляция тут же дожимает его на место. Проверка идёт периодически, пока
+    // раскладка остывает, и в конце; лимит срабатываний защищает от бесконечной
+    // "качели" (обновляется, когда пользователь двигает узлы).
+    const UNTANGLE_BUDGET = 12;
+    let untangleBudget = UNTANGLE_BUDGET;
+    let untangleTicks = 0;
+
+    // Пересечение отрезков p1p2 и p3p4. Проход ровно через конец чужого ребра
+    // (вершину цикла) тоже считается пересечением — иначе связь, идущая через
+    // угол треугольника, оставалась бы "незамеченной"; лежащие на одной прямой
+    // отрезки пропускаем.
+    const orient = (a, b, c) => {
+      const v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      return Math.abs(v) < 1e-6 ? 0 : v;
+    };
+    const segmentsCross = (p1, p2, p3, p4) => {
+      const d1 = orient(p3, p4, p1);
+      const d2 = orient(p3, p4, p2);
+      const d3 = orient(p1, p2, p3);
+      const d4 = orient(p1, p2, p4);
+      if (!d1 && !d2) return false;
+      return d1 * d2 <= 0 && d3 * d4 <= 0;
+    };
+
+    function untangle() {
+      let fixed = 0;
+      for (const { anchor, head, comp } of pendants) {
+        if (anchor.x == null || head.x == null) continue;
+        // закреплённые (в т.ч. перетаскиваемые) узлы не трогаем
+        if ([...comp.values()].some((n) => n.fx != null || n.fy != null)) continue;
+        for (const { a, b } of pairs) {
+          if (a === anchor || b === anchor || comp.has(a.slug) || comp.has(b.slug)) continue;
+          if (!segmentsCross(anchor, head, a, b)) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const len2 = dx * dx + dy * dy || 1;
+          comp.forEach((n) => {
+            const t = ((n.x - a.x) * dx + (n.y - a.y) * dy) / len2;
+            const footX = a.x + t * dx;
+            const footY = a.y + t * dy;
+            n.x = 2 * footX - n.x;
+            n.y = 2 * footY - n.y;
+            n.vx = 0;
+            n.vy = 0;
+          });
+          fixed += 1;
+          break;
+        }
+      }
+      return fixed;
+    }
+
+    function runUntangle() {
+      if (untangleBudget <= 0) return;
+      if (untangle()) {
+        untangleBudget -= 1;
+        // подбодрить симуляцию, чтобы перенесённые узлы разошлись и осели
+        simulation.alpha(Math.max(simulation.alpha(), 0.45)).restart();
+      }
+    }
+
     simulation.on('tick', () => {
       link
         .attr('x1', (l) => l.source.x)
@@ -638,7 +760,10 @@
       node.attr('transform', (n) => `translate(${n.x},${n.y})`);
       label.attr('transform', (n) => `translate(${n.x},${n.y})`);
       glow.attr('cx', (n) => n.x).attr('cy', (n) => n.y);
+      // раз в ~0.5 с, пока раскладка уже подостыла (в начале узлы ещё летят)
+      if (pendants.length && ++untangleTicks % 30 === 0 && simulation.alpha() < 0.35) runUntangle();
     });
+    simulation.on('end', runUntangle);
 
     return {
       destroy() {

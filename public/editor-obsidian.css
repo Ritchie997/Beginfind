@@ -78,6 +78,17 @@
 .editor-panes[data-mode="preview"] .editor-pane { display: none; }
 .editor-panes[data-mode="preview"] .preview-pane { flex: 1 1 100%; }
 
+/* Телефон: превью В РЕДАКТОРЕ — меньше отступ и текст, больше места под
+   содержимое. Только внутри .editor-panes: .preview-pane общий с Ibripedia, а
+   читательский вид статьи на телефоне трогать не нужно. */
+@media (max-width: 640px) {
+  .editor-panes .preview-pane {
+    padding: 10px 8px;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+}
+
 /* Режим "Двойной просмотр": оба рядом (слева редактор, справа превью) */
 .editor-panes[data-mode="split"] .editor-pane,
 .editor-panes[data-mode="split"] .preview-pane { flex: 1 1 50%; }

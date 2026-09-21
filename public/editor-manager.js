@@ -127,6 +127,154 @@
     }
   }
 
+  // ===== Помощники для мобильного редактирования =====
+
+  // Тач-интерфейс (телефон/планшет пальцем) или узкий экран.
+  function isTouchUi() {
+    return window.innerWidth <= 640
+      || !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+  }
+
+  // Мгновенный скролл. У html стоит scroll-behavior: smooth (global-styles.css),
+  // поэтому обычное присваивание scrollTop проигрывало бы плавную анимацию —
+  // для "вернуть страницу туда, где была" это выглядит как дёрганье.
+  function scrollToInstant(y) {
+    const scroller = document.scrollingElement || document.documentElement;
+    try { scroller.scrollTo({ top: y, behavior: 'instant' }); } catch (e) { scroller.scrollTop = y; }
+  }
+
+  // Авторазмер поля по содержимому БЕЗ прыжка страницы. Классическое
+  // "height='auto'; height=scrollHeight" на миг схлопывает поле до одной
+  // строки: у длинного блока высота документа падает на сотни пикселей,
+  // браузер прижимает scrollTop к новому (меньшему) максимуму — и когда поле
+  // снова вытягивается, страница уже "уехала". На телефоне это и есть
+  // "экран дёргается и текст уезжает наверх" на каждую набранную букву.
+  // На время замера держим высоту родителя (min-height), а положение
+  // скролла на всякий случай возвращаем мгновенно.
+  function autosizeField(el) {
+    if (!el || !el.isConnected) return;
+    const scroller = document.scrollingElement || document.documentElement;
+    const prevScroll = scroller.scrollTop;
+    const holder = el.parentElement;
+    const prevMin = holder ? holder.style.minHeight : '';
+    if (holder) holder.style.minHeight = `${holder.offsetHeight}px`;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    if (holder) holder.style.minHeight = prevMin;
+    if (scroller.scrollTop !== prevScroll) scrollToInstant(prevScroll);
+  }
+
+  // Видимая область экрана в координатах position:fixed. Пока на телефоне
+  // открыта клавиатура, она заметно меньше окна (iOS не меняет layout-viewport,
+  // а сужает visualViewport) — поэтому берём её, а не window.innerHeight.
+  function visibleArea() {
+    const vv = window.visualViewport;
+    if (vv) return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height };
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+
+  // Ставит всплывающее окно (position:fixed) у якоря так, чтобы оно целиком
+  // помещалось в видимую область: сдвигает по горизонтали, переворачивает
+  // вверх, если снизу не хватает места, а если не хватает нигде — ограничивает
+  // высоту (окно с overflow-y:auto тогда прокручивается само). Раньше окна
+  // ставились строго под якорем и на телефоне вылезали за экран — до
+  // остальных цветов/ссылок было не добраться.
+  function positionFloating(el, anchorRect, { gap = 6, margin = 8, minHeight = 120 } = {}) {
+    const area = visibleArea();
+    el.style.maxWidth = `${Math.max(0, area.width - margin * 2)}px`;
+    el.style.maxHeight = '';
+    el.style.left = '0px';
+    el.style.top = '0px';
+    el.hidden = false;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const topLimit = area.top + margin;
+    const bottomLimit = area.top + area.height - margin;
+    const below = bottomLimit - (anchorRect.bottom + gap);
+    const above = (anchorRect.top - gap) - topLimit;
+
+    let top;
+    let effH = h;
+    if (h <= below) {
+      top = anchorRect.bottom + gap;
+    } else if (h <= above) {
+      top = anchorRect.top - gap - h;
+    } else if (below >= above) {
+      effH = Math.min(h, Math.max(below, minHeight));
+      top = anchorRect.bottom + gap;
+    } else {
+      effH = Math.min(h, Math.max(above, minHeight));
+      top = anchorRect.top - gap - effH;
+    }
+    effH = Math.min(effH, bottomLimit - topLimit);
+    if (effH < h) el.style.maxHeight = `${effH}px`;
+    top = Math.min(Math.max(top, topLimit), bottomLimit - effH);
+    const left = Math.min(Math.max(anchorRect.left, area.left + margin), area.left + area.width - w - margin);
+    el.style.left = `${Math.max(left, area.left + margin)}px`;
+    el.style.top = `${top}px`;
+  }
+
+  // Прямоугольник каретки внутри <textarea> в координатах окна — нужен, чтобы
+  // список автодополнения вставал у места ввода, а не под всем (возможно
+  // очень длинным) полем, низ которого на телефоне далеко за экраном.
+  // Классический приём: невидимый двойник поля с тем же шрифтом/шириной, текст
+  // до каретки + маркер, по маркеру считаем координаты.
+  function getCaretRect(ta, pos = ta.selectionEnd) {
+    const fallback = ta.getBoundingClientRect();
+    try {
+      const cs = getComputedStyle(ta);
+      const mirror = document.createElement('div');
+      ['boxSizing', 'width', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+        'lineHeight', 'textTransform', 'textIndent', 'wordSpacing', 'tabSize', 'paddingTop',
+        'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth',
+        'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderLeftStyle'
+      ].forEach((prop) => { mirror.style[prop] = cs[prop]; });
+      mirror.style.position = 'absolute';
+      mirror.style.visibility = 'hidden';
+      mirror.style.left = '-9999px';
+      mirror.style.top = '0';
+      mirror.style.whiteSpace = 'pre-wrap';
+      mirror.style.overflowWrap = 'break-word';
+      mirror.textContent = ta.value.slice(0, pos);
+      const marker = document.createElement('span');
+      marker.textContent = '\u200b';
+      mirror.appendChild(marker);
+      document.body.appendChild(mirror);
+      const lineHeight = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) || 15) * 1.5;
+      const x = fallback.left + (parseFloat(cs.borderLeftWidth) || 0) + marker.offsetLeft - ta.scrollLeft;
+      const y = fallback.top + (parseFloat(cs.borderTopWidth) || 0) + marker.offsetTop - ta.scrollTop;
+      mirror.remove();
+      return { left: x, right: x, top: y, bottom: y + lineHeight, width: 0, height: lineHeight };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  // Вернуть фокус в поле после действия тулбара. preventScroll — чтобы страница
+  // не "улетала" к тексту (при длинной статье тулбар и выделенный текст в
+  // разных местах экрана). На телефоне фокус возвращаем, только если каретка
+  // сейчас на экране: иначе открывшаяся клавиатура сама прокрутит страницу к
+  // полю — тот же прыжок, что и без preventScroll.
+  function refocusField(el) {
+    if (isTouchUi()) {
+      const caret = getCaretRect(el);
+      const area = visibleArea();
+      const visible = caret.bottom > area.top && caret.top < area.top + area.height;
+      if (!visible) return;
+    }
+    el.focus({ preventScroll: true });
+  }
+
+  // iOS Safari приближает страницу при фокусе на поле со шрифтом < 16px —
+  // а текст в редакторе на телефоне мелкий (14px). На время работы на
+  // странице статей просим maximum-scale=1: авто-зум по фокусу пропадает, а
+  // щипок пальцами на iOS 10+ продолжает работать (maximum-scale он игнорирует).
+  // Только iOS: на Android Chrome это отключило бы щипок-зум без всякой пользы.
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
   // ===== EditorManager =====
 
   class EditorManager {
@@ -173,9 +321,41 @@
       this.setupToolbar();
       this.setupModeTabs();
       this.setupHotkeys();
+      this.setupZoomGuard();
+      this.setupPopupViewportTracking();
       this.renderAll();
       this.observeArticleIdForBacklinks();
       this.scheduleRenderPreview();
+    }
+
+    // См. isIOS(): maximum-scale=1 только пока открыта страница статей (класс
+    // articles-page на body ставит/снимает spa-router) — MutationObserver
+    // избавляет от правок роутера и не оставляет ограничение после ухода.
+    setupZoomGuard() {
+      if (this._zoomGuardBound || !isIOS()) return;
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) return;
+      this._zoomGuardBound = true;
+      const base = meta.getAttribute('content') || 'width=device-width, initial-scale=1.0';
+      const sync = () => {
+        const onArticles = document.body.classList.contains('articles-page');
+        meta.setAttribute('content', onArticles ? `${base}, maximum-scale=1` : base);
+      };
+      new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      sync();
+    }
+
+    // Клавиатура на телефоне открывается/закрывается и двигает видимую область
+    // уже ПОСЛЕ того, как попап был поставлен — переставляем открытые попапы.
+    setupPopupViewportTracking() {
+      if (this._popupTrackingBound || !window.visualViewport) return;
+      this._popupTrackingBound = true;
+      const update = () => {
+        if (this._suggestEl && !this._suggestEl.hidden) this.placeSuggest();
+        if (this._hlPickerEl && !this._hlPickerEl.hidden) this.placeHighlightPicker();
+      };
+      window.visualViewport.addEventListener('resize', update);
+      window.visualViewport.addEventListener('scroll', update);
     }
 
     // Шим innerHTML на #articleContent: spa-router.js по-прежнему читает и
@@ -292,6 +472,15 @@
         this._pendingFocusBlockId = first.id;
       }
 
+      // Перерисовка выкидывает ВСЕ блоки и создаёт их заново — высота документа
+      // на миг падает почти до нуля, браузер прижимает скролл к верху страницы,
+      // и после сборки ты оказываешься в начале статьи (на телефоне — заметный
+      // "прыжок наверх" после Enter/добавления/перемещения блока). Держим
+      // высоту контейнера и возвращаем скролл мгновенно.
+      const scroller = document.scrollingElement || document.documentElement;
+      const prevScroll = scroller.scrollTop;
+      this.container.style.minHeight = `${this.container.offsetHeight}px`;
+
       while (this.container.firstChild) this.container.removeChild(this.container.firstChild);
       this.renderBlockList(this.doc.blocks, this.container, { nested: false });
 
@@ -302,11 +491,13 @@
       // текстом это "будущее" измерение сразу после вставки в детач-ветку
       // DOM иногда даёт заниженный scrollHeight, и поле остаётся в одну
       // строку, пока не тронешь его. Один проход по уже полностью
-      // вставленному дереву — сразу с верными размерами.
-      this.container.querySelectorAll('textarea').forEach((ta) => {
-        ta.style.height = 'auto';
-        ta.style.height = ta.scrollHeight + 'px';
-      });
+      // вставленному дереву — сразу с верными размерами. Внутри контейнера
+      // min-height ещё держит его высоту, поэтому autosizeField здесь скролл
+      // не двигает.
+      this.container.querySelectorAll('textarea').forEach((ta) => autosizeField(ta));
+
+      this.container.style.minHeight = '';
+      if (scroller.scrollTop !== prevScroll) scrollToInstant(prevScroll);
 
       if (this._pendingFocusBlockId) {
         const id = this._pendingFocusBlockId;
@@ -398,7 +589,7 @@
       if (autofocus) ta.dataset.autofocus = '1';
       if (splitOnEnter) ta.dataset.splitOnEnter = '1';
 
-      const autosize = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+      const autosize = () => autosizeField(ta);
       requestAnimationFrame(autosize);
 
       ta.addEventListener('focus', () => this.setActive(list, block, ta));
@@ -409,7 +600,9 @@
         this.updateWikilinkSuggest(ta);
       });
       ta.addEventListener('keydown', (e) => this.handleTextKeydown(e, ta));
-      ta.addEventListener('blur', () => setTimeout(() => this.closeSuggest(), 150));
+      // Палец на списке автодополнения (прокрутка/выбор) не должен закрывать его
+      // из-за blur поля — см. _suggestTouching в ensureSuggestEl().
+      ta.addEventListener('blur', () => setTimeout(() => { if (!this._suggestTouching) this.closeSuggest(); }, 150));
 
       return ta;
     }
@@ -487,7 +680,7 @@
       el.selectionStart = coreStart;
       el.selectionEnd = coreStart + core.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.focus();
+      refocusField(el);
     }
 
     insertLinkInline() {
@@ -502,7 +695,7 @@
       el.value = el.value.slice(0, start) + insert + el.value.slice(end);
       el.selectionStart = el.selectionEnd = start + insert.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.focus();
+      refocusField(el);
     }
 
     insertWikilinkInline() {
@@ -518,7 +711,7 @@
       el.value = el.value.slice(0, start) + insert + '))' + el.value.slice(end);
       el.selectionStart = el.selectionEnd = start + insert.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.focus();
+      refocusField(el);
     }
 
     // ===== Автодополнение wiki-ссылок [текст]((статья)) =====
@@ -530,7 +723,26 @@
       el.hidden = true;
       document.body.appendChild(el);
       this._suggestEl = el;
+      // Прокрутка списка пальцем на телефоне: пока палец на списке, blur поля
+      // (клавиатура/фокус) не закрывает его — иначе список пропадал бы прямо
+      // под пальцем, и до нужной статьи было не долистать.
+      let touchTimer = null;
+      const touching = () => { clearTimeout(touchTimer); this._suggestTouching = true; };
+      const released = () => { clearTimeout(touchTimer); touchTimer = setTimeout(() => { this._suggestTouching = false; }, 400); };
+      el.addEventListener('touchstart', touching, { passive: true });
+      el.addEventListener('touchend', released, { passive: true });
+      el.addEventListener('touchcancel', released, { passive: true });
       return el;
+    }
+
+    // Ставит список автодополнения у КАРЕТКИ (а не под всем полем: у длинного
+    // блока низ поля далеко за экраном) и в пределах видимой области — над
+    // клавиатурой на телефоне, если снизу не хватает места.
+    placeSuggest() {
+      const el = this._suggestEl;
+      const ta = this._suggestTarget;
+      if (!el || !ta || !ta.isConnected) return;
+      positionFloating(el, getCaretRect(ta), { gap: 6 });
     }
 
     closeSuggest() {
@@ -565,11 +777,10 @@
       });
       // position:fixed — чистые viewport-координаты, без +scrollX/Y (см.
       // комментарий у .eb-wikilink-suggest в editor-blocks.css).
-      const rect = ta.getBoundingClientRect();
-      el.style.left = `${rect.left}px`;
-      el.style.top = `${rect.bottom + 4}px`;
-      el.hidden = false;
       this._suggestTarget = ta;
+      el.hidden = false;
+      el.scrollTop = 0;
+      this.placeSuggest();
     }
 
     moveSuggestSelection(dir) {
@@ -602,7 +813,7 @@
       ta.selectionStart = ta.selectionEnd = pos;
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       this.closeSuggest();
-      ta.focus();
+      ta.focus({ preventScroll: true });
     }
 
     // ===== Код-блок =====
@@ -622,7 +833,7 @@
       code.rows = 3;
       code.value = block.data.code || '';
       code.dataset.autofocus = '1';
-      const autosize = () => { code.style.height = 'auto'; code.style.height = code.scrollHeight + 'px'; };
+      const autosize = () => autosizeField(code);
       requestAnimationFrame(autosize);
       code.addEventListener('input', () => { block.data.code = code.value; autosize(); this.scheduleRenderPreview(); });
       code.addEventListener('focus', () => { this._active = { list, block }; this._activeTextInput = null; });
@@ -1093,7 +1304,7 @@
         // расширяемой, как обычные блоки с текстом").
         const value = document.createElement('textarea');
         value.className = 'eb-input eb-input-auto'; value.rows = 1; value.placeholder = 'Значение'; value.value = row.value;
-        const autosizeValue = () => { value.style.height = 'auto'; value.style.height = value.scrollHeight + 'px'; };
+        const autosizeValue = () => autosizeField(value);
         requestAnimationFrame(autosizeValue);
         value.addEventListener('input', () => { row.value = value.value; autosizeValue(); this.scheduleRenderPreview(); });
 
@@ -1259,10 +1470,7 @@
         });
         el.appendChild(btn);
       });
-      const rect = anchorBtn.getBoundingClientRect();
-      el.style.left = `${rect.left}px`;
-      el.style.top = `${rect.bottom + 6}px`;
-      el.hidden = false;
+      positionFloating(el, anchorBtn.getBoundingClientRect());
     }
 
     closeBlockTypeMenu() {
@@ -1313,10 +1521,7 @@
         el.appendChild(btn);
       });
 
-      const rect = anchorBtn.getBoundingClientRect();
-      el.style.left = `${rect.left}px`;
-      el.style.top = `${rect.bottom + 6}px`;
-      el.hidden = false;
+      positionFloating(el, anchorBtn.getBoundingClientRect());
     }
 
     closeBlockActionsMenu() {
@@ -1416,7 +1621,11 @@
       custom.className = 'eb-color-swatch-custom';
       custom.title = 'Свой цвет';
       custom.value = DEFAULT_HIGHLIGHT_COLOR;
-      custom.addEventListener('input', () => this.applyHighlightColor(custom.value));
+      // change, а не input: у нативного выбора цвета (особенно на телефоне)
+      // input идёт на КАЖДОЕ движение по палитре — выделение оборачивалось бы
+      // разметкой заново на каждом шаге. change приходит один раз, когда
+      // цвет выбран.
+      custom.addEventListener('change', () => this.applyHighlightColor(custom.value));
       custom.addEventListener('mousedown', (e) => e.stopPropagation());
       swatches.appendChild(custom);
       el.appendChild(swatches);
@@ -1445,10 +1654,17 @@
       // position:fixed — чистые viewport-координаты (см. комментарий у
       // .eb-color-picker в editor-blocks.css: тулбар — sticky с z-index:100,
       // absolute-попап на координатах документа мог оказаться под ним).
-      const rect = anchorBtn.getBoundingClientRect();
-      el.style.left = `${rect.left}px`;
-      el.style.top = `${rect.bottom + 6}px`;
-      el.hidden = false;
+      this.placeHighlightPicker();
+    }
+
+    // Палитра целиком в видимой области (на телефоне лента тулбара
+    // прокручивается, и кнопка "выделение" может быть у самого правого края —
+    // раньше палитра уезжала за экран).
+    placeHighlightPicker() {
+      const el = this._hlPickerEl;
+      const anchor = this._hlPickerAnchor;
+      if (!el || !anchor || !anchor.isConnected) return;
+      positionFloating(el, anchor.getBoundingClientRect());
     }
 
     closeHighlightPicker() {

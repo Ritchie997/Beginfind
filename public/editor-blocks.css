@@ -342,8 +342,15 @@
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
   padding: 8px;
+  box-sizing: border-box;
+  /* На телефоне палитра может не влезть в экран целиком (JS ограничивает
+     max-width/max-height видимой областью, см. positionFloating в
+     editor-manager.js) — тогда она прокручивается пальцем, а не обрезается. */
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
-.eb-color-picker-swatches { display: flex; align-items: center; gap: 6px; }
+.eb-color-picker-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .eb-color-swatch {
   width: 24px;
   height: 24px;
@@ -378,6 +385,12 @@
   max-height: 220px;
   overflow-y: auto;
   min-width: 220px;
+  box-sizing: border-box;
+  /* Прокрутка пальцем внутри списка не должна "протекать" на страницу
+     под ним (иначе на границе списка дёргается вся страница). */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .eb-wikilink-suggest button {
   display: block;
@@ -389,6 +402,9 @@
   color: var(--text-normal);
   font-size: 13px;
   cursor: pointer;
+  /* Длинное название статьи переносится, а не раздувает список за экран. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .eb-wikilink-suggest button:hover,
 .eb-wikilink-suggest button.eb-suggest-active { background: var(--blurple); color: #fff; }
@@ -406,6 +422,10 @@
   overflow-y: auto;
   min-width: 180px;
   padding: 4px;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .eb-block-type-menu button {
   display: flex;
@@ -439,4 +459,42 @@
 @media (hover: none) and (pointer: coarse) {
   .eb-mini-btn, .eb-nested-add { padding: 9px 12px; }
   .eb-icon-btn { width: 32px; height: 32px; }
+  .eb-color-swatch, .eb-color-swatch-custom { width: 34px; height: 34px; }
+  .eb-wikilink-suggest button { padding: 12px 14px; }
+  .eb-block-type-menu button { padding: 11px 12px; }
+}
+
+/* --- телефон (≤640px): больше места под сам текст ---
+   Каждый слой рамки съедает ширину узкого экрана: отступ поля списка блоков,
+   внутренний отступ блока (слева ещё колонка под кнопку "⋮"), рамка блока по
+   фокусу, отступы вложенных колонок/инфобокса. Здесь всё ужато, а рамка в фокусе
+   заменена тонкой полосой слева (inset box-shadow) — она не занимает места.
+   Текст мельче (14px против 15px и 22/19/16 у заголовков), чтобы в экран
+   помещалось больше строк. Объявлено в конце файла — перебивает правила
+   тач-режима выше при равной специфичности. */
+@media (max-width: 640px) {
+  .eb-blocklist { padding: 4px 0; gap: 2px; min-height: 120px; }
+  .eb-block { padding: 3px 2px 3px 26px; border-radius: 6px; }
+  .eb-block:hover,
+  .eb-block:focus-within {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: inset 2px 0 0 var(--blurple);
+  }
+  .eb-block-more-btn { left: 0; top: 2px; width: 24px; height: 24px; }
+  .eb-nested-blocklist { gap: 2px; }
+  .eb-nested-blocklist .eb-block { padding-left: 22px; }
+
+  .eb-text { font-size: 14px; line-height: 1.55; padding: 1px 0; }
+  .eb-heading-1 .eb-text { font-size: 19px; }
+  .eb-heading-2 .eb-text { font-size: 17px; }
+  .eb-heading-3 .eb-text { font-size: 15px; }
+  .eb-code-text { font-size: 12px; padding: 8px !important; }
+  .eb-quote { padding-left: 8px; }
+  .eb-callout-editor { padding-left: 8px; }
+  .eb-column { padding: 6px; min-width: 0; }
+  .eb-infobox-editor { padding: 8px; max-width: none; }
+  .eb-spoiler-section-editor { padding: 8px; }
+  .eb-input { padding: 6px 8px; }
+  .eb-table input { padding: 5px 6px; }
 }
