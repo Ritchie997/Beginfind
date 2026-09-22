@@ -18,6 +18,7 @@ const path = require('path');
 const { CONTENT_DIR } = require('../config/paths');
 const { slugify } = require('./slugify');
 const blocks = require('./blocks');
+const articleLayers = require('./article-layers');
 
 const TRASH_DIR = path.join(CONTENT_DIR, '.trash');
 const FILE_EXT = '.json';
@@ -101,6 +102,10 @@ function parseArticleFile(filePath, slug) {
     // blocks.js). normalizeDocument заодно чинит любую неполноту/повреждённость
     // отдельных блоков, не роняя чтение всей статьи целиком.
     content: blocks.normalizeDocument(fm.content),
+    // Слои "многослойной" статьи (см. src/services/article-layers.js) — []
+    // означает "статья слоями не пользуется", тогда в силе обычные
+    // title/content/excerpt/image/locked/roles ниже (как было всегда).
+    layers: articleLayers.normalizeLayers(fm.layers),
     views: typeof fm.views === 'number' ? fm.views : 0,
     locked: !!fm.locked,
     role: Array.isArray(fm.roles) && fm.roles.length > 0 ? JSON.stringify(fm.roles) : null,
@@ -145,7 +150,10 @@ function writeArticleFile(slug, article) {
     views: article.views || 0,
     // content всегда нормализуется перед записью — на диске никогда не
     // оказывается "сырых" данных произвольной формы.
-    content: blocks.normalizeDocument(article.content)
+    content: blocks.normalizeDocument(article.content),
+    // Слои — так же всегда нормализуются; [] пишется и для обычных статей
+    // (явный, а не подразумеваемый признак "слои не используются").
+    layers: articleLayers.normalizeLayers(article.layers)
   };
   if (article.legacyId != null) {
     fileContents.legacyId = article.legacyId;
@@ -228,6 +236,7 @@ function createArticle(fields) {
   const article = {
     title: fields.title || 'Без названия',
     content: blocks.normalizeDocument(fields.content),
+    layers: articleLayers.normalizeLayers(fields.layers),
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: normalizeRoles(fields.role, fields.roles),
@@ -259,6 +268,7 @@ function importArticle(slug, fields) {
   writeArticleFile(slug, {
     title: fields.title || 'Без названия',
     content: blocks.normalizeDocument(fields.content),
+    layers: articleLayers.normalizeLayers(fields.layers),
     views: fields.views || 0,
     locked: !!fields.locked,
     roles: fields.roles || [],
@@ -285,6 +295,11 @@ function updateArticle(slug, fields) {
   const updated = {
     title: fields.title ?? existing.title,
     content: fields.content !== undefined ? blocks.normalizeDocument(fields.content) : existing.content,
+    // fields.layers, если передан, приходит сюда УЖЕ полностью слитым (см.
+    // articleLayers.mergeLayersUpdate в articles.routes.js) — слои выше
+    // резолвнутого максимума текущего пользователя уже сохранены в нём как
+    // есть, здесь остаётся только нормализовать форму на всякий случай.
+    layers: fields.layers !== undefined ? articleLayers.normalizeLayers(fields.layers) : existing.layers,
     views: fields.views ?? existing.views,
     locked: fields.locked !== undefined ? !!fields.locked : existing.locked,
     roles: (fields.role !== undefined || fields.roles !== undefined)
@@ -328,9 +343,26 @@ function updateArticle(slug, fields) {
 function rewriteMentions(rewrite) {
   const updatedArticles = [];
   for (const article of listArticles()) {
-    const { doc, changed } = blocks.rewriteWikiLinksInDocument(article.content, slugify, rewrite);
-    if (!changed) continue;
-    writeArticleFile(article.slug, { ...article, content: doc });
+    const patch = {};
+    let changedAny = false;
+
+    if (!article.layers || article.layers.length === 0) {
+      const { doc, changed } = blocks.rewriteWikiLinksInDocument(article.content, slugify, rewrite);
+      if (changed) { patch.content = doc; changedAny = true; }
+    } else {
+      // Многослойная статья — ссылка могла встретиться в любом слое; верхнеуровневый
+      // article.content у таких статей не используется, трогать его незачем.
+      let layersChanged = false;
+      const newLayers = article.layers.map((l) => {
+        const { doc, changed } = blocks.rewriteWikiLinksInDocument(l.content, slugify, rewrite);
+        if (changed) layersChanged = true;
+        return changed ? { ...l, content: doc } : l;
+      });
+      if (layersChanged) { patch.layers = newLayers; changedAny = true; }
+    }
+
+    if (!changedAny) continue;
+    writeArticleFile(article.slug, { ...article, ...patch });
     updatedArticles.push(article.slug);
   }
   if (updatedArticles.length > 0) invalidateCache();
@@ -449,7 +481,7 @@ function collectTags(articles) {
 
   for (const article of articles) {
     (article.tags || []).forEach((t) => add(t, article.slug, true));
-    extractHashtags(article.content).forEach((t) => add(t, article.slug, false));
+    extractHashtags(article).forEach((t) => add(t, article.slug, false));
   }
 
   return [...byKey.values()]
@@ -488,6 +520,19 @@ function stripLegacyCategoryFields() {
   return rewritten;
 }
 
+// Текст статьи для полнотекстового поиска/фильтра — объединяет ВСЕ слои
+// (заголовок+тело каждого), а не только тот, что достался бы конкретному
+// читателю: иначе одна и та же статья находилась бы по разным запросам для
+// разных ролей, что и труднее поддерживать, и путает пользователя ("почему
+// поиск не находит статью, которую я точно видел"). Доступ к самой статье
+// (и к тому, какой слой её представляет) по-прежнему решает canAccessArticle
+// отдельно, уже после того, как поиск её нашёл — см. articles.routes.js.
+function allLayersSearchText(article) {
+  return articleLayers.getEffectiveLayers(article)
+    .map((l) => `${l.title || ''}\n${blocks.documentSearchText(l.content)}`)
+    .join('\n\n');
+}
+
 function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   const q = query.trim().toLowerCase();
   const all = listArticles();
@@ -495,7 +540,7 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
   const scored = all
     .map(article => {
       const titleLower = article.title.toLowerCase();
-      const contentLower = blocks.documentSearchText(article.content).toLowerCase();
+      const contentLower = allLayersSearchText(article).toLowerCase();
       let rank = 0;
       if (titleLower === q) rank = 1;
       else if (titleLower.includes(q)) rank = 2;
@@ -545,7 +590,7 @@ function filterArticles(opts = {}) {
       let rank = 0;
       if (titleLower === qLower) rank = 3;
       else if (titleLower.includes(qLower)) rank = 2;
-      else if (blocks.documentSearchText(a.content).toLowerCase().includes(qLower)) rank = 1;
+      else if (allLayersSearchText(a).toLowerCase().includes(qLower)) rank = 1;
       if (rank > 0) scoreBySlug.set(a.slug, rank);
       return rank > 0;
     });
@@ -558,7 +603,7 @@ function filterArticles(opts = {}) {
       if (ownTags.some((t) => set.has(t))) return true;
       // #теги прямо в тексте статьи (Obsidian-стиль) — те же, что подсвечиваются
       // в редакторе/превью (см. extractHashtags), тоже должны находиться фильтром.
-      return extractHashtags(a.content).some((t) => set.has(t));
+      return extractHashtags(a).some((t) => set.has(t));
     });
   }
 
@@ -612,26 +657,44 @@ function filterArticles(opts = {}) {
 // === Wiki-ссылки и backlinks ===
 
 /**
- * Извлекает все wiki-ссылки [подпись]((slug)) из документа статьи.
+ * Извлекает все wiki-ссылки [подпись]((slug)) из статьи — из ВСЕХ её слоёв
+ * разом (см. allLayersSearchText выше про то же решение для поиска): граф
+ * связей и бэклинки — это карта того, что автор вообще написал в статье,
+ * не зависящая от того, какой слой достанется конкретному читателю. Видимость
+ * самого узла/связи читателю решает canAccessArticle отдельно.
+ * @param {object} article
  */
-function extractWikiLinks(content) {
-  return blocks.extractWikiLinksFromDocument(content, slugify);
+function extractWikiLinks(article) {
+  const links = new Set();
+  articleLayers.getEffectiveLayers(article).forEach((l) => {
+    blocks.extractWikiLinksFromDocument(l.content, slugify).forEach((s) => links.add(s));
+  });
+  return Array.from(links);
 }
 
 /**
- * Извлекает #теги, упомянутые прямо в тексте статьи (в нижнем регистре).
+ * Извлекает #теги, упомянутые прямо в тексте статьи (в нижнем регистре) — по
+ * всем слоям сразу, по той же логике, что и extractWikiLinks выше.
+ * @param {object} article
  */
-function extractHashtags(content) {
-  return blocks.extractHashtagsFromDocument(content);
+function extractHashtags(article) {
+  const tags = new Set();
+  articleLayers.getEffectiveLayers(article).forEach((l) => {
+    blocks.extractHashtagsFromDocument(l.content).forEach((t) => tags.add(t));
+  });
+  return Array.from(tags);
 }
 
 /**
- * Возвращает список статей, ссылающихся на указанный slug через wiki-ссылку [подпись]((slug)).
+ * Возвращает статьи, ссылающиеся на указанный slug через wiki-ссылку
+ * [подпись]((slug)) — статьи целиком (не {slug,title}): маршрут
+ * GET /articles/:id/backlinks сам фильтрует их по доступу конкретного
+ * смотрящего (canAccessArticle) и резолвит заголовок под его слой — раньше
+ * этой фильтрации не было (см. обсуждение "многослойные статьи", пункт про
+ * утечку заголовков в бэклинках).
  */
 function getBacklinks(slug) {
-  return listArticles()
-    .filter(a => a.slug !== slug && extractWikiLinks(a.content).includes(slug))
-    .map(a => ({ slug: a.slug, title: a.title }));
+  return listArticles().filter(a => a.slug !== slug && extractWikiLinks(a).includes(slug));
 }
 
 // === Вспомогательные функции нормализации полей (перенесены из старого

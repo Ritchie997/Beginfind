@@ -179,6 +179,83 @@
     });
   }
 
+  // ===== Вариативные подписи wiki-ссылки по слою цели =====
+  // [вариант1:вариант2:...]((статья)), вариант := подпись|слой(,слой)* —
+  // подпись зависит от того, на какой СЛОЙ цели резолвится ИМЕННО ЭТОТ
+  // читатель (см. обсуждение "многослойные статьи", фаза 2). Разделители —
+  // ':' между вариантами, '|' между подписью и списком слоёв, ',' между
+  // несколькими слоями одного варианта (OR); внутри "кавычек" разделители не
+  // действуют — только так можно вписать в подпись/название слоя пробел,
+  // двоеточие, запятую и т.п. Пример:
+  //   [Кальций|Кальций:"Бодер Фагос - Великий маг"|Бодер Фагос - Великий маг]((...))
+
+  // Делит строку по delimiter, не трогая то, что внутри "кавычек".
+  function splitRespectingQuotes(str, delimiter) {
+    const parts = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '"') { inQuotes = !inQuotes; current += ch; continue; }
+      if (ch === delimiter && !inQuotes) { parts.push(current); current = ''; continue; }
+      current += ch;
+    }
+    parts.push(current);
+    return parts;
+  }
+
+  function unquoteToken(token) {
+    const t = token.trim();
+    return (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') ? t.slice(1, -1) : t;
+  }
+
+  // Обратная операция — собрать label обратно из variants (используется
+  // редактором: автозамена "/N" на название слоя, диалог вставки ссылки с
+  // вариантами, см. editor-manager.js). В кавычки берём токен, только если
+  // без них он бы сломал разбор (спецсимволы или пробел) — иначе минимально
+  // загромождаем текст.
+  function wikilinkTokenNeedsQuoting(token) {
+    return /[|:,"\s]/.test(token);
+  }
+  function quoteWikilinkToken(token) {
+    return wikilinkTokenNeedsQuoting(token) ? `"${token}"` : token;
+  }
+  function buildWikilinkVariantsLabel(variants) {
+    return variants.map((v) =>
+      `${quoteWikilinkToken(v.caption || '')}|${(v.layers || []).map(quoteWikilinkToken).join(',')}`
+    ).join(':');
+  }
+
+  // Возвращает [{caption, layers:[...]}, ...] если в подписи есть хотя бы
+  // один '|' (значит это вариативный синтаксис), иначе null — обычная
+  // ссылка со статичной подписью, ничего не разбираем (без '|' синтаксис
+  // вариантов невозможен — это единственный признак, ':' сам по себе
+  // ничего не значит: он законно встречается в обычном тексте подписи).
+  function parseWikilinkVariants(label) {
+    if (!label.includes('|')) return null;
+    return splitRespectingQuotes(label, ':').map((variantStr) => {
+      const pipeParts = splitRespectingQuotes(variantStr, '|');
+      const caption = unquoteToken(pipeParts[0] || '');
+      const layersPart = pipeParts.slice(1).join('|');
+      const layers = splitRespectingQuotes(layersPart, ',').map(unquoteToken).filter(Boolean);
+      return { caption, layers };
+    });
+  }
+
+  // Подпись первого варианта, чей список слоёв содержит resolvedTitle (без
+  // учёта регистра) — resolvedTitle это заголовок СЛОЯ цели, резолвнутого
+  // именно для текущего читателя (см. article.title в /api/articles-index —
+  // он уже отдаётся per-viewer, см. articles.routes.js). Пустая подпись у
+  // подошедшего варианта — тоже "авто" (сам resolvedTitle). Ничего не
+  // подошло (слой переименовали/убрали, опечатка) — null, откатываемся на
+  // обычный авто-заголовок цели вызывающим кодом (см. обсуждение, вариант А
+  // — без каскада переименований, тихий фолбэк).
+  function resolveWikilinkVariantCaption(variants, resolvedTitle) {
+    if (!resolvedTitle) return null;
+    const match = variants.find((v) => v.layers.some((l) => l.toLowerCase() === resolvedTitle.toLowerCase()));
+    return match ? (match.caption || resolvedTitle) : null;
+  }
+
   function splitWikilinkMarkers(text) {
     const parts = [];
     let pos = 0;
@@ -195,7 +272,18 @@
     return parts;
   }
 
-  function replaceWikilinkMarkersInDom(root, articlesIndexBySlug) {
+  // restrictedSlugs — Set<slug> статей, которые СУЩЕСТВУЮТ, но этому
+  // читателю не открыт ни один их слой (см. /api/articles-index,
+  // restrictedSlugs в ответе) — раньше визуально ничем не отличались от
+  // ссылки на несуществующую статью ("статьи ещё нет"); теперь отдельный
+  // класс wiki-link-restricted и подпись "Недоступно" для пустых ((скобок)) —
+  // настоящий заголовок цели читателю здесь показывать нельзя, он его и не
+  // получает (см. articles-index на сервере — title для restrictedSlugs не
+  // отдаётся вовсе). Собственную (не авто) подпись ссылки — ту, что явно
+  // набрал автор ТЕКУЩЕЙ статьи — по-прежнему показываем как есть: это уже
+  // текст, который читатель и так видит в этом же абзаце, ограничение цели
+  // тут ничего нового не раскрывает.
+  function replaceWikilinkMarkersInDom(root, articlesIndexBySlug, restrictedSlugs) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
@@ -214,13 +302,48 @@
         if (part.type === 'text') { frag.appendChild(document.createTextNode(part.value)); return; }
         const article = articlesIndexBySlug.get(part.slug);
         const exists = !!article;
+        const restricted = !exists && !!(restrictedSlugs && restrictedSlugs.has(part.slug));
         let label = part.label;
+        // Плейсхолдер "/N" (позиция слоя, набранная вслепую до того, как
+        // дописана цель, см. обсуждение "многослойные статьи", фаза 2) —
+        // должен был замениться на название слоя автозаменой в редакторе
+        // (editor-manager.js, по выбору статьи из автодополнения). Если он
+        // всё ещё тут — либо ссылку набрали вручную мимо автодополнения,
+        // либо цель ещё не резолвилась (например, статья была недоступна в
+        // момент набора) — честно помечаем как незавершённую, а не выдаём
+        // вслепую что-то похожее на осмысленный результат.
+        let hasUnresolvedPlaceholder = false;
         if (label.startsWith(WIKILINK_MARK_AUTO)) {
-          label = (exists && article.title) || label.slice(1);
+          if (exists && article.title) label = article.title;
+          else if (restricted) label = 'Недоступно';
+          else label = label.slice(1);
+        } else {
+          // Вариативная подпись по слою ([вариант1:вариант2]((...))) — см.
+          // parseWikilinkVariants выше. Без '|' в подписи — это не она,
+          // label остаётся как есть (обычная статичная подпись).
+          const variants = parseWikilinkVariants(label);
+          if (variants) {
+            hasUnresolvedPlaceholder = variants.some((v) => v.layers.some((l) => /^\/\d+$/.test(l.trim())));
+            const matched = exists ? resolveWikilinkVariantCaption(variants, article.title) : null;
+            if (matched != null) label = matched;
+            else if (exists && article.title) label = article.title; // ни один вариант не подошёл — обычный авто-заголовок
+            // Недоступная/несуществующая статья — своего заголовка нет, но
+            // подпись первого варианта уже написал автор ТЕКУЩЕЙ статьи, это
+            // не утечка (тот же принцип, что и для обычной, не вариативной,
+            // подписи, см. выше по файлу) — показываем её, а не "Недоступно"/
+            // сырой синтаксис. Пустая подпись у варианта — тогда уже нечего
+            // показать, вот там честное "Недоступно".
+            else if (restricted) label = variants[0]?.caption || 'Недоступно';
+            else label = variants[0]?.caption || label;
+          }
         }
         const a = document.createElement('a');
         a.href = 'javascript:void(0)';
-        a.className = exists ? 'wiki-link' : 'wiki-link-missing';
+        a.className = exists ? 'wiki-link' : (restricted ? 'wiki-link-restricted' : 'wiki-link-missing');
+        if (hasUnresolvedPlaceholder) {
+          a.classList.add('wiki-link-unresolved-variant');
+          a.title = 'Ссылка с вариантами по слою не дописана — есть незаполненный "/N"';
+        }
         a.dataset.slug = part.slug;
         a.textContent = label;
         frag.appendChild(a);
@@ -355,11 +478,16 @@
         const img = d.image
           ? `<div class="blk-infobox-art"><img src="${escapeAttr(d.image.src)}" alt="${escapeAttr(d.image.alt)}" loading="lazy"></div>`
           : '';
+        // Значения/подписи строк — тот же инлайн-markdown, что и везде
+        // (жирный/курсив/вики-ссылки и т.п.), а не сырой экранированный текст —
+        // иначе, например, [Название]((статья)) в значении инфобокса
+        // показывалось буквально в виде скобок вместо ссылки (баг "форматирование
+        // в инфоблоке не работает").
         const rows = d.rows.map((r) =>
-          `<div class="blk-infobox-row"><dt>${escapeHtml(r.label)}</dt><dd>${escapeHtml(r.value)}</dd></div>`
+          `<div class="blk-infobox-row"><dt>${renderInline(marked, r.label)}</dt><dd>${renderInline(marked, r.value)}</dd></div>`
         ).join('');
         return `<aside class="blk-infobox">`
-          + (d.title ? `<div class="blk-infobox-head">${escapeHtml(d.title)}</div>` : '')
+          + (d.title ? `<div class="blk-infobox-head">${renderInline(marked, d.title)}</div>` : '')
           + img
           + `<dl class="blk-infobox-rows">${rows}</dl>`
           + `</aside>`;
@@ -390,8 +518,11 @@
    * articlesIndexBySlug — Map<slug, {slug,title,tags}> (см. loadArticlesIndex
    * в editor-manager.js / ibripedia.js) — нужна, чтобы отличить существующую
    * wiki-ссылку от несуществующей (класс wiki-link / wiki-link-missing).
+   * restrictedSlugs — Set<slug> статей, которые существуют, но недоступны
+   * читателю ни на одном слое (см. replaceWikilinkMarkersInDom выше) —
+   * класс wiki-link-restricted вместо wiki-link-missing.
    */
-  async function renderArticleBlocks(doc, articlesIndexBySlug) {
+  async function renderArticleBlocks(doc, articlesIndexBySlug, restrictedSlugs) {
     const blockList = doc && Array.isArray(doc.blocks) ? doc.blocks : [];
     if (!blockList.length) {
       return '<p class="preview-empty">Нечего показывать — в статье пока нет ни одного блока.</p>';
@@ -411,7 +542,7 @@
 
     const container = document.createElement('div');
     container.innerHTML = clean;
-    replaceWikilinkMarkersInDom(container, articlesIndexBySlug || new Map());
+    replaceWikilinkMarkersInDom(container, articlesIndexBySlug || new Map(), restrictedSlugs);
     highlightHashtagsInDom(container);
     return container.innerHTML;
   }
@@ -456,11 +587,33 @@
     return parts.join(' ');
   }
 
-  function blocksToExcerptText(doc, maxLen = 180) {
+  // Подпись wiki-ссылки для excerpt — тот же резолв, что и в
+  // replaceWikilinkMarkersInDom (пустая подпись -> заголовок цели,
+  // вариативная по слою [вариант1|слой1:...]((цель)) -> вариант, подошедший
+  // РЕЗОЛВНУТОМУ для ЭТОГО читателя заголовку цели, см. articlesIndexBySlug),
+  // а не сырой синтаксис — иначе, например, [название]((статья)) в начале
+  // текста показывалось в карточке буквально, со скобками, а вариативная
+  // подпись по слою — как есть, с "|"/":" ("многослойная система статей":
+  // пересылка на пересылку к под-статье должна показывать ПРАВИЛЬНЫЙ,
+  // резолвнутый для читателя вариант, а не первый попавшийся/сырой).
+  function resolveExcerptWikilinkLabel(label, target, articlesIndexBySlug) {
+    const article = articlesIndexBySlug ? articlesIndexBySlug.get(slugify(target.trim())) : null;
+    const ownLabel = label.trim();
+    if (!ownLabel) return (article && article.title) || target.trim();
+    const variants = parseWikilinkVariants(ownLabel);
+    if (!variants) return ownLabel;
+    const matched = article ? resolveWikilinkVariantCaption(variants, article.title) : null;
+    if (matched != null) return matched;
+    if (article && article.title) return article.title;
+    return variants[0]?.caption || target.trim();
+  }
+
+  function blocksToExcerptText(doc, maxLen = 180, articlesIndexBySlug = null) {
     const blockList = doc && Array.isArray(doc.blocks) ? doc.blocks : [];
     const raw = collectExcerptText(blockList)
       // [Имя]((статья)) — подпись, а без неё ([]((статья))) — сама цель
-      .replace(/\[([^\]\n]*)\]\(\(([^()#\n]+)(?:#[^()\n]*)?\)\)/g, (m, label, target) => label.trim() || target.trim())
+      .replace(/\[([^\]\n]*)\]\(\(([^()#\n]+)(?:#[^()\n]*)?\)\)/g, (m, label, target) =>
+        resolveExcerptWikilinkLabel(label, target, articlesIndexBySlug))
       .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/^[ \t]*[-*+][ \t]+/gm, '')
       .replace(/^[ \t]*\d+\.[ \t]+/gm, '')
@@ -474,4 +627,11 @@
   window.renderArticleBlocks = renderArticleBlocks;
   window.blocksToExcerptText = blocksToExcerptText;
   window.attachBlocksInteractions = attachInteractions;
+  // Разбор/сборка вариативных подписей wiki-ссылки по слою цели ([вариант1:
+  // вариант2]((статья))) — переиспользуются редактором (editor-manager.js):
+  // автозамена "/N" на название слоя после выбора статьи в автодополнении,
+  // подсветка нерезолвнутых плейсхолдеров, диалог вставки ссылки с вариантами.
+  window.parseWikilinkVariants = parseWikilinkVariants;
+  window.buildWikilinkVariantsLabel = buildWikilinkVariantsLabel;
+  window.WIKILINK_PARSE_RE_G = WIKILINK_PARSE_RE_G;
 })();

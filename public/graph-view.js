@@ -12,6 +12,16 @@
 (function () {
   'use strict';
 
+  // Выход из полноэкранного режима графа по Escape — один обработчик на весь
+  // модуль (а не по одному на каждый visit дашборда через SPA-роутер), чтобы
+  // не копить дублирующиеся document-level листенеры при повторных заходах
+  // на вкладку. initGraphPage переписывает ссылку при каждом входе в
+  // fullscreen и обнуляет её при уходе/перезаходе на страницу.
+  let exitActiveGraphFullscreen = null;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && exitActiveGraphFullscreen) exitActiveGraphFullscreen();
+  });
+
   const D3_SELECTION_VERSION = '3.0.0';
   const D3_DEPS = `d3-selection@${D3_SELECTION_VERSION}`;
 
@@ -53,6 +63,15 @@
   function tagNodeColor(node, tagColors) {
     const primary = primaryTagOf(node, tagColors);
     return primary ? primary.color : NO_TAG_COLOR;
+  }
+
+  // Узел-заглушка (locked:true, см. /api/articles-graph на сервере) — статья
+  // существует, но этому читателю не открыт ни один её слой; сервер
+  // сознательно не отдаёт её title/tags (не спойлерить сам факт секрета
+  // названием), поэтому и подпись, и тултип — заглушка, а не n.title
+  // (который для таких узлов null).
+  function nodeDisplayTitle(n) {
+    return n.locked ? '???' : (n.title || n.slug);
   }
 
   // ---------------------------------------------------------------------------
@@ -838,7 +857,7 @@
       .selectAll('g')
       .data(nodes)
       .join('g')
-      .attr('class', (n) => 'graph-node' + (n.slug === centerSlug ? ' graph-node-center' : ''))
+      .attr('class', (n) => 'graph-node' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : ''))
       .call(d3.drag()
         .on('start', (event, n) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -871,7 +890,7 @@
       .attr('class', 'graph-node-circle')
       .style('fill', fillFor);
 
-    node.append('title').text((n) => n.title);
+    node.append('title').text(nodeDisplayTitle);
 
     // Подписи — отдельным слоем ПОВЕРХ всех точек (а не внутри группы своего
     // узла): иначе кружок соседнего узла, нарисованный позже в DOM, закрывал
@@ -886,7 +905,7 @@
       .selectAll('g')
       .data([...nodes].sort((a, b) => a.degree - b.degree))
       .join('g')
-      .attr('class', (n) => 'graph-label' + (n.slug === centerSlug ? ' graph-node-center' : ''));
+      .attr('class', (n) => 'graph-label' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : ''));
 
     const labelText = label.append('text')
       .attr('class', 'graph-node-label')
@@ -894,7 +913,7 @@
       .attr('dy', (n) => -(radiusFor(n) + 4))
       .style('font-size', (n) => `${labelSizeFor(n)}px`)
       .style('--label-hover-scale', labelHoverScaleFor)
-      .text((n) => n.title);
+      .text(nodeDisplayTitle);
 
     // Состояние подсветки живёт и на точке, и на её подписи.
     const setNodeClass = (name, predicate) => {
@@ -903,9 +922,11 @@
       glow.classed(name, predicate);
     };
 
-    node.style('cursor', onNodeClick ? 'pointer' : 'default');
+    node.style('cursor', (n) => n.locked ? 'not-allowed' : (onNodeClick ? 'pointer' : 'default'));
     if (onNodeClick) {
-      node.on('click', (event, n) => onNodeClick(n.slug));
+      // Узел-заглушка (locked) — недоступная статья; клик по нему ничего не
+      // открывает (сервер бы всё равно ответил 403), только тултип "???".
+      node.on('click', (event, n) => { if (!n.locked) onNodeClick(n.slug); });
     }
 
     // Подсветка: набор "главных" slug (наведённый узел, либо совпадения
@@ -958,7 +979,8 @@
       const term = searchTerm();
       if (!term) return false;
       if ((n.tags || []).some((t) => tagMatchesTerm(t, term))) return true;
-      return !activeSearchQuery.startsWith('#') && n.title.toLowerCase().includes(term);
+      // Узел-заглушка (locked) без названия — по тексту не ищем, нечего искать.
+      return !n.locked && !activeSearchQuery.startsWith('#') && n.title.toLowerCase().includes(term);
     }
 
     function searchMatches() {
@@ -1307,6 +1329,11 @@
     const container = document.getElementById('graphContainer');
     if (!container) return;
 
+    // Свежий заход на дашборд (в т.ч. повторный через SPA-роутер) — сбрасываем
+    // ссылку на fullscreen-выход от предыдущего визита: разметка dashboard.html
+    // перезагружена целиком, старая карточка отсоединена от DOM.
+    exitActiveGraphFullscreen = null;
+
     container.innerHTML = '<div class="graph-empty">Загрузка графа…</div>';
 
     const result = await window.apiClient.makeAuthenticatedRequest('/api/articles-graph');
@@ -1407,6 +1434,30 @@
     });
 
     document.getElementById('graphExportPng')?.addEventListener('click', () => exportGraphPng(container));
+
+    // Полноэкранный режим: разворачиваем ВСЮ карточку (.graph-card-top —
+    // заголовок + панель фильтров/поиска + сам граф), а не только
+    // #graphContainer, — поиск и остальные controls остаются на прежнем
+    // месте на панели, просто она растягивается на весь экран. Раскладка
+    // графа (силы, viewBox) посчитана под размер контейнера на момент
+    // renderGraph, поэтому при входе/выходе пересчитываем её через rerender().
+    const fullscreenBtn = document.getElementById('graphFullscreenToggle');
+    const cardEl = container.closest('.graph-card-top');
+    function setGraphFullscreen(on) {
+      if (!cardEl) return;
+      cardEl.classList.toggle('graph-fullscreen', on);
+      if (fullscreenBtn) {
+        fullscreenBtn.innerHTML = on
+          ? '<i class="fas fa-compress"></i> Свернуть'
+          : '<i class="fas fa-expand"></i> Во весь экран';
+        fullscreenBtn.title = on ? 'Свернуть граф' : 'Открыть граф на весь экран';
+      }
+      exitActiveGraphFullscreen = on ? () => setGraphFullscreen(false) : null;
+      rerender();
+    }
+    fullscreenBtn?.addEventListener('click', () => {
+      setGraphFullscreen(!cardEl?.classList.contains('graph-fullscreen'));
+    });
 
     await rerender();
   }

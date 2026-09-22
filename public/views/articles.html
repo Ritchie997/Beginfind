@@ -24,7 +24,13 @@
       <div class="form-section-grid">
         <!-- Заголовок -->
         <div class="form-group">
-          <label class="form-label" for="articleTitle">Заголовок статьи</label>
+          <label class="form-label" for="articleTitle">
+            Заголовок статьи
+            <!-- Видно только в многослойном режиме (см. renderArticleLayersList
+                 в spa-router.js) — поля "Заголовок"/"Содержание статьи" ниже в
+                 этом режиме относятся к ВЫБРАННОМУ слою, а не ко всей статье. -->
+            <span id="articleLayerEditingHint" class="layer-editing-hint" hidden></span>
+          </label>
           <input type="text" id="articleTitle" class="form-input" placeholder="Введите заголовок">
         </div>
 
@@ -59,27 +65,31 @@
       </div>
 
       <div class="form-section-grid">
-        <!-- Статус статьи -->
-        <div class="form-group">
-          <label class="form-label" for="articleLocked">Статус статьи</label>
-          <select id="articleLocked" class="form-select">
-            <option value="false">🔓 Открытая</option>
-            <option value="true">🔒 Закрытая (только по ролям)</option>
-          </select>
-        </div>
-
-        <!-- Сервер -->
+        <!-- Сервер — виден всегда, нужен и обычной статье, и многослойной
+             (сервер задаёт каталог ролей "Доступ к слою" ниже). -->
         <div class="form-group">
           <label class="form-label" for="articleServer">Сервер</label>
           <select id="articleServer" class="form-select">
             <option value="">Выберите сервер</option>
           </select>
         </div>
+
+        <!-- Статус статьи/"Доступ для" — простой замок на статью целиком,
+             отдельный от многослойности (см. articleLayersToggle ниже). При
+             включённых слоях этот блок скрывается — доступ определяется
+             ролями каждого слоя, а не одним общим списком. -->
+        <div class="form-group" id="articleLegacyAccessRow">
+          <label class="form-label" for="articleLocked">Статус статьи</label>
+          <select id="articleLocked" class="form-select">
+            <option value="false">🔓 Открытая</option>
+            <option value="true">🔒 Закрытая (только по ролям)</option>
+          </select>
+        </div>
       </div>
 
       <!-- Доступ для (роли) — тот же чиповый компонент, что и у тегов,
            чтобы оба поля выглядели одинаково (см. .chip-field в global-styles.css). -->
-      <div class="form-group full-width">
+      <div class="form-group full-width" id="articleLegacyRolesRow">
         <label class="form-label">Доступ для</label>
         <div id="articleRolesField" class="chip-field">
           <div class="chip-field-box">
@@ -88,6 +98,45 @@
           </div>
           <div class="chip-field-dropdown" hidden></div>
           <input type="hidden" class="chip-field-hidden">
+        </div>
+      </div>
+
+      <!-- Многослойность (см. обсуждение "многослойные статьи") — разным
+           ролям видна разная версия заголовка и текста ОДНОЙ и той же
+           статьи (пересылки на неё — те же, не меняются в зависимости от
+           слоя). Excerpt/обложка — общие на статью (автовычисляются из
+           текста активного слоя, как и раньше для обычных статей). -->
+      <div class="form-group full-width">
+        <label class="checkbox-field">
+          <input type="checkbox" id="articleLayersToggle">
+          <span>Многослойная статья — разным ролям видна разная версия заголовка и текста</span>
+        </label>
+
+        <div id="articleLayersPanel" hidden>
+          <div id="articleLayersList" class="article-layers-list"></div>
+          <button type="button" id="articleLayersAddBtn" class="btn btn-secondary btn-sm">
+            <i class="fas fa-plus"></i> Добавить слой выше
+          </button>
+          <!-- Копирует выбранный слой (роли/заголовок/текст) как новый слой
+               выше — чтобы не переписывать всё заново, когда следующий слой
+               лишь немного отличается от текущего (см. renderArticleLayersList/
+               duplicateActiveLayer в spa-router.js). -->
+          <button type="button" id="articleLayersDuplicateBtn" class="btn btn-secondary btn-sm">
+            <i class="fas fa-copy"></i> Дублировать слой
+          </button>
+
+          <div class="form-group full-width" style="margin-top:12px;">
+            <label class="form-label">Доступ к выбранному слою</label>
+            <div id="articleLayerRolesField" class="chip-field">
+              <div class="chip-field-box">
+                <div class="chip-field-chips"></div>
+                <input type="text" class="chip-field-input" placeholder="Пусто — слой публичный...">
+              </div>
+              <div class="chip-field-dropdown" hidden></div>
+              <input type="hidden" class="chip-field-hidden">
+            </div>
+            <div class="form-hint">Пусто — слой виден всем. Роль — с общего каталога или с сервера статьи. Заголовок и текст этого слоя — поля "Заголовок статьи" и "Содержание статьи" выше/ниже.</div>
+          </div>
         </div>
       </div>
 
@@ -240,6 +289,7 @@
                   <button type="button" class="toolbar-button" data-block-command="divider" title="Горизонтальная линия"><i class="fas fa-minus"></i></button>
                   <button type="button" class="toolbar-button" data-inline-command="link" title="Ссылка (Ctrl+K)"><i class="fas fa-link"></i></button>
                   <button type="button" class="toolbar-button" data-inline-command="wikilink" title="Wiki-ссылка на статью: [название]((статья)); без названия []((статья)) ссылка показывает название самой статьи"><i class="fas fa-file-alt"></i></button>
+                  <button type="button" class="toolbar-button" data-inline-command="wikilink-variants" title="Ссылка на статью с разной подписью по слою — сначала выбираешь статью, потом вписываешь подпись под каждый её слой"><i class="fas fa-layer-group"></i></button>
                   <button type="button" class="toolbar-button" data-block-command="image" title="Изображение"><i class="fas fa-image"></i></button>
                 </div>
                 <span class="toolbar-group-label">вставки</span>
@@ -529,6 +579,147 @@
 .articles-page .author-coauthors[hidden],
 .articles-page .checkbox-field[hidden],
 .articles-page .authors-admin[hidden] {
+  display: none;
+}
+
+/* Многослойность (см. articleLayersToggle/renderArticleLayersList в
+   spa-router.js) — заголовок статьи выше становится подсказкой "какой слой
+   сейчас редактируется", а сами слои — пилюли с активным/удалить. */
+.articles-page .layer-editing-hint {
+  font-weight: 400;
+  color: var(--blurple);
+  font-size: 12px;
+  margin-left: 6px;
+}
+.articles-page .article-layers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.articles-page .article-layer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  border-radius: 14px;
+  padding: 4px 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.articles-page .article-layer-pill:hover {
+  background: var(--background-accent);
+}
+.articles-page .article-layer-pill.active {
+  background: var(--blurple);
+  border-color: var(--blurple);
+  color: #fff;
+}
+.articles-page .article-layer-pill-remove,
+.articles-page .article-layer-pill-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.articles-page .article-layer-pill-remove:hover,
+.articles-page .article-layer-pill-move:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.15);
+}
+/* Перестановка слоя (менять глубину) — стрелки на краях пилюли; на самом
+   краю стека (публичнее некуда / закрытее некуда) соответствующая стрелка
+   выключена, а не просто скрыта — чтобы порядок пилюль не "прыгал". */
+.articles-page .article-layer-pill-move {
+  font-size: 11px;
+  width: 16px;
+  height: 16px;
+}
+.articles-page .article-layer-pill-move:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+#articleLegacyAccessRow[hidden],
+#articleLegacyRolesRow[hidden] {
+  display: none;
+}
+
+/* Диалог "Ссылка с вариантами по слою" (insertWikilinkVariants/
+   ensureWikilinkVariantsDialogEl в editor-manager.js) — .modal-overlay/
+   .modal-box и т.п. уже стилизованы глобально (global-styles.css), здесь —
+   только содержимое двух шагов (поиск статьи / список слоёв). */
+.wikilink-dialog-box {
+  width: 100%;
+  max-width: 460px;
+}
+.wikilink-dialog-results {
+  margin-top: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wikilink-dialog-result {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 14px;
+}
+.wikilink-dialog-result:hover {
+  background: var(--background-accent);
+}
+.wikilink-dialog-empty {
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.wikilink-dialog-target-name {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--header-primary);
+}
+.wikilink-dialog-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.wikilink-dialog-layer-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 2fr;
+  align-items: center;
+  gap: 8px;
+}
+.wikilink-dialog-layer-name {
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* .btn задаёт display:inline-flex той же специфичностью, что и обычный
+   [hidden] — без этого явного переопределения кнопки "Назад"/"Вставить" в
+   диалоге вариантов оставались бы видимыми на шаге поиска (та же причина,
+   что и у .checkbox-field[hidden] выше в этом файле). */
+.wikilink-dialog-box .btn[hidden] {
   display: none;
 }
 

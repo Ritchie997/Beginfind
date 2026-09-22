@@ -396,9 +396,12 @@
     async loadArticlesIndex() {
       try {
         const result = await window.apiClient.makeAuthenticatedRequest('/api/articles-index');
-        this.articlesIndex = (result.success && Array.isArray(result.data)) ? result.data : [];
+        const data = (result.success && result.data) || {};
+        this.articlesIndex = Array.isArray(data.accessible) ? data.accessible : [];
+        this.restrictedSlugs = new Set(Array.isArray(data.restrictedSlugs) ? data.restrictedSlugs : []);
       } catch (e) {
         this.articlesIndex = [];
+        this.restrictedSlugs = new Set();
       }
       this.articlesIndexBySlug = new Map(this.articlesIndex.map(a => [a.slug, a]));
     }
@@ -714,6 +717,158 @@
       refocusField(el);
     }
 
+    // ===== Диалог вставки ссылки с вариантами подписи по слою =====
+    // (см. обсуждение "многослойные статьи", фаза 2) — второй, дружелюбный
+    // путь рядом с ручным набором "[подпись|/N:...]((статья))": сначала
+    // выбираешь статью из поиска (цель уже известна сразу, а не после), затем
+    // видишь настоящий список её слоёв и вписываешь подпись под нужные —
+    // никаких "/N" и путаницы, что и зачем. Тот же паттерн модалки, что и у
+    // .modal-overlay/.modal-box в global-styles.css (см. confirm-dialog.js).
+
+    insertWikilinkVariants() {
+      const target = this._activeTextInput;
+      if (!target) { window.showMessage?.('Сначала кликните в текстовый блок', 'warning'); return; }
+      this.openWikilinkVariantsDialog().then((result) => {
+        if (!result) return; // отмена
+        const el = target.el;
+        if (!document.body.contains(el)) return;
+        const start = el.selectionStart, end = el.selectionEnd;
+        const insert = `[${result.label}]((${result.target}))`;
+        el.value = el.value.slice(0, start) + insert + el.value.slice(end);
+        el.selectionStart = el.selectionEnd = start + insert.length;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        refocusField(el);
+      });
+    }
+
+    ensureWikilinkVariantsDialogEl() {
+      if (this._wlDialogEl) return this._wlDialogEl;
+      const el = document.createElement('div');
+      el.className = 'modal-overlay wikilink-dialog-overlay';
+      el.hidden = true;
+      el.innerHTML = `
+        <div class="modal-box wikilink-dialog-box" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <h3>Ссылка с вариантами по слою</h3>
+            <button type="button" class="modal-close" id="wlDialogClose" title="Закрыть">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="wlDialogSearchStep">
+              <input type="text" id="wlDialogSearch" class="form-input" placeholder="Найти статью…" autocomplete="off">
+              <div id="wlDialogResults" class="wikilink-dialog-results"></div>
+            </div>
+            <div id="wlDialogLayersStep" hidden>
+              <p class="wikilink-dialog-target-name" id="wlDialogTargetName"></p>
+              <div id="wlDialogLayersList" class="wikilink-dialog-layers"></div>
+              <div class="form-hint">Подпись пустая — читатели с этим слоем увидят обычное авто-название статьи.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="wlDialogBack" hidden>← Назад</button>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn-secondary" id="wlDialogCancel">Отмена</button>
+            <button type="button" class="btn btn-primary" id="wlDialogInsert" hidden>Вставить</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+      this._wlDialogEl = el;
+
+      el.addEventListener('mousedown', (e) => { if (e.target === el) this.closeWikilinkVariantsDialog(null); });
+      el.querySelector('#wlDialogClose').addEventListener('click', () => this.closeWikilinkVariantsDialog(null));
+      el.querySelector('#wlDialogCancel').addEventListener('click', () => this.closeWikilinkVariantsDialog(null));
+      el.querySelector('#wlDialogBack').addEventListener('click', () => this.showWikilinkDialogSearchStep());
+      el.querySelector('#wlDialogInsert').addEventListener('click', () => this.confirmWikilinkVariantsDialog());
+      el.querySelector('#wlDialogSearch').addEventListener('input', (e) => this.renderWikilinkDialogResults(e.target.value));
+
+      return el;
+    }
+
+    openWikilinkVariantsDialog() {
+      const el = this.ensureWikilinkVariantsDialogEl();
+      this._wlDialogState = { slug: null, title: null, layers: [] };
+      this.showWikilinkDialogSearchStep();
+      el.querySelector('#wlDialogSearch').value = '';
+      this.renderWikilinkDialogResults('');
+      el.hidden = false;
+      setTimeout(() => el.querySelector('#wlDialogSearch')?.focus(), 0);
+      return new Promise((resolve) => { this._wlDialogResolve = resolve; });
+    }
+
+    closeWikilinkVariantsDialog(result) {
+      const el = this._wlDialogEl;
+      if (el) el.hidden = true;
+      const resolve = this._wlDialogResolve;
+      this._wlDialogResolve = null;
+      if (resolve) resolve(result);
+    }
+
+    showWikilinkDialogSearchStep() {
+      const el = this._wlDialogEl;
+      if (!el) return;
+      el.querySelector('#wlDialogSearchStep').hidden = false;
+      el.querySelector('#wlDialogLayersStep').hidden = true;
+      el.querySelector('#wlDialogBack').hidden = true;
+      el.querySelector('#wlDialogInsert').hidden = true;
+      setTimeout(() => el.querySelector('#wlDialogSearch')?.focus(), 0);
+    }
+
+    renderWikilinkDialogResults(query) {
+      const el = this._wlDialogEl;
+      const listEl = el.querySelector('#wlDialogResults');
+      const q = query.trim().toLowerCase();
+      const options = (q ? this.articlesIndex.filter((a) => a.title.toLowerCase().includes(q)) : this.articlesIndex).slice(0, 30);
+      listEl.innerHTML = options.length
+        ? options.map((a) => `<button type="button" class="wikilink-dialog-result" data-slug="${escapeHtml(a.slug)}">${escapeHtml(a.title)}</button>`).join('')
+        : '<div class="wikilink-dialog-empty">Ничего не найдено</div>';
+      listEl.querySelectorAll('button[data-slug]').forEach((btn) => {
+        btn.addEventListener('click', () => this.selectWikilinkDialogTarget(btn.dataset.slug, btn.textContent));
+      });
+    }
+
+    async selectWikilinkDialogTarget(slug, title) {
+      const el = this._wlDialogEl;
+      this._wlDialogState.slug = slug;
+      this._wlDialogState.title = title;
+      el.querySelector('#wlDialogTargetName').textContent = `Статья: ${title}`;
+      el.querySelector('#wlDialogLayersList').innerHTML = '<div class="wikilink-dialog-empty">Загрузка слоёв…</div>';
+      el.querySelector('#wlDialogSearchStep').hidden = true;
+      el.querySelector('#wlDialogLayersStep').hidden = false;
+      el.querySelector('#wlDialogBack').hidden = false;
+      el.querySelector('#wlDialogInsert').hidden = false;
+
+      const layerTitles = await this.fetchArticleLayerTitles(slug);
+      // Статья без явных слоёв (обычная) — один "слой" с её собственным
+      // названием, подпись под него — то же самое, что и обычная кастомная
+      // подпись у простой ссылки, диалог остаётся полезным и для них.
+      this._wlDialogState.layers = (layerTitles && layerTitles.length) ? layerTitles : [title];
+      if (el.querySelector('#wlDialogSearchStep').hidden === false || this._wlDialogState.slug !== slug) return; // диалог уже закрыли/сменили статью, пока грузилось
+
+      const listEl = el.querySelector('#wlDialogLayersList');
+      listEl.innerHTML = this._wlDialogState.layers.map((layerTitle, i) => `
+        <div class="wikilink-dialog-layer-row">
+          <span class="wikilink-dialog-layer-name">${escapeHtml(layerTitle)}</span>
+          <input type="text" class="form-input" data-layer-index="${i}" placeholder="Подпись для этого слоя (необязательно)">
+        </div>
+      `).join('');
+    }
+
+    confirmWikilinkVariantsDialog() {
+      const el = this._wlDialogEl;
+      const state = this._wlDialogState;
+      if (!state.slug) { this.closeWikilinkVariantsDialog(null); return; }
+      const inputs = [...el.querySelectorAll('#wlDialogLayersList input[data-layer-index]')];
+      const variants = inputs
+        .map((input) => ({ caption: input.value.trim(), layer: state.layers[parseInt(input.dataset.layerIndex, 10)] }))
+        .filter((v) => v.caption); // только слои, для которых реально вписали подпись
+
+      // Ни одной кастомной подписи не вписали — обычная авто-ссылка []((статья)),
+      // без вариативного синтаксиса вообще (нечего было бы вариировать).
+      const label = variants.length && window.buildWikilinkVariantsLabel
+        ? window.buildWikilinkVariantsLabel(variants.map((v) => ({ caption: v.caption, layers: [v.layer] })))
+        : '';
+      this.closeWikilinkVariantsDialog({ target: state.slug, label });
+    }
+
     // ===== Автодополнение wiki-ссылок [текст]((статья)) =====
 
     ensureSuggestEl() {
@@ -806,7 +961,17 @@
       const closeAlready = after.startsWith('))');
       // Название с ( ) # в ссылку не записать — ими ссылка разбирается
       // (см. mentionTarget в articles-store.js), поэтому вместо него slug.
-      const target = /[()#]/.test(title) && active.dataset.slug ? active.dataset.slug : title;
+      // Второе условие — то же самое, что уже делает mentionTarget на
+      // сервере: название годится как цель ссылки, только если оно САМО
+      // slugify()-ится обратно в правильный slug. Для обычной статьи так и
+      // есть (slug и получен из title при создании), но title в этом списке
+      // — уже резолвнутый ПОД ЧИТАТЕЛЯ заголовок слоя многослойной статьи
+      // (см. /api/articles-index), а он может вообще не совпадать с тем
+      // заголовком, из которого когда-то получился slug — тогда без этой
+      // проверки ссылка вела бы в никуда.
+      const slug = active.dataset.slug;
+      const titleRoundTrips = !!slug && slugify(title) === slug;
+      const target = (titleRoundTrips && !/[()#]/.test(title)) ? title : (slug || title);
       const insert = target + (closeAlready ? '' : '))');
       ta.value = ta.value.slice(0, openStart) + insert + after;
       const pos = openStart + insert.length;
@@ -814,6 +979,83 @@
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       this.closeSuggest();
       ta.focus({ preventScroll: true });
+      // Цель только что стала известна — если в подписи перед ней остались
+      // плейсхолдеры "/N" (слой по позиции, набранный вслепую, см.
+      // обсуждение "многослойные статьи", фаза 2), заменяем их на настоящие
+      // названия слоёв этой статьи.
+      if (active.dataset.slug) this.resolveWikilinkLayerPlaceholders(ta, openStart, active.dataset.slug);
+    }
+
+    // Слои статьи по slug — с кэшем на время сессии редактора (не ходим в
+    // сеть повторно за той же статьёй при каждой правке). null — статья не
+    // резолвится (недоступна/не существует ещё) — вызывающий код просто
+    // ничего не подставляет, оставляя "/N" как есть (подсветится
+    // wiki-link-unresolved-variant в превью, см. blocks-renderer.js).
+    async fetchArticleLayerTitles(slug) {
+      if (!this._layerTitlesCache) this._layerTitlesCache = new Map();
+      if (this._layerTitlesCache.has(slug)) return this._layerTitlesCache.get(slug);
+      const promise = (async () => {
+        try {
+          const result = await window.apiClient.makeAuthenticatedRequest(`/api/articles/${encodeURIComponent(slug)}/layers`);
+          if (!result.success || !result.data || !Array.isArray(result.data.layers)) return null;
+          return result.data.layers.map((l) => l.title || '');
+        } catch (e) {
+          return null;
+        }
+      })();
+      this._layerTitlesCache.set(slug, promise);
+      return promise;
+    }
+
+    // Заменяет "/N" в подписи ссылки, только что завершённой в поле ta
+    // (openStart — позиция сразу после "((" этой ссылки), на настоящее
+    // название N-го слоя статьи slug. Асинхронно (нужен поход в сеть) —
+    // пока ждём, пользователь мог продолжить печатать, поэтому саму замену
+    // после ответа ищем заново по точному тексту "[label](( " — нашли,
+    // значит пользователь его не трогал, не нашли — просто ничего не делаем
+    // (безопаснее промолчать, чем угадывать и испортить то, что уже не то).
+    async resolveWikilinkLayerPlaceholders(ta, openStart, slug) {
+      if (!window.parseWikilinkVariants || !window.buildWikilinkVariantsLabel) return;
+      const beforeTarget = ta.value.slice(0, openStart);
+      if (!beforeTarget.endsWith(']((')) return;
+      const closeBracketIdx = beforeTarget.length - 3;
+      if (beforeTarget[closeBracketIdx] !== ']') return;
+      const openBracketIdx = beforeTarget.lastIndexOf('[', closeBracketIdx - 1);
+      if (openBracketIdx === -1) return;
+      const label = beforeTarget.slice(openBracketIdx + 1, closeBracketIdx);
+      if (!/\/\d+/.test(label)) return; // нет плейсхолдеров — нечего делать
+      const variants = window.parseWikilinkVariants(label);
+      if (!variants) return;
+
+      const layerTitles = await this.fetchArticleLayerTitles(slug);
+      if (!layerTitles || !ta.isConnected) return;
+
+      let changed = false;
+      const newVariants = variants.map((v) => ({
+        caption: v.caption,
+        layers: v.layers.map((l) => {
+          const pm = /^\/(\d+)$/.exec(l.trim());
+          if (!pm) return l;
+          const resolvedTitle = layerTitles[parseInt(pm[1], 10)];
+          if (resolvedTitle == null) return l; // индекс вне диапазона — оставляем, подсветится в превью
+          changed = true;
+          return resolvedTitle;
+        })
+      }));
+      if (!changed) return;
+
+      const oldFull = `[${label}]((`;
+      const idx = ta.value.indexOf(oldFull);
+      if (idx === -1) return; // пользователь уже поменял этот текст — не трогаем
+      const newLabel = window.buildWikilinkVariantsLabel(newVariants);
+      const before2 = ta.value.slice(0, idx);
+      const after2 = ta.value.slice(idx + oldFull.length);
+      const cursorAfterReplaced = ta.selectionStart >= idx + oldFull.length;
+      ta.value = before2 + `[${newLabel}]((` + after2;
+      if (cursorAfterReplaced) {
+        ta.selectionStart = ta.selectionEnd = ta.selectionStart + (newLabel.length - label.length);
+      }
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     // ===== Код-блок =====
@@ -1593,6 +1835,7 @@
         case 'spoiler': this.applyInlineFormat('||'); break;
         case 'link': this.insertLinkInline(); break;
         case 'wikilink': this.insertWikilinkInline(); break;
+        case 'wikilink-variants': this.insertWikilinkVariants(); break;
       }
     }
 
@@ -1762,7 +2005,7 @@
     async renderPreview() {
       if (!this.previewEl || !window.renderArticleBlocks) return;
       try {
-        this.previewEl.innerHTML = await window.renderArticleBlocks(this.doc, this.articlesIndexBySlug);
+        this.previewEl.innerHTML = await window.renderArticleBlocks(this.doc, this.articlesIndexBySlug, this.restrictedSlugs);
         window.attachBlocksInteractions?.(this.previewEl);
       } catch (e) {
         console.error('Ошибка рендера превью:', e);
@@ -1775,9 +2018,13 @@
       this.previewEl.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
-        const wikiEl = target.closest('.wiki-link, .wiki-link-missing');
+        const wikiEl = target.closest('.wiki-link, .wiki-link-missing, .wiki-link-restricted');
         if (wikiEl) {
           event.preventDefault();
+          if (wikiEl.classList.contains('wiki-link-restricted')) {
+            window.showMessage?.('Эта статья недоступна вашей роли', 'info');
+            return;
+          }
           this.navigateToWikiLink(wikiEl.dataset.slug, wikiEl.classList.contains('wiki-link'));
           return;
         }

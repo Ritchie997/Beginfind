@@ -274,11 +274,14 @@
 
   // Краткий текст для карточки — явный excerpt из формы статьи, а если его
   // не заполнили, вытаскиваем текст из дерева блоков (см.
-  // window.blocksToExcerptText в blocks-renderer.js).
-  function makeExcerpt(article) {
+  // window.blocksToExcerptText в blocks-renderer.js). articlesIndexBySlug
+  // передаём дальше — нужен, чтобы вики-ссылка в начале текста показывала
+  // резолвленное для ЭТОГО читателя название цели (в т.ч. правильный вариант
+  // подписи по слою), а не сырой синтаксис [подпись]((статья)).
+  function makeExcerpt(article, articlesIndexBySlug) {
     const explicit = article.excerpt && article.excerpt.trim();
     if (explicit) return explicit.length <= 180 ? explicit : explicit.slice(0, 180).replace(/\s+\S*$/, '') + '…';
-    return window.blocksToExcerptText ? window.blocksToExcerptText(article.content, 180) : '';
+    return window.blocksToExcerptText ? window.blocksToExcerptText(article.content, 180, articlesIndexBySlug) : '';
   }
 
   class IbripediaManager {
@@ -462,14 +465,20 @@
     }
 
     // Индекс статей (slug/title/tags) — нужен для: списка тегов в фильтре,
-    // подсветки "существует/не существует" у wiki-ссылок в просмотре статьи,
-    // и подписи для отсутствующей статьи в диалоге "создать?".
+    // подсветки "существует/не существует/недоступно" у wiki-ссылок в
+    // просмотре статьи, и подписи для отсутствующей статьи в диалоге
+    // "создать?". restrictedSlugs — статьи, которые существуют, но не
+    // открыты этому читателю ни на одном слое (см. /api/articles-index на
+    // сервере) — рендерятся как "Недоступно", а не как "статьи ещё нет".
     async loadArticlesIndex() {
       try {
         const result = await window.apiClient.makeAuthenticatedRequest('/api/articles-index');
-        this.articlesIndex = (result.success && Array.isArray(result.data)) ? result.data : [];
+        const data = (result.success && result.data) || {};
+        this.articlesIndex = Array.isArray(data.accessible) ? data.accessible : [];
+        this.restrictedSlugs = new Set(Array.isArray(data.restrictedSlugs) ? data.restrictedSlugs : []);
       } catch (e) {
         this.articlesIndex = [];
+        this.restrictedSlugs = new Set();
       }
       this.articlesIndexBySlug = new Map(this.articlesIndex.map((a) => [a.slug, a]));
 
@@ -513,6 +522,11 @@
 
       this.gridEl?.addEventListener('click', (e) => this.handleGridClick(e));
       document.getElementById('ibripediaViewContent')?.addEventListener('click', (e) => this.handleViewContentClick(e));
+      // Переключатель слоя — отдельный элемент СНАРУЖИ #ibripediaViewContent
+      // (см. renderLayerSwitcher), поэтому его клики туда не всплывают и
+      // нужен свой обработчик; handleViewContentClick сам проверяет
+      // .ibripedia-layer-btn первым делом, переиспользуем ту же функцию.
+      document.getElementById('ibripediaViewLayerSwitcher')?.addEventListener('click', (e) => this.handleViewContentClick(e));
       document.getElementById('ibripediaViewMeta')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (!btn) return;
@@ -767,7 +781,7 @@
         </div>` : ''}
         <div class="ibripedia-card-body">
           <h3 class="ibripedia-card-title">${escapeHtml(article.title)}</h3>
-          <p class="ibripedia-card-excerpt">${escapeHtml(makeExcerpt(article))}</p>
+          <p class="ibripedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>
           ${tags.length ? `<div class="ibripedia-card-tags">${tags.map((t) =>
             `<span class="ibripedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
           ).join('')}</div>` : ''}
@@ -925,10 +939,10 @@
       }
     }
 
-    async openArticleView(slug, { jumpToComments = false } = {}) {
+    async openArticleView(slug, { jumpToComments = false, layer } = {}) {
       if (!slug) return;
       try {
-        const result = await window.apiClient.getArticle(slug);
+        const result = await window.apiClient.getArticle(slug, layer != null ? { layer } : undefined);
         if (!result.success) {
           showMessage(`Не удалось открыть статью: ${result.data?.error || result.error || ''}`, 'error');
           return;
@@ -1020,10 +1034,12 @@
       const badgesEl = document.getElementById('ibripediaViewBadges');
       if (badgesEl) badgesEl.innerHTML = badges.join('');
 
+      this.renderLayerSwitcher(article);
+
       const contentEl = document.getElementById('ibripediaViewContent');
       if (!contentEl) return;
       if (window.renderArticleBlocks) {
-        contentEl.innerHTML = await window.renderArticleBlocks(article.content, this.articlesIndexBySlug);
+        contentEl.innerHTML = await window.renderArticleBlocks(article.content, this.articlesIndexBySlug, this.restrictedSlugs);
         window.attachBlocksInteractions?.(contentEl);
       } else {
         contentEl.textContent = '';
@@ -1041,13 +1057,59 @@
       });
     }
 
+    // Переключатель слоя многослойной статьи (см. обсуждение "многослойные
+    // статьи", пункт D): показывается только когда читателю доступно больше
+    // одного слоя (layerOptions приходят уже отфильтрованными сервером —
+    // только те, до которых читатель "дотягивается", каскадом вниз от его
+    // максимума). Достигнув верхнего слоя, читатель может свободно смотреть
+    // и любой более нижний — сама кнопка просто перезапрашивает статью с
+    // ?layer=N, сервер сам не пустит выше положенного.
+    renderLayerSwitcher(article) {
+      const el = document.getElementById('ibripediaViewLayerSwitcher');
+      if (!el) return;
+      const options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
+      if (options.length < 2) { el.hidden = true; el.innerHTML = ''; return; }
+
+      el.hidden = false;
+      el.innerHTML = `<i class="fas fa-layer-group" title="Слои статьи"></i>` + options.map((opt) => (
+        `<button type="button" class="ibripedia-layer-btn${opt.index === article.layerIndex ? ' active' : ''}" data-layer-index="${opt.index}">${escapeHtml(opt.title)}</button>`
+      )).join('');
+    }
+
+    async switchArticleLayer(index) {
+      if (!this.currentSlug) return;
+      try {
+        const result = await window.apiClient.getArticle(this.currentSlug, { layer: index });
+        if (!result.success) {
+          showMessage('Не удалось переключить слой статьи', 'error');
+          return;
+        }
+        await this.renderArticleView(result.data);
+        this.buildToc();
+        this.scheduleBookmarkGutterRefresh();
+      } catch (e) {
+        showMessage('Не удалось переключить слой статьи', 'error');
+      }
+    }
+
     handleViewContentClick(e) {
-      const wikiEl = e.target.closest('.wiki-link, .wiki-link-missing');
+      const layerBtn = e.target.closest('.ibripedia-layer-btn');
+      if (layerBtn) {
+        e.preventDefault();
+        this.switchArticleLayer(parseInt(layerBtn.dataset.layerIndex, 10));
+        return;
+      }
+
+      const wikiEl = e.target.closest('.wiki-link, .wiki-link-missing, .wiki-link-restricted');
       if (wikiEl) {
         e.preventDefault();
         const slug = wikiEl.dataset.slug;
         if (wikiEl.classList.contains('wiki-link')) {
           this.openArticleView(slug);
+        } else if (wikiEl.classList.contains('wiki-link-restricted')) {
+          // Статья существует, но ни один её слой этому читателю не открыт —
+          // ничего похожего на "создать новую?" здесь предлагать нельзя.
+          showMessage('Эта статья недоступна вашей роли', 'info');
         } else {
           const article = this.articlesIndexBySlug.get(slug);
           const title = article ? article.title : wikiEl.textContent;
@@ -2466,7 +2528,7 @@
     // пропускаем ссылки/хэштеги/значок закладки: у них своя реакция на тап,
     // не нужно, чтобы двойной тап по ним ЕЩЁ и открывал попап закладки.
     handleContentDblClick(e) {
-      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .hashtag, .ibripedia-bm-toggle')) return;
+      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .ibripedia-bm-toggle')) return;
       const blockEl = e.target.closest('[data-block-id]');
       if (!blockEl) return;
       e.preventDefault();

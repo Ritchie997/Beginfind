@@ -14,7 +14,7 @@ const stickers = require('../services/stickers-store');
 const tagColors = require('../services/tag-colors');
 const dashboardStats = require('../services/dashboard-stats');
 const { serversDb } = require('../db/connections');
-const { isAdminOnServer } = require('../services/server-permissions');
+const articleLayers = require('../services/article-layers');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
 
@@ -100,39 +100,14 @@ function getServerNameById(serverId) {
   });
 }
 
-// Возвращает id ролей сервера, назначенных пользователю на этом сервере
-function getUserRoleIdsOnServer(userId, serverId) {
-  return new Promise((resolve) => {
-    serversDb.all(
-      'SELECT role_id FROM user_server_role_assignments WHERE user_id = ? AND server_id = ?',
-      [userId, serverId],
-      (err, rows) => resolve(err || !rows ? [] : rows.map(r => r.role_id))
-    );
-  });
-}
-
-// Проверяет, может ли пользователь просматривать/редактировать/удалять статью
-// с учётом её флага "locked" и списка разрешённых ролей сервера.
-// root и админ сервера статьи могут всё; остальным при locked=true нужна
-// одна из ролей, перечисленных в article.roles.
+// Проверяет, может ли пользователь просматривать статью хотя бы на каком-то
+// уровне — обёртка над article-layers.hasArticleAccess (см. там же). Раньше
+// это была самостоятельная проверка article.locked/article.roles — теперь
+// это частный случай резолва слоёв (нелойерная статья = один виртуальный
+// слой, см. articleLayers.getEffectiveLayers), поведение для таких статей не
+// изменилось.
 async function canAccessArticle(user, article) {
-  if (!article.locked) return true;
-  if (user.is_root) return true;
-
-  const serverId = parseInt(article.server);
-  if (!serverId || isNaN(serverId)) {
-    // Статья не привязана к валидному серверу — проверить роли невозможно,
-    // по умолчанию запрещаем доступ к закрытой статье кроме root
-    return false;
-  }
-
-  if (await isAdminOnServer(user.id, serverId)) return true;
-
-  const allowedRoleIds = (article.roles || []).map(r => parseInt(r)).filter(r => !isNaN(r));
-  if (allowedRoleIds.length === 0) return true; // ограничение не задано корректно — не блокируем
-
-  const userRoleIds = await getUserRoleIdsOnServer(user.id, serverId);
-  return userRoleIds.some(r => allowedRoleIds.includes(r));
+  return articleLayers.hasArticleAccess(article, user);
 }
 
 // Возвращает { is_root, admin_level } автора статьи (0/false, если id не
@@ -314,7 +289,15 @@ function updateImageUrlsInContent(content, req = null) {
 // заранее собранные карты (см. GET /articles и /articles/browse ниже, где
 // они собираются один раз на весь список вместо запроса на статью); если не
 // переданы — резолвятся здесь же, для одиночного GET /articles/:id.
-async function formatArticleResponse(article, req, usersMap, legacyNameToId, rankCache) {
+//
+// requestedLayerIndex — читатель явно попросил более нижний слой, чем ему
+// резолвится по умолчанию (переключатель слоя, см. обсуждение "многослойные
+// статьи", пункт D) — учитывается только если он действительно ≤ того, что
+// пользователю доступно; иначе (по умолчанию) отдаётся самый верхний
+// доступный слой. title/excerpt/image/content ответа — всегда С ЭТОГО слоя,
+// а не верхнеуровневые поля статьи. Сырое article.layers (все слои,
+// в т.ч. недоступные читателю) в ответ НИКОГДА не попадает — см. articleSafe.
+async function formatArticleResponse(article, req, usersMap, legacyNameToId, rankCache, requestedLayerIndex) {
   let serverName = article.server;
   if (article.server && !isNaN(article.server) && parseInt(article.server) > 0) {
     const serverFromDb = await getServerNameById(parseInt(article.server));
@@ -340,10 +323,45 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     ? await getArticlePermissions(req.user, article, nameToId, rankCache)
     : { can_edit: false, can_delete: false };
 
+  // Резолв слоя для текущего читателя (см. src/services/article-layers.js).
+  // Без req.user (не должно происходить — маршруты все за authenticateToken)
+  // остаётся пустой фоллбэк на верхнеуровневые поля статьи.
+  const resolved = req && req.user ? await articleLayers.resolveArticleLayer(article, req.user) : null;
+  let viewLayer = { title: article.title, excerpt: article.excerpt, image: article.image, content: article.content };
+  let layerIndex = null;
+  let layerCount = 1;
+  let layerOptions = [];
+  if (resolved) {
+    let index = resolved.index;
+    const requested = Number(requestedLayerIndex);
+    if (Number.isInteger(requested) && requested >= 0 && requested <= resolved.index) {
+      index = requested;
+    }
+    viewLayer = resolved.layers[index];
+    layerIndex = index;
+    layerCount = resolved.layers.length;
+    // Варианты для переключателя слоя на клиенте — только слои от 0 до
+    // максимума, до которого читатель "дотягивается" (каскад вниз, см.
+    // обсуждение) — то, что выше, ему не резолвилось и сюда не попадает.
+    layerOptions = resolved.layers.slice(0, resolved.index + 1).map((l, i) => ({
+      index: i,
+      title: l.title || article.title || article.slug
+    }));
+  }
+
+  // layers: не пробрасываем сырое article.layers дальше — там могут лежать
+  // слои выше того, что резолвился читателю (см. viewLayer/layerOptions).
+  const { layers: _rawLayers, ...articleSafe } = article;
+
   return {
-    ...article,
-    content: updateImageUrlsInContent(article.content, req),
-    image: formatImageUrl(article.image, req),
+    ...articleSafe,
+    title: viewLayer.title || article.title || article.slug,
+    excerpt: viewLayer.excerpt ?? article.excerpt,
+    content: updateImageUrlsInContent(viewLayer.content, req),
+    image: formatImageUrl(viewLayer.image, req),
+    layerIndex,
+    layerCount,
+    layerOptions,
     server: serverName,
     author,
     co_authors: (article.co_author_ids || []).map((id) => ({ id, display_name: map.get(id) || 'Неизвестный' })),
@@ -384,7 +402,7 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
       const tagLower = String(tag).toLowerCase();
       articles = articles.filter(a =>
         (a.tags || []).some(t => String(t).toLowerCase() === tagLower) ||
-        store.extractHashtags(a.content).includes(tagLower)
+        store.extractHashtags(a).includes(tagLower)
       );
     }
 
@@ -486,13 +504,47 @@ router.get('/articles/:id', auth.authenticateToken, auth.checkApproved, async (r
     if (!(await canAccessArticle(req.user, article))) {
       return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
-    const formatted = await formatArticleResponse(article, req);
+    // ?layer=N — переключатель слоя (см. обсуждение "многослойные статьи",
+    // пункт D): читатель просит более нижний слой, чем ему резолвится по
+    // умолчанию; formatArticleResponse сам игнорирует значение выше его
+    // фактического доступа.
+    const requestedLayer = req.query.layer !== undefined ? parseInt(req.query.layer, 10) : undefined;
+    const formatted = await formatArticleResponse(article, req, undefined, undefined, undefined, requestedLayer);
     // Реальный счётчик просмотров (см. article_views в connections.js) —
     // сам просмотр этим запросом НЕ засчитывается (см. POST .../view ниже):
     // этот GET дёргает и читалка Ibripedia, и редактор при открытии статьи
     // на правку, а редактирование не должно накручивать статистику.
     formatted.viewsCount = await social.getViewCount(article.slug);
     res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Полный доступный пользователю "стек" слоёв статьи разом — для панели
+// "Слои" в редакторе (в отличие от GET /articles/:id?layer=N, который отдаёт
+// ОДИН слой за раз для читалки). Слои ВЫШЕ резолвнутого максимума в ответ не
+// попадают — тот же принцип, что и в formatArticleResponse/layerOptions.
+router.get('/articles/:id/layers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const article = store.getArticle(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    const resolved = await articleLayers.resolveArticleLayer(article, req.user);
+    if (!resolved) {
+      return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+    }
+    const reachable = resolved.layers.slice(0, resolved.index + 1).map((l) => ({
+      ...l,
+      content: updateImageUrlsInContent(l.content, req),
+      image: formatImageUrl(l.image, req)
+    }));
+    res.json({
+      usingLayers: Array.isArray(article.layers) && article.layers.length > 0,
+      maxIndex: resolved.index,
+      layers: reachable
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -521,13 +573,27 @@ router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, as
 
 router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
-    const { title, content, views, locked, role, roles, tags, image, attachments, server } = req.body;
+    const { title, content, views, locked, role, roles, tags, image, attachments, server, layers } = req.body;
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'Заголовок статьи обязателен' });
     }
 
+    // Слои у совсем новой статьи — своей "уже сохранённой" версии для
+    // сравнения нет, поэтому просто каждый присланный слой должен быть под
+    // ролью, которая есть у самого создателя (см. canCreateLayerWithRoles).
+    let createLayers;
+    if (Array.isArray(layers) && layers.length) {
+      for (const l of layers) {
+        if (!(await articleLayers.canCreateLayerWithRoles({ server: server || null }, req.user, l && l.roles))) {
+          return res.status(403).json({ error: 'Нельзя создать слой с ролью, которой у вас нет' });
+        }
+      }
+      createLayers = layers;
+    }
+
     const article = store.createArticle({
       title, content, views, locked, role, roles, tags, image, attachments,
+      layers: createLayers,
       // Автор — всегда реальный создатель (из токена), а не то, что прислал
       // клиент — поле "Автор" в форме вырезано именно поэтому.
       author_id: req.user.id,
@@ -603,6 +669,21 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
     }
 
     const { author_id: _ignoredAuthorId, ...bodyFields } = req.body;
+
+    // Многослойность (см. src/services/article-layers.js): клиент присылает
+    // только слои от 0 до своего резолвнутого максимума (ровно то, что сам
+    // видел через GET) — что физически лежит ВЫШЕ, он никогда не получал и
+    // прислать не мог; mergeLayersUpdate сохраняет это как есть, а не
+    // затирает. Новые слои сверх своего максимума разрешены, только если
+    // их роли — те, что есть у самого запросившего (см. canCreateLayerWithRoles).
+    if (Array.isArray(bodyFields.layers)) {
+      const merge = await articleLayers.mergeLayersUpdate(existing, req.user, bodyFields.layers);
+      if (merge.error) {
+        return res.status(403).json({ error: merge.error });
+      }
+      bodyFields.layers = merge.layers;
+    }
+
     const updated = store.updateArticle(req.params.id, {
       ...bodyFields,
       co_author_ids: coAuthorIds,
@@ -673,6 +754,11 @@ router.get('/search-articles', auth.authenticateToken, auth.checkApproved, async
 
 // Backlinks — статьи, ссылающиеся на данную через wiki-ссылку [подпись]((slug)) (используется
 // панелью обратных ссылок редактора, см. Этап 4).
+// Источники фильтруются по доступу ТЕКУЩЕГО читателя (раньше — не
+// фильтровались: заголовок статьи, которую самому читателю видеть не
+// положено, мог засветиться в панели бэклинков; см. обсуждение "многослойные
+// статьи"), а заголовок каждого источника — с его резолвнутого для этого
+// читателя слоя, а не верхнеуровневый.
 router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const article = store.getArticle(req.params.id);
@@ -682,7 +768,14 @@ router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved
     if (!(await canAccessArticle(req.user, article))) {
       return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
-    res.json(store.getBacklinks(req.params.id));
+    const sources = store.getBacklinks(req.params.id);
+    const result = [];
+    for (const source of sources) {
+      const resolved = await articleLayers.resolveArticleLayer(source, req.user);
+      if (!resolved) continue;
+      result.push({ slug: source.slug, title: resolved.layer.title || source.title || source.slug });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -928,15 +1021,34 @@ router.delete('/articles/:id/comments/:commentId', auth.authenticateToken, auth.
 });
 
 // Облегчённый индекс статей (без содержимого) — для автодополнения
-// wiki-ссылок и проверки "существует ли статья" в редакторе.
+// wiki-ссылок, проверки "существует ли статья" в редакторе и авто-подписи
+// пустых wiki-ссылок ("[]((slug))" — см. blocks-renderer.js) заголовком,
+// резолвнутым под конкретного читателя (title здесь — с ЕГО слоя, а не
+// верхнеуровневый article.title, см. src/services/article-layers.js).
+//
+// Раньше отдавался плоский список только доступных статей — недоступная
+// статья и вовсе не существующая выглядели на клиенте одинаково ("статьи
+// ещё нет"). Теперь отдельно перечисляются slug'и статей, которые
+// существуют, но не открыты ни на одном слое ЭТОМУ читателю — сами по себе,
+// без заголовка (иначе он утёк бы в подпись "[не доступно]"), чтобы клиент
+// мог отличить [не доступно] от настоящего "статьи не существует".
 router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const index = [];
+    const accessible = [];
+    const restrictedSlugs = [];
     for (const article of store.listArticles()) {
-      if (!(await canAccessArticle(req.user, article))) continue;
-      index.push({ slug: article.slug, title: article.title, tags: article.tags });
+      const resolved = await articleLayers.resolveArticleLayer(article, req.user);
+      if (!resolved) {
+        restrictedSlugs.push(article.slug);
+        continue;
+      }
+      accessible.push({
+        slug: article.slug,
+        title: resolved.layer.title || article.title || article.slug,
+        tags: article.tags
+      });
     }
-    res.json(index);
+    res.json({ accessible, restrictedSlugs });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1010,30 +1122,45 @@ router.put('/tags/color', auth.authenticateToken, auth.checkApproved, auth.check
 });
 
 // Данные для графа связей: статьи (узлы) + wiki-ссылки между ними (рёбра).
+//
+// Статья, которая СУЩЕСТВУЕТ, но не открыта этому читателю ни на одном
+// слое, теперь не пропадает из графа молча (как было раньше), а появляется
+// узлом-заглушкой (locked:true, без title/server/tags — сам факт связи
+// видно, содержание и даже название — нет, см. обсуждение "многослойные
+// статьи", пункт C). Ссылка на статью, которой вообще не существует,
+// по-прежнему не создаёт ни узла, ни ребра.
 router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
+    const all = store.listArticles();
+    const allSlugs = new Set(all.map((a) => a.slug));
+
     const accessible = [];
-    for (const article of store.listArticles()) {
-      if (await canAccessArticle(req.user, article)) accessible.push(article);
+    const resolvedBySlug = new Map();
+    for (const article of all) {
+      const resolved = await articleLayers.resolveArticleLayer(article, req.user);
+      if (!resolved) continue;
+      accessible.push(article);
+      resolvedBySlug.set(article.slug, resolved);
     }
     const slugs = new Set(accessible.map(a => a.slug));
 
     // server — для клиентского фильтра графа (выбор сервера), см.
     // public/graph-view.js.
     // tags — для поиска по #тегу в графе: объединяем теги, заданные в форме
-    // статьи (a.tags), и #хэштеги прямо в тексте (Obsidian-стиль, см.
-    // extractHashtags) — так же, как это уже устроено в filterArticles()
-    // для витрины Ibripedia, только тут результат отдаётся клиенту, а не
-    // используется для серверной фильтрации.
+    // статьи (a.tags), и #хэштеги прямо в тексте по ВСЕМ слоям (Obsidian-
+    // стиль, см. extractHashtags) — так же, как это уже устроено в
+    // filterArticles() для витрины Ibripedia, только тут результат отдаётся
+    // клиенту, а не используется для серверной фильтрации.
     // Теги узла нормализованы (store.tagKey) и идут в порядке: сначала из поля
     // "Теги", затем #хэштеги из текста — ПЕРВЫЙ из них определяет цвет узла на
     // клиенте (tagColors ниже, см. renderGraph в public/graph-view.js).
+    // title — с резолвнутого ДЛЯ ЭТОГО читателя слоя, а не верхнеуровневый.
     const nodes = accessible.map(a => {
       const ownTags = (a.tags || []).map(t => store.tagKey(t));
-      const hashtags = store.extractHashtags(a.content).map(t => store.tagKey(t));
+      const hashtags = store.extractHashtags(a).map(t => store.tagKey(t));
       return {
         slug: a.slug,
-        title: a.title,
+        title: resolvedBySlug.get(a.slug).layer.title || a.title || a.slug,
         server: a.server ?? null,
         tags: [...new Set([...ownTags, ...hashtags])].filter(Boolean)
       };
@@ -1042,14 +1169,24 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     const colorMap = await tagColors.ensureColors(tagList.map((t) => ({ key: t.key, name: t.tag })));
     const tagColorsOut = {};
     colorMap.forEach((v, key) => { tagColorsOut[key] = { name: v.name, color: v.color }; });
+
     const edges = [];
+    const ghostSlugs = new Set();
     for (const article of accessible) {
-      for (const target of store.extractWikiLinks(article.content)) {
-        if (slugs.has(target) && target !== article.slug) {
+      for (const target of store.extractWikiLinks(article)) {
+        if (target === article.slug) continue;
+        if (slugs.has(target)) {
           edges.push({ from: article.slug, to: target });
+        } else if (allSlugs.has(target)) {
+          edges.push({ from: article.slug, to: target });
+          ghostSlugs.add(target);
         }
+        // иначе — ссылка на несуществующую статью: ни узла, ни ребра, как и раньше.
       }
     }
+    ghostSlugs.forEach((slug) => {
+      nodes.push({ slug, title: null, server: null, tags: [], locked: true });
+    });
 
     res.json({ nodes, edges, tagColors: tagColorsOut });
   } catch (err) {

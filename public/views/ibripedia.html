@@ -144,6 +144,11 @@
         <div id="ibripediaViewMeta" class="ibripedia-view-meta"></div>
         <div id="ibripediaViewBadges" class="ibripedia-view-badges"></div>
 
+        <!-- Переключатель слоя многослойной статьи (см. renderArticleView/
+             switchArticleLayer в ibripedia.js) — показывается только когда
+             читателю доступно больше одного слоя (article.layerOptions). -->
+        <div id="ibripediaViewLayerSwitcher" class="ibripedia-layer-switcher" hidden></div>
+
         <div class="ibripedia-view-actions">
           <button type="button" id="ibripediaEditBtn" class="btn btn-primary"><i class="fas fa-pen"></i> Редактировать</button>
           <button type="button" id="ibripediaDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Удалить</button>

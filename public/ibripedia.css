@@ -594,6 +594,38 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   gap: 8px;
 }
 
+/* Переключатель слоя многослойной статьи (renderLayerSwitcher в
+   ibripedia.js) — показывается только когда читателю доступно больше одного
+   слоя; кнопки — доступные слои по порядку, активная подсвечена. */
+.ibripedia-layer-switcher {
+  margin: 12px 24px 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.ibripedia-layer-btn {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  color: var(--text-normal);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ibripedia-layer-btn:hover {
+  background: var(--background-accent);
+}
+.ibripedia-layer-btn.active {
+  background: var(--blurple);
+  border-color: var(--blurple);
+  color: #fff;
+  cursor: default;
+}
+
 .ibripedia-view-actions {
   margin: 16px 24px 0;
   display: flex;

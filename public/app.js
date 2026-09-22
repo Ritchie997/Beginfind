@@ -151,8 +151,13 @@ class ApiClient {
     return this.makeAuthenticatedRequest(endpoint);
   }
 
-  async getArticle(id) {
-    return this.makeAuthenticatedRequest(`/api/articles/${id}`);
+  // opts.layer — переключатель слоя многослойной статьи (см. обсуждение
+  // "многослойные статьи"): просит конкретный слой вместо того, что
+  // резолвится по умолчанию; сервер сам игнорирует значение выше
+  // фактического доступа читателя (см. formatArticleResponse на бэкенде).
+  async getArticle(id, opts = {}) {
+    const query = opts && opts.layer != null ? `?layer=${encodeURIComponent(opts.layer)}` : '';
+    return this.makeAuthenticatedRequest(`/api/articles/${id}${query}`);
   }
 
   // Засчитать просмотр статьи текущим пользователем (один на пользователя —

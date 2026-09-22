@@ -640,6 +640,171 @@ class SPARouter {
       freeText: true,
       placeholder: 'Введите тег и нажмите Enter...'
     }) : null;
+
+    // Многослойность (см. article-layers.js на сервере) — значения ролей
+    // здесь строки вида "system:7"/"server:3" (см. encodeRoleRef/decodeRoleRef),
+    // объединяющие оба каталога сразу, не пересекается с this.rolesField
+    // (тот — простой список id ролей сервера для обычного "закрыта/открыта").
+    const layerRolesRoot = document.getElementById('articleLayerRolesField');
+    this.layerRolesField = layerRolesRoot ? new ChipField(layerRolesRoot, {
+      freeText: false,
+      placeholder: 'Пусто — слой публичный...',
+      emptyText: 'Сначала выберите сервер'
+    }) : null;
+
+    // Состояние многослойности формы — см. setLayersMode/renderArticleLayersList.
+    this.articleLayersEnabled = false;
+    this.articleLayers = []; // [{ roles: [{scope,id}], title, content }]
+    this.activeLayerIndex = 0;
+    // true по умолчанию — свежая форма ("создать статью") без слоёв, это и
+    // есть достоверное состояние. editArticle() сбрасывает в false на время
+    // запроса /articles/:id/layers и не даёт (см. collectArticleFormData)
+    // сохранить layers, пока не получит достоверный ответ — см. там же.
+    this._layersStateKnown = true;
+    const hint = document.getElementById('articleLayerEditingHint');
+    if (hint) { hint.hidden = true; hint.textContent = ''; }
+    const panel = document.getElementById('articleLayersPanel');
+    if (panel) panel.hidden = true;
+    const toggle = document.getElementById('articleLayersToggle');
+    if (toggle) toggle.checked = false;
+    document.getElementById('articleLegacyAccessRow')?.removeAttribute('hidden');
+    document.getElementById('articleLegacyRolesRow')?.removeAttribute('hidden');
+  }
+
+  // "system:7" -> {scope:'system', id:7}; невалидное — null.
+  decodeRoleRef(value) {
+    const m = /^(system|server):(\d+)$/.exec(String(value || ''));
+    return m ? { scope: m[1], id: parseInt(m[2], 10) } : null;
+  }
+
+  encodeRoleRef(ref) {
+    return `${ref.scope}:${ref.id}`;
+  }
+
+  // Варианты для "Доступ к выбранному слою" — оба каталога сразу: 🌐 общие
+  // роли платформы (admin_roles, не зависят от сервера) и 🏠 роли ВЫБРАННОГО
+  // сервера статьи (server_roles). Без сервера — только общие.
+  async loadRoleCatalogForLayers(serverId) {
+    if (!this.layerRolesField) return;
+    const options = [];
+    try {
+      const adminRes = await apiClient.makeAuthenticatedRequest('/api/admin-roles');
+      // GET /api/admin-roles отдаёт { roles: [...], permission_keys: [...] },
+      // а не голый массив (см. auth.routes.js) — тот же формат, что и в
+      // управлении ролями админки.
+      if (adminRes.success && Array.isArray(adminRes.data?.roles)) {
+        adminRes.data.roles.forEach((r) => options.push({ value: `system:${r.id}`, label: `🌐 ${r.name}` }));
+      }
+    } catch (e) { /* общий каталог просто не подгрузится в список вариантов */ }
+
+    if (serverId) {
+      try {
+        const serverRes = await apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
+        if (serverRes.success && Array.isArray(serverRes.data)) {
+          serverRes.data.forEach((r) => options.push({ value: `server:${r.id}`, label: `🏠 ${r.name}` }));
+        }
+      } catch (e) { /* роли сервера просто не подгрузятся */ }
+    }
+
+    this.layerRolesField.setOptions(options);
+    this.layerRolesField.setPlaceholder(options.length ? 'Пусто — слой публичный...' : 'Сначала выберите сервер...');
+  }
+
+  // Снимает текущее состояние формы (заголовок/контент редактора/роли) в
+  // this.articleLayers[this.activeLayerIndex] — вызывается ПЕРЕД тем, как
+  // форма покажет другой слой (переключение/сохранение), иначе несохранённые
+  // правки активного слоя потерялись бы молча.
+  snapshotActiveLayer() {
+    if (!this.articleLayersEnabled || !this.articleLayers[this.activeLayerIndex]) return;
+    const editorMgr = this.editorManager;
+    this.articleLayers[this.activeLayerIndex] = {
+      roles: (this.layerRolesField?.getValues() || []).map((v) => this.decodeRoleRef(v)).filter(Boolean),
+      title: document.getElementById('articleTitle')?.value || '',
+      content: editorMgr ? editorMgr.doc : { version: 1, blocks: [] }
+    };
+  }
+
+  // Показывает слой с данным индексом в форме (заголовок/редактор/роли) —
+  // обратная операция к snapshotActiveLayer.
+  loadLayerIntoForm(index) {
+    const layer = this.articleLayers[index];
+    if (!layer) return;
+    this.activeLayerIndex = index;
+
+    const titleInput = document.getElementById('articleTitle');
+    if (titleInput) titleInput.value = layer.title || '';
+
+    const editorMgr = this.editorManager;
+    if (editorMgr) {
+      editorMgr.doc = layer.content || { version: 1, blocks: [] };
+      if (editorMgr.container) { editorMgr.renderAll(); editorMgr.scheduleRenderPreview?.(); }
+    }
+
+    this.layerRolesField?.setValues((layer.roles || []).map((r) => this.encodeRoleRef(r)));
+
+    const hint = document.getElementById('articleLayerEditingHint');
+    if (hint) hint.textContent = `(слой: ${layer.title || 'без названия'})`;
+
+    this.renderArticleLayersList();
+  }
+
+  renderArticleLayersList() {
+    const listEl = document.getElementById('articleLayersList');
+    if (!listEl) return;
+    const lastIndex = this.articleLayers.length - 1;
+    listEl.innerHTML = this.articleLayers.map((l, i) => `
+      <span class="article-layer-pill${i === this.activeLayerIndex ? ' active' : ''}" data-index="${i}">
+        <button type="button" class="article-layer-pill-move" data-move="-1" data-index="${i}" title="Сделать публичнее (на уровень ниже)"${i === 0 ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+        <span class="article-layer-pill-title">${this.escapeHtml(l.title || 'Без названия')}</span>
+        <button type="button" class="article-layer-pill-move" data-move="1" data-index="${i}" title="Сделать закрытее (на уровень выше)"${i === lastIndex ? ' disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+        ${this.articleLayers.length > 1 ? `<button type="button" class="article-layer-pill-remove" data-index="${i}" title="Удалить слой">&times;</button>` : ''}
+      </span>
+    `).join('');
+  }
+
+  // Ручная перестановка слоёв (меняет глубину — позиция в массиве и есть
+  // уровень, см. article-layers.js на сервере) — меняет местами слой с
+  // соседом. Безопасно с точки зрения прав уже сегодня: сервер (см.
+  // mergeLayersUpdate) проверяет роли каждого присланного слоя независимо от
+  // его позиции, а не только "новых по номеру", так что переставлять можно
+  // свободно в пределах своей же доступной глубины.
+  moveArticleLayer(index, direction) {
+    const swapWith = index + direction;
+    if (swapWith < 0 || swapWith >= this.articleLayers.length) return;
+    this.snapshotActiveLayer();
+    [this.articleLayers[index], this.articleLayers[swapWith]] = [this.articleLayers[swapWith], this.articleLayers[index]];
+    if (this.activeLayerIndex === index) this.activeLayerIndex = swapWith;
+    else if (this.activeLayerIndex === swapWith) this.activeLayerIndex = index;
+    this.renderArticleLayersList();
+  }
+
+  // Включает/выключает многослойный режим формы. enabled=true в первый раз —
+  // текущий заголовок/контент становится слоем 0 (публичным), ничего не
+  // теряется; enabled=false — легаси-поля ("Статус статьи"/"Доступ для")
+  // показываются обратно, this.articleLayers остаются в памяти на случай,
+  // если пользователь включит режим обратно, не сохраняя.
+  setLayersMode(enabled) {
+    this.articleLayersEnabled = enabled;
+    document.getElementById('articleLayersPanel').hidden = !enabled;
+    document.getElementById('articleLegacyAccessRow').hidden = enabled;
+    document.getElementById('articleLegacyRolesRow').hidden = enabled;
+    document.getElementById('articleLayerEditingHint').hidden = !enabled;
+
+    if (enabled) {
+      if (!this.articleLayers.length) {
+        this.articleLayers = [{
+          roles: [],
+          title: document.getElementById('articleTitle')?.value || '',
+          content: this.editorManager ? this.editorManager.doc : { version: 1, blocks: [] }
+        }];
+        this.activeLayerIndex = 0;
+      }
+      this.loadRoleCatalogForLayers(document.getElementById('articleServer')?.value).then(() => {
+        this.loadLayerIntoForm(this.activeLayerIndex);
+      });
+    } else {
+      document.getElementById('articleLayerEditingHint').textContent = '';
+    }
   }
 
   // Подгружает список ролей выбранного сервера в chip-field "Доступ для".
@@ -943,7 +1108,14 @@ class SPARouter {
   // терялся при сохранении статьи (см. заголовок chip-field.js).
   collectArticleFormData() {
     const addAsCoauthorCheckbox = document.getElementById('addAsCoauthorCheckbox');
-    return {
+    // Многослойность — снимаем несохранённые правки активного слоя перед
+    // сборкой (см. snapshotActiveLayer), иначе последний выбранный слой
+    // ушёл бы на сервер со старым содержимым. layers шлём ТОЛЬКО массивом
+    // {roles,title,content} — сервер сам сливает его со слоями выше
+    // резолвнутого максимума текущего пользователя (см. mergeLayersUpdate
+    // в src/services/article-layers.js), которых форма даже не видела.
+    this.snapshotActiveLayer();
+    const data = {
       title: document.getElementById('articleTitle').value,
       server: document.getElementById('articleServer').value,
       content: document.getElementById('articleContent').innerHTML,
@@ -953,6 +1125,27 @@ class SPARouter {
       tags: this.tagsField ? this.tagsField.getValues() : [],
       add_as_coauthor: addAsCoauthorCheckbox ? addAsCoauthorCheckbox.checked : true
     };
+
+    // layers добавляем в payload, только если ДОСТОВЕРНО знаем реальное
+    // состояние слоёв редактируемой статьи (см. this._layersStateKnown в
+    // editArticle/clearArticleForm) — иначе, если, например, запрос
+    // GET /articles/:id/layers не долетел, отправка layers:[] тихо стёрла бы
+    // все слои статьи до одного. Не зная — просто не трогаем это поле:
+    // сервер (PUT /api/articles/:id) не меняет layers, если ключа нет вовсе.
+    if (this._layersStateKnown) {
+      data.layers = this.articleLayersEnabled
+        ? this.articleLayers.map((l) => ({ roles: l.roles, title: l.title, content: l.content }))
+        : [];
+      // Сервер эти два поля игнорирует (в PUT/POST /api/articles он читает
+      // только известные ему поля) — они здесь только для черновика
+      // (см. loadDraft), чтобы при восстановлении вернуть тот же слой
+      // активным и правильное состояние переключателя "Многослойная статья",
+      // а не только заголовок/текст ОДНОГО слоя, который был открыт в
+      // момент "Черновик".
+      data.layersEnabled = this.articleLayersEnabled;
+      data.activeLayerIndex = this.activeLayerIndex;
+    }
+    return data;
   }
 
   // Set up basic editor events as a fallback
@@ -1105,6 +1298,60 @@ class SPARouter {
     document.getElementById('articleServer')?.addEventListener('change', (e) => {
       if (this.rolesField) this.rolesField.setValues([]);
       this.loadRolesForArticleField(e.target.value);
+      if (this.articleLayersEnabled) {
+        this.layerRolesField?.setValues([]);
+        this.loadRoleCatalogForLayers(e.target.value);
+      }
+    });
+
+    // Многослойность (см. setLayersMode/renderArticleLayersList выше).
+    document.getElementById('articleLayersToggle')?.addEventListener('change', (e) => {
+      this.setLayersMode(e.target.checked);
+    });
+    document.getElementById('articleLayersAddBtn')?.addEventListener('click', () => {
+      this.snapshotActiveLayer();
+      this.articleLayers.push({ roles: [], title: '', content: { version: 1, blocks: [] } });
+      this.loadLayerIntoForm(this.articleLayers.length - 1);
+    });
+    // Копия выбранного слоя (роли+заголовок+текст) как новый слой выше —
+    // чтобы не набирать заново почти такой же текст следующего слоя.
+    // Глубокая копия content (JSON.parse/stringify) — иначе оригинал и
+    // дубликат делили бы один и тот же вложенный объект блоков, и правка
+    // одного меняла бы другой молча.
+    document.getElementById('articleLayersDuplicateBtn')?.addEventListener('click', () => {
+      this.snapshotActiveLayer();
+      const source = this.articleLayers[this.activeLayerIndex];
+      if (!source) return;
+      this.articleLayers.push({
+        roles: source.roles.map((r) => ({ ...r })),
+        title: source.title ? `${source.title} (копия)` : '',
+        content: JSON.parse(JSON.stringify(source.content))
+      });
+      this.loadLayerIntoForm(this.articleLayers.length - 1);
+    });
+    document.getElementById('articleLayersList')?.addEventListener('click', (e) => {
+      const moveBtn = e.target.closest('.article-layer-pill-move');
+      if (moveBtn) {
+        this.moveArticleLayer(parseInt(moveBtn.dataset.index, 10), parseInt(moveBtn.dataset.move, 10));
+        return;
+      }
+      const removeBtn = e.target.closest('.article-layer-pill-remove');
+      if (removeBtn) {
+        const idx = parseInt(removeBtn.dataset.index, 10);
+        if (this.articleLayers.length <= 1) return; // хотя бы один слой должен остаться
+        this.articleLayers.splice(idx, 1);
+        // Индекс активного слоя мог сместиться — выбираем ближайший.
+        const nextIndex = Math.min(this.activeLayerIndex >= idx ? Math.max(0, this.activeLayerIndex - 1) : this.activeLayerIndex, this.articleLayers.length - 1);
+        this.loadLayerIntoForm(nextIndex);
+        return;
+      }
+      const pill = e.target.closest('.article-layer-pill');
+      if (pill) {
+        const idx = parseInt(pill.dataset.index, 10);
+        if (idx === this.activeLayerIndex) return;
+        this.snapshotActiveLayer();
+        this.loadLayerIntoForm(idx);
+      }
     });
 
     // Add beforeunload event listener to warn user about unsaved changes
@@ -1645,6 +1892,20 @@ class SPARouter {
 
     this.resetArticleAuthorInfo();
 
+    // Многослойность — сброс к пустому одиночному состоянию (см.
+    // initArticleChipFields, та же исходная форма).
+    this.articleLayersEnabled = false;
+    this.articleLayers = [];
+    this.activeLayerIndex = 0;
+    this._layersStateKnown = true;
+    document.getElementById('articleLayersToggle').checked = false;
+    document.getElementById('articleLayersPanel').hidden = true;
+    document.getElementById('articleLegacyAccessRow').hidden = false;
+    document.getElementById('articleLegacyRolesRow').hidden = false;
+    const layerHint = document.getElementById('articleLayerEditingHint');
+    if (layerHint) { layerHint.hidden = true; layerHint.textContent = ''; }
+    this.layerRolesField?.setValues([]);
+
     document.getElementById('draftsManager').style.display = 'none';
     this.currentDraftId = null; // Clear current draft ID
 
@@ -1817,6 +2078,29 @@ class SPARouter {
 
         // Handle tags
         if (this.tagsField) this.tagsField.setValues(Array.isArray(draft.tags) ? draft.tags : []);
+
+        // Многослойность — восстанавливаем весь стек слоёв и переключатель
+        // (см. layersEnabled/activeLayerIndex в collectArticleFormData), а
+        // не только заголовок/текст того одного слоя, что был открыт в
+        // момент "Черновик" (раньше остальные слои молча терялись при
+        // восстановлении черновика). Черновику доверяем полностью — это не
+        // серверная статья, откуда что-то могло не долететь, а то, что сам
+        // же пользователь сохранил в этом браузере.
+        this.articleLayers = Array.isArray(draft.layers)
+          ? draft.layers.map((l) => ({
+              roles: Array.isArray(l.roles) ? l.roles : [],
+              title: l.title || '',
+              content: l.content || { version: 1, blocks: [] }
+            }))
+          : [];
+        this.activeLayerIndex = Number.isInteger(draft.activeLayerIndex)
+          && draft.activeLayerIndex >= 0 && draft.activeLayerIndex < this.articleLayers.length
+          ? draft.activeLayerIndex
+          : 0;
+        this._layersStateKnown = true;
+        const layersEnabled = !!draft.layersEnabled && this.articleLayers.length > 0;
+        document.getElementById('articleLayersToggle').checked = layersEnabled;
+        this.setLayersMode(layersEnabled);
 
         this.resetArticleAuthorInfo();
 
@@ -2159,6 +2443,34 @@ class SPARouter {
       // Set content in editor
       const editor = document.getElementById('articleContent');
       if (editor) editor.innerHTML = article.content || '';
+
+      // Многослойность — грузим достоверное состояние слоёв ЭТОЙ статьи
+      // отдельным запросом (GET /articles/:id уже отдал только резолвнутый
+      // под нас слой, не весь стек). Пока запрос не завершился успешно,
+      // collectArticleFormData() не станет трогать layers при сохранении
+      // (см. this._layersStateKnown) — так правка статьи, слоёв которой мы
+      // не увидели из-за сетевой ошибки, не сотрёт их молча.
+      this._layersStateKnown = false;
+      try {
+        const layersRes = await apiClient.makeAuthenticatedRequest(`/api/articles/${articleId}/layers`);
+        if (layersRes.success && layersRes.data) {
+          this._layersStateKnown = true;
+          const usingLayers = !!layersRes.data.usingLayers;
+          this.articleLayers = (layersRes.data.layers || []).map((l) => ({
+            roles: Array.isArray(l.roles) ? l.roles : [],
+            title: l.title || '',
+            content: l.content || { version: 1, blocks: [] }
+          }));
+          this.activeLayerIndex = this.articleLayers.length ? this.articleLayers.length - 1 : 0;
+          const toggle = document.getElementById('articleLayersToggle');
+          if (toggle) toggle.checked = usingLayers;
+          this.setLayersMode(usingLayers);
+        } else {
+          showMessage('Не удалось загрузить слои статьи — сохранение временно заблокирует их изменение', 'warning');
+        }
+      } catch (e) {
+        showMessage('Не удалось загрузить слои статьи — сохранение временно заблокирует их изменение', 'warning');
+      }
 
       // Update form title and save button text
       const formTitle = document.getElementById('article-form-title');

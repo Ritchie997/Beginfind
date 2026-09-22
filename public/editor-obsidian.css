@@ -509,6 +509,34 @@
   font-size: 0.8em;
   opacity: 0.7;
 }
+/* Статья существует, но её не открыл ни один слой ЭТОМУ читателю (см.
+   restrictedSlugs в /api/articles-index) — отдельно от wiki-link-missing
+   ("статьи ещё нет"): другой цвет, значок замка вместо "(создать)", курсор
+   not-allowed — клик по ней не предлагает ничего создать. */
+.preview-pane .wiki-link-restricted {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: not-allowed;
+}
+.preview-pane .wiki-link-restricted::after {
+  content: '\f023';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: 0.75em;
+  margin-left: 3px;
+  opacity: 0.8;
+}
+/* Вариативная подпись по слою (см. blocks-renderer.js::parseWikilinkVariants)
+   с незаполненным "/N" — ссылка ещё не дописана (не резолвилась цель, либо
+   набрана мимо автодополнения). Волнистое подчёркивание — тот же язык, что
+   у подчёркивания опечаток в браузере, интуитивно читается как "здесь
+   недоделано", не как "сломано/недоступно". */
+.preview-pane .wiki-link-unresolved-variant {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--yellow);
+}
 .preview-pane .hashtag {
   color: var(--blurple);
   cursor: pointer;
@@ -613,6 +641,7 @@
   font-weight: 700;
   font-size: 14px;
   padding: 11px 10px 10px;
+  overflow-wrap: break-word;
 }
 .preview-pane .blk-infobox-art {
   display: flex;
@@ -637,6 +666,7 @@
   text-transform: uppercase;
   color: var(--text-muted);
   margin: 0;
+  overflow-wrap: break-word;
 }
 .preview-pane .blk-infobox-row dd {
   font-size: 12.5px;
@@ -647,6 +677,11 @@
      там просто ставит перенос строки — pre-wrap сохраняет его и здесь,
      иначе в самой статье перенос молча схлопывался бы в пробел. */
   white-space: pre-wrap;
+  /* Значение теперь рендерится как инлайн-markdown (см. blocks-renderer.js) —
+     длинная вики-ссылка/название статьи без пробелов внутри узкой (240px)
+     колонки инфобокса иначе вылезала бы за её край, а не переносилась
+     ("перенос рядом с инфобоксами... работает не совсем корректно"). */
+  overflow-wrap: break-word;
 }
 @media (max-width: 680px) {
   .preview-pane aside.blk-infobox { float: none; width: 100%; margin: 0 0 16px; }
@@ -914,6 +949,20 @@
 .graph-node-center .graph-node-circle {
   fill: var(--green);
 }
+/* Узел-заглушка (locked, см. graph-view.js::nodeDisplayTitle) — статья
+   существует, но читателю не открыт ни один её слой: пунктирная обводка
+   вместо заливки цветом тега (тегов у такого узла и нет — сервер их не
+   отдаёт), сам факт связи виден, содержание/название — нет. */
+.graph-node-locked .graph-node-circle {
+  fill: var(--background-tertiary);
+  stroke: var(--text-muted);
+  stroke-width: 1.5px;
+  stroke-dasharray: 2.5 2;
+}
+.graph-node-locked .graph-node-label {
+  fill: var(--text-muted);
+  font-style: italic;
+}
 /* Наведение и попадание в поиск — одинаковое "кольцо" вместо смены заливки:
    так подсветка работает поверх любой заливки, в т.ч. любой заливки, а не только
    однотонного --blurple. */
@@ -1062,9 +1111,49 @@
   cursor: pointer;
 }
 
-.graph-controls-export {
+/* margin-left:auto только на первой кнопке "хвоста" (fullscreen) — она
+   утягивает вправо всю группу, включая идущую следом PNG-кнопку, без
+   разрыва между ними (см. .graph-controls-export ниже). */
+.graph-controls-fullscreen {
   margin-left: auto;
   white-space: nowrap;
+}
+
+.graph-controls-export {
+  white-space: nowrap;
+}
+
+/* === Полноэкранный режим графа связей (дашборд) ===
+   Тумблер #graphFullscreenToggle в graph-view.js добавляет/снимает этот
+   класс на .graph-card-top (вся карточка: заголовок + панель фильтров/
+   поиска + сам граф) — так поиск и остальные controls остаются на месте,
+   просто карточка растягивается на весь экран поверх остального интерфейса.
+   Свой fixed-оверлей, а не Fullscreen API браузера: тот на iOS Safari
+   работает с ограничениями и требует жеста пользователя на каждый вызов;
+   через CSS-класс работает одинаково на ПК и мобильных. */
+.graph-card-top.graph-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  margin: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.graph-card-top.graph-fullscreen .graph-page-header,
+.graph-card-top.graph-fullscreen .graph-controls {
+  flex: 0 0 auto;
+}
+.graph-card-top.graph-fullscreen .graph-container {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+@media (max-width: 480px) {
+  .graph-card-top.graph-fullscreen {
+    padding: 10px;
+  }
 }
 
 /* === Диалог размера/положения картинки ===
