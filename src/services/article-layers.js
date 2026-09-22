@@ -82,6 +82,12 @@ function normalizeLayer(raw) {
   return {
     id: str(raw.id) || genId(),
     roles: normalizeLayerRoles(raw.roles),
+    // public — явная отметка "этот слой без ролей нарочно открыт всем", а
+    // не молча оставленная пустой. См. findAmbiguousPublicLayer ниже: без
+    // этой отметки статью со смесью "слой с ролями" + "слой без ролей" сохранить
+    // нельзя — раньше именно так пустой слой тихо открывал всю статью любому
+    // читателю, даже когда другой слой той же статьи был ограничен ролью.
+    public: raw.public === true,
     title: str(raw.title),
     excerpt: str(raw.excerpt),
     image: raw.image || null,
@@ -225,6 +231,21 @@ async function canCreateLayerWithRoles(article, user, roles) {
   return layerRolesMatch(normalized, user, userServerRoleIds);
 }
 
+/**
+ * Находит слой без ролей, который никак не помечен публичным, в статье, где
+ * ЕСТЬ другой слой с ролями — сам по себе слой без ролей это ок (обычная
+ * незакрытая статья/единственный слой), проблема только в СМЕСИ: рядом с
+ * реально ограниченным слоем пустой слой без явной пометки "публичный",
+ * скорее всего, просто забыли настроить, а не намеренно оставили дырой.
+ * @returns {object|null} первый такой слой или null, если всё однозначно.
+ */
+function findAmbiguousPublicLayer(layers) {
+  if (!Array.isArray(layers) || layers.length < 2) return null;
+  const hasRestricted = layers.some((l) => l && Array.isArray(l.roles) && l.roles.length > 0);
+  if (!hasRestricted) return null;
+  return layers.find((l) => l && (!Array.isArray(l.roles) || l.roles.length === 0) && l.public !== true) || null;
+}
+
 // === Слияние слоёв при PUT /articles/:id ===
 //
 // Клиент присылает layers = [слой0 .. слойK] — ровно то, что сам видел (все
@@ -258,7 +279,14 @@ async function mergeLayersUpdate(existingArticle, user, bodyLayers) {
 
   const normalizedPart = normalizeLayers(bodyLayers);
   const preservedTail = getEffectiveLayers(existingArticle).slice(maxIndex + 1);
-  return { layers: [...normalizedPart, ...preservedTail] };
+  const merged = [...normalizedPart, ...preservedTail];
+
+  const ambiguous = findAmbiguousPublicLayer(merged);
+  if (ambiguous) {
+    return { error: `Слой "${ambiguous.title || 'без названия'}" без ролей соседствует со слоем, у которого роли есть — отметьте его публичным или задайте ему роли` };
+  }
+
+  return { layers: merged };
 }
 
 module.exports = {
@@ -271,6 +299,7 @@ module.exports = {
   hasArticleAccess,
   canAccessLayerIndex,
   canCreateLayerWithRoles,
+  findAmbiguousPublicLayer,
   mergeLayersUpdate,
   getUserServerRoleIds,
   articleServerId,

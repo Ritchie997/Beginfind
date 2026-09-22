@@ -130,12 +130,23 @@
             <div id="articleLayerRolesField" class="chip-field">
               <div class="chip-field-box">
                 <div class="chip-field-chips"></div>
-                <input type="text" class="chip-field-input" placeholder="Пусто — слой публичный...">
+                <input type="text" class="chip-field-input" placeholder="Роли этого слоя...">
               </div>
               <div class="chip-field-dropdown" hidden></div>
               <input type="hidden" class="chip-field-hidden">
             </div>
-            <div class="form-hint">Пусто — слой виден всем. Роль — с общего каталога или с сервера статьи. Заголовок и текст этого слоя — поля "Заголовок статьи" и "Содержание статьи" выше/ниже.</div>
+            <!-- Без ролей слой НЕ становится публичным молча — нужно явно
+                 отметить его таким. Это защита от той самой ошибки: слой без
+                 ролей, про который забыли, тихо открывал всю статью любому
+                 читателю, даже если другой слой той же статьи был ограничен
+                 ролью (см. mergeLayersUpdate/findAmbiguousPublicLayer в
+                 src/services/article-layers.js — сервер отклонит сохранение
+                 статьи с таким "забытым" слоем). -->
+            <label class="checkbox-field" id="articleLayerPublicRow" style="margin-top:6px;">
+              <input type="checkbox" id="articleLayerPublicCheckbox">
+              <span>Этот слой публичный — виден всем, даже без роли</span>
+            </label>
+            <div class="form-hint">Роль — с общего каталога или с сервера статьи. Если ролей нет, слой нужно явно отметить публичным — иначе статью с ним не получится сохранить. Заголовок и текст этого слоя — поля "Заголовок статьи" и "Содержание статьи" выше/ниже.</div>
           </div>
         </div>
       </div>

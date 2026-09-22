@@ -719,6 +719,7 @@ class SPARouter {
     const editorMgr = this.editorManager;
     this.articleLayers[this.activeLayerIndex] = {
       roles: (this.layerRolesField?.getValues() || []).map((v) => this.decodeRoleRef(v)).filter(Boolean),
+      public: !!document.getElementById('articleLayerPublicCheckbox')?.checked,
       title: document.getElementById('articleTitle')?.value || '',
       content: editorMgr ? editorMgr.doc : { version: 1, blocks: [] }
     };
@@ -741,6 +742,8 @@ class SPARouter {
     }
 
     this.layerRolesField?.setValues((layer.roles || []).map((r) => this.encodeRoleRef(r)));
+    const publicCheckbox = document.getElementById('articleLayerPublicCheckbox');
+    if (publicCheckbox) publicCheckbox.checked = !!layer.public;
 
     const hint = document.getElementById('articleLayerEditingHint');
     if (hint) hint.textContent = `(слой: ${layer.title || 'без названия'})`;
@@ -792,8 +795,15 @@ class SPARouter {
 
     if (enabled) {
       if (!this.articleLayers.length) {
+        // public: false — намеренно не отмечаем автоматически, хотя это
+        // единственный слой и сейчас это неважно (сервер не блокирует статьи
+        // из одного слоя). Если позже добавят слой с ролями выше, не помечая
+        // этот публичным, сохранение статьи будет заблокировано — и это
+        // единственная защита от "забыли настроить доступ базовому слою"
+        // (см. articleLayerPublicCheckbox/findAmbiguousPublicLayer).
         this.articleLayers = [{
           roles: [],
+          public: false,
           title: document.getElementById('articleTitle')?.value || '',
           content: this.editorManager ? this.editorManager.doc : { version: 1, blocks: [] }
         }];
@@ -1134,7 +1144,7 @@ class SPARouter {
     // сервер (PUT /api/articles/:id) не меняет layers, если ключа нет вовсе.
     if (this._layersStateKnown) {
       data.layers = this.articleLayersEnabled
-        ? this.articleLayers.map((l) => ({ roles: l.roles, title: l.title, content: l.content }))
+        ? this.articleLayers.map((l) => ({ roles: l.roles, public: !!l.public, title: l.title, content: l.content }))
         : [];
       // Сервер эти два поля игнорирует (в PUT/POST /api/articles он читает
       // только известные ему поля) — они здесь только для черновика
@@ -1310,7 +1320,7 @@ class SPARouter {
     });
     document.getElementById('articleLayersAddBtn')?.addEventListener('click', () => {
       this.snapshotActiveLayer();
-      this.articleLayers.push({ roles: [], title: '', content: { version: 1, blocks: [] } });
+      this.articleLayers.push({ roles: [], public: false, title: '', content: { version: 1, blocks: [] } });
       this.loadLayerIntoForm(this.articleLayers.length - 1);
     });
     // Копия выбранного слоя (роли+заголовок+текст) как новый слой выше —
@@ -1324,6 +1334,7 @@ class SPARouter {
       if (!source) return;
       this.articleLayers.push({
         roles: source.roles.map((r) => ({ ...r })),
+        public: !!source.public,
         title: source.title ? `${source.title} (копия)` : '',
         content: JSON.parse(JSON.stringify(source.content))
       });
@@ -1905,6 +1916,8 @@ class SPARouter {
     const layerHint = document.getElementById('articleLayerEditingHint');
     if (layerHint) { layerHint.hidden = true; layerHint.textContent = ''; }
     this.layerRolesField?.setValues([]);
+    const publicCheckboxReset = document.getElementById('articleLayerPublicCheckbox');
+    if (publicCheckboxReset) publicCheckboxReset.checked = false;
 
     document.getElementById('draftsManager').style.display = 'none';
     this.currentDraftId = null; // Clear current draft ID
@@ -2089,6 +2102,7 @@ class SPARouter {
         this.articleLayers = Array.isArray(draft.layers)
           ? draft.layers.map((l) => ({
               roles: Array.isArray(l.roles) ? l.roles : [],
+              public: !!l.public,
               title: l.title || '',
               content: l.content || { version: 1, blocks: [] }
             }))
@@ -2458,6 +2472,7 @@ class SPARouter {
           const usingLayers = !!layersRes.data.usingLayers;
           this.articleLayers = (layersRes.data.layers || []).map((l) => ({
             roles: Array.isArray(l.roles) ? l.roles : [],
+            public: !!l.public,
             title: l.title || '',
             content: l.content || { version: 1, blocks: [] }
           }));

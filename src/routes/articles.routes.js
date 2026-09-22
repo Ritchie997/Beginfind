@@ -588,6 +588,14 @@ router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkN
           return res.status(403).json({ error: 'Нельзя создать слой с ролью, которой у вас нет' });
         }
       }
+      // Слой без ролей рядом со слоем с ролями обязан быть явно помечен
+      // публичным (см. findAmbiguousPublicLayer) — иначе он тихо открывал бы
+      // всю статью любому читателю, несмотря на роль на другом слое.
+      const normalized = articleLayers.normalizeLayers(layers);
+      const ambiguous = articleLayers.findAmbiguousPublicLayer(normalized);
+      if (ambiguous) {
+        return res.status(400).json({ error: `Слой "${ambiguous.title || 'без названия'}" без ролей соседствует со слоем, у которого роли есть — отметьте его публичным или задайте ему роли` });
+      }
       createLayers = layers;
     }
 
