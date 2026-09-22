@@ -276,7 +276,7 @@ function showModalLogin() {
       <form id="register-form" style="display:none; flex-direction:column;">
         <div style="margin-bottom: 15px;">
           <label for="reg-username" style="display:block; margin-bottom:8px; color:var(--text-muted, #b9bbbe); font-weight:500;">Логин:</label>
-          <input type="text" id="reg-username" autocomplete="username" required minlength="3" maxlength="32" pattern="\S{3,32}" title="От 3 до 32 символов, без пробелов" style="
+          <input type="text" id="reg-username" autocomplete="username" required minlength="3" maxlength="32" pattern="\\S{3,32}" title="От 3 до 32 символов, без пробелов" style="
             width:100%; padding:12px; box-sizing:border-box;
             background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
             border-radius:4px; color:var(--text-normal, #dcddde); font-size:15px;
