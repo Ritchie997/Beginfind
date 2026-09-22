@@ -3765,7 +3765,7 @@ class SPARouter {
         const totalArticles = document.getElementById('total-articles');
         if (totalArticles) totalArticles.textContent = articlesResult.data.length;
         articlesData = articlesResult.data;
-        this.renderTrendBadge('trend-articles', this.countLastDays(articlesData, 7));
+        this.renderTrendBadge('trend-articles', this.countToday(articlesData));
       } else {
         console.error('Error loading articles count:', articlesResult.error);
       }
@@ -3836,12 +3836,16 @@ class SPARouter {
     }
   }
 
-  // Сколько элементов создано за последние N дней (для бейджа-тренда в сводке)
-  countLastDays(items, days, dateField = 'created_at') {
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  // Сколько элементов создано СЕГОДНЯ — календарный день по UTC, та же зона,
+  // что и у дат на сервере (см. TODAY_CUTOFF_SQL в dashboard-stats.js) — для
+  // бейджа "▲+N" в сводке. Раньше здесь считалось за последние 7 дней — на
+  // небольшой базе, где почти вся активность свежая, бейдж почти всегда
+  // совпадал с общим количеством статей и выглядел как ложный "не считается".
+  countToday(items, dateField = 'created_at') {
+    const todayUtc = new Date().toISOString().slice(0, 10);
     return items.filter(item => {
-      const t = new Date(item[dateField]).getTime();
-      return !Number.isNaN(t) && t >= cutoff;
+      const d = new Date(item[dateField]);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === todayUtc;
     }).length;
   }
 

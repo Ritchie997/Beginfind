@@ -14,7 +14,12 @@ const sqlite3 = require('sqlite3').verbose();
 const { dbPath } = require('../config/paths');
 const { messengerDb, socialDb } = require('../db/connections');
 
-// Окно "тренда" в бейджах рядом со счётчиками (см. renderTrendBadge на клиенте).
+// Ширина спарклайнов (сколько последних дней показываем на мини-графике,
+// см. renderSparkline на клиенте) — НЕ путать с бейджем "▲+N" рядом со
+// счётчиком: тот считает не за это окно, а строго за сегодня (см.
+// TODAY_CUTOFF_SQL ниже) — раньше бейдж суммировал за TREND_DAYS дней, из-за
+// чего на небольшой базе (где почти вся активность свежая) он почти всегда
+// совпадал с общим количеством и выглядел как "не считается вообще".
 const TREND_DAYS = 7;
 
 function dbAll(db, sql, params = []) {
@@ -33,14 +38,20 @@ function toIso(ts) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-// Границы окна тренда в том же формате, что и CURRENT_TIMESTAMP — иначе
+// Границы окна спарклайна в том же формате, что и CURRENT_TIMESTAMP — иначе
 // строковое сравнение created_at в SQL было бы некорректным.
 const TREND_CUTOFF_SQL = `datetime('now', '-${TREND_DAYS} days')`;
+
+// "Сегодня" для бейджа "▲+N" — календарный день по UTC (та же зона, что и у
+// CURRENT_TIMESTAMP/timestamp в БД), а не скользящие последние 24 часа:
+// так же, как уже группируются дни в perDayRows ниже, значит после полуночи
+// UTC счётчик обнуляется, а не "уезжает" вместе с текущим временем.
+const TODAY_CUTOFF_SQL = `date('now')`;
 
 /**
  * Пользователи: сколько всего (только подтверждённые — заявки в ожидании и
  * отклонённые пользователями ещё/уже не являются), сколько зарегистрировалось
- * за последние TREND_DAYS дней и последние регистрации для ленты активности.
+ * СЕГОДНЯ (для бейджа "▲+N") и последние регистрации для ленты активности.
  */
 async function getUsersSummary(recentLimit = 5) {
   const usersDb = new sqlite3.Database(dbPath('users.db'), sqlite3.OPEN_READONLY);
@@ -48,7 +59,7 @@ async function getUsersSummary(recentLimit = 5) {
     const [counts] = await dbAll(
       usersDb,
       `SELECT COUNT(*) AS total,
-              COALESCE(SUM(CASE WHEN created_at >= ${TREND_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS recent
+              COALESCE(SUM(CASE WHEN date(created_at) = ${TODAY_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS today
          FROM users WHERE status = 'approved'`
     );
     const recent = await dbAll(
@@ -59,7 +70,7 @@ async function getUsersSummary(recentLimit = 5) {
     );
     return {
       total: counts.total,
-      trend: counts.recent,
+      trend: counts.today,
       recent: recent.map((u) => ({
         id: u.id,
         name: u.display_name || u.username,
@@ -72,13 +83,13 @@ async function getUsersSummary(recentLimit = 5) {
 }
 
 /**
- * Сообщения мессенджера: всего, за окно тренда и последние для ленты.
+ * Сообщения мессенджера: всего, сегодня (для бейджа) и последние для ленты.
  */
 async function getMessengerSummary(recentLimit = 3) {
   const [counts] = await dbAll(
     messengerDb,
     `SELECT COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN timestamp >= ${TREND_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS recent
+            COALESCE(SUM(CASE WHEN date(timestamp) = ${TODAY_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS today
        FROM messages`
   );
   const recent = await dbAll(
@@ -105,7 +116,7 @@ async function getMessengerSummary(recentLimit = 3) {
 
   return {
     total: counts.total,
-    trend: counts.recent,
+    trend: counts.today,
     daily,
     recent: recent.map((m) => ({
       id: m.id,
@@ -117,16 +128,16 @@ async function getMessengerSummary(recentLimit = 3) {
 }
 
 /**
- * Комментарии статей Ibripedia: число по каждой статье (всего и за окно
- * тренда) — вызывающий код суммирует только по СУЩЕСТВУЮЩИМ статьям, потому
- * что комментарии удалённой статьи в article_comments остаются — и последние
+ * Комментарии статей Ibripedia: число по каждой статье (всего и сегодня) —
+ * вызывающий код суммирует только по СУЩЕСТВУЮЩИМ статьям, потому что
+ * комментарии удалённой статьи в article_comments остаются — и последние
  * комментарии (с запасом, часть отсеется проверкой доступа/существования).
  */
 async function getCommentsSummary(recentLimit = 50) {
   const perArticle = await dbAll(
     socialDb,
     `SELECT article_slug AS slug, COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN created_at >= ${TREND_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS recent
+            COALESCE(SUM(CASE WHEN date(created_at) = ${TODAY_CUTOFF_SQL} THEN 1 ELSE 0 END), 0) AS today
        FROM article_comments GROUP BY article_slug`
   );
   const recent = await dbAll(

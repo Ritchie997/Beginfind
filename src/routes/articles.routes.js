@@ -1225,7 +1225,7 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
     for (const row of comments.perArticle) {
       if (!articlesBySlug.has(row.slug)) continue;
       commentsTotal += row.total;
-      commentsTrend += row.recent;
+      commentsTrend += row.today;
       commentedArticles += 1;
     }
 
