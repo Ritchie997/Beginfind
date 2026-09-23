@@ -343,6 +343,14 @@
       this.bookmarkGhostEl = null;
       this.bookmarkGutterHoverEl = null;
       this.bookmarkCompactHoverEl = null;
+
+      // Прокрутка витрины на момент открытия статьи — чтобы кнопка "Назад"
+      // (closeArticleView) возвращала не наверх списка, а туда же, откуда
+      // читатель ушёл в статью. Запоминается только при переходе ИЗ витрины
+      // (см. openArticleView) — переходы между статьями по wiki-ссылкам/
+      // бэклинкам, пока витрина и так скрыта, это значение не трогают, чтобы
+      // "Назад" всегда возвращал к исходному месту в библиотеке.
+      this._libraryScrollY = 0;
     }
 
     async init() {
@@ -966,6 +974,7 @@
         this.switchSidebarTab('toc');
         this.closeSidebarOnMobile();
 
+        if (!this.browseEl.hidden) this._libraryScrollY = window.scrollY;
         this.browseEl.hidden = true;
         this.viewEl.hidden = false;
         window.scrollTo(0, 0);
@@ -2009,6 +2018,14 @@
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
       if (this.viewEl) this.viewEl.hidden = true;
       if (this.browseEl) this.browseEl.hidden = false;
+      // Витрина только что снова видима — hidden=false выше уже обновил
+      // раскладку синхронно, так что scrollHeight/scrollTo для неё доступны
+      // сразу же, без ожидания кадра (см. комментарий у _libraryScrollY в
+      // конструкторе). behavior: 'instant' обязателен — на html стоит
+      // scroll-behavior: smooth (см. global-styles.css), а scrollTo(x, y)/
+      // behavior:'auto' его наследует и едет к цели плавно, из-за чего сразу
+      // после вызова scrollY ещё не совпадает с целью.
+      window.scrollTo({ top: this._libraryScrollY || 0, left: 0, behavior: 'instant' });
     }
 
     // ========================================

@@ -572,7 +572,7 @@
         case 'divider': return this.renderDividerBody();
         case 'image': return this.renderImageBody(block);
         case 'columns': return this.renderColumnsBody(block);
-        case 'infobox': return this.renderInfoboxBody(block);
+        case 'infobox': return this.renderInfoboxBody(block, list);
         case 'callout': return this.renderCalloutBody(block, list);
         case 'spoiler-section': return this.renderSpoilerSectionBody(block);
         default: return document.createElement('div');
@@ -608,6 +608,19 @@
       ta.addEventListener('blur', () => setTimeout(() => { if (!this._suggestTouching) this.closeSuggest(); }, 150));
 
       return ta;
+    }
+
+    // Та же связка "активное поле тулбара + автодополнение вставки статьи +
+    // Ctrl+B/I/U/K", что makeTextArea() вешает сама, — для полей, которые
+    // строятся вручную и не проходят через неё (однострочные <input>/своя
+    // textarea вне общего eb-text, например поля инфобокса): без этого клик
+    // в такое поле не делал его активным для тулбара, а набор "[текст]((" не
+    // показывал список статей — вставка ссылки в них молча не работала.
+    wireWikilinkField(el, list, block) {
+      el.addEventListener('focus', () => this.setActive(list, block, el));
+      el.addEventListener('input', () => this.updateWikilinkSuggest(el));
+      el.addEventListener('keydown', (e) => this.handleTextKeydown(e, el));
+      el.addEventListener('blur', () => setTimeout(() => { if (!this._suggestTouching) this.closeSuggest(); }, 150));
     }
 
     handleTextKeydown(e, ta) {
@@ -1496,7 +1509,7 @@
 
     // ===== Инфобокс =====
 
-    renderInfoboxBody(block) {
+    renderInfoboxBody(block, list) {
       const wrap = document.createElement('div');
       wrap.className = 'eb-infobox-editor eb-gap';
 
@@ -1505,6 +1518,7 @@
       titleInput.value = block.data.title || '';
       titleInput.dataset.autofocus = '1';
       titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); });
+      this.wireWikilinkField(titleInput, list, block);
       wrap.appendChild(titleInput);
 
       const coverRow = document.createElement('div');
@@ -1539,6 +1553,7 @@
         const rowEl = document.createElement('div'); rowEl.className = 'eb-infobox-row';
         const label = document.createElement('input'); label.type = 'text'; label.className = 'eb-input'; label.placeholder = 'Поле'; label.value = row.label;
         label.addEventListener('input', () => { row.label = label.value; this.scheduleRenderPreview(); });
+        this.wireWikilinkField(label, list, block);
 
         // Значение — как обычные текстовые блоки (eb-text): textarea, сама
         // растёт по высоте, а не однострочный input, где длинный текст
@@ -1549,6 +1564,7 @@
         const autosizeValue = () => autosizeField(value);
         requestAnimationFrame(autosizeValue);
         value.addEventListener('input', () => { row.value = value.value; autosizeValue(); this.scheduleRenderPreview(); });
+        this.wireWikilinkField(value, list, block);
 
         const del = document.createElement('button'); del.type = 'button'; del.className = 'eb-icon-btn'; del.innerHTML = '<i class="fas fa-xmark"></i>';
         del.addEventListener('click', () => { if (block.data.rows.length <= 1) return; block.data.rows.splice(idx, 1); this.renderAll(); this.scheduleRenderPreview(); });

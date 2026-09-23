@@ -2582,6 +2582,20 @@ class SPARouter {
     document.getElementById('tagsSearchInput')?.addEventListener('input', (e) => {
       this.renderTagsGrid(e.target.value);
     });
+
+    // Модалка "Цвет тега" — тот же паттерн close/cancel/overlay-click, что и
+    // у модалок вкладки "Сервера" (см. setupServerFormEvents).
+    document.getElementById('tag-color-modal-save-btn')?.addEventListener('click', () => this.saveTagColorModal());
+    document.getElementById('tag-color-modal-cancel-btn')?.addEventListener('click', () => this.hideTagColorModal());
+    document.getElementById('tag-color-modal-close-btn')?.addEventListener('click', () => this.hideTagColorModal());
+    document.getElementById('tag-color-modal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'tag-color-modal') this.hideTagColorModal();
+    });
+    document.getElementById('tag-color-modal-picker')?.addEventListener('input', (e) => this.setTagColorModalValue(e.target.value));
+    document.getElementById('tag-color-modal-hex')?.addEventListener('input', (e) => this.setTagColorModalValue(e.target.value, { fromHexField: true }));
+    document.getElementById('tag-color-modal-hex')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.saveTagColorModal(); }
+    });
   }
 
   async loadTagsList() {
@@ -2603,7 +2617,9 @@ class SPARouter {
           const key = String(item.tag).toLowerCase();
           if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0, color: item.color || '#5865f2' });
         });
-        this.tagsCache = [...seen.values()];
+        // Алфавитный порядок — список приходит с сервера в произвольном
+        // порядке (см. collectTags в articles-store.js), сортируем на клиенте.
+        this.tagsCache = [...seen.values()].sort((a, b) => a.tag.localeCompare(b.tag, 'ru'));
         this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
       } else {
         if (loadingEl) loadingEl.hidden = true;
@@ -2652,9 +2668,8 @@ class SPARouter {
     }
 
     // Цвет тега — один на тег во всей системе (граф связей красит узлы им же).
-    // Плитка = кнопка "показать статьи с тегом" + круглый переключатель цвета
-    // (нативный <input type="color"> под кружком): изменить цвет на свой можно
-    // прямо здесь.
+    // Плитка = кнопка "показать статьи с тегом" + круглый переключатель цвета,
+    // открывающий модалку #tag-color-modal (см. showTagColorModal ниже).
     gridEl.innerHTML = filtered.map((t) => `
       <div class="tag-card" data-tag="${this.escapeHtml(t.tag)}">
         <button type="button" class="tag-card-main" data-open-tag title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
@@ -2664,22 +2679,17 @@ class SPARouter {
             <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
           </span>
         </button>
-        <label class="tag-card-color" title="Изменить цвет тега">
-          <input type="color" value="${t.color}" data-tag-color="${this.escapeHtml(t.tag)}" aria-label="Цвет тега «${this.escapeHtml(t.tag)}»">
+        <button type="button" class="tag-card-color" data-open-tag-color="${this.escapeHtml(t.tag)}" title="Изменить цвет тега «${this.escapeHtml(t.tag)}»" aria-label="Изменить цвет тега «${this.escapeHtml(t.tag)}»">
           <span class="tag-card-swatch" style="background:${t.color}"></span>
-        </label>
+        </button>
       </div>
     `).join('');
 
     gridEl.querySelectorAll('[data-open-tag]').forEach((btn) => {
       btn.addEventListener('click', () => this.openTagInIbripedia(btn.closest('.tag-card').dataset.tag));
     });
-    gridEl.querySelectorAll('input[data-tag-color]').forEach((input) => {
-      const card = input.closest('.tag-card');
-      // Пока тянут ползунок в пикере — просто перекрашиваем плитку (без
-      // запросов); сохраняем один раз, когда цвет выбран (change).
-      input.addEventListener('input', () => this.paintTagCard(card, input.value));
-      input.addEventListener('change', () => this.saveTagColor(input.dataset.tagColor, input.value, card));
+    gridEl.querySelectorAll('[data-open-tag-color]').forEach((btn) => {
+      btn.addEventListener('click', () => this.showTagColorModal(btn.dataset.openTagColor));
     });
   }
 
@@ -2691,29 +2701,106 @@ class SPARouter {
     if (swatch) swatch.style.background = color;
   }
 
-  async saveTagColor(tag, color, card) {
-    const item = (this.tagsCache || []).find((t) => t.tag === tag);
-    const previous = item ? item.color : null;
-    try {
-      const result = await apiClient.setTagColor(tag, color);
-      if (!result.success) throw new Error(result.data?.error || result.error || 'не удалось сохранить цвет');
-      if (item) item.color = result.data.color || color;
-      showMessage(`Цвет тега «${tag}» обновлён`, 'success');
-    } catch (error) {
-      // Откатываем плитку к прежнему цвету, чтобы не показывать несохранённое.
-      if (previous) {
-        this.paintTagCard(card, previous);
-        const input = card?.querySelector('input[data-tag-color]');
-        if (input) input.value = previous;
-      }
-      showMessage(`Ошибка смены цвета: ${error.message}`, 'error');
-    }
-  }
-
   // Клик по тегу — витрина Ibripedia с уже включённым фильтром по нему.
   async openTagInIbripedia(tag) {
     await this.navigateTo('/ibripedia');
     window.ibripediaManager?.filterByTag(tag);
+  }
+
+  // === Модалка "Цвет тега" — тот же .modal-overlay/.modal-box, что у
+  // модалок вкладки "Сервера" (см. комментарий в tags.html). Два способа
+  // задать цвет, синхронизированные друг с другом: нативный <input
+  // type="color"> (основной) и HEX-поле (точное значение), плюс готовые
+  // пресеты — та же палитра, что у аватаров серверов (serverAvatarPalette).
+
+  // "#RRGGBB"/"RRGGBB"/"RGB" -> "#rrggbb" в нижнем регистре, null если не хекс.
+  normalizeHexColor(value) {
+    const v = String(value || '').trim().replace(/^#/, '');
+    if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v.toLowerCase()}`;
+    if (/^[0-9a-fA-F]{3}$/.test(v)) return `#${v.toLowerCase().split('').map((c) => c + c).join('')}`;
+    return null;
+  }
+
+  showTagColorModal(tag) {
+    const item = (this.tagsCache || []).find((t) => t.tag === tag);
+    if (!item) return;
+    this._tagColorModalTag = tag;
+
+    document.getElementById('tag-color-modal-name').textContent = `#${item.tag}`;
+    this.renderTagColorModalPresets();
+    this.setTagColorModalValue(item.color);
+
+    const modal = document.getElementById('tag-color-modal');
+    if (modal) modal.hidden = false;
+    document.getElementById('tag-color-modal-hex')?.focus();
+  }
+
+  hideTagColorModal() {
+    const modal = document.getElementById('tag-color-modal');
+    if (modal) modal.hidden = true;
+    this._tagColorModalTag = null;
+  }
+
+  renderTagColorModalPresets() {
+    const wrap = document.getElementById('tag-color-modal-presets');
+    if (!wrap) return;
+    wrap.innerHTML = this.serverAvatarPalette().map((c) =>
+      `<button type="button" class="tag-color-modal-preset" data-preset-color="${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`
+    ).join('');
+    wrap.querySelectorAll('[data-preset-color]').forEach((btn) => {
+      btn.addEventListener('click', () => this.setTagColorModalValue(btn.dataset.presetColor));
+    });
+  }
+
+  // Общая точка входа для пикера/HEX-поля/пресетов — красит превью и
+  // подсвечивает совпавший пресет. fromHexField: true — вызов из СОБСТВЕННОГО
+  // input-обработчика HEX-поля: его же value руками не трогаем (иначе на
+  // полпути к 6-значному коду normalizeHexColor успевает принять честные 3
+  // символа за короткую HEX-запись "#rgb" и подменяет то, что человек ещё
+  // печатает, — цвет "портился" посреди набора, см. баг с "#ff8800" на
+  // выходе дававший "#ffff88").
+  setTagColorModalValue(color, { fromHexField = false } = {}) {
+    const normalized = this.normalizeHexColor(color);
+    const hexInput = document.getElementById('tag-color-modal-hex');
+    const pickerInput = document.getElementById('tag-color-modal-picker');
+    const icon = document.getElementById('tag-color-modal-icon');
+
+    if (hexInput) {
+      if (!fromHexField) hexInput.value = normalized || color || '';
+      hexInput.classList.toggle('invalid', fromHexField && !normalized);
+    }
+    if (!normalized) return; // невалидный HEX (например, ещё не дописан) — превью/пикер не трогаем
+    if (pickerInput) pickerInput.value = normalized;
+    if (icon) { icon.style.background = `${normalized}26`; icon.style.color = normalized; }
+    document.querySelectorAll('.tag-color-modal-preset').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.presetColor.toLowerCase() === normalized);
+    });
+  }
+
+  async saveTagColorModal() {
+    const tag = this._tagColorModalTag;
+    if (!tag) return;
+    const hexInput = document.getElementById('tag-color-modal-hex');
+    const color = this.normalizeHexColor(hexInput?.value);
+    if (!color) {
+      hexInput?.classList.add('invalid');
+      showMessage('Некорректный HEX-код цвета', 'error');
+      return;
+    }
+
+    try {
+      const result = await apiClient.setTagColor(tag, color);
+      if (!result.success) throw new Error(result.data?.error || result.error || 'не удалось сохранить цвет');
+      const finalColor = result.data.color || color;
+      const item = (this.tagsCache || []).find((t) => t.tag === tag);
+      if (item) item.color = finalColor;
+      const card = document.getElementById('tagsContainer')?.querySelector(`.tag-card[data-tag="${CSS.escape(tag)}"]`);
+      this.paintTagCard(card, finalColor);
+      showMessage(`Цвет тега «${tag}» обновлён`, 'success');
+      this.hideTagColorModal();
+    } catch (error) {
+      showMessage(`Ошибка смены цвета: ${error.message}`, 'error');
+    }
   }
 
   // === Server management — каталог + рабочая область открытого сервера ===

@@ -31,6 +31,41 @@
   </div>
 
   <div class="tags-grid" id="tagsContainer" hidden></div>
+
+  <!-- Смена цвета тега — тот же язык модалок, что у вкладки "Сервера" (см.
+       .modal-overlay/.modal-box/.modal-header/.modal-body/.modal-footer в
+       global-styles.css и, например, #server-role-editor-modal в
+       servers.html): те же классы, тот же порядок блоков — на телефоне и на
+       ПК ведёт себя одинаково с остальными модалками сайта. Основной способ
+       выбора цвета — нативный <input type="color">; HEX-поле — уточнение
+       рядом, синхронизируется с ним в обе стороны (см. showTagColorModal/
+       setTagColorModalValue в spa-router.js). -->
+  <div id="tag-color-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Цвет тега</h3>
+        <button type="button" class="modal-close" id="tag-color-modal-close-btn" title="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tag-color-modal-preview">
+          <span class="tag-card-icon tag-color-modal-icon" id="tag-color-modal-icon"><i class="fas fa-hashtag"></i></span>
+          <span class="tag-color-modal-name" id="tag-color-modal-name"></span>
+        </div>
+        <div class="tag-color-modal-picker-row">
+          <input type="color" id="tag-color-modal-picker" class="tag-color-modal-picker" aria-label="Выбор цвета">
+          <div class="tag-color-modal-hex-wrap">
+            <label class="form-label" for="tag-color-modal-hex">HEX-код</label>
+            <input type="text" id="tag-color-modal-hex" class="form-input tag-color-modal-hex" maxlength="7" placeholder="#5865F2" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="tag-color-modal-presets" id="tag-color-modal-presets"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="tag-color-modal-cancel-btn">Отмена</button>
+        <button class="btn btn-primary" id="tag-color-modal-save-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -197,25 +232,17 @@
 }
 .tag-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
 
-/* Круглый переключатель цвета: настоящий <input type="color"> лежит под
-   кружком невидимым слоем на всю его площадь — клик открывает системный
-   выбор цвета. */
+/* Круглый переключатель цвета — открывает модалку #tag-color-modal (см.
+   showTagColorModal в spa-router.js), а не системный пикер напрямую: там же
+   рядом с ним теперь и HEX-поле. */
 .tag-card-color {
-  position: relative;
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
-  cursor: pointer;
-}
-.tag-card-color input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
   padding: 0;
   border: none;
+  background: none;
+  cursor: pointer;
 }
 .tag-card-swatch {
   display: block;
@@ -227,7 +254,71 @@
   pointer-events: none;
 }
 .tag-card-color:hover .tag-card-swatch,
-.tag-card-color:focus-within .tag-card-swatch { border-color: var(--text-normal); }
+.tag-card-color:focus-visible .tag-card-swatch { border-color: var(--text-normal); }
+
+/* === Модалка смены цвета тега === */
+
+.tag-color-modal-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tag-color-modal-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 17px;
+}
+.tag-color-modal-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-color-modal-picker-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.tag-color-modal-picker {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+/* Убираем системные внутренние отступы предпросмотра цвета у input[type=color] —
+   чтобы заливка занимала весь прямоугольник кнопки, без каёмки браузера по умолчанию. */
+.tag-color-modal-picker::-webkit-color-swatch-wrapper { padding: 4px; }
+.tag-color-modal-picker::-webkit-color-swatch { border: none; border-radius: 5px; }
+.tag-color-modal-picker::-moz-color-swatch { border: none; border-radius: 5px; }
+
+.tag-color-modal-hex-wrap { flex: 1 1 auto; min-width: 0; }
+.tag-color-modal-hex { text-transform: uppercase; font-family: var(--font-mono, monospace); }
+.tag-color-modal-hex.invalid { border-color: var(--red); }
+
+.tag-color-modal-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tag-color-modal-preset {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--background-accent);
+}
+.tag-color-modal-preset:hover { transform: scale(1.08); }
+.tag-color-modal-preset.active { border-color: var(--text-normal); }
 
 .tags-no-results { grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 14px; }
 
