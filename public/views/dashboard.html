@@ -25,6 +25,14 @@
             <input type="checkbox" id="graphUniformSize">
             Одинаковый размер точек
         </label>
+        <label class="graph-controls-checkbox" title="Статьи, которые чаще ссылаются друг на друга, собираются в «острова» с подложкой и названием">
+            <input type="checkbox" id="graphClusters" checked>
+            Группы
+        </label>
+        <label class="graph-controls-checkbox" title="При сильном отдалении большого графа (от 60 статей) каждая группа сворачивается в один кружок; клик по нему — раскрыть">
+            <input type="checkbox" id="graphCollapse" checked>
+            Сворачивать группы при отдалении
+        </label>
         <label class="graph-controls-checkbox" title="Мерцающие звёзды на фоне, параллакс при движении и свечение точек">
             <input type="checkbox" id="graphCosmos" checked>
             Космос
@@ -36,6 +44,7 @@
             <i class="fas fa-download"></i> PNG
         </button>
     </div>
+    <div class="graph-focus-bar" id="graphFocusBar" hidden></div>
     <div class="graph-container graph-container-dashboard" id="graphContainer">
         <div class="graph-empty">Загрузка графа…</div>
     </div>

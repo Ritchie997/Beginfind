@@ -932,13 +932,78 @@
   padding: 20px;
 }
 
+/* Связи по умолчанию тихие — фон, на котором видны статьи; при наведении/
+   поиске связи выбранной статьи становятся яркими (graph-link-active).
+   Взаимная ссылка (A↔B, graph-link-mutual) — чуть толще и заметнее;
+   связь между разными группами (graph-link-inter) — самая бледная, чтобы
+   "острова" читались отдельно. */
 .graph-link {
   stroke: var(--background-accent);
-  stroke-width: 1.5px;
+  stroke-width: 1px;
+  opacity: 0.6;
   transition: stroke 0.15s, opacity 0.15s;
 }
-.graph-link-active { stroke: var(--blurple); stroke-width: 2px; }
+.graph-link-mutual { stroke-width: 1.6px; opacity: 0.75; }
+.graph-link-inter { opacity: 0.3; }
+.graph-link-active { stroke: var(--blurple); stroke-width: 2px; opacity: 1; }
 .graph-link-dim { opacity: 0.12; }
+
+/* === Группы статей (clusters в graph-view.js) ===
+   Подложка — выпуклая оболочка статей группы, скруглённая толстой обводкой
+   того же цвета; прозрачность — на всей группе, чтобы заливка и обводка
+   не складывались. */
+.graph-hull { opacity: 0.08; }
+.graph-cosmos .graph-hull { opacity: 0.11; }
+.graph-cluster-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  stroke: var(--graph-bg, var(--background-tertiary));
+  stroke-linejoin: round;
+  paint-order: stroke;
+  user-select: none;
+}
+
+/* Свёрнутые группы при сильном отдалении (.graph-collapsed на контейнере):
+   статьи групп, их связи, подложки и названия плавно гаснут, вместо них
+   проявляется мета-граф — кружок на группу и линии между группами.
+   Статьи вне групп остаются видны. */
+.graph-node,
+.graph-links,
+.graph-hulls,
+.graph-cluster-labels { transition: opacity 0.35s; }
+.graph-meta {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s;
+}
+.graph-collapsed .graph-meta { opacity: 1; pointer-events: auto; }
+.graph-collapsed .graph-links,
+.graph-collapsed .graph-hulls,
+.graph-collapsed .graph-cluster-labels { opacity: 0; }
+.graph-container.graph-collapsed .graph-in-cluster { opacity: 0; pointer-events: none; }
+.graph-meta-link {
+  stroke: var(--background-accent);
+  opacity: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+.graph-supernode { cursor: pointer; }
+.graph-supernode-backing { fill: var(--graph-bg, var(--background-tertiary)); }
+.graph-supernode-circle {
+  fill-opacity: 0.35;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  transition: fill-opacity 0.15s;
+}
+.graph-supernode:hover .graph-supernode-circle { fill-opacity: 0.6; }
+.graph-supernode-label {
+  fill: var(--text-normal);
+  font-weight: 600;
+  stroke: var(--graph-bg, var(--background-tertiary));
+  stroke-linejoin: round;
+  paint-order: stroke;
+  pointer-events: none;
+  user-select: none;
+}
 
 .graph-node-circle {
   fill: var(--blurple);
@@ -1110,6 +1175,21 @@
 .graph-controls-checkbox input {
   cursor: pointer;
 }
+
+/* Полоса "Окрестность статьи" над графом (graphFocusBar в graph-view.js) */
+.graph-focus-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+.graph-focus-bar[hidden] { display: none; }
+.graph-focus-title { margin-right: 4px; }
+.graph-focus-title i { color: var(--green); margin-right: 4px; }
+.graph-card-top.graph-fullscreen .graph-focus-bar { flex: 0 0 auto; }
 
 /* margin-left:auto только на первой кнопке "хвоста" (fullscreen) — она
    утягивает вправо всю группу, включая идущую следом PNG-кнопку, без
