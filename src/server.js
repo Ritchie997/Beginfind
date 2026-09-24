@@ -23,6 +23,7 @@ const { readSettings, writeSettings, SETTINGS_PATH } = require('./services/backu
 const cleanup = require('./services/cleanup');
 const { readSettings: readCleanupSettings, writeSettings: writeCleanupSettings, SETTINGS_PATH: CLEANUP_SETTINGS_PATH } = require('./services/cleanup-settings');
 const { maintenanceGate } = require('./middleware/maintenance');
+const { dedupeRequests } = require('./middleware/dedupe-requests');
 
 const pages = require('./routes/pages.routes');
 const authRoutes = require('./routes/auth.routes');
@@ -94,6 +95,10 @@ app.use('/api/*', cors(corsOptions));
 // they успеют отработать до проверки. См. src/middleware/maintenance.js —
 // пропускает владельца и сам /api/login, всех остальных отбивает 503.
 app.use('/api/*', maintenanceGate);
+// Повторные одинаковые изменяющие запросы (многократное нажатие "Создать",
+// одновременное нажатие в двух вкладках) не выполняются второй раз, а
+// получают ответ первого — см. src/middleware/dedupe-requests.js.
+app.use('/api/*', dedupeRequests);
 
 // Маршруты API
 app.use('/api', authRoutes);

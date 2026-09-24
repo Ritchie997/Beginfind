@@ -245,6 +245,7 @@
   gap: 6px;
 }
 .eb-image-settings-btn:hover { background: rgba(0,0,0,.75); }
+.eb-image-caption { font-size: .82em; color: var(--text-muted); margin-top: 4px; }
 .eb-image-placeholder {
   display: flex;
   align-items: center;

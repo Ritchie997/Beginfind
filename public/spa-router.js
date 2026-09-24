@@ -1285,7 +1285,7 @@ class SPARouter {
     // Set up all button events using event delegation
     document.getElementById('add-tag-mobile-btn')?.addEventListener('click', () => this.tagsField?.commitTyped());
     document.getElementById('upload-image-btn')?.addEventListener('click', () => this.uploadImage());
-    document.getElementById('saveArticleBtn')?.addEventListener('click', () => this.saveArticle());
+    document.getElementById('saveArticleBtn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.saveArticle()));
     document.getElementById('saveDraftBtn')?.addEventListener('click', () => this.saveDraft());
     document.getElementById('loadDraftBtn')?.addEventListener('click', () => {
       // Show the drafts manager
@@ -1505,7 +1505,7 @@ class SPARouter {
   setupServerFormEvents() {
     document.getElementById('create-server-btn')?.addEventListener('click', () => this.showCreateServerModal());
     document.getElementById('create-server-empty-btn')?.addEventListener('click', () => this.showCreateServerModal());
-    document.getElementById('create-server-confirm-btn')?.addEventListener('click', () => this.createServer());
+    document.getElementById('create-server-confirm-btn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.createServer()));
     document.getElementById('cancel-create-server-btn')?.addEventListener('click', () => this.hideCreateServerModal());
     document.getElementById('create-server-close-btn')?.addEventListener('click', () => this.hideCreateServerModal());
     document.getElementById('create-server-modal')?.addEventListener('click', (e) => {
@@ -1564,7 +1564,7 @@ class SPARouter {
     });
 
     // Модалка создания/редактирования роли
-    document.getElementById('server-role-editor-save-btn')?.addEventListener('click', () => this.saveServerRoleEditor());
+    document.getElementById('server-role-editor-save-btn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.saveServerRoleEditor()));
     document.getElementById('server-role-editor-cancel-btn')?.addEventListener('click', () => this.hideServerRoleEditorModal());
     document.getElementById('server-role-editor-close-btn')?.addEventListener('click', () => this.hideServerRoleEditorModal());
     document.getElementById('server-role-editor-modal')?.addEventListener('click', (e) => {
@@ -1580,7 +1580,7 @@ class SPARouter {
     });
 
     // Модалка создания/редактирования канала
-    document.getElementById('channel-editor-save-btn')?.addEventListener('click', () => this.saveChannelEditor());
+    document.getElementById('channel-editor-save-btn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.saveChannelEditor()));
     document.getElementById('channel-editor-cancel-btn')?.addEventListener('click', () => this.hideChannelEditorModal());
     document.getElementById('channel-editor-close-btn')?.addEventListener('click', () => this.hideChannelEditorModal());
     document.getElementById('channel-editor-modal')?.addEventListener('click', (e) => {

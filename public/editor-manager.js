@@ -1259,6 +1259,13 @@
       settingsBtn.addEventListener('click', () => this.editImageBlock(block));
       holder.append(img, settingsBtn);
       wrap.appendChild(holder);
+      // Подпись под картинкой, как <figcaption> в превью (blocks-renderer.js).
+      if (block.data.alt) {
+        const caption = document.createElement('div');
+        caption.className = 'eb-image-caption';
+        caption.textContent = block.data.alt;
+        wrap.appendChild(caption);
+      }
       return wrap;
     }
 

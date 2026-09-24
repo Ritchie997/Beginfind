@@ -78,12 +78,12 @@
       document.getElementById('stickersMineEmptyCreateBtn')?.addEventListener('click', () => this.openCreateModal());
       document.getElementById('stickersCreateCloseBtn')?.addEventListener('click', () => this.closeCreateModal());
       document.getElementById('stickersCreateCancelBtn')?.addEventListener('click', () => this.closeCreateModal());
-      document.getElementById('stickersCreateConfirmBtn')?.addEventListener('click', () => this.submitCreate());
+      document.getElementById('stickersCreateConfirmBtn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.submitCreate()));
       document.getElementById('stickersCreateModal')?.addEventListener('click', (e) => {
         if (e.target.id === 'stickersCreateModal') this.closeCreateModal();
       });
       document.getElementById('stickersCreateTitle')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') this.submitCreate();
+        if (e.key === 'Enter') runExclusive(document.getElementById('stickersCreateConfirmBtn'), () => this.submitCreate());
       });
 
       let searchInput = document.getElementById('stickersCatalogSearch');
