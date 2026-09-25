@@ -1230,9 +1230,57 @@
   height: auto;
   min-height: 0;
 }
-@media (max-width: 480px) {
+/* Кнопка "Фильтры" нужна только в полноэкранном режиме на телефоне. */
+.graph-controls-toggle { display: none; }
+
+/* Телефон: панель фильтров (6 переключателей, сервер, PNG) встаёт столбиком
+   выше самого графа — в полноэкранном режиме граф выходил даже НИЖЕ, чем
+   в обычной карточке. Поэтому на весь экран остаются поиск, "Фильтры" и
+   "Свернуть"; остальное раскрывается кнопкой "Фильтры" (класс
+   .graph-controls-open на карточке, см. graph-view.js). */
+@media (max-width: 768px) {
   .graph-card-top.graph-fullscreen {
-    padding: 10px;
+    padding: 8px;
+  }
+  .graph-card-top.graph-fullscreen .graph-page-header {
+    margin-bottom: 6px;
+  }
+  .graph-card-top.graph-fullscreen .chart-title {
+    font-size: 16px;
+  }
+  .graph-card-top.graph-fullscreen .graph-controls {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .graph-card-top.graph-fullscreen .graph-search-wrap {
+    flex: 1 1 100px;
+    min-width: 0;
+    max-width: none;
+  }
+  .graph-card-top.graph-fullscreen .graph-controls-toggle { display: inline-flex; }
+  /* global-styles.css растягивает .btn на всю ширину при ≤480px — здесь
+     кнопки должны стоять в одну строку с поиском. */
+  .graph-card-top.graph-fullscreen .graph-controls .btn {
+    width: auto;
+    flex: 0 0 auto;
+    /* mobile-menu.css даёт .btn 12px 16px — с ним "Фильтры" + "Свернуть"
+       не помещаются рядом с поиском и уезжают второй строкой. */
+    padding: 8px 12px;
+  }
+  .graph-card-top.graph-fullscreen .graph-controls-fullscreen { margin-left: 0; }
+  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-select,
+  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-checkbox,
+  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-export {
+    display: none;
+  }
+  /* Раскрытые фильтры не должны снова съесть весь экран. */
+  .graph-card-top.graph-fullscreen.graph-controls-open .graph-controls {
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+  .graph-card-top.graph-fullscreen.graph-controls-open .graph-controls-toggle {
+    background: var(--blurple);
+    color: #fff;
   }
 }
 

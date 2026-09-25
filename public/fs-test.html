@@ -1,5 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/mobile-menu.css">
+<link rel="stylesheet" href="/editor-obsidian.css">
+<link rel="stylesheet" href="/editor-blocks.css">
+<link rel="stylesheet" href="/ibripedia.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head><body>
 <!-- Граф связей статей — теперь первый и главный блок страницы -->
-<div class="chart-card graph-card-top">
+<div class="chart-card graph-card-top graph-fullscreen">
     <div class="graph-page-header">
         <h3 class="chart-title" style="margin-bottom: 0;">Граф связей статей</h3>
         <span id="graphNodeCount" class="graph-page-count"></span>
@@ -51,83 +59,4 @@
     <div class="graph-container graph-container-dashboard" id="graphContainer">
         <div class="graph-empty">Загрузка графа…</div>
     </div>
-</div>
-
-<!-- Компактная сводка вместо четырёх громоздких карточек + отдельного графика -->
-<div class="stat-strip">
-    <div class="stat-chip">
-        <div class="stat-chip-icon">📝</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-articles">0</span>
-                <span class="stat-chip-trend" id="trend-articles"></span>
-            </div>
-            <div class="stat-chip-label">Статей</div>
-        </div>
-        <canvas id="articlesSparkline" class="stat-chip-sparkline" width="64" height="28"></canvas>
-    </div>
-
-    <div class="stat-chip">
-        <div class="stat-chip-icon">🌐</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-servers">0</span>
-            </div>
-            <div class="stat-chip-label">Серверов</div>
-        </div>
-    </div>
-
-    <div class="stat-chip">
-        <div class="stat-chip-icon">👥</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-users">0</span>
-                <span class="stat-chip-trend" id="trend-users"></span>
-            </div>
-            <div class="stat-chip-label">Пользователей</div>
-        </div>
-    </div>
-
-    <div class="stat-chip">
-        <div class="stat-chip-icon">💬</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-messages">0</span>
-                <span class="stat-chip-trend" id="trend-messages"></span>
-            </div>
-            <div class="stat-chip-label">Сообщений</div>
-        </div>
-        <canvas id="messagesSparkline" class="stat-chip-sparkline" width="64" height="28"></canvas>
-    </div>
-
-    <div class="stat-chip">
-        <div class="stat-chip-icon">🗨️</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-comments">0</span>
-                <span class="stat-chip-trend" id="trend-comments"></span>
-            </div>
-            <div class="stat-chip-label">Комментариев</div>
-            <div class="stat-chip-sub" id="comments-articles"></div>
-        </div>
-    </div>
-
-    <div class="stat-chip">
-        <div class="stat-chip-icon">🏷️</div>
-        <div class="stat-chip-body">
-            <div class="stat-chip-value">
-                <span id="total-tags">0</span>
-            </div>
-            <div class="stat-chip-label">Тегов</div>
-        </div>
-    </div>
-</div>
-
-<div class="activity-container">
-    <h2 class="activity-title">Последняя активность</h2>
-    <ul class="activity-list" id="activity-list">
-        <li class="activity-item">
-            <div class="activity-description">Загрузка активности…</div>
-        </li>
-    </ul>
-</div>
+</div></body></html>

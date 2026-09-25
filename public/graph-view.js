@@ -2105,6 +2105,7 @@
     function setGraphFullscreen(on) {
       if (!cardEl) return;
       cardEl.classList.toggle('graph-fullscreen', on);
+      cardEl.classList.remove('graph-controls-open');
       if (fullscreenBtn) {
         fullscreenBtn.innerHTML = on
           ? '<i class="fas fa-compress"></i> Свернуть'
@@ -2116,6 +2117,12 @@
     }
     fullscreenBtn?.addEventListener('click', () => {
       setGraphFullscreen(!cardEl?.classList.contains('graph-fullscreen'));
+    });
+    // "Фильтры" — видна только в полноэкранном режиме на телефоне (CSS):
+    // раскрывает спрятанные там переключатели. Граф не пересчитываем — SVG
+    // занимает контейнер по CSS и просто становится ниже/выше.
+    document.getElementById('graphControlsToggle')?.addEventListener('click', () => {
+      cardEl?.classList.toggle('graph-controls-open');
     });
 
     await rerender();
