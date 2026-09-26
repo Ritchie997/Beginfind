@@ -24,7 +24,6 @@
 // canAccessArticle в articles.routes.js.
 
 const { serversDb } = require('../db/connections');
-const { isAdminOnServer } = require('./server-permissions');
 const blocks = require('./blocks');
 
 function genId() {
@@ -155,6 +154,13 @@ function articleServerId(article) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+// Кто игнорирует закрытость статьи целиком: ТОЛЬКО владелец (is_root) и
+// доверенный админ (is_role_manager). Админ сервера статьи, модераторы и
+// прочие системные роли — нет: им доступ даёт только совпадение роли слоя.
+function bypassesArticleLock(user) {
+  return !!(user && (user.is_root || user.is_role_manager));
+}
+
 function layerRolesMatch(roles, user, userServerRoleIds) {
   if (!roles || roles.length === 0) return true; // публичный слой
   return roles.some((r) => {
@@ -168,8 +174,8 @@ function layerRolesMatch(roles, user, userServerRoleIds) {
 /**
  * Резолвит для пользователя самый верхний слой статьи, до которого он
  * "дотягивается" своими ролями (общесистемной ИЛИ ролью на сервере статьи).
- * root и админ сервера статьи — как и раньше с article.locked — сразу
- * получают самый верхний (закрытый) слой, без проверки списков ролей.
+ * Владелец и доверенный админ (см. bypassesArticleLock) сразу получают самый
+ * верхний (закрытый) слой, без проверки списков ролей.
  * @returns {Promise<{index:number, layer:object, layers:object[]}|null>}
  *   null — нет доступа НИ К ОДНОМУ слою (используется для узла-заглушки в
  *   графе и маркера "[не доступно]" у wiki-ссылок).
@@ -179,14 +185,9 @@ async function resolveArticleLayer(article, user) {
   if (!layers.length) return null;
   const topIndex = layers.length - 1;
 
-  if (user.is_root) return { index: topIndex, layer: layers[topIndex], layers };
+  if (bypassesArticleLock(user)) return { index: topIndex, layer: layers[topIndex], layers };
 
   const serverId = articleServerId(article);
-
-  if (serverId && await isAdminOnServer(user.id, serverId)) {
-    return { index: topIndex, layer: layers[topIndex], layers };
-  }
-
   const userServerRoleIds = serverId ? await getUserServerRoleIds(user.id, serverId) : [];
   for (let i = topIndex; i >= 0; i--) {
     if (layerRolesMatch(layers[i].roles, user, userServerRoleIds)) {
@@ -224,9 +225,8 @@ async function canAccessLayerIndex(article, user, layerIndex) {
 async function canCreateLayerWithRoles(article, user, roles) {
   const normalized = normalizeLayerRoles(roles);
   if (normalized.length === 0) return true;
-  if (user.is_root) return true;
+  if (bypassesArticleLock(user)) return true;
   const serverId = articleServerId(article);
-  if (serverId && await isAdminOnServer(user.id, serverId)) return true;
   const userServerRoleIds = serverId ? await getUserServerRoleIds(user.id, serverId) : [];
   return layerRolesMatch(normalized, user, userServerRoleIds);
 }
