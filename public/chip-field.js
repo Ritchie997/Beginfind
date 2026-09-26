@@ -97,7 +97,26 @@
     // иначе при сохранении статьи такой текст молча пропадал (см. заголовок файла).
     getValues() {
       if (this.freeText) this._commitTyped(/* silent */ true);
+      else this._commitTypedOption();
       return [...this.values];
+    }
+
+    // Режим "список": набранный текст, точно совпадающий с подписью варианта
+    // (без учёта регистра), тоже считается выбором — иначе роль, напечатанная
+    // в "Доступ для", но не выбранная кликом, молча терялась, и "закрытая"
+    // статья сохранялась без ролей.
+    _commitTypedOption() {
+      const text = (this.inputEl?.value || '').trim().toLowerCase();
+      if (!text || !this.options) return;
+      const opt = this.options.find((o) => String(o.label).trim().toLowerCase() === text);
+      if (!opt) return;
+      this.inputEl.value = '';
+      if (!this.values.includes(String(opt.value))) {
+        this.values.push(String(opt.value));
+        this._syncHidden();
+        this._renderChips();
+        this.onChange?.(this.values);
+      }
     }
 
     addValue(value) {

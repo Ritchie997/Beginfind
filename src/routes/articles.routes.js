@@ -110,6 +110,20 @@ async function canAccessArticle(user, article) {
   return articleLayers.hasArticleAccess(article, user);
 }
 
+// "Закрытая" обычная (не многослойная) статья без единой роли — раньше
+// такая тихо сохранялась и становилась публичной (см. legacyLayers в
+// article-layers.js). Теперь сохранить её нельзя: это почти наверняка
+// потерянный на клиенте выбор роли, а не намерение автора.
+const LOCKED_WITHOUT_ROLES_ERROR = 'Статья помечена закрытой, но не выбрано ни одной роли в «Доступ для» — выберите роль или сделайте статью открытой';
+function isLockedWithoutRoles({ locked, roles, layers }) {
+  if (!locked) return false;
+  if (Array.isArray(layers) && layers.length > 0) return false;
+  const valid = (Array.isArray(roles) ? roles : [])
+    .map((id) => parseInt(id, 10))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  return valid.length === 0;
+}
+
 // Возвращает { is_root, admin_level } автора статьи (0/false, если id не
 // задан или пользователь не найден — например, автор был удалён).
 // admin_level читается через JOIN на admin_roles (актуальный level роли),
@@ -599,6 +613,10 @@ router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkN
       createLayers = layers;
     }
 
+    if (isLockedWithoutRoles({ locked, roles: roles !== undefined ? roles : role, layers: createLayers })) {
+      return res.status(400).json({ error: LOCKED_WITHOUT_ROLES_ERROR });
+    }
+
     const article = store.createArticle({
       title, content, views, locked, role, roles, tags, image, attachments,
       layers: createLayers,
@@ -690,6 +708,17 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
         return res.status(403).json({ error: merge.error });
       }
       bodyFields.layers = merge.layers;
+    }
+
+    const rolesAfter = bodyFields.roles !== undefined ? bodyFields.roles
+      : bodyFields.role !== undefined ? bodyFields.role
+      : existing.roles;
+    if (isLockedWithoutRoles({
+      locked: bodyFields.locked !== undefined ? !!bodyFields.locked : existing.locked,
+      roles: Array.isArray(rolesAfter) ? rolesAfter : (rolesAfter ? [rolesAfter] : []),
+      layers: bodyFields.layers !== undefined ? bodyFields.layers : existing.layers
+    })) {
+      return res.status(400).json({ error: LOCKED_WITHOUT_ROLES_ERROR });
     }
 
     const updated = store.updateArticle(req.params.id, {

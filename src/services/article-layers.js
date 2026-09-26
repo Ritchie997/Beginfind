@@ -111,6 +111,11 @@ function normalizeLayers(raw) {
 // публичный; locked — слой с ролями article.roles (числа id server_roles,
 // как и раньше; путь для них ВСЕГДА scope:'server' — легаси-статьи ничего не
 // знают про системный каталог admin_roles).
+//
+// locked без единой валидной роли раньше давал roles:[] — то есть ПУБЛИЧНЫЙ
+// слой: закрытая статья, у которой роль не сохранилась, была открыта всем.
+// Теперь такой слой помечается lockedNoRoles — его не видит никто, кроме
+// тех, кто обходит закрытость (см. bypassesArticleLock).
 function legacyLayers(article) {
   const roles = article.locked
     ? (article.roles || [])
@@ -120,6 +125,7 @@ function legacyLayers(article) {
   return [{
     id: '__legacy__',
     roles,
+    lockedNoRoles: !!article.locked && roles.length === 0,
     title: article.title,
     excerpt: article.excerpt,
     image: article.image,
@@ -190,6 +196,7 @@ async function resolveArticleLayer(article, user) {
   const serverId = articleServerId(article);
   const userServerRoleIds = serverId ? await getUserServerRoleIds(user.id, serverId) : [];
   for (let i = topIndex; i >= 0; i--) {
+    if (layers[i].lockedNoRoles) continue;
     if (layerRolesMatch(layers[i].roles, user, userServerRoleIds)) {
       return { index: i, layer: layers[i], layers };
     }
