@@ -91,6 +91,50 @@
     return TYPE_LABELS[block.type] || block.type;
   }
 
+  // Короткий текст блока для "призрака" при перетаскивании.
+  function blockDragPreviewText(block) {
+    const dt = block.data || {};
+    let text = dt.markdown || dt.title || dt.code || '';
+    if (!text && Array.isArray(dt.items)) text = dt.items.map((it) => (it && it.markdown) || '').join(' ');
+    text = String(text).replace(/\s+/g, ' ').trim();
+    return text.length > 40 ? text.slice(0, 40) + '…' : text;
+  }
+
+  // ===== Буфер блоков ("Копировать"/"Вставить"). Живёт в localStorage, а не
+  // в памяти редактора — чтобы скопированный в одной статье блок можно было
+  // вставить в другую (и после перезагрузки, и в другой вкладке). =====
+  const BLOCK_CLIPBOARD_KEY = 'beginfind.blockClipboard';
+
+  function readBlockClipboard() {
+    try {
+      const raw = localStorage.getItem(BLOCK_CLIPBOARD_KEY);
+      const parsed = raw && JSON.parse(raw);
+      return parsed && parsed.block && parsed.block.type ? parsed.block : null;
+    } catch (e) { return null; }
+  }
+
+  function writeBlockClipboard(block) {
+    try {
+      localStorage.setItem(BLOCK_CLIPBOARD_KEY, JSON.stringify({ block, copiedAt: Date.now() }));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Копия блока с новыми id (и у вложенных блоков колонок/секций) — id
+  // внутри документа должны быть уникальны, а один и тот же скопированный
+  // блок можно вставить сколько угодно раз.
+  function cloneBlockWithNewIds(block) {
+    const copy = JSON.parse(JSON.stringify(block));
+    const reId = (b) => {
+      b.id = genId();
+      const dt = b.data || {};
+      if (Array.isArray(dt.blocks)) dt.blocks.forEach(reId);
+      if (Array.isArray(dt.columns)) dt.columns.forEach((c) => (c.blocks || []).forEach(reId));
+    };
+    reId(copy);
+    return copy;
+  }
+
   // Типы, разрешённые ВНУТРИ columns/spoiler-section — без вложенности
   // контейнеров друг в друга (см. CONTAINER_TYPES в src/services/blocks.js).
   const NESTED_ALLOWED_TYPES = ['paragraph', 'heading', 'list', 'quote', 'image', 'table', 'code', 'divider'];
@@ -407,6 +451,7 @@
     }
 
     cleanup() {
+      this.endBlockDrag(false);
       if (this._articleIdObserver) { this._articleIdObserver.disconnect(); this._articleIdObserver = null; }
       clearTimeout(this._previewTimer);
       if (this._localGraphInstance) { this._localGraphInstance.destroy(); this._localGraphInstance = null; }
@@ -452,13 +497,279 @@
       this.scheduleRenderPreview();
     }
 
-    moveBlockIn(list, block, dir) {
-      const idx = list.indexOf(block);
-      const to = idx + dir;
-      if (idx === -1 || to < 0 || to >= list.length) return;
-      [list[idx], list[to]] = [list[to], list[idx]];
+    // ===== Копировать/вставить блок (буфер — см. readBlockClipboard) =====
+
+    copyBlock(block) {
+      if (!writeBlockClipboard(block)) { this.showEditorToast('Не удалось скопировать блок'); return; }
+      this.updatePasteButtonState();
+      this.showEditorToast(`Блок «${blockTypeTag(block)}» скопирован — вставьте его кнопкой «Вставить блок» в любой статье`);
+    }
+
+    // Вставка скопированного блока в list на позицию index (по умолчанию —
+    // после активного блока, как и новые блоки из тулбара).
+    pasteBlockInto(list, index) {
+      const src = readBlockClipboard();
+      if (!src) { this.showEditorToast('Буфер пуст — сначала скопируйте блок'); return; }
+      if (list !== this.doc.blocks && !NESTED_ALLOWED_TYPES.includes(src.type)) {
+        this.showEditorToast(`«${blockTypeTag(src)}» нельзя вставить внутрь колонки или секции`);
+        return;
+      }
+      const block = cloneBlockWithNewIds(src);
+      list.splice(Math.max(0, Math.min(index, list.length)), 0, block);
+      this._active = { list, block };
       this.renderAll();
       this.scheduleRenderPreview();
+      const el = this.container.querySelector(`[data-block-id="${block.id}"]`);
+      if (el) {
+        el.classList.add('eb-just-dropped');
+        setTimeout(() => el.classList.remove('eb-just-dropped'), 700);
+      }
+    }
+
+    pasteBlockAfterActive() {
+      const list = this.getActiveList();
+      const active = this._active && list.includes(this._active.block) ? this._active.block : null;
+      this.pasteBlockInto(list, active ? list.indexOf(active) + 1 : list.length);
+    }
+
+    // Кнопка "Вставить блок" в тулбаре: приглушена, пока буфер пуст, в
+    // подсказке — что именно вставится.
+    updatePasteButtonState() {
+      const btn = document.getElementById('pasteBlockBtn');
+      if (!btn) return;
+      const src = readBlockClipboard();
+      btn.classList.toggle('eb-paste-empty', !src);
+      if (!src) { btn.title = 'Вставить блок — сначала скопируйте блок кнопкой «Копировать»'; return; }
+      const preview = blockDragPreviewText(src);
+      btn.title = `Вставить скопированный блок: ${blockTypeTag(src)}${preview ? ` «${preview}»` : ''}`;
+    }
+
+    showEditorToast(text) {
+      if (!this._toastEl) {
+        this._toastEl = document.createElement('div');
+        this._toastEl.className = 'eb-toast';
+        document.body.appendChild(this._toastEl);
+      }
+      const el = this._toastEl;
+      el.textContent = text;
+      el.classList.add('eb-toast-visible');
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(() => el.classList.remove('eb-toast-visible'), 2600);
+    }
+
+    // ===== Перетаскивание блоков за ручку (грип в стеке кнопок на десктопе,
+    // кнопка-грип "действия" на тач-экране): зажал — тянешь — отпустил в
+    // любом месте документа, в том числе во вложенный список колонки/секции.
+    // У верхнего/нижнего края экрана страница прокручивается сама. Заменяет
+    // "вырезать/вставить" блок. =====
+
+    attachDragHandle(handle, wrap, list, block) {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || this._drag) return;
+        // Мышь: не начинаем выделение текста. Палец: у ручки touch-action:none
+        // (см. .eb-drag-handle) — браузер не заберёт жест под прокрутку.
+        if (e.pointerType === 'mouse') e.preventDefault();
+        const startX = e.clientX, startY = e.clientY, pointerId = e.pointerId;
+        const detach = () => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+        };
+        // Порог в несколько пикселей: простое нажатие остаётся кликом (меню).
+        const onMove = (ev) => {
+          if (ev.pointerId !== pointerId) return;
+          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+          detach();
+          this.startBlockDrag(ev, wrap, list, block);
+        };
+        const onUp = (ev) => { if (ev.pointerId === pointerId) detach(); };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      });
+    }
+
+    startBlockDrag(e, wrap, list, block) {
+      this.closeBlockActionsMenu();
+      this.closeBlockTypeMenu();
+      this.closeSuggest();
+
+      // "Призрак" у пальца/курсора: тип блока и начало текста. Клон самого
+      // блока не годится — cloneNode не переносит текущий value у textarea.
+      const ghost = document.createElement('div');
+      ghost.className = 'eb-drag-ghost';
+      ghost.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      const typeEl = document.createElement('span'); typeEl.className = 'eb-drag-ghost-type'; typeEl.textContent = blockTypeTag(block);
+      ghost.appendChild(typeEl);
+      const preview = blockDragPreviewText(block);
+      if (preview) { const t = document.createElement('span'); t.className = 'eb-drag-ghost-text'; t.textContent = preview; ghost.appendChild(t); }
+      document.body.appendChild(ghost);
+
+      const indicator = document.createElement('div');
+      indicator.className = 'eb-drop-indicator';
+      indicator.hidden = true;
+      document.body.appendChild(indicator);
+
+      wrap.classList.add('eb-dragging');
+      document.body.classList.add('eb-drag-active');
+
+      const d = this._drag = {
+        pointerId: e.pointerId, wrap, list, block, ghost, indicator,
+        x: e.clientX, y: e.clientY, target: null, raf: 0, lastTs: 0, scrollAcc: 0
+      };
+
+      const onMove = (ev) => {
+        if (ev.pointerId !== d.pointerId) return;
+        if (ev.cancelable) ev.preventDefault();
+        d.x = ev.clientX; d.y = ev.clientY;
+        this.updateBlockDrag();
+      };
+      const onUp = (ev) => { if (ev.pointerId === d.pointerId) this.endBlockDrag(true); };
+      const onCancel = (ev) => { if (ev.pointerId === d.pointerId) this.endBlockDrag(false); };
+      const onKey = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); this.endBlockDrag(false); } };
+      document.addEventListener('pointermove', onMove, { passive: false });
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
+      document.addEventListener('keydown', onKey, true);
+      d.detach = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        document.removeEventListener('keydown', onKey, true);
+      };
+
+      const tick = (ts) => {
+        if (this._drag !== d) return;
+        const dt = d.lastTs ? Math.min(ts - d.lastTs, 50) : 16;
+        d.lastTs = ts;
+        if (this.autoScrollDuringDrag(dt)) this.updateBlockDrag();
+        d.raf = requestAnimationFrame(tick);
+      };
+      d.raf = requestAnimationFrame(tick);
+
+      this.updateBlockDrag();
+    }
+
+    // Прокрутка страницы, пока указатель у верхнего (под sticky-тулбаром) или
+    // нижнего края видимой области; чем ближе к краю — тем быстрее.
+    autoScrollDuringDrag(dt) {
+      const d = this._drag;
+      const area = visibleArea();
+      let top = area.top;
+      const toolbar = document.getElementById('toolbar');
+      if (toolbar) {
+        const r = toolbar.getBoundingClientRect();
+        if (r.bottom > top && r.top <= top + 1) top = r.bottom; // тулбар прилип сверху
+      }
+      const bottom = area.top + area.height;
+      const zone = Math.min(80, (bottom - top) / 4);
+      let k = 0;
+      if (d.y < top + zone) k = -(top + zone - d.y) / zone;
+      else if (d.y > bottom - zone) k = (d.y - (bottom - zone)) / zone;
+      if (!k) { d.scrollAcc = 0; return false; }
+      k = Math.max(-1, Math.min(1, k));
+      d.scrollAcc += k * 1.4 * dt; // до ~1.4px/мс у самого края
+      const step = Math.trunc(d.scrollAcc);
+      if (!step) return false;
+      d.scrollAcc -= step;
+      const scroller = document.scrollingElement || document.documentElement;
+      const before = scroller.scrollTop;
+      scrollToInstant(before + step);
+      return scroller.scrollTop !== before;
+    }
+
+    updateBlockDrag() {
+      const d = this._drag;
+      if (!d) return;
+      d.ghost.style.transform = `translate(${d.x + 14}px, ${d.y + 12}px)`;
+
+      const target = this.findDropTarget(d.x, d.y);
+      if (target) d.target = target;
+      const t = d.target;
+      if (!t || !t.listEl.isConnected) { d.indicator.hidden = true; return; }
+
+      // Линия вставки — посередине зазора между блоками или в пустом списке.
+      const blocks = Array.from(t.listEl.children).filter((c) => c.classList.contains('eb-block'));
+      const listRect = t.listEl.getBoundingClientRect();
+      let y;
+      if (!blocks.length) y = listRect.top + Math.min(listRect.height, 30) / 2;
+      else if (t.index <= 0) y = blocks[0].getBoundingClientRect().top - 3;
+      else if (t.index >= blocks.length) y = blocks[blocks.length - 1].getBoundingClientRect().bottom + 3;
+      else y = (blocks[t.index - 1].getBoundingClientRect().bottom + blocks[t.index].getBoundingClientRect().top) / 2;
+      d.indicator.hidden = false;
+      d.indicator.style.left = `${listRect.left}px`;
+      d.indicator.style.width = `${listRect.width}px`;
+      d.indicator.style.top = `${Math.round(y - 1)}px`;
+    }
+
+    // Куда встанет блок, если отпустить в точке (x,y): { listEl, list, index }.
+    // null — над самим перетаскиваемым блоком или вне редактора (тогда
+    // остаётся последняя найденная цель, см. updateBlockDrag).
+    findDropTarget(x, y) {
+      const d = this._drag;
+      let el = document.elementFromPoint(x, y);
+      if (!el || !this.container.contains(el)) {
+        // Курсор сбоку от колонки блоков — берём точку внутри неё на той же высоте.
+        const r = this.container.getBoundingClientRect();
+        if (y < r.top || y > r.bottom) return null;
+        el = document.elementFromPoint(Math.min(Math.max(x, r.left + 40), r.right - 20), y);
+        if (!el || !this.container.contains(el)) return null;
+      }
+      if (d.wrap.contains(el)) return null;
+
+      // От элемента под курсором вверх до ближайшего списка блоков, в который
+      // этот тип можно положить: колонки/секции внутрь вложенных списков не
+      // кладутся (см. NESTED_ALLOWED_TYPES) — для них цель поднимется до
+      // списка верхнего уровня.
+      const canHost = (listEl) => !listEl._ebNested || NESTED_ALLOWED_TYPES.includes(d.block.type);
+      for (let node = el; node && node !== this.container.parentElement; node = node.parentElement) {
+        if (!node._ebList || !canHost(node)) continue;
+        const blocks = Array.from(node.children).filter((c) => c.classList.contains('eb-block'));
+        let index = blocks.length;
+        for (let i = 0; i < blocks.length; i++) {
+          const r = blocks[i].getBoundingClientRect();
+          if (y < r.top + r.height / 2) { index = i; break; }
+        }
+        return { listEl: node, list: node._ebList, index };
+      }
+      return null;
+    }
+
+    endBlockDrag(commit) {
+      const d = this._drag;
+      if (!d) return;
+      this._drag = null;
+      cancelAnimationFrame(d.raf);
+      d.detach();
+      d.ghost.remove();
+      d.indicator.remove();
+      d.wrap.classList.remove('eb-dragging');
+      document.body.classList.remove('eb-drag-active');
+
+      // Отпускание над ручкой даёт ещё и click — меню открываться не должно.
+      this._suppressHandleClick = true;
+      setTimeout(() => { this._suppressHandleClick = false; }, 0);
+
+      if (!commit || !d.target) return;
+      const toList = d.target.list;
+      let index = d.target.index; // DOM-блоки списка идут 1:1 с массивом (renderBlockList)
+      const from = d.list.indexOf(d.block);
+      if (from === -1) return;
+      if (toList === d.list) {
+        if (index > from) index--;
+        if (index === from) return;
+      }
+      d.list.splice(from, 1);
+      toList.splice(Math.max(0, Math.min(index, toList.length)), 0, d.block);
+      this._active = { list: toList, block: d.block };
+      this.renderAll();
+      this.scheduleRenderPreview();
+
+      const moved = this.container.querySelector(`[data-block-id="${d.block.id}"]`);
+      if (moved) {
+        moved.classList.add('eb-just-dropped');
+        setTimeout(() => moved.classList.remove('eb-just-dropped'), 700);
+      }
     }
 
     // ===== Рендер списка блоков (используется и для верхнего уровня, и для
@@ -511,6 +822,10 @@
     }
 
     renderBlockList(list, containerEl, ctx) {
+      // Для перетаскивания (см. findDropTarget): по DOM-элементу списка
+      // находим массив, в который вставлять, и вложенный ли он.
+      containerEl._ebList = list;
+      containerEl._ebNested = !!(ctx && ctx.nested);
       list.forEach((block) => {
         const wrap = this.renderBlockWrapper(block, list, ctx);
         containerEl.appendChild(wrap);
@@ -524,13 +839,13 @@
 
       const controls = document.createElement('div');
       controls.className = 'eb-block-controls';
-      const upBtn = document.createElement('button'); upBtn.type = 'button'; upBtn.title = 'Переместить выше'; upBtn.innerHTML = '<i class="fas fa-chevron-up"></i>';
-      upBtn.addEventListener('click', () => this.moveBlockIn(list, block, -1));
-      const downBtn = document.createElement('button'); downBtn.type = 'button'; downBtn.title = 'Переместить ниже'; downBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
-      downBtn.addEventListener('click', () => this.moveBlockIn(list, block, 1));
+      const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Потяните, чтобы переместить блок'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      this.attachDragHandle(dragBtn, wrap, list, block);
+      const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.title = 'Копировать блок (вставить можно и в другой статье)'; copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+      copyBtn.addEventListener('click', () => this.copyBlock(block));
       const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.title = 'Удалить блок'; delBtn.className = 'eb-remove'; delBtn.innerHTML = '<i class="fas fa-trash"></i>';
       delBtn.addEventListener('click', () => this.removeBlockFrom(list, block));
-      controls.append(upBtn, downBtn, delBtn);
+      controls.append(dragBtn, copyBtn, delBtn);
 
       // Та же тройка действий, но одной кнопкой "⋮" с попап-меню — только для
       // тач-экрана (см. .eb-block-more-btn в editor-blocks.css). Стек из трёх
@@ -542,13 +857,16 @@
       // в любой блок.
       const moreBtn = document.createElement('button');
       moreBtn.type = 'button';
-      moreBtn.className = 'eb-block-more-btn';
-      moreBtn.title = 'Действия с блоком';
-      moreBtn.innerHTML = '<i class="fas fa-ellipsis-vertical"></i>';
+      // Она же — ручка перетаскивания: нажал — меню, зажал и повёл — блок едет.
+      moreBtn.className = 'eb-block-more-btn eb-drag-handle';
+      moreBtn.title = 'Нажмите — действия с блоком, потяните — переместить';
+      moreBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
       moreBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this._suppressHandleClick) return;
         this.openBlockActionsMenu(moreBtn, list, block);
       });
+      this.attachDragHandle(moreBtn, wrap, list, block);
 
       const tag = document.createElement('span');
       tag.className = 'eb-block-type-tag';
@@ -1719,6 +2037,18 @@
       const el = this.ensureBlockTypeMenuEl();
       this._blockTypeMenuAnchor = anchorBtn;
       el.innerHTML = '';
+      const clip = readBlockClipboard();
+      if (clip && NESTED_ALLOWED_TYPES.includes(clip.type)) {
+        const pasteBtn = document.createElement('button');
+        pasteBtn.type = 'button';
+        pasteBtn.innerHTML = `<i class="fas fa-paste"></i> Вставить скопированный (${escapeHtml(blockTypeTag(clip))})`;
+        pasteBtn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          this.closeBlockTypeMenu();
+          this.pasteBlockInto(list, list.length);
+        });
+        el.appendChild(pasteBtn);
+      }
       NESTED_ALLOWED_TYPES.forEach((type) => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -1742,10 +2072,10 @@
       if (this._blockTypeMenuEl) this._blockTypeMenuEl.hidden = true;
     }
 
-    // ===== Попап-меню действий с блоком (▲▼🗑 одной кнопкой "⋮") — то же
-    // самое, чем эта тройка была всегда, просто под кнопкой вместо стека
-    // (см. .eb-block-more-btn, видна только на тач-устройствах). Переиспользует
-    // класс .eb-block-type-menu — визуально это тот же попап-список. =====
+    // ===== Попап-меню действий с блоком (копировать/вставить/удалить одной
+    // кнопкой-ручкой вместо стека — см. .eb-block-more-btn, видна только на
+    // тач-устройствах). Переиспользует класс .eb-block-type-menu — визуально
+    // это тот же попап-список. =====
 
     ensureBlockActionsMenuEl() {
       if (this._blockActionsMenuEl) return this._blockActionsMenuEl;
@@ -1770,10 +2100,12 @@
       el.innerHTML = '';
 
       const items = [
-        { icon: 'fa-chevron-up', label: 'Переместить выше', action: () => this.moveBlockIn(list, block, -1) },
-        { icon: 'fa-chevron-down', label: 'Переместить ниже', action: () => this.moveBlockIn(list, block, 1) },
-        { icon: 'fa-trash', label: 'Удалить блок', action: () => this.removeBlockFrom(list, block) }
+        { icon: 'fa-copy', label: 'Копировать блок', action: () => this.copyBlock(block) }
       ];
+      if (readBlockClipboard()) {
+        items.push({ icon: 'fa-paste', label: 'Вставить скопированный ниже', action: () => this.pasteBlockInto(list, list.indexOf(block) + 1) });
+      }
+      items.push({ icon: 'fa-trash', label: 'Удалить блок', action: () => this.removeBlockFrom(list, block) });
       items.forEach(({ icon, label, action }) => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -1813,6 +2145,14 @@
       });
 
       this.setupToolbarScrollFade();
+
+      // Блок могли скопировать в другой вкладке — кнопка вставки узнаёт об
+      // этом из события storage (слушатель на window — один на приложение).
+      this.updatePasteButtonState();
+      if (!this._clipboardStorageBound) {
+        this._clipboardStorageBound = true;
+        window.addEventListener('storage', (e) => { if (e.key === BLOCK_CLIPBOARD_KEY) this.updatePasteButtonState(); });
+      }
     }
 
     // Тень+стрелка у края ленты форматирования, пока есть куда прокрутить в
@@ -1956,6 +2296,7 @@
         case 'callout': this.insertBlockAfterActive('callout'); break;
         case 'columns': this.insertBlockAfterActive('columns'); break;
         case 'spoiler-section': this.insertBlockAfterActive('spoiler-section'); break;
+        case 'paste-block': this.pasteBlockAfterActive(); break;
         case 'image': {
           const block = this.insertBlockAfterActive('image', {});
           this.pickAndUploadImageForBlock(block);

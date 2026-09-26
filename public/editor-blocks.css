@@ -27,6 +27,11 @@
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 8px 10px 8px 34px;
+  /* Не ниже стека кнопок слева (грип/копировать/удалить: 8px сверху + 3×22px
+     + 2×2px зазоры + 8px снизу) — иначе на коротких блоках (разделитель,
+     однострочный текст) стек вылезает на соседний блок. Только редактор:
+     предпросмотр рендерится отдельно (blocks-renderer.js). */
+  min-height: 86px;
   transition: border-color .12s, background .12s;
 }
 .eb-block:hover,
@@ -99,11 +104,89 @@
 .eb-block:hover .eb-block-type-tag,
 .eb-block:focus-within .eb-block-type-tag { opacity: 1; }
 
+/* --- перетаскивание блоков (см. startBlockDrag в editor-manager.js) ---
+   Ручка: грип в стеке кнопок на десктопе и кнопка .eb-block-more-btn на
+   тач-экране. touch-action:none — иначе палец на ручке прокручивал бы
+   страницу вместо того, чтобы тащить блок. */
+.eb-drag-handle { touch-action: none; }
+.eb-block-controls button.eb-drag-handle { cursor: grab; }
+.eb-block.eb-dragging { opacity: .35; }
+body.eb-drag-active,
+body.eb-drag-active * {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+.eb-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(320px, 80vw);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--blurple);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  color: var(--text-normal);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.eb-drag-ghost > i { color: var(--text-muted); }
+.eb-drag-ghost-type {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--blurple);
+  flex-shrink: 0;
+}
+.eb-drag-ghost-text { overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
+.eb-drop-indicator {
+  position: fixed;
+  z-index: 9999;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--blurple);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .15);
+  pointer-events: none;
+}
+.eb-block.eb-just-dropped { animation: eb-just-dropped .7s ease-out; }
+@keyframes eb-just-dropped {
+  from { background: rgba(88, 101, 242, .22); border-color: var(--blurple); }
+}
+
+/* --- буфер блоков (copyBlock/pasteBlockInto) --- */
+.articles-page .toolbar-button.eb-paste-empty { opacity: .4; }
+.eb-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 10001;
+  max-width: calc(100vw - 32px);
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  color: var(--text-normal);
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity .18s, transform .18s;
+}
+.eb-toast.eb-toast-visible { opacity: 1; transform: translate(-50%, 0); }
+
 @media (hover: none) and (pointer: coarse) {
-  /* Стек из трёх кнопок скрыт целиком — вместо него .eb-block-more-btn. */
+  /* Стек кнопок скрыт целиком — вместо него .eb-block-more-btn. */
   .eb-block-controls { display: none; }
   .eb-block-more-btn { display: flex; }
-  .eb-block { padding-left: 32px; }
+  .eb-block { padding-left: 32px; min-height: 38px; } /* одна кнопка 26px + отступы 6px */
   .eb-nested-blocklist .eb-block { padding-left: 26px; }
   /* Ярлык типа блока ("ТЕКСТ"/"ЗАГОЛОВОК"...) по :focus-within реально
      показывался бы всё время, пока редактируешь текст этого блока, — и
@@ -483,6 +566,9 @@
     box-shadow: inset 2px 0 0 var(--blurple);
   }
   .eb-block-more-btn { left: 0; top: 2px; width: 24px; height: 24px; }
+  @media (hover: none) and (pointer: coarse) {
+    .eb-block { min-height: 28px; } /* кнопка 24px + отступы 2px */
+  }
   .eb-nested-blocklist { gap: 2px; }
   .eb-nested-blocklist .eb-block { padding-left: 22px; }
 
