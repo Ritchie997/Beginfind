@@ -2037,6 +2037,251 @@ html {
 .modal-hint i { margin-top: 1px; color: var(--blurple); flex-shrink: 0; }
 
 /* ========================================
+   ОКНО "МОИ ЧЕРНОВИКИ" (редактор статей)
+   Мини-витрина в духе Ибрипедии: карточки — те же .ibripedia-card*
+   (ibripedia.css подключён глобально), здесь только компактные размеры
+   и то, чего у витрины нет (бейджи синхронизации, удаление, поиск).
+   Разметка — spa-router.js, ensureDraftsModal()/buildDraftCardHtml().
+   ======================================== */
+
+/* Строка "Автосохранение в 14:32" рядом с кнопками черновика в редакторе */
+.draft-save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.draft-save-status[hidden] { display: none; }
+.draft-save-status.is-offline { color: var(--yellow); }
+.draft-save-status.is-error { color: var(--red); }
+
+/* Чуть ниже остальных модалок: confirm-dialog.js ("Удалить черновик?")
+   открывается поверх этого окна, даже если его overlay создан раньше и
+   стоит в DOM выше. */
+.modal-overlay.drafts-modal { z-index: 1990; }
+
+.drafts-modal-box {
+    width: 920px;
+    height: min(760px, 88vh);
+    max-height: 88vh;
+    overflow: hidden;
+}
+
+.drafts-modal-box .modal-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.drafts-modal-box .modal-header h3 i { color: var(--blurple); }
+
+.drafts-modal-toolbar {
+    display: flex;
+    gap: 10px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--background-accent);
+    flex-wrap: wrap;
+}
+
+.drafts-modal-search {
+    position: relative;
+    flex: 1 1 260px;
+    min-width: 0;
+}
+.drafts-modal-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 13px;
+    pointer-events: none;
+}
+.drafts-modal-search input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px 9px 34px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    color: var(--text-normal);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.drafts-modal-search input:focus { border-color: var(--blurple); }
+
+.drafts-modal-sort {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.drafts-modal-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 12px 18px 0;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+.drafts-modal-status[hidden] { display: none; }
+.drafts-modal-status i { margin-top: 2px; flex-shrink: 0; }
+.drafts-modal-status.is-offline {
+    background: rgba(237, 66, 69, 0.12);
+    color: var(--text-normal);
+    border: 1px solid rgba(237, 66, 69, 0.35);
+}
+.drafts-modal-status.is-offline i { color: var(--red); }
+.drafts-modal-status.is-pending {
+    background: rgba(250, 168, 26, 0.1);
+    color: var(--text-normal);
+    border: 1px solid rgba(250, 168, 26, 0.3);
+}
+.drafts-modal-status.is-pending i { color: var(--yellow); }
+
+.drafts-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px 18px 18px;
+}
+
+.drafts-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+}
+
+.drafts-modal-loading,
+.drafts-modal-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 48px 16px;
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 14px;
+}
+.drafts-modal-loading { flex-direction: row; justify-content: center; }
+.drafts-modal-empty[hidden] { display: none; }
+.drafts-modal-empty > i { font-size: 32px; opacity: 0.6; }
+.drafts-modal-empty-hint { max-width: 380px; font-size: 13px; line-height: 1.5; }
+
+.drafts-modal-count {
+    margin-right: auto;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* --- Карточка черновика (поверх .ibripedia-card) --- */
+
+.drafts-card { outline: none; }
+.drafts-card:focus-visible { border-color: var(--blurple); box-shadow: 0 0 0 2px var(--blurple); }
+.drafts-card.is-current { border-color: var(--blurple); }
+
+.drafts-card .ibripedia-card-cover { aspect-ratio: auto; height: 92px; }
+.drafts-card .ibripedia-card-body { gap: 6px; padding: 10px 12px 12px; }
+.drafts-card .ibripedia-card-title { font-size: 14px; }
+.drafts-card .ibripedia-card-excerpt { font-size: 12px; -webkit-line-clamp: 3; }
+.drafts-card .ibripedia-card-meta { font-size: 11px; }
+.drafts-card mark {
+    background: rgba(88, 101, 242, 0.35);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+.drafts-card-untitled,
+.drafts-card-no-text { color: var(--text-muted); font-style: italic; font-weight: 500; }
+.drafts-card-more-tags { cursor: default; }
+
+.drafts-card-badges {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 44px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    pointer-events: none;
+}
+.drafts-card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: auto;
+}
+.drafts-card-badge.is-current { background: var(--blurple); }
+.drafts-card-badge.is-locked { color: var(--yellow); }
+.drafts-card-badge.is-pending i,
+.drafts-card-badge.is-local i { color: var(--yellow); }
+
+.drafts-card-delete {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+.drafts-card:hover .drafts-card-delete,
+.drafts-card:focus-within .drafts-card-delete { opacity: 1; }
+.drafts-card-delete:hover { background: var(--red); }
+
+/* Тач-экраны: наведения нет — кнопка удаления видна всегда. */
+@media (hover: none) {
+    .drafts-card-delete { opacity: 1; }
+}
+
+@media (max-width: 600px) {
+    .drafts-modal.modal-overlay { padding: 0; }
+    .drafts-modal-box {
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+        border: none;
+    }
+    .drafts-modal-toolbar { padding: 10px 12px; }
+    .drafts-modal-sort { flex: 1 1 100%; }
+    .drafts-modal-status { margin: 10px 12px 0; }
+    .drafts-modal-body { padding: 12px; }
+    .drafts-modal-grid { grid-template-columns: 1fr; gap: 10px; }
+    /* На телефоне — строкой: обложка слева, текст справа, как список
+       Ибрипедии (.ibripedia-grid--list). */
+    .drafts-card { flex-direction: row; align-items: stretch; }
+    .drafts-card .ibripedia-card-cover { width: 88px; height: auto; min-height: 96px; }
+    .drafts-card-badges { left: 96px; }
+    .drafts-card:has(.drafts-card-badge) .ibripedia-card-body { padding-top: 38px; }
+}
+
+/* ========================================
    TOAST COMPONENT (общий для всего приложения)
    ======================================== */
 /* Раньше каждая страница, показывающая всплывающие уведомления, собирала

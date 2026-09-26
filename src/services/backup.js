@@ -14,7 +14,8 @@ const DATABASE_FILES = [
   'users.db',
   'bookmarks.db', // закладки статей Ibripedia, привязанные к профилю — см. src/db/connections.js
   'social.db', // лайки и комментарии статей Ibripedia — см. src/db/connections.js
-  'stickers.db' // наборы стикеров, подписки, избранное — см. src/db/connections.js
+  'stickers.db', // наборы стикеров, подписки, избранное — см. src/db/connections.js
+  'drafts.db' // черновики статей редактора, привязанные к профилю — см. src/db/connections.js
 ];
 
 // Файлы настроек сайта (Настройки → владелец). backup-settings.json сюда

@@ -109,6 +109,36 @@ const bookmarksDb = new sqlite3.Database(dbPath('bookmarks.db'), (err) => {
   }
 });
 
+// Черновики статей редактора — привязаны к профилю (user_id), чтобы
+// продолжать работу над черновиком с другого устройства. Раньше черновики
+// жили только в localStorage браузера; теперь там остаётся лишь очередь
+// офлайн-копий, которые не успели доехать до сервера (см.
+// public/spa-router.js — flushPendingDrafts). data — весь снимок формы
+// (JSON, то же, что collectArticleFormData()), title/search_text —
+// денормализованы из него для списка и поиска без разбора data. rev —
+// номер версии: клиент присылает rev, с которой начинал правку, и если на
+// сервере она уже новее (правка с другого устройства), сохранение
+// отклоняется как конфликт — см. src/services/drafts-store.js.
+const draftsDb = new sqlite3.Database(dbPath('drafts.db'), (err) => {
+  if (err) {
+    console.error('Error opening drafts database', err);
+  } else {
+    console.log('Connected to drafts SQLite database');
+    draftsDb.run("PRAGMA encoding = 'UTF-8'");
+    draftsDb.run(`CREATE TABLE IF NOT EXISTS drafts (
+      id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      title TEXT,
+      search_text TEXT,
+      data TEXT NOT NULL,
+      rev INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, id)
+    )`);
+  }
+});
+
 // Лайки и комментарии статей (Ibripedia) — в отличие от закладок это
 // ПУБЛИЧНЫЕ данные (комментарий/факт лайка видны всем читателям статьи, а
 // не только автору), поэтому живут в собственном файле, а не в bookmarks.db.
@@ -358,4 +388,4 @@ const stickersDb = new sqlite3.Database(dbPath('stickers.db'), (err) => {
   }
 });
 
-module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb };
+module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb };

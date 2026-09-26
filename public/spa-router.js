@@ -25,6 +25,12 @@ class SPARouter {
     this.loading = false;
     this.templateCache = new Map(); // Cache for fetched templates
     this.currentDraftId = null; // Track the currently loaded draft ID
+    this.currentDraftRev = null; // Серверная rev открытого черновика (null — на сервере его ещё нет)
+    // Догружаем офлайн-копии черновиков, оставшиеся с прошлого раза (см.
+    // flushPendingDrafts) — не дожидаясь захода в редактор. setTimeout —
+    // чтобы глобальный spaRouter уже указывал на этот экземпляр.
+    this.bindDraftSyncListeners();
+    setTimeout(() => this.flushPendingDrafts(), 0);
 
     // Экземпляры ChipField для формы статьи (Доступ для/Теги) —
     // создаются заново в initArticleChipFields() при каждом заходе на
@@ -617,6 +623,7 @@ class SPARouter {
 
     // Set up event listeners for article form
     this.setupArticleFormEvents();
+    this.startDraftAutosave();
 
     // Check for and offer to load draft
     this.checkAndOfferDraft();
@@ -1286,18 +1293,10 @@ class SPARouter {
     document.getElementById('add-tag-mobile-btn')?.addEventListener('click', () => this.tagsField?.commitTyped());
     document.getElementById('upload-image-btn')?.addEventListener('click', () => this.uploadImage());
     document.getElementById('saveArticleBtn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.saveArticle()));
-    document.getElementById('saveDraftBtn')?.addEventListener('click', () => this.saveDraft());
-    document.getElementById('loadDraftBtn')?.addEventListener('click', () => {
-      // Show the drafts manager
-      document.getElementById('draftsManager').style.display = 'block';
-      this.displayDrafts();
-    });
+    document.getElementById('saveDraftBtn')?.addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.saveDraft()));
+    document.getElementById('loadDraftBtn')?.addEventListener('click', () => this.openDraftsModal());
     document.getElementById('resetArticleBtn')?.addEventListener('click', () => {
       this.resetArticle();
-    });
-    document.getElementById('closeDraftsManagerBtn')?.addEventListener('click', () => {
-      // Hide the drafts manager
-      document.getElementById('draftsManager').style.display = 'none';
     });
     document.getElementById('clearArticleFormBtn')?.addEventListener('click', () => this.clearArticleForm());
     document.getElementById('previewArticleBtn')?.addEventListener('click', () => this.previewArticle());
@@ -1386,40 +1385,41 @@ class SPARouter {
       const isEditingExistingArticle = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
 
       // If there's content, warn the user about potential data loss
-      if (title.trim() || content.trim()) {
+      const hasContent = !this.isDraftContentEmpty(content);
+      if (title.trim() || hasContent) {
         // Черновик автосохраняется на выход только если в редакторе реально
         // есть содержимое — один заголовок без единого блока в редакторе
         // черновиком не считается (см. требование "если содержание статьи
         // пустое, мы не отправляем её в черновик при выходе"): иначе
         // checkAndOfferDraft() при следующем заходе на страницу подставлял
         // бы пустую "статью" из одного заголовка.
-        if (content.trim() && !isEditingExistingArticle) {
+        if (hasContent && !isEditingExistingArticle) {
           try {
-            const articleData = {
-              id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
-              ...this.collectArticleFormData(),
-              description: '',
-              timestamp: Date.now()
+            // Ответа на запрос при закрытии вкладки уже не дождаться,
+            // поэтому копия ложится в офлайн-очередь (при следующем
+            // заходе flushPendingDrafts() догрузит её сам), а параллельно
+            // уходит keepalive-запрос — если он успеет, черновик сразу
+            // появится и на других устройствах. keepalive ограничен ~64 КБ
+            // тела; большой черновик доедет уже из очереди.
+            const entry = {
+              id: this.currentDraftId || this.newDraftId(),
+              baseRev: this.currentDraftRev ?? null,
+              updatedAt: Date.now(),
+              data: this.buildDraftSnapshot(),
+              offline: false
             };
+            this.putPendingDraft(entry);
+            this.currentDraftId = entry.id;
 
-            // Get existing drafts or initialize empty array
-            let drafts = this.getDraftsFromStorage();
-
-            // Check if we're updating an existing draft
-            const existingDraftIndex = drafts.findIndex(draft => draft.id === this.currentDraftId);
-            if (existingDraftIndex !== -1) {
-              // Update existing draft
-              drafts[existingDraftIndex] = articleData;
-            } else {
-              // Add new draft to the beginning of the array
-              drafts.unshift(articleData);
+            const body = JSON.stringify({ data: entry.data, baseRev: entry.baseRev, updatedAt: entry.updatedAt });
+            if (body.length < 60000) {
+              fetch(`/api/drafts/${encodeURIComponent(entry.id)}`, {
+                method: 'PUT',
+                keepalive: true,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authManager.getToken()}` },
+                body
+              }).catch(() => {});
             }
-
-            // Save updated drafts array to localStorage
-            localStorage.setItem('articleDrafts', JSON.stringify(drafts));
-
-            // Update currentDraftId to the saved draft's ID
-            this.currentDraftId = articleData.id;
 
             // Реальный черновик только что создан/обновлён — снимаем флаг
             // подавления автозагрузки (см. resetArticle()/suppressDraftAutoLoad()):
@@ -1865,9 +1865,11 @@ class SPARouter {
         const result = await response.json();
         if (response.ok) {
             showMessage(articleId ? 'Статья успешно обновлена!' : 'Статья создана!', 'success');
-            // Clear all drafts from localStorage after successful save
-            localStorage.removeItem('articleDrafts');
+            // Опубликованный черновик больше не нужен — удаляем именно его
+            // (остальные черновики, в том числе с других устройств, не трогаем).
+            if (this.currentDraftId) this.removeDraftEverywhere(this.currentDraftId);
             this.currentDraftId = null; // Clear current draft ID after successful save
+            this.currentDraftRev = null;
             this.navigateTo('/articles');
         } else {
             showMessage(`Ошибка: ${result.error || 'Неизвестная ошибка'}`, 'error');
@@ -1919,8 +1921,12 @@ class SPARouter {
     const publicCheckboxReset = document.getElementById('articleLayerPublicCheckbox');
     if (publicCheckboxReset) publicCheckboxReset.checked = false;
 
-    document.getElementById('draftsManager').style.display = 'none';
+    this.closeDraftsModal();
     this.currentDraftId = null; // Clear current draft ID
+    this.currentDraftRev = null;
+    this._lastLoadedDraftData = null;
+    const draftStatusEl = document.getElementById('draftSaveStatus');
+    if (draftStatusEl) draftStatusEl.hidden = true;
 
     // Reset to create mode
     document.getElementById('article-form-title').textContent = 'Создать новую статью';
@@ -1928,69 +1934,389 @@ class SPARouter {
     document.getElementById('saveArticleBtn').removeAttribute('data-article-id');
   }
 
-  saveDraft() {
+  // ===== Черновики: сервер + офлайн-очередь =====
+  //
+  // Основное хранилище черновиков — сервер (GET/PUT/DELETE /api/drafts,
+  // см. src/services/drafts-store.js): черновик привязан к профилю и
+  // открывается с любого устройства. localStorage — только очередь
+  // офлайн-копий (articleDraftsPending:<userId>): каждое сохранение сначала
+  // пишется туда, потом уходит на сервер, и после успешного ответа копия
+  // удаляется. Если сети нет (или вкладку закрыли раньше ответа), копия
+  // остаётся в очереди и сама догружается при первой возможности —
+  // flushPendingDrafts() на старте, при возвращении сети ('online') и при
+  // возвращении во вкладку.
+  //
+  // Запись очереди: { id, baseRev, updatedAt, data, offline }. baseRev —
+  // серверная rev, с которой начали правку (null — черновика на сервере
+  // ещё нет); offline — копия хотя бы раз не смогла уйти из-за сети (тогда
+  // о её загрузке стоит сказать пользователю отдельно).
+
+  draftsStorageKey() {
+    const user = typeof authManager !== 'undefined' ? authManager.getUser() : null;
+    return `articleDraftsPending:${user && user.id != null ? user.id : 'anon'}`;
+  }
+
+  getPendingDrafts() {
+    try {
+      const raw = localStorage.getItem(this.draftsStorageKey());
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.filter((d) => d && d.id && d.data) : [];
+    } catch (error) {
+      console.error('Error reading pending drafts:', error);
+      return [];
+    }
+  }
+
+  setPendingDrafts(list) {
+    localStorage.setItem(this.draftsStorageKey(), JSON.stringify(list));
+  }
+
+  putPendingDraft(entry) {
+    const list = this.getPendingDrafts().filter((d) => d.id !== entry.id);
+    list.unshift(entry);
+    this.setPendingDrafts(list);
+  }
+
+  // onlyIfUpdatedAt — снять копию, только если в очереди всё ещё та самая
+  // версия, что ушла на сервер: пока запрос летел, пользователь мог
+  // сохранить черновик ещё раз, и эту более свежую копию терять нельзя.
+  removePendingDraft(id, onlyIfUpdatedAt = null) {
+    try {
+      const list = this.getPendingDrafts();
+      const next = list.filter((d) => !(d.id === id && (onlyIfUpdatedAt == null || d.updatedAt === onlyIfUpdatedAt)));
+      if (next.length !== list.length) this.setPendingDrafts(next);
+    } catch (error) {
+      console.error('Error removing pending draft:', error);
+    }
+  }
+
+  markPendingOffline(id) {
+    try {
+      const list = this.getPendingDrafts();
+      const item = list.find((d) => d.id === id);
+      if (item && !item.offline) {
+        item.offline = true;
+        this.setPendingDrafts(list);
+      }
+    } catch (error) { /* не критично */ }
+  }
+
+  // Старые черновики (до серверного хранения) лежали в общем для браузера
+  // ключе articleDrafts — переносим их в очередь текущего пользователя,
+  // откуда они уедут на сервер обычным путём.
+  migrateLegacyDrafts() {
+    try {
+      const raw = localStorage.getItem('articleDrafts');
+      if (!raw) return;
+      const legacy = JSON.parse(raw);
+      if (Array.isArray(legacy) && legacy.length) {
+        const pending = this.getPendingDrafts();
+        const known = new Set(pending.map((d) => d.id));
+        legacy.forEach((d) => {
+          if (!d || typeof d !== 'object') return;
+          const { id, timestamp, description, ...data } = d;
+          const safeId = /^[A-Za-z0-9_-]{1,64}$/.test(String(id || '')) ? id : this.newDraftId();
+          if (known.has(safeId)) return;
+          pending.push({ id: safeId, baseRev: null, updatedAt: Number(timestamp) || Date.now(), data, offline: true });
+        });
+        this.setPendingDrafts(pending);
+      }
+      localStorage.removeItem('articleDrafts');
+    } catch (error) {
+      console.error('Could not migrate legacy drafts:', error);
+    }
+  }
+
+  newDraftId() {
+    return `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async draftsFetch(method, path, body) {
+    const response = await fetch(`/api/drafts${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authManager.getToken()}`
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    let json = null;
+    try { json = await response.json(); } catch (e) { /* пустое/не-JSON тело */ }
+    return { ok: response.ok, status: response.status, json };
+  }
+
+  // Все отправки черновиков идут строго по очереди: два быстрых
+  // сохранения подряд иначе ушли бы с одной и той же baseRev, и второе
+  // сервер принял бы за конфликт с первым.
+  queueDraftPush(entry) {
+    const run = () => this.pushDraft(entry);
+    this._draftPushChain = (this._draftPushChain || Promise.resolve()).then(run, run);
+    return this._draftPushChain;
+  }
+
+  // Отправить одну копию на сервер. Возвращает { status: 'ok' | 'offline'
+  // | 'conflict' | 'error' }. Копия остаётся в очереди при 'offline' и
+  // 'error'; при конфликте она пересохраняется отдельным черновиком.
+  async pushDraft(entry) {
+    // Пока запрос стоял в очереди, копию могли удалить ("Сбросить",
+    // удаление из списка) или заменить более свежим сохранением — тогда
+    // отправлять её уже нельзя/незачем.
+    if (!this.getPendingDrafts().some((d) => d.id === entry.id && d.updatedAt === entry.updatedAt)) {
+      return { status: 'skipped' };
+    }
+    this._draftRevs = this._draftRevs || {};
+    const baseRev = this._draftRevs[entry.id] ?? entry.baseRev ?? null;
+    let res;
+    try {
+      res = await this.draftsFetch('PUT', `/${encodeURIComponent(entry.id)}`, {
+        data: entry.data, baseRev, updatedAt: entry.updatedAt
+      });
+    } catch (error) {
+      this.markPendingOffline(entry.id);
+      return { status: 'offline' };
+    }
+
+    if (res.ok && res.json) {
+      this._draftRevs[entry.id] = res.json.rev;
+      if (this.currentDraftId === entry.id) {
+        this.currentDraftRev = res.json.rev;
+        this._lastLoadedDraftData = entry.data; // см. hasUnsavedDraftChanges
+      }
+      this.removePendingDraft(entry.id, entry.updatedAt);
+      return { status: 'ok', rev: res.json.rev };
+    }
+
+    if (res.status === 409) {
+      // Черновик тем временем сохранили с другого устройства. Ни свою
+      // версию, ни чужую не теряем — свою кладём рядом, новым черновиком
+      // с пометкой в названии.
+      const copy = {
+        id: this.newDraftId(),
+        baseRev: null,
+        updatedAt: entry.updatedAt,
+        offline: entry.offline,
+        data: { ...entry.data, title: `${entry.data.title || 'Без названия'} (копия с этого устройства)` }
+      };
+      this.removePendingDraft(entry.id, entry.updatedAt);
+      this.putPendingDraft(copy);
+      if (this.currentDraftId === entry.id) {
+        this.currentDraftId = copy.id;
+        this.currentDraftRev = null;
+        const titleEl = document.getElementById('articleTitle');
+        if (titleEl) titleEl.value = copy.data.title;
+      }
+      await this.pushDraft(copy);
+      return { status: 'conflict', newId: copy.id };
+    }
+
+    // 5xx — сервер временно недоступен: ведём себя как без сети.
+    if (res.status >= 500) {
+      this.markPendingOffline(entry.id);
+      return { status: 'offline' };
+    }
+    return { status: 'error', error: (res.json && res.json.error) || `Ошибка ${res.status}` };
+  }
+
+  // Догрузить на сервер всё, что осталось в очереди. Параллельные вызовы
+  // (старт + 'online' + возврат во вкладку) склеиваются в один.
+  flushPendingDrafts() {
+    if (this._flushingDrafts) return this._flushingDrafts;
+    if (typeof authManager === 'undefined' || !authManager.isAuthenticated()) return Promise.resolve();
+
+    this._flushingDrafts = (async () => {
+      this.migrateLegacyDrafts();
+      // Старые копии — первыми, чтобы более свежие правки не оказались
+      // под ними.
+      const pending = this.getPendingDrafts().sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+      let uploaded = 0;
+      let conflicts = 0;
+      for (const entry of pending) {
+        const result = await this.queueDraftPush(entry);
+        if (result.status === 'offline') break; // сети нет — дальше пробовать бессмысленно
+        if (result.status === 'ok' && entry.offline) uploaded++;
+        if (result.status === 'conflict') conflicts++;
+      }
+      if (uploaded) showMessage(`Офлайн-копии черновиков загружены на сервер: ${uploaded}`, 'success');
+      if (conflicts) showMessage(`Черновик изменили на другом устройстве — офлайн-версия сохранена отдельным черновиком (${conflicts})`, 'warning');
+      if (uploaded || conflicts) this.refreshDraftsModalIfOpen();
+    })().catch((error) => {
+      console.error('Error flushing pending drafts:', error);
+    }).finally(() => {
+      this._flushingDrafts = null;
+    });
+    return this._flushingDrafts;
+  }
+
+  // Один раз на страницу (роутер пересоздаётся при перелогине) —
+  // обработчики зовут актуальный глобальный spaRouter.
+  bindDraftSyncListeners() {
+    if (window._draftSyncListenersBound) return;
+    window._draftSyncListenersBound = true;
+    const flush = () => { if (spaRouter) spaRouter.flushPendingDrafts(); };
+    window.addEventListener('online', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') flush();
+    });
+  }
+
+  async saveDraft() {
     // Check if form is empty before saving
     const title = document.getElementById('articleTitle').value;
     const content = document.getElementById('articleContent').innerHTML;
 
     // If form is empty, don't save a draft
-    if (!title.trim() && !content.trim()) {
+    if (!title.trim() && this.isDraftContentEmpty(content)) {
       showMessage('Невозможно сохранить черновик: форма пуста', 'warning');
       return;
     }
 
+    let entry;
     try {
-      // Get all article data from the form
-      const articleData = {
-        id: this.currentDraftId || 'draft_' + Date.now(), // Use current draft ID if editing, otherwise generate new ID
-        ...this.collectArticleFormData(),
-        description: '',
-        timestamp: Date.now() // Add timestamp for when draft was saved
+      entry = {
+        id: this.currentDraftId || this.newDraftId(),
+        baseRev: this.currentDraftRev ?? null,
+        updatedAt: Date.now(),
+        data: this.collectArticleFormData(),
+        offline: false
       };
-
-      // Get existing drafts or initialize empty array
-      const drafts = this.getDraftsFromStorage();
-
-      // Check if we're updating an existing draft
-      const existingDraftIndex = drafts.findIndex(draft => draft.id === this.currentDraftId);
-      if (existingDraftIndex !== -1) {
-        // Update existing draft
-        drafts[existingDraftIndex] = articleData;
-      } else {
-        // Add new draft to the beginning of the array
-        drafts.unshift(articleData);
-      }
-
-      // Save updated drafts array to localStorage
-      localStorage.setItem('articleDrafts', JSON.stringify(drafts));
-
-      // Update currentDraftId to the saved draft's ID
-      this.currentDraftId = articleData.id;
+      // Сначала — локальная копия: что бы ни случилось с запросом,
+      // черновик уже не потеряется.
+      this.putPendingDraft(entry);
+      this.currentDraftId = entry.id;
 
       // Пользователь явно сохранил черновик — снимаем возможный флаг
-      // подавления автозагрузки от предыдущего "Сбросить" (см.
+      // подавления автозагрузки, оставшийся от "Сбросить" (см.
       // suppressDraftAutoLoad()/checkAndOfferDraft()).
       this.clearDraftAutoLoadSuppression();
-
-      // Show success message
-      showMessage('Черновик успешно сохранен в локальное хранилище', 'success');
     } catch (error) {
       console.error('Error saving draft:', error);
       showMessage('Ошибка при сохранении черновика: ' + error.message, 'error');
+      return;
+    }
+
+    const result = await this.queueDraftPush(entry);
+    this.updateDraftSaveStatus(result.status);
+    if (result.status === 'ok' || result.status === 'skipped') {
+      showMessage('Черновик сохранён', 'success');
+    } else if (result.status === 'offline') {
+      showMessage('Нет связи с сервером — черновик сохранён на этом устройстве и загрузится сам, когда связь вернётся', 'warning');
+    } else if (result.status === 'conflict') {
+      showMessage('Этот черновик уже изменили на другом устройстве — ваша версия сохранена отдельным черновиком', 'warning');
+    } else {
+      showMessage(`Черновик сохранён только на этом устройстве: ${result.error}`, 'error');
+    }
+    this.refreshDraftsModalIfOpen();
+  }
+
+  // ===== Автосохранение черновика =====
+  //
+  // Раз в минуту (не чаще — чтобы не грузить слабые машины) сравниваем
+  // форму с последней сохранённой версией открытого черновика и, только
+  // если что-то изменилось, тихо сохраняем её тем же путём, что и кнопка
+  // "Черновик" (офлайн-очередь -> сервер). Нет правок — нет ни записи в
+  // localStorage, ни запроса. Правила те же, что у автосохранения при
+  // закрытии вкладки (beforeunload): открытую опубликованную статью в
+  // черновик не превращаем, один заголовок без текста черновиком не считаем.
+  startDraftAutosave() {
+    clearInterval(this._draftAutosaveTimer);
+    this._draftAutosaveTimer = setInterval(() => this.autosaveDraft(), 60 * 1000);
+  }
+
+  async autosaveDraft() {
+    const titleEl = document.getElementById('articleTitle');
+    const contentEl = document.getElementById('articleContent');
+    // Ушли со страницы редактора — таймер больше не нужен.
+    if (!titleEl || !contentEl) {
+      clearInterval(this._draftAutosaveTimer);
+      this._draftAutosaveTimer = null;
+      return;
+    }
+    if (this._draftAutosaving) return;
+    if (document.getElementById('saveArticleBtn')?.getAttribute('data-article-id')) return;
+    if (this.isDraftContentEmpty(contentEl.innerHTML)) return;
+
+    let data;
+    let json;
+    try {
+      data = this.collectArticleFormData();
+      json = JSON.stringify(data);
+    } catch (error) {
+      return;
+    }
+
+    if (this.currentDraftId) {
+      const pending = this.getPendingDrafts().find((d) => d.id === this.currentDraftId);
+      const saved = pending ? pending.data : this._lastLoadedDraftData;
+      if (saved && JSON.stringify(saved) === json) return; // ничего не изменилось
+    }
+
+    this._draftAutosaving = true;
+    try {
+      const entry = {
+        id: this.currentDraftId || this.newDraftId(),
+        baseRev: this.currentDraftRev ?? null,
+        updatedAt: Date.now(),
+        data,
+        offline: false
+      };
+      this.putPendingDraft(entry);
+      this.currentDraftId = entry.id;
+      this.clearDraftAutoLoadSuppression();
+
+      const result = await this.queueDraftPush(entry);
+      this.updateDraftSaveStatus(result.status, true);
+      // Конфликт молча не проглатываем — пользователь должен знать, что
+      // дальше он пишет уже в копию.
+      if (result.status === 'conflict') {
+        showMessage('Этот черновик изменили на другом устройстве — дальше правки сохраняются в отдельную копию', 'warning');
+      }
+      this.refreshDraftsModalIfOpen();
+    } catch (error) {
+      console.error('Draft autosave failed:', error);
+    } finally {
+      this._draftAutosaving = false;
     }
   }
 
-  // Get drafts from localStorage
-  getDraftsFromStorage() {
-    try {
-      const draftsData = localStorage.getItem('articleDrafts');
-      if (draftsData) {
-        return JSON.parse(draftsData);
-      }
-    } catch (error) {
-      console.error('Error loading drafts from storage:', error);
+  // Строка рядом с кнопками черновика: когда и куда сохранили последний раз.
+  updateDraftSaveStatus(status, auto = false) {
+    const el = document.getElementById('draftSaveStatus');
+    if (!el) return;
+    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const prefix = auto ? 'Автосохранение' : 'Сохранено';
+    el.classList.remove('is-offline', 'is-error');
+    if (status === 'ok' || status === 'skipped' || status === 'conflict') {
+      el.innerHTML = `<i class="fas fa-cloud"></i> ${prefix} в ${time}`;
+      el.title = 'Черновик сохранён в профиле — доступен с любого устройства';
+    } else if (status === 'offline') {
+      el.classList.add('is-offline');
+      el.innerHTML = `<i class="fas fa-plug"></i> ${prefix} в ${time} — только на устройстве`;
+      el.title = 'Нет связи с сервером — черновик загрузится сам, когда связь вернётся';
+    } else {
+      el.classList.add('is-error');
+      el.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Не удалось сохранить на сервер`;
+      el.title = '';
     }
-    return [];
+    el.hidden = false;
+  }
+
+  // Удалить черновик и из очереди, и с сервера. false — до сервера
+  // достучаться не удалось (локальная копия при этом уже снята). Идёт
+  // через ту же очередь, что и сохранения: иначе DELETE мог бы обогнать
+  // ещё не ушедший PUT этого же черновика, и тот воскресил бы его.
+  removeDraftEverywhere(draftId) {
+    this.removePendingDraft(draftId);
+    if (this._draftRevs) delete this._draftRevs[draftId];
+    const run = async () => {
+      try {
+        const res = await this.draftsFetch('DELETE', `/${encodeURIComponent(draftId)}`);
+        return res.ok;
+      } catch (error) {
+        return false;
+      }
+    };
+    this._draftPushChain = (this._draftPushChain || Promise.resolve()).then(run, run);
+    return this._draftPushChain;
   }
 
   // --- Флаг "не предлагать черновик автоматически" — выставляется
@@ -2020,13 +2346,44 @@ class SPARouter {
     }
   }
 
-  // Load draft from localStorage if it exists
-  loadDraft(draftId) {
+  // Открыть черновик: несинхронизированная локальная копия (это самая
+  // свежая правка на этом устройстве) важнее серверной версии; нет
+  // копии — берём с сервера.
+  async loadDraft(draftId, { silent = false } = {}) {
     try {
-      const drafts = this.getDraftsFromStorage();
-      const draft = drafts.find(d => d.id === draftId);
+      let draft = null;
+      let rev = null;
+      let updatedAt = null;
+      const pending = this.getPendingDrafts().find((d) => d.id === draftId);
+      if (pending) {
+        draft = pending.data;
+        rev = (this._draftRevs && this._draftRevs[draftId]) ?? pending.baseRev ?? null;
+        updatedAt = pending.updatedAt;
+      } else {
+        let res;
+        try {
+          res = await this.draftsFetch('GET', `/${encodeURIComponent(draftId)}`);
+        } catch (error) {
+          showMessage('Нет связи с сервером — этот черновик сейчас недоступен', 'error');
+          return false;
+        }
+        if (!res.ok || !res.json) {
+          showMessage((res.json && res.json.error) || 'Черновик не найден', 'error');
+          return false;
+        }
+        draft = res.json.data || {};
+        rev = res.json.rev;
+        updatedAt = res.json.updatedAt;
+      }
+      // Форма могла исчезнуть, пока шёл запрос (ушли на другую страницу).
+      if (!document.getElementById('articleTitle')) return false;
 
       if (draft) {
+        // Из окна черновиков можно переключаться с одного черновика на
+        // другой — сначала полностью очищаем форму, иначе обложка/сервер
+        // предыдущего черновика остались бы, если в новом их нет.
+        this.clearArticleForm();
+
         // Populate the form with draft data
         document.getElementById('articleTitle').value = draft.title || '';
 
@@ -2098,7 +2455,7 @@ class SPARouter {
         // момент "Черновик" (раньше остальные слои молча терялись при
         // восстановлении черновика). Черновику доверяем полностью — это не
         // серверная статья, откуда что-то могло не долететь, а то, что сам
-        // же пользователь сохранил в этом браузере.
+        // же пользователь сохранил как черновик.
         this.articleLayers = Array.isArray(draft.layers)
           ? draft.layers.map((l) => ({
               roles: Array.isArray(l.roles) ? l.roles : [],
@@ -2118,17 +2475,32 @@ class SPARouter {
 
         this.resetArticleAuthorInfo();
 
+        // Черновик не знает, к какой опубликованной статье относится, —
+        // всегда открываем его в режиме создания, иначе "Обновить статью"
+        // перезаписало бы статью, которая была открыта до этого.
+        document.getElementById('article-form-title').textContent = 'Создать новую статью';
+        document.getElementById('saveArticleBtn').textContent = 'Опубликовать';
+        document.getElementById('saveArticleBtn').removeAttribute('data-article-id');
+
         // Set the current draft ID to enable overwriting
         this.currentDraftId = draftId;
+        this.currentDraftRev = rev;
+        this._draftRevs = this._draftRevs || {};
+        if (rev != null) this._draftRevs[draftId] = rev;
+        // Снимок формы сразу после загрузки — по нему окно черновиков
+        // понимает, есть ли в редакторе несохранённые правки (см.
+        // hasUnsavedDraftChanges).
+        this._lastLoadedDraftData = this.collectArticleFormData();
 
         // Пользователь явно загрузил черновик (сам или через checkAndOfferDraft
         // при заходе на страницу) — снимаем возможный флаг подавления
         // автозагрузки, оставшийся от предыдущего "Сбросить".
         this.clearDraftAutoLoadSuppression();
 
-        // Show a message to the user
-        const timestamp = new Date(draft.timestamp).toLocaleString();
-        showMessage(`Загружен черновик "${draft.title || 'Без названия'}", сохраненный ${timestamp}`, 'info');
+        if (!silent) {
+          const timestamp = updatedAt ? new Date(updatedAt).toLocaleString('ru-RU') : '';
+          showMessage(`Загружен черновик "${draft.title || 'Без названия'}"${timestamp ? `, сохранённый ${timestamp}` : ''}`, 'info');
+        }
 
         return true;
       }
@@ -2141,7 +2513,7 @@ class SPARouter {
   }
 
   // Check for and load draft if form is empty
-  checkAndOfferDraft() {
+  async checkAndOfferDraft() {
     // Пользователь недавно нажал "Сбросить" — это осознанный выбор начать с
     // чистого листа, а не просто "форма сейчас пустая" (см. requirement
     // "если пользователь нажал сбросить статью... черновик не откроется,
@@ -2149,24 +2521,33 @@ class SPARouter {
     // только появится новый реальный черновик (saveDraft()/beforeunload с
     // непустым контентом) или пользователь сам откроет черновик из списка
     // (loadDraft()) — до тех пор автоподстановка молчит.
-    if (this.isDraftAutoLoadSuppressed()) return;
+    if (this.isDraftAutoLoadSuppressed()) {
+      this.flushPendingDrafts();
+      return;
+    }
 
-    // Check if there's a draft in localStorage
-    const drafts = this.getDraftsFromStorage();
-    if (drafts && drafts.length > 0) {
-      try {
-        // Check if the current form is empty
-        const title = document.getElementById('articleTitle').value;
-        const content = document.getElementById('articleContent').innerHTML;
+    const isFormEmpty = () => {
+      const titleEl = document.getElementById('articleTitle');
+      const contentEl = document.getElementById('articleContent');
+      if (!titleEl || !contentEl) return false;
+      const editingExisting = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
+      return !editingExisting && !titleEl.value.trim() && this.isDraftContentEmpty(contentEl.innerHTML);
+    };
+    if (!isFormEmpty()) {
+      this.flushPendingDrafts();
+      return;
+    }
 
-        // If form is empty or nearly empty, load the most recent draft
-        if (!title.trim() && !content.trim()) {
-          const latestDraft = drafts[0]; // Most recent draft
-          this.loadDraft(latestDraft.id);
-        }
-      } catch (error) {
-        console.error('Error checking draft:', error);
+    try {
+      await this.flushPendingDrafts();
+      const { items } = await this.fetchDraftList();
+      // Пока шли запросы, пользователь мог начать писать или открыть
+      // статью — тогда ничего не подставляем.
+      if (items.length && isFormEmpty() && !this.isDraftAutoLoadSuppressed()) {
+        await this.loadDraft(items[0].id); // Most recent draft
       }
+    } catch (error) {
+      console.error('Error checking draft:', error);
     }
   }
 
@@ -2203,8 +2584,7 @@ class SPARouter {
       document.getElementById('saveArticleBtn').textContent = 'Опубликовать';
       document.getElementById('saveArticleBtn').removeAttribute('data-article-id');
 
-      // Hide drafts manager
-      document.getElementById('draftsManager').style.display = 'none';
+      this.closeDraftsModal();
 
       // "Сбросить" — осознанный выбор начать заново, а не просто очистка
       // полей: то, что сейчас было в редакторе (свой ли черновик, свежий,
@@ -2215,15 +2595,11 @@ class SPARouter {
       // (requirement "черновик не откроется, даже если пользователь ничего
       // не заполнял"). Поэтому удаляем сам сохранённый черновик с этим ID
       // из localStorage — недостаточно было бы просто забыть currentDraftId,
-      // запись осталась бы лежать в articleDrafts и её всё равно предложил
-      // бы checkAndOfferDraft() при следующем открытии страницы.
+      // запись осталась бы лежать среди черновиков (и на сервере, и в
+      // офлайн-очереди) и её всё равно предложил бы checkAndOfferDraft()
+      // при следующем открытии страницы.
       if (this.currentDraftId) {
-        try {
-          const drafts = this.getDraftsFromStorage().filter((draft) => draft.id !== this.currentDraftId);
-          localStorage.setItem('articleDrafts', JSON.stringify(drafts));
-        } catch (error) {
-          console.error('Could not remove draft on reset:', error);
-        }
+        this.removeDraftEverywhere(this.currentDraftId);
       }
 
       // Клавиша подавления автозагрузки — на случай, если в хранилище
@@ -2233,66 +2609,417 @@ class SPARouter {
 
       // Clear current draft ID
       this.currentDraftId = null;
+      this.currentDraftRev = null;
 
       showMessage('Форма сброшена до пустого состояния', 'info');
     }
   }
 
-  // Display drafts in the drafts manager
-  displayDrafts() {
-    const draftsList = document.getElementById('draftsList');
-    if (!draftsList) return;
+  // ===== Окно "Мои черновики" =====
+  //
+  // Мини-витрина в духе Ибрипедии (те же .ibripedia-card*, только
+  // компактнее — см. .drafts-modal в global-styles.css): обложка, название,
+  // кусок текста, теги и время последней правки, плюс поиск по названию,
+  // тексту и тегам. Модалка создаётся лениво один раз и живёт в body —
+  // как confirm-dialog.js, — поэтому переживает перезагрузку партиала
+  // редактора.
 
-    const drafts = this.getDraftsFromStorage();
+  // Список для окна: серверные черновики + несинхронизированные копии из
+  // очереди (у копии — приоритет: это более свежая правка). offline — до
+  // сервера не достучались, показаны только копии этого устройства.
+  async fetchDraftList() {
+    let serverItems = [];
+    let offline = false;
+    try {
+      const res = await this.draftsFetch('GET', '');
+      if (res.ok && Array.isArray(res.json)) serverItems = res.json;
+      else offline = true;
+    } catch (error) {
+      offline = true;
+    }
 
-    if (drafts.length === 0) {
-      draftsList.innerHTML = '<div style="color: var(--header-secondary); padding: 10px; text-align: center;">Нет сохраненных черновиков</div>';
+    const byId = new Map(serverItems.map((d) => [d.id, { ...d, onServer: true, pending: false }]));
+    this.getPendingDrafts().forEach((p) => {
+      const data = p.data || {};
+      const server = byId.get(p.id);
+      byId.set(p.id, {
+        id: p.id,
+        title: data.title || '',
+        text: this.draftContentToText(data.content),
+        image: data.image || '',
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        locked: !!data.locked,
+        createdAt: server ? server.createdAt : p.updatedAt,
+        updatedAt: p.updatedAt,
+        onServer: !!server,
+        pending: true
+      });
+    });
+
+    const items = [...byId.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return { items, offline };
+  }
+
+  // Содержимое редактора — не HTML, а JSON документа блоков (см.
+  // shimInnerHTML в editor-manager.js). Разбираем его в документ; старые
+  // черновики из localStorage могли хранить просто текст — тогда это один
+  // абзац.
+  parseDraftContent(content) {
+    if (content && typeof content === 'object') return content;
+    const str = String(content || '').trim();
+    if (!str) return { version: 1, blocks: [] };
+    if (str[0] === '{') {
+      try {
+        const doc = JSON.parse(str);
+        if (doc && Array.isArray(doc.blocks)) return doc;
+      } catch (e) { /* не JSON — ниже как текст */ }
+    }
+    return { version: 1, blocks: [{ type: 'paragraph', data: { markdown: str } }] };
+  }
+
+  // Пустой редактор — это не только пустая строка: новая статья начинается
+  // с одного пустого абзаца, и такой документ черновиком не считаем (иначе
+  // автосохранение и закрытие вкладки плодили бы пустые черновики).
+  // Любой другой блок (картинка, таблица, код...) — уже содержимое.
+  isDraftContentEmpty(content) {
+    const doc = this.parseDraftContent(content);
+    return doc.blocks.every((b) => b && b.type === 'paragraph' && !String((b.data && b.data.markdown) || '').trim());
+  }
+
+  draftContentToText(content) {
+    const doc = this.parseDraftContent(content);
+    try {
+      if (window.blocksToExcerptText) return window.blocksToExcerptText(doc, 5000);
+    } catch (e) { /* ниже — запасной вариант */ }
+    return doc.blocks.map((b) => (b && b.data && b.data.markdown) || '').join(' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+  }
+
+  ensureDraftsModal() {
+    if (this._draftsModalEls && document.body.contains(this._draftsModalEls.overlay)) return this._draftsModalEls;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay drafts-modal';
+    overlay.id = 'draftsModal';
+    overlay.hidden = true;
+    overlay.innerHTML = `
+      <div class="modal-box drafts-modal-box" role="dialog" aria-modal="true" aria-labelledby="draftsModalTitle">
+        <div class="modal-header">
+          <div>
+            <h3 id="draftsModalTitle"><i class="fas fa-folder-open"></i> Мои черновики</h3>
+            <p class="modal-subtitle" id="draftsModalSubtitle">Хранятся в профиле — доступны с любого устройства</p>
+          </div>
+          <button type="button" class="modal-close" data-action="close" aria-label="Закрыть">&times;</button>
+        </div>
+        <div class="drafts-modal-toolbar">
+          <div class="drafts-modal-search">
+            <i class="fas fa-search"></i>
+            <input type="search" id="draftsModalSearch" placeholder="Поиск по названию, тексту и тегам..." autocomplete="off">
+          </div>
+          <select id="draftsModalSort" class="drafts-modal-sort" aria-label="Сортировка">
+            <option value="updated">Недавно изменённые</option>
+            <option value="created">Недавно созданные</option>
+            <option value="title">По названию</option>
+          </select>
+        </div>
+        <div class="drafts-modal-status" id="draftsModalStatus" hidden></div>
+        <div class="drafts-modal-body">
+          <div class="drafts-modal-grid" id="draftsModalGrid"></div>
+          <div class="drafts-modal-empty" id="draftsModalEmpty" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <span class="drafts-modal-count" id="draftsModalCount"></span>
+          <button type="button" class="btn btn-secondary" data-action="close">Закрыть</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const els = {
+      overlay,
+      search: overlay.querySelector('#draftsModalSearch'),
+      sort: overlay.querySelector('#draftsModalSort'),
+      status: overlay.querySelector('#draftsModalStatus'),
+      grid: overlay.querySelector('#draftsModalGrid'),
+      empty: overlay.querySelector('#draftsModalEmpty'),
+      count: overlay.querySelector('#draftsModalCount')
+    };
+    this._draftsModalEls = els;
+
+    try {
+      const savedSort = localStorage.getItem('draftsModalSort');
+      if (savedSort && els.sort.querySelector(`option[value="${savedSort}"]`)) els.sort.value = savedSort;
+    } catch (e) { /* не критично */ }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.closest('[data-action="close"]')) {
+        this.closeDraftsModal();
+        return;
+      }
+      const deleteBtn = e.target.closest('[data-action="delete-draft"]');
+      if (deleteBtn) {
+        e.stopPropagation();
+        this.deleteDraft(deleteBtn.dataset.id);
+        return;
+      }
+      const tagPill = e.target.closest('[data-action="filter-tag"]');
+      if (tagPill) {
+        e.stopPropagation();
+        els.search.value = tagPill.dataset.value;
+        this.renderDraftsModal();
+        return;
+      }
+      const card = e.target.closest('.drafts-card');
+      if (card) this.openDraftFromModal(card.dataset.id);
+    });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.closeDraftsModal();
+      } else if (e.key === 'Enter' && e.target === els.search) {
+        // Enter в поиске — открыть первый найденный черновик.
+        const first = els.grid.querySelector('.drafts-card');
+        if (first) this.openDraftFromModal(first.dataset.id);
+      } else if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('drafts-card')) {
+        e.preventDefault();
+        this.openDraftFromModal(e.target.dataset.id);
+      }
+    });
+    els.search.addEventListener('input', () => this.renderDraftsModal());
+    els.sort.addEventListener('change', () => {
+      try { localStorage.setItem('draftsModalSort', els.sort.value); } catch (e) { /* не критично */ }
+      this.renderDraftsModal();
+    });
+
+    return els;
+  }
+
+  async openDraftsModal() {
+    const els = this.ensureDraftsModal();
+    els.overlay.hidden = false;
+    els.search.value = '';
+    els.grid.innerHTML = '<div class="drafts-modal-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка черновиков...</div>';
+    els.empty.hidden = true;
+    els.status.hidden = true;
+    els.count.textContent = '';
+    setTimeout(() => els.search.focus(), 0);
+
+    // Сначала догружаем офлайн-копии — тогда список сразу показывает их
+    // как обычные серверные черновики.
+    await this.flushPendingDrafts();
+    await this.refreshDraftsModalIfOpen();
+  }
+
+  closeDraftsModal() {
+    if (this._draftsModalEls) this._draftsModalEls.overlay.hidden = true;
+  }
+
+  async refreshDraftsModalIfOpen() {
+    const els = this._draftsModalEls;
+    if (!els || els.overlay.hidden) return;
+    const { items, offline } = await this.fetchDraftList();
+    this._draftsModalItems = items;
+    this._draftsModalOffline = offline;
+    this.renderDraftsModal();
+  }
+
+  normalizeDraftSearch(str) {
+    return String(str || '').toLowerCase().replace(/ё/g, 'е');
+  }
+
+  renderDraftsModal() {
+    const els = this._draftsModalEls;
+    if (!els) return;
+    const all = this._draftsModalItems || [];
+
+    const pendingCount = all.filter((d) => d.pending).length;
+    if (this._draftsModalOffline) {
+      els.status.hidden = false;
+      els.status.className = 'drafts-modal-status is-offline';
+      els.status.innerHTML = '<i class="fas fa-plug"></i> Нет связи с сервером — показаны только копии, сохранённые на этом устройстве. Они загрузятся сами, когда связь вернётся.';
+    } else if (pendingCount) {
+      els.status.hidden = false;
+      els.status.className = 'drafts-modal-status is-pending';
+      els.status.innerHTML = `<i class="fas fa-cloud-upload-alt"></i> Ждут синхронизации: ${pendingCount}`;
+    } else {
+      els.status.hidden = true;
+    }
+
+    const query = this.normalizeDraftSearch(els.search.value.trim().replace(/^#/, ''));
+    const terms = query.split(/\s+/).filter(Boolean);
+    let items = terms.length
+      ? all.filter((d) => {
+        const haystack = this.normalizeDraftSearch(`${d.title} ${d.text} ${(d.tags || []).join(' ')}`);
+        return terms.every((t) => haystack.includes(t));
+      })
+      : all.slice();
+
+    const sort = els.sort.value;
+    if (sort === 'created') items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    else if (sort === 'title') items.sort((a, b) => (a.title || 'Без названия').localeCompare(b.title || 'Без названия', 'ru'));
+    else items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    els.count.textContent = all.length
+      ? (terms.length ? `Найдено ${items.length} из ${all.length}` : `Всего черновиков: ${all.length}`)
+      : '';
+
+    if (!items.length) {
+      els.grid.innerHTML = '';
+      els.empty.hidden = false;
+      els.empty.innerHTML = all.length
+        ? `<i class="fas fa-search"></i><div>Ничего не найдено по запросу «${this.escapeDraftHtml(els.search.value.trim())}»</div>`
+        : '<i class="fas fa-file-alt"></i><div>Черновиков пока нет</div><div class="drafts-modal-empty-hint">Нажмите «💾 Черновик» в редакторе, чтобы сохранить статью и вернуться к ней позже — с этого или другого устройства.</div>';
       return;
     }
 
-    // Create HTML for each draft
-    let draftsHtml = '';
-    drafts.forEach((draft, index) => {
-      const timestamp = new Date(draft.timestamp).toLocaleString();
-      const title = draft.title || 'Без названия';
+    els.empty.hidden = true;
+    els.grid.innerHTML = items.map((d) => this.buildDraftCardHtml(d, terms)).join('');
+  }
 
-      draftsHtml += `
-        <div class="draft-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--background-accent);">
-          <div style="flex: 1; cursor: pointer;" onclick="spaRouter.loadDraft('${draft.id}')">
-            <div style="font-weight: bold; color: var(--text-normal);">${title}</div>
-            <div style="font-size: 0.8em; color: var(--header-secondary);">${timestamp}</div>
-          </div>
-          <button class="btn btn-danger" style="padding: 4px 8px; margin-left: 8px;"
-            onclick="spaRouter.deleteDraft('${draft.id}', event)">Удалить</button>
+  escapeDraftHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  // Экранирует текст и подсвечивает найденные слова (<mark>). "е" в
+  // запросе совпадает и с "ё" в тексте — как и в самом фильтре.
+  highlightDraftText(text, terms) {
+    const raw = String(text || '');
+    if (!terms.length) return this.escapeDraftHtml(raw);
+    const pattern = terms
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/е/g, '[её]'))
+      .join('|');
+    const re = new RegExp(`(${pattern})`, 'gi');
+    return raw.split(re).map((part, i) => (i % 2 ? `<mark>${this.escapeDraftHtml(part)}</mark>` : this.escapeDraftHtml(part))).join('');
+  }
+
+  // Превью текста: при поиске — кусок вокруг первого совпадения, чтобы
+  // было видно, почему черновик нашёлся, даже если слово далеко от начала.
+  draftExcerpt(text, terms) {
+    const raw = String(text || '');
+    if (!raw) return '';
+    if (terms.length) {
+      const norm = this.normalizeDraftSearch(raw);
+      const idx = terms.map((t) => norm.indexOf(t)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
+      if (idx > 80) return '…' + raw.slice(idx - 60, idx + 220);
+    }
+    return raw.slice(0, 280);
+  }
+
+  formatDraftTime(ts) {
+    if (!ts) return '';
+    const date = new Date(ts);
+    const now = new Date();
+    const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const diffMin = Math.floor((now - date) / 60000);
+    if (diffMin < 1) return 'только что';
+    if (diffMin < 60) return `${diffMin} мин назад`;
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (ts >= startOfToday) return `сегодня, ${time}`;
+    if (ts >= startOfToday - 86400000) return `вчера, ${time}`;
+    const sameYear = date.getFullYear() === now.getFullYear();
+    return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })}, ${time}`;
+  }
+
+  buildDraftCardHtml(d, terms) {
+    const esc = (v) => this.escapeDraftHtml(v);
+    const isCurrent = d.id === this.currentDraftId;
+    const tags = d.tags || [];
+    const shownTags = tags.slice(0, 4);
+    const fullDate = (ts) => (ts ? new Date(ts).toLocaleString('ru-RU') : '');
+    const excerpt = this.draftExcerpt(d.text, terms);
+
+    let syncBadge = '';
+    if (d.pending && !d.onServer) {
+      syncBadge = '<span class="drafts-card-badge is-local" title="Сохранён только на этом устройстве — загрузится на сервер, когда будет связь"><i class="fas fa-mobile-alt"></i> Только здесь</span>';
+    } else if (d.pending) {
+      syncBadge = '<span class="drafts-card-badge is-pending" title="Есть правки, которые ещё не загружены на сервер"><i class="fas fa-cloud-upload-alt"></i> Не синхронизирован</span>';
+    }
+
+    return `
+      <article class="ibripedia-card drafts-card${isCurrent ? ' is-current' : ''}" data-id="${esc(d.id)}" tabindex="0" title="Открыть черновик">
+        ${d.image
+          ? `<div class="ibripedia-card-cover"><img src="${esc(d.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.parentElement.innerHTML='<i class=&quot;fas fa-file-alt&quot;></i>'"></div>`
+          : '<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>'}
+        <div class="drafts-card-badges">
+          ${isCurrent ? '<span class="drafts-card-badge is-current"><i class="fas fa-pen"></i> Открыт</span>' : ''}
+          ${d.locked ? '<span class="drafts-card-badge is-locked" title="Закрытая статья"><i class="fas fa-lock"></i></span>' : ''}
+          ${syncBadge}
         </div>
-      `;
-    });
+        <button type="button" class="drafts-card-delete" data-action="delete-draft" data-id="${esc(d.id)}" title="Удалить черновик" aria-label="Удалить черновик">
+          <i class="fas fa-trash"></i>
+        </button>
+        <div class="ibripedia-card-body">
+          <h3 class="ibripedia-card-title">${d.title ? this.highlightDraftText(d.title, terms) : '<span class="drafts-card-untitled">Без названия</span>'}</h3>
+          ${excerpt ? `<p class="ibripedia-card-excerpt">${this.highlightDraftText(excerpt, terms)}</p>` : '<p class="ibripedia-card-excerpt drafts-card-no-text">Текста пока нет</p>'}
+          ${shownTags.length ? `<div class="ibripedia-card-tags">${shownTags.map((t) =>
+            `<span class="ibripedia-tag-pill" data-action="filter-tag" data-value="${esc(t)}" title="Искать по тегу">#${this.highlightDraftText(t, terms)}</span>`
+          ).join('')}${tags.length > shownTags.length ? `<span class="ibripedia-tag-pill drafts-card-more-tags">+${tags.length - shownTags.length}</span>` : ''}</div>` : ''}
+          <div class="ibripedia-card-meta">
+            <span title="Изменён ${esc(fullDate(d.updatedAt))}${d.createdAt ? ` · создан ${esc(fullDate(d.createdAt))}` : ''}"><i class="fas fa-clock"></i> ${esc(this.formatDraftTime(d.updatedAt))}</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }
 
-    draftsList.innerHTML = draftsHtml;
+  async openDraftFromModal(draftId) {
+    if (!draftId) return;
+    const titleEl = document.getElementById('articleTitle');
+    const contentEl = document.getElementById('articleContent');
+    const editingExisting = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
+    const hasUnsaved = titleEl && contentEl && (titleEl.value.trim() || !this.isDraftContentEmpty(contentEl.innerHTML));
+    // В редакторе что-то написано и это не тот же черновик — предупреждаем,
+    // что текущий текст будет заменён (сохранить его — кнопкой "Черновик").
+    if (hasUnsaved && draftId !== this.currentDraftId && (editingExisting || !this.currentDraftId || this.hasUnsavedDraftChanges())) {
+      const ok = window.confirmDialog
+        ? await window.confirmDialog.open({
+          title: 'Открыть черновик?',
+          message: 'Текущее содержимое редактора будет заменено. Если оно нужно — сначала сохраните его как черновик.',
+          confirmLabel: 'Открыть',
+          danger: false
+        })
+        : confirm('Текущее содержимое редактора будет заменено. Продолжить?');
+      if (!ok) return;
+    }
+    const loaded = await this.loadDraft(draftId);
+    if (loaded) this.closeDraftsModal();
+  }
+
+  // Есть ли в форме правки, которых нет в сохранённой версии открытого
+  // черновика (ни в очереди, ни — насколько известно — на сервере).
+  hasUnsavedDraftChanges() {
+    if (!this.currentDraftId) return true;
+    const pending = this.getPendingDrafts().find((d) => d.id === this.currentDraftId);
+    const saved = pending ? pending.data : this._lastLoadedDraftData;
+    if (!saved) return true;
+    try {
+      return JSON.stringify(this.collectArticleFormData()) !== JSON.stringify(saved);
+    } catch (e) {
+      return true;
+    }
   }
 
   // Delete a specific draft
-  deleteDraft(draftId, event) {
-    event.stopPropagation(); // Prevent the click from loading the draft
+  async deleteDraft(draftId) {
+    const item = (this._draftsModalItems || []).find((d) => d.id === draftId);
+    const title = item && item.title ? `«${item.title}»` : 'этот черновик';
+    const ok = window.confirmDialog
+      ? await window.confirmDialog.open({ message: `Удалить ${title}? Он пропадёт на всех устройствах.` })
+      : confirm('Вы уверены, что хотите удалить этот черновик?');
+    if (!ok) return;
 
-    if (!confirm('Вы уверены, что хотите удалить этот черновик?')) {
-      return;
+    const removed = await this.removeDraftEverywhere(draftId);
+    if (draftId === this.currentDraftId) {
+      this.currentDraftId = null;
+      this.currentDraftRev = null;
     }
-
-    try {
-      let drafts = this.getDraftsFromStorage();
-      drafts = drafts.filter(draft => draft.id !== draftId);
-
-      // Save updated drafts array to localStorage
-      localStorage.setItem('articleDrafts', JSON.stringify(drafts));
-
-      // Update the display
-      this.displayDrafts();
-      showMessage('Черновик удален', 'success');
-    } catch (error) {
-      console.error('Error deleting draft:', error);
-      showMessage('Ошибка при удалении черновика', 'error');
+    if (removed || (item && !item.onServer)) {
+      showMessage('Черновик удалён', 'success');
+    } else {
+      showMessage('Нет связи с сервером — черновик удалён только на этом устройстве и может снова появиться в списке', 'warning');
     }
+    await this.refreshDraftsModalIfOpen();
   }
 
   previewArticle() {
@@ -2498,8 +3225,9 @@ class SPARouter {
       }
 
       // Hide the drafts manager and clear current draft ID when editing an article
-      document.getElementById('draftsManager').style.display = 'none';
+      this.closeDraftsModal();
       this.currentDraftId = null; // Clear current draft ID when editing existing article
+      this.currentDraftRev = null;
 
       // Scroll to form
       const formContainer = document.querySelector('.form-container');

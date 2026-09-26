@@ -157,20 +157,14 @@
       <div class="button-group">
         <div class="btn-cluster">
           <button id="saveDraftBtn" class="btn btn-secondary btn-sm">💾 Черновик</button>
-          <button id="loadDraftBtn" class="btn btn-secondary btn-sm">📂 Загрузить</button>
+          <button id="loadDraftBtn" class="btn btn-secondary btn-sm" title="Мои черновики — список с поиском">📂 Мои черновики</button>
+          <!-- Когда черновик сохранили последний раз (кнопкой или автосохранением
+               раз в минуту) — см. updateDraftSaveStatus в spa-router.js. -->
+          <span id="draftSaveStatus" class="draft-save-status" hidden></span>
         </div>
         <div class="btn-cluster">
           <button id="resetArticleBtn" class="btn btn-ghost-warning">Сбросить</button>
           <button id="saveArticleBtn" class="btn btn-primary">Опубликовать</button>
-        </div>
-      </div>
-
-      <!-- Контейнер для управления черновиками -->
-      <div id="draftsManager" class="tags-display" style="display: none; margin-top: 10px; padding: 8px; background: var(--background-tertiary); border: 1px solid var(--background-accent); border-radius: 4px;">
-        <h4 style="margin: 0 0 10px 0; color: var(--text-normal);">Черновики</h4>
-        <div id="draftsList" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
-        <div style="display: flex; gap: 5px;">
-          <button id="closeDraftsManagerBtn" class="btn btn-secondary" style="flex: 1;">Закрыть</button>
         </div>
       </div>
 
