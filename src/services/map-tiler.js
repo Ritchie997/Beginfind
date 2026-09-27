@@ -90,7 +90,7 @@ async function processJob({ mapId, basemapId }) {
 
   const src = store.sourcePath(mapId, basemap);
   if (!fs.existsSync(src)) {
-    await setBasemap(mapId, basemapId, { status: 'error', error: 'Исходный файл подложки не найден' });
+    await setBasemap(mapId, basemapId, { status: 'error', error: 'Исходный файл фона не найден' });
     return;
   }
 
@@ -110,7 +110,7 @@ async function processJob({ mapId, basemapId }) {
     // Все подложки карты — в одной системе координат (размер первой).
     const fresh = store.getMap(mapId);
     if (fresh && fresh.size && (fresh.size.w !== w || fresh.size.h !== h)) {
-      throw new Error(`Размер ${w}×${h} не совпадает с размером карты ${fresh.size.w}×${fresh.size.h} — подложки одной карты должны быть одинакового размера`);
+      throw new Error(`Размер ${w}×${h} не совпадает с размером карты ${fresh.size.w}×${fresh.size.h} — все фоны одной карты должны быть одинакового размера`);
     }
 
     fs.rmSync(workDir, { recursive: true, force: true });

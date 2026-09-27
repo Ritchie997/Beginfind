@@ -119,6 +119,109 @@
     return widest ? widest.pt : [(bb.minX + bb.maxX) / 2, (bb.minY + bb.maxY) / 2];
   }
 
+  // ===== Время и календарь (этап 3) =====
+  // Время — целое «абсолютный год» мира; календарь (настройка мира)
+  // превращает его в подпись. Эра с прямым счётом: год = t − start + 1;
+  // с обратным (как «до н. э.»): год = начало следующей эры − t.
+
+  const DEFAULT_CALENDAR = {
+    eras: [
+      { id: 'before', name: 'До Основания', short: 'до О.', start: null, direction: 'backward' },
+      { id: 'founding', name: 'Эпоха Основания', short: 'Э.О.', start: 0, direction: 'forward' }
+    ],
+    format: '{year} {short}'
+  };
+  const FLUBBER_SRC = 'https://cdn.jsdelivr.net/npm/flubber@0.4.2/build/flubber.min.js';
+
+  function calendarEras(cal) {
+    const eras = cal && Array.isArray(cal.eras) && cal.eras.length ? cal.eras : DEFAULT_CALENDAR.eras;
+    return eras.slice().sort((a, b) => (a.start === null ? -Infinity : a.start) - (b.start === null ? -Infinity : b.start));
+  }
+
+  function eraIndexFor(eras, t) {
+    let idx = 0;
+    eras.forEach((e, i) => { if (e.start === null || e.start <= t) idx = i; });
+    return idx;
+  }
+
+  // t → { era, year } в календаре мира.
+  function toEraYear(cal, t) {
+    const eras = calendarEras(cal);
+    const i = eraIndexFor(eras, t);
+    const era = eras[i];
+    const next = eras[i + 1] ? eras[i + 1].start : null;
+    const year = era.direction === 'backward'
+      ? (next !== null ? next : 0) - t
+      : t - (era.start !== null ? era.start : 0) + 1;
+    return { era, year };
+  }
+
+  // { eraId, year } → t (обратное к toEraYear).
+  function fromEraYear(cal, eraId, year) {
+    const eras = calendarEras(cal);
+    const i = Math.max(0, eras.findIndex((e) => e.id === eraId));
+    const era = eras[i];
+    const next = eras[i + 1] ? eras[i + 1].start : null;
+    const y = Math.round(Number(year) || 0);
+    return era.direction === 'backward' ? (next !== null ? next : 0) - y : (era.start !== null ? era.start : 0) + y - 1;
+  }
+
+  // Даты в интерфейсе — просто год числом: для вымышленных миров эпохи и
+  // сокращения («Э.О.», «до О.») оказались непонятнее обычного числа.
+  function formatTime(cal, t) {
+    if (t === null || t === undefined || !Number.isFinite(t)) return '';
+    return String(t);
+  }
+
+  function formatRange(cal, from, to) {
+    if (from === null || from === undefined) return to === null || to === undefined ? '' : `до ${formatTime(cal, to)}`;
+    return to === null || to === undefined ? formatTime(cal, from) : `${formatTime(cal, from)} — ${formatTime(cal, to)}`;
+  }
+
+  // Существует ли объект (зона, метка, подложка) в момент t: [from, to).
+  function existsAt(obj, t) {
+    if (t === null || t === undefined) return true;
+    return (obj.from === null || obj.from === undefined || t >= obj.from) && (obj.to === null || obj.to === undefined || t < obj.to);
+  }
+
+  // Индекс версии границы зоны, действующей в момент t.
+  function shapeIndexAt(zone, t) {
+    const shapes = zone.shapes || [];
+    let idx = 0;
+    shapes.forEach((sh, i) => { if (sh.from === null || sh.from === undefined || (t !== null && t !== undefined && sh.from <= t)) idx = i; });
+    return idx;
+  }
+
+  // Есть ли у карты вообще что-то во времени — иначе шкалу не показываем.
+  function mapHasTime(data) {
+    const bounded = (o) => (o.from !== null && o.from !== undefined) || (o.to !== null && o.to !== undefined);
+    const tl = data.timeline || {};
+    if (tl.start != null || tl.end != null || (tl.periods || []).length) return true;
+    return (data.events || []).length > 0
+      || (data.zones || []).some((z) => bounded(z) || (z.shapes || []).length > 1)
+      || (data.markers || []).some(bounded)
+      || (data.basemaps || []).some(bounded);
+  }
+
+  // Диапазон шкалы: начальная и конечная дата карты, если заданы; иначе
+  // все даты карты + поля по краям.
+  function timeRange(data) {
+    const tl = data.timeline || {};
+    if (tl.start != null && tl.end != null && tl.end > tl.start) return { min: tl.start, max: tl.end };
+    const vals = [];
+    const push = (v) => { if (v !== null && v !== undefined && Number.isFinite(v)) vals.push(v); };
+    (data.zones || []).forEach((z) => { push(z.from); push(z.to); (z.shapes || []).forEach((sh) => push(sh.from)); });
+    (data.markers || []).forEach((m) => { push(m.from); push(m.to); });
+    (data.events || []).forEach((e) => { push(e.from); push(e.to); });
+    (data.basemaps || []).forEach((b) => { push(b.from); push(b.to); });
+    if (data.timeline) push(data.timeline.initial);
+    if (!vals.length) return { min: tl.start != null ? tl.start : 0, max: tl.end != null ? tl.end : (tl.start != null ? tl.start + 100 : 100) };
+    let min = Math.min(...vals);
+    let max = Math.max(...vals);
+    const pad = Math.max(1, Math.round((max - min) * 0.05));
+    return { min: tl.start != null ? tl.start : min - pad, max: tl.end != null ? tl.end : max + pad };
+  }
+
   // ===== Типы зон и стили =====
 
   function typeMap(zoneTypes) {
@@ -218,7 +321,20 @@
   class MapViewer {
     constructor(container, mapData, opts = {}) {
       this.container = container;
-      this.data = mapData;
+      // Своя копия зон: текущая форма зоны (polygon) зависит от момента
+      // таймлайна, а данные карты кэшируются и общие для нескольких просмотров.
+      this.data = { ...mapData, zones: (mapData.zones || []).map((z) => ({ ...z })) };
+      this.hasTime = mapHasTime(this.data);
+      this.range = timeRange(this.data);
+      const initial = [opts.time, this.data.timeline && this.data.timeline.initial].find((v) => v !== null && v !== undefined && Number.isFinite(v));
+      this.time = this.hasTime ? (initial !== undefined ? initial : this.range.min) : null;
+      this.data.zones.forEach((z) => {
+        if (!z.shapes && z.polygon) z.shapes = [{ from: null, polygon: z.polygon }];
+        z._shapeIndex = shapeIndexAt(z, this.time);
+        z.polygon = z.shapes && z.shapes[z._shapeIndex] ? z.shapes[z._shapeIndex].polygon : [];
+      });
+      this.selectedEventId = null;
+      this._morphs = new Map();
       this.opts = opts;
       this.types = typeMap(mapData.zoneTypes);
       this.markerTypes = typeMap(mapData.markerTypes);
@@ -270,9 +386,10 @@
       if (embed) this.setupEmbedGestures();
 
       this.basemapLayer = null;
-      const initialBasemap = data.basemaps.find((b) => b.id === opts.basemapId) || data.basemaps[0] || null;
+      const initialBasemap = this.basemapForTime(this.time) || data.basemaps.find((b) => b.id === opts.basemapId) || data.basemaps[0] || null;
       if (initialBasemap) this.setBasemap(initialBasemap.id);
       else this.container.classList.add('map-viewer-no-basemap');
+      this._chosenBasemap = opts.basemapId || null; // стартовый фон периода — не ручной выбор
 
       this.zonesPane = this.map.createPane('zonesPane');
       this.zonesPane.style.zIndex = 450;
@@ -294,13 +411,24 @@
       this._pendingInitialView = true;
       if (this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.applyInitialViewOnce();
 
-      this.map.on('click', () => { if (!this._zoneClickedAt || Date.now() - this._zoneClickedAt > 50) this.selectZone(null); });
+      this.map.on('click', () => {
+        if (this._zoneClickedAt && Date.now() - this._zoneClickedAt <= 50) return;
+        this.clearEventHighlight();
+        this.selectZone(null);
+      });
       this._resizeObserver = new ResizeObserver(() => {
         if (!this.map) return;
         this.map.invalidateSize();
         if (this._pendingInitialView && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.applyInitialViewOnce();
       });
       this._resizeObserver.observe(this.container);
+
+      if (this.hasTime) {
+        this.buildTimeline();
+        // Плавное перетекание границ — библиотека flubber (не загрузилась —
+        // смена формы растворением).
+        loadScript(FLUBBER_SRC, 'flubber').catch(() => {});
+      }
     }
 
     applyInitialViewOnce() {
@@ -345,6 +473,7 @@
       if (this.basemapLayer) this.map.removeLayer(this.basemapLayer);
       this.basemapLayer = makeTileLayer(bm, this.size).addTo(this.map);
       this.currentBasemapId = id;
+      this._chosenBasemap = id; // ручной выбор — фон вне периодов шкалы
     }
 
     // Порядок отрисовки: глубина по возрастанию, внутри уровня — крупные
@@ -480,6 +609,7 @@
 
     selectZone(id, { fly = false } = {}) {
       this.clearMarkerSelection();
+      if (this.selectedEventId && id !== null) this.clearEventHighlight();
       const prev = this.selectedId;
       this.selectedId = id;
       if (prev) this.applyStyle(prev);
@@ -500,6 +630,7 @@
 
     zoneZoomVisible(zone) {
       if (!zone) return false;
+      if (!existsAt(zone, this.time)) return false; // зоны ещё/уже нет в этот момент
       if (zone.id === this.selectedId) return true;
       const t = this.types.get(zone.typeId);
       return this.isVisibleAtZoom(t ? t.minZoomRel : 0);
@@ -573,7 +704,7 @@
       const add = [];
       const remove = [];
       this.markerLayers.forEach((e, id) => {
-        const vis = id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerType(e.data).minZoomRel);
+        const vis = existsAt(e.data, this.time) && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerType(e.data).minZoomRel));
         if (vis && !e.shown) { add.push(e.marker); e.shown = true; }
         else if (!vis && e.shown) { remove.push(e.marker); e.shown = false; }
       });
@@ -643,13 +774,18 @@
         this.cardEl.addEventListener('click', (e) => {
           const btn = e.target.closest('[data-card-action]');
           if (!btn) return;
-          const item = this.selectedMarkerId ? this.markerById(this.selectedMarkerId) : this.zoneById(this.selectedId);
+          if (btn.dataset.cardAction === 'close') { this.clearEventHighlight(); this.selectZone(null); return; }
+          if (btn.dataset.cardAction === 'goto-zone') { this.selectZone(btn.dataset.id, { fly: true }); return; }
+          if (btn.dataset.cardAction === 'goto-marker') { this.selectMarker(btn.dataset.id, { fly: true }); return; }
+          const item = this.selectedMarkerId ? this.markerById(this.selectedMarkerId)
+            : this.selectedEventId ? this.eventById(this.selectedEventId)
+              : this.zoneById(this.selectedId);
           if (!item) return;
           if (btn.dataset.cardAction === 'open') this.activate(item);
-          if (btn.dataset.cardAction === 'close') this.selectZone(null);
         });
       }
       if (this.selectedMarkerId) { this.renderMarkerCard(); return; }
+      if (this.selectedEventId) { this.renderEventCard(); return; }
       const zone = this.zoneById(this.selectedId);
       if (!zone) { this.cardEl.hidden = true; return; }
 
@@ -664,14 +800,15 @@
         <div class="map-zone-card-type" style="--zone-color:${escapeHtml(effectiveType(this.types.get(zone.typeId), zone.style).color)}">${escapeHtml(this.typeName(zone))}</div>
         <div class="map-zone-card-title">${escapeHtml(zone.title || 'Без названия')}</div>
         ${zone.articleTitle && zone.articleTitle !== zone.title ? `<div class="map-zone-card-sub">${escapeHtml(zone.articleTitle)}</div>` : ''}
+        ${this.hasTime && (zone.from != null || zone.to != null) ? `<div class="map-zone-card-when"><i class="fas fa-hourglass-half"></i> ${escapeHtml(formatRange(this.data.calendar, zone.from, zone.to))}</div>` : ''}
         <div class="map-zone-card-actions">${action}</div>`;
       this.cardEl.hidden = false;
     }
 
     cardAction(item, noun) {
-      if (item.locked) return `<div class="map-zone-card-note"><i class="fas fa-lock"></i> Статья этой ${noun} вам недоступна</div>`;
+      if (item.locked) return `<div class="map-zone-card-note"><i class="fas fa-lock"></i> Статья ${noun === 'события' ? 'этого' : 'этой'} ${noun} вам недоступна</div>`;
       if (item.articleMissing) return `<button type="button" class="btn btn-secondary btn-sm" data-card-action="open"><i class="fas fa-plus"></i> Создать статью «${escapeHtml(item.title || item.article)}»</button>`;
-      if (item.article) return `<button type="button" class="btn btn-primary btn-sm" data-card-action="open"><i class="fas fa-book-open"></i> Открыть статью</button>${this.touch ? '' : `<span class="map-zone-card-tip">или двойной клик по ${noun === 'метки' ? 'метке' : 'зоне'}</span>`}`;
+      if (item.article) return `<button type="button" class="btn btn-primary btn-sm" data-card-action="open"><i class="fas fa-book-open"></i> Открыть статью</button>${this.touch || noun === 'события' ? '' : `<span class="map-zone-card-tip">или двойной клик по ${noun === 'метки' ? 'метке' : 'зоне'}</span>`}`;
       return '';
     }
 
@@ -687,6 +824,267 @@
         ${m.articleTitle && m.articleTitle !== m.title ? `<div class="map-zone-card-sub">${escapeHtml(m.articleTitle)}</div>` : ''}
         ${text ? `<div class="map-zone-card-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>` : ''}
         <div class="map-zone-card-actions">${this.cardAction(m, 'метки')}</div>`;
+      this.cardEl.hidden = false;
+    }
+
+    // ===== Таймлайн (этап 3) =====
+
+    eventById(id) { return (this.data.events || []).find((e) => e.id === id) || null; }
+
+    // Подложка, привязанная ко времени: первая, в чей интервал попал момент t.
+    // Подложки без интервала — обычные, выбираются читателем.
+    basemapForTime(t) {
+      if (t === null || t === undefined) return null;
+      // Фон по периодам (настройка шкалы карты): период, в который попал момент.
+      const periods = (this.data.timeline && this.data.timeline.periods) || [];
+      if (periods.length) {
+        const p = periods.find((x) => existsAt(x, t));
+        const bm = p && this.data.basemaps.find((b) => b.id === p.basemapId);
+        if (bm) return bm;
+        return this._chosenBasemap ? this.data.basemaps.find((b) => b.id === this._chosenBasemap) || null : this.data.basemaps[0] || null;
+      }
+      const timed = (this.data.basemaps || []).filter((b) => b.from != null || b.to != null);
+      if (!timed.length) return null;
+      return timed.find((b) => existsAt(b, t)) || (this.data.basemaps || []).find((b) => b.from == null && b.to == null) || null;
+    }
+
+    // Смена подложки с плавным растворением старой.
+    fadeToBasemap(id) {
+      const bm = this.data.basemaps.find((b) => b.id === id);
+      if (!bm || id === this.currentBasemapId) return;
+      const old = this.basemapLayer;
+      const layer = makeTileLayer(bm, this.size).setOpacity(0).addTo(this.map);
+      this.basemapLayer = layer;
+      this.currentBasemapId = id;
+      const start = performance.now();
+      const step = (now) => {
+        const k = Math.min(1, (now - start) / 450);
+        layer.setOpacity(k);
+        if (k < 1) requestAnimationFrame(step);
+        else if (old) this.map.removeLayer(old);
+      };
+      layer.once('load', () => requestAnimationFrame(step));
+      setTimeout(() => { if (old && this.map && this.map.hasLayer(old)) { layer.setOpacity(1); this.map.removeLayer(old); } }, 4000);
+      if (this.opts.onBasemapChange) this.opts.onBasemapChange(id);
+    }
+
+    // Перейти к моменту t. animate — перетекание границ (при клике по событию,
+    // «вперёд/назад»); при перетаскивании ползунка — мгновенно.
+    setTime(t, { animate = true } = {}) {
+      if (!this.hasTime) return;
+      t = Math.round(Math.max(this.range.min, Math.min(this.range.max, t)));
+      if (t === this.time) { this.updateTimelineUI(); return; }
+      this.time = t;
+      let shapeChanged = false;
+      this.data.zones.forEach((z) => {
+        const idx = shapeIndexAt(z, t);
+        if (idx === z._shapeIndex) return;
+        const fromPoly = z.polygon;
+        z._shapeIndex = idx;
+        z.polygon = z.shapes[idx].polygon;
+        shapeChanged = true;
+        const layer = this.zoneLayers.get(z.id);
+        if (!layer) return;
+        if (animate && existsAt(z, t)) this.morphZone(z, layer, fromPoly, z.polygon);
+        else layer.setLatLngs(polygonToLatLngs(z.polygon));
+      });
+      if (this.selectedId && !existsAt(this.zoneById(this.selectedId) || {}, t)) this.selectZone(null);
+      if (this.selectedMarkerId && !existsAt(this.markerById(this.selectedMarkerId) || {}, t)) this.selectZone(null);
+      const bm = this.basemapForTime(t);
+      if (bm) this.fadeToBasemap(bm.id);
+      this.updateZoomVisibility();
+      if (shapeChanged) {
+        clearTimeout(this._labelTimer);
+        this._labelTimer = setTimeout(() => this.renderLabels(), animate ? 650 : 0);
+      } else {
+        this.updateLabels();
+      }
+      this.updateTimelineUI();
+      if (this.opts.onTimeChange) this.opts.onTimeChange(t);
+    }
+
+    // Перетекание границы: одна замкнутая линия → одна — плавная
+    // интерполяция формы (flubber); распад/слияние/дыры — растворение.
+    morphZone(zone, layer, fromPoly, toPoly) {
+      const prev = this._morphs.get(zone.id);
+      if (prev) cancelAnimationFrame(prev);
+      const fl = window.flubber;
+      const simple = (p) => p && p.length === 1 && p[0].length === 1 && p[0][0].length <= 1500;
+      let interp = null;
+      if (fl && simple(fromPoly) && simple(toPoly)) {
+        const bb = polygonBBox(toPoly);
+        const seg = Math.max(2, Math.max(bb.maxX - bb.minX, bb.maxY - bb.minY) / 90);
+        try { interp = fl.interpolate(fromPoly[0][0], toPoly[0][0], { string: false, maxSegmentLength: seg }); } catch (e) { interp = null; }
+      }
+      if (interp) {
+        const start = performance.now();
+        const step = (now) => {
+          if (!this.map) return;
+          const k = Math.min(1, (now - start) / 600);
+          const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+          if (k < 1) {
+            layer.setLatLngs(polygonToLatLngs([[interp(ease)]]));
+            this._morphs.set(zone.id, requestAnimationFrame(step));
+          } else {
+            layer.setLatLngs(polygonToLatLngs(toPoly));
+            this._morphs.delete(zone.id);
+          }
+        };
+        this._morphs.set(zone.id, requestAnimationFrame(step));
+        return;
+      }
+      const el = layer.getElement && layer.getElement();
+      if (!el) { layer.setLatLngs(polygonToLatLngs(toPoly)); return; }
+      el.style.transition = 'opacity .25s ease';
+      el.style.opacity = '0';
+      setTimeout(() => {
+        if (!this.map) return;
+        layer.setLatLngs(polygonToLatLngs(toPoly));
+        el.style.opacity = '';
+        setTimeout(() => { el.style.transition = ''; }, 300);
+      }, 250);
+    }
+
+    // Шкала внизу карты: события точками (моментальные) и полосами
+    // (длительные), ползунок момента, переходы к предыдущему/следующему событию.
+    buildTimeline() {
+      const el = document.createElement('div');
+      el.className = 'map-timeline';
+      this.container.appendChild(el);
+      this.timelineEl = el;
+      this.container.classList.add('has-timeline');
+      const { min, max } = this.range;
+      const span = Math.max(1, max - min);
+      const pct = (t) => ((t - min) / span) * 100;
+
+      // Длительные события — по дорожкам, чтобы полосы не налезали.
+      const events = (this.data.events || []).slice().sort((a, b) => a.from - b.from);
+      const laneEnds = [];
+      const items = events.map((e) => {
+        if (e.to === null || e.to === undefined) return `<button type="button" class="map-tl-event map-tl-point" data-event-id="${escapeHtml(e.id)}" style="left:${pct(e.from).toFixed(3)}%" title="${escapeHtml(`${formatTime(this.data.calendar, e.from)} — ${e.title}`)}"></button>`;
+        let lane = laneEnds.findIndex((end) => end <= e.from);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(e.to); } else laneEnds[lane] = e.to;
+        lane = Math.min(lane, 2);
+        return `<button type="button" class="map-tl-event map-tl-bar" data-event-id="${escapeHtml(e.id)}" style="left:${pct(e.from).toFixed(3)}%;width:${Math.max(0.6, pct(e.to) - pct(e.from)).toFixed(3)}%;--lane:${lane}" title="${escapeHtml(`${formatRange(this.data.calendar, e.from, e.to)} — ${e.title}`)}"></button>`;
+      }).join('');
+
+      // На телефоне при большом числе событий шкала шире экрана и листается.
+      const wide = this.touch && events.length > 8 ? `style="width:${events.length * 56}px"` : '';
+      el.innerHTML = `
+        <div class="map-tl-head">
+          <button type="button" class="map-tl-btn" data-tl="prev" title="Предыдущее событие"><i class="fas fa-backward-step"></i></button>
+          <span class="map-tl-date"></span>
+          <button type="button" class="map-tl-btn" data-tl="next" title="Следующее событие"><i class="fas fa-forward-step"></i></button>
+        </div>
+        <div class="map-tl-scroll">
+          <div class="map-tl-track" ${wide}>
+            <div class="map-tl-events">${items}</div>
+            <input type="range" class="map-tl-range" min="${min}" max="${max}" step="1" value="${this.time}" aria-label="Момент времени">
+          </div>
+        </div>`;
+
+      const range = el.querySelector('.map-tl-range');
+      let frame = null;
+      range.addEventListener('input', () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => { frame = null; this.setTime(Number(range.value), { animate: false }); });
+      });
+      el.addEventListener('click', (e) => {
+        const ev = e.target.closest('[data-event-id]');
+        if (ev) { this.selectEvent(ev.dataset.eventId); return; }
+        const btn = e.target.closest('[data-tl]');
+        if (!btn) return;
+        const list = events.map((x) => x.from);
+        const target = btn.dataset.tl === 'prev'
+          ? [...list].reverse().find((f) => f < this.time)
+          : list.find((f) => f > this.time);
+        if (target !== undefined) {
+          const e2 = events.find((x) => x.from === target);
+          if (e2) this.selectEvent(e2.id); else this.setTime(target);
+        }
+      });
+      // Колесо над шкалой не должно масштабировать карту.
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+      this.updateTimelineUI();
+    }
+
+    updateTimelineUI() {
+      if (!this.timelineEl) return;
+      const range = this.timelineEl.querySelector('.map-tl-range');
+      if (range && Number(range.value) !== this.time) range.value = String(this.time);
+      const date = this.timelineEl.querySelector('.map-tl-date');
+      if (date) date.textContent = formatTime(this.data.calendar, this.time);
+      this.timelineEl.querySelectorAll('[data-event-id]').forEach((b) => {
+        const e = this.eventById(b.dataset.eventId);
+        b.classList.toggle('is-current', !!e && existsAt({ from: e.from, to: e.to === null ? e.from + 1 : e.to }, this.time));
+        b.classList.toggle('is-selected', b.dataset.eventId === this.selectedEventId);
+      });
+    }
+
+    // Выбор события: переход к его началу, подсветка связанных зон и
+    // меток, карточка с описанием.
+    selectEvent(id) {
+      const e = this.eventById(id);
+      if (!e) return;
+      // Повторное нажатие на то же событие — свернуть: карточка закрывается,
+      // подсветка снимается.
+      if (id === this.selectedEventId) {
+        this.clearEventHighlight();
+        this.renderCard();
+        if (this.opts.onSelect) this.opts.onSelect(null, 'event');
+        return;
+      }
+      this.clearEventHighlight();
+      this.clearMarkerSelection();
+      if (this.selectedId) { const z = this.selectedId; this.selectedId = null; this.applyStyle(z); }
+      this.selectedEventId = id;
+      this.setTime(e.from);
+      e.zoneIds.forEach((zid) => {
+        const el = this.zoneLayers.get(zid) && this.zoneLayers.get(zid).getElement();
+        if (el) el.classList.add('map-zone-event');
+      });
+      e.markerIds.forEach((mid) => {
+        const entry = this.markerLayers.get(mid);
+        const el = entry && entry.marker.getElement && entry.marker.getElement();
+        if (el) el.classList.add('map-marker-event');
+      });
+      // Показать связанные зоны целиком.
+      const boxes = e.zoneIds.map((zid) => this.zoneById(zid)).filter(Boolean).map((z) => polygonBBox(z.polygon)).filter(Boolean);
+      if (boxes.length) {
+        const b = boxes.reduce((acc, x) => ({ minX: Math.min(acc.minX, x.minX), minY: Math.min(acc.minY, x.minY), maxX: Math.max(acc.maxX, x.maxX), maxY: Math.max(acc.maxY, x.maxY) }));
+        this.map.flyToBounds(bboxToLatLngBounds(b), { padding: [50, 50], maxZoom: 1, duration: 0.6 });
+      }
+      this.updateTimelineUI();
+      this.renderCard();
+      if (this.opts.onSelect) this.opts.onSelect(id, 'event');
+    }
+
+    clearEventHighlight() {
+      if (!this.selectedEventId) return;
+      this.selectedEventId = null;
+      this.container.querySelectorAll('.map-zone-event').forEach((el) => el.classList.remove('map-zone-event'));
+      this.container.querySelectorAll('.map-marker-event').forEach((el) => el.classList.remove('map-marker-event'));
+      this.updateTimelineUI();
+    }
+
+    renderEventCard() {
+      const e = this.eventById(this.selectedEventId);
+      if (!e) { this.cardEl.hidden = true; return; }
+      const text = (e.text || '').trim();
+      const zones = e.zoneIds.map((id) => this.zoneById(id)).filter(Boolean);
+      const markers = e.markerIds.map((id) => this.markerById(id)).filter(Boolean);
+      const links = [
+        ...zones.map((z) => `<button type="button" class="map-card-chip" data-card-action="goto-zone" data-id="${escapeHtml(z.id)}">${escapeHtml(z.title || 'Зона')}</button>`),
+        ...markers.map((m) => `<button type="button" class="map-card-chip" data-card-action="goto-marker" data-id="${escapeHtml(m.id)}"><i class="fas fa-location-dot"></i> ${escapeHtml(m.title || 'Метка')}</button>`)
+      ].join('');
+      this.cardEl.innerHTML = `
+        <button type="button" class="map-zone-card-close" data-card-action="close" aria-label="Закрыть"><i class="fas fa-xmark"></i></button>
+        <div class="map-zone-card-type map-zone-card-type-marker" style="--zone-color:var(--blurple)"><i class="fas fa-hourglass-half"></i> ${escapeHtml(formatRange(this.data.calendar, e.from, e.to))}</div>
+        <div class="map-zone-card-title">${escapeHtml(e.title)}</div>
+        ${text ? `<div class="map-zone-card-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>` : ''}
+        ${links ? `<div class="map-card-chips">${links}</div>` : ''}
+        <div class="map-zone-card-actions">${this.cardAction(e, 'события')}</div>`;
       this.cardEl.hidden = false;
     }
 
@@ -716,6 +1114,8 @@
     }
 
     destroy() {
+      this._morphs.forEach((id) => cancelAnimationFrame(id));
+      clearTimeout(this._labelTimer);
       if (this._resizeObserver) this._resizeObserver.disconnect();
       if (this.map) this.map.remove();
       this.map = null;
@@ -778,11 +1178,11 @@
         const data = await fetchViewerMap(mapId);
         canvas.innerHTML = '';
         if (!data.basemaps.length) {
-          canvas.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет готовой подложки</div>';
+          canvas.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет фона</div>';
           continue;
         }
         const viewer = new MapViewer(canvas, data, {
-          mode: 'embed', view: cfg.view, focusZoneId: cfg.focusZoneId, basemapId: cfg.basemapId,
+          mode: 'embed', view: cfg.view, focusZoneId: cfg.focusZoneId, basemapId: cfg.basemapId, time: cfg.time,
           onZoneActivate: inEditor ? () => window.showMessage?.('В предпросмотре редактора переход по зонам отключён', 'info') : undefined
         });
         embedInstances.add(viewer);
@@ -798,11 +1198,11 @@
     bar.className = 'blk-map-controls';
     const basemaps = viewer.data.basemaps;
     bar.innerHTML = `
-      ${basemaps.length > 1 ? `<select class="blk-map-basemap" title="Подложка">${basemaps.map((b) => `<option value="${escapeHtml(b.id)}"${b.id === viewer.currentBasemapId ? ' selected' : ''}>${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
+      ${basemaps.length > 1 ? `<select class="blk-map-basemap" title="Фон карты">${basemaps.map((b) => `<option value="${escapeHtml(b.id)}"${b.id === viewer.currentBasemapId ? ' selected' : ''}>${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
       ${inEditor ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
     bar.querySelector('.blk-map-basemap')?.addEventListener('change', (e) => viewer.setBasemap(e.target.value));
     bar.querySelector('.blk-map-fullscreen')?.addEventListener('click', () => {
-      window.MapsUI?.openMapPage(mapId, { zoneId: viewer.selectedId, view: viewer.getView(), basemapId: viewer.currentBasemapId });
+      window.MapsUI?.openMapPage(mapId, { zoneId: viewer.selectedId, view: viewer.getView(), basemapId: viewer.currentBasemapId, time: viewer.time });
     });
     el.appendChild(bar);
   }
@@ -833,6 +1233,16 @@
     fetchViewerMap,
     mountEmbeds,
     sweepEmbeds,
-    FALLBACK_TYPE
+    FALLBACK_TYPE,
+    DEFAULT_CALENDAR,
+    calendarEras,
+    toEraYear,
+    fromEraYear,
+    formatTime,
+    formatRange,
+    existsAt,
+    shapeIndexAt,
+    mapHasTime,
+    timeRange
   };
 })();

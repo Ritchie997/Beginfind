@@ -84,7 +84,7 @@ function getServerName(serverId) {
 function publicBasemaps(map) {
   return map.basemaps
     .filter((b) => b.status === 'ready')
-    .map((b) => ({ id: b.id, title: b.title, url: store.tilesUrl(map.id, b), maxZoom: b.maxZoom, width: b.width, height: b.height }));
+    .map((b) => ({ id: b.id, title: b.title, url: store.tilesUrl(map.id, b), maxZoom: b.maxZoom, width: b.width, height: b.height, from: b.from, to: b.to }));
 }
 
 /**
@@ -156,7 +156,9 @@ async function buildViewerMap(user, map) {
       articleMissing,
       locked,
       style: z.style || null,
-      polygon: z.shapes[0] ? z.shapes[0].polygon : []
+      from: z.from,
+      to: z.to,
+      shapes: z.shapes
     });
   }
 
@@ -179,9 +181,33 @@ async function buildViewerMap(user, map) {
         article = null;
       } else articleTitle = info.title;
     }
-    markers.push({ id: m.id, typeId: m.typeId, title: m.title, text: m.text, article, articleTitle, articleMissing, locked, pos: m.pos });
+    markers.push({ id: m.id, typeId: m.typeId, title: m.title, text: m.text, article, articleTitle, articleMissing, locked, from: m.from, to: m.to, pos: m.pos });
   }
-  return { zones: out, markers };
+
+  // События: связи — только с видимыми читателю зонами и метками; закрытая
+  // статья события — без ссылки (само событие остаётся на шкале).
+  const visibleZoneIds = new Set(out.map((z) => z.id));
+  const visibleMarkerIds = new Set(markers.map((m) => m.id));
+  const events = [];
+  for (const e of map.events || []) {
+    let article = e.article;
+    let articleTitle = null;
+    let articleMissing = false;
+    let locked = false;
+    if (article) {
+      const info = await articleInfo(article);
+      if (!info.exists) articleMissing = true;
+      else if (!info.access) { locked = true; article = null; }
+      else articleTitle = info.title;
+    }
+    events.push({
+      id: e.id, from: e.from, to: e.to, title: e.title, text: e.text,
+      article, articleTitle, articleMissing, locked,
+      zoneIds: e.zoneIds.filter((id) => visibleZoneIds.has(id)),
+      markerIds: e.markerIds.filter((id) => visibleMarkerIds.has(id))
+    });
+  }
+  return { zones: out, markers, events };
 }
 
 module.exports = {

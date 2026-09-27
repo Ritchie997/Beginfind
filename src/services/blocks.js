@@ -171,7 +171,9 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         height: Math.min(900, Math.max(200, Math.round(num(data.height, 420)))),
         view,
         focusZoneId: idOrNull(data.focusZoneId),
-        basemapId: idOrNull(data.basemapId)
+        basemapId: idOrNull(data.basemapId),
+        // Момент таймлайна, на котором статья открывает карту (null — как у карты).
+        time: Number.isFinite(Number(data.time)) && data.time !== null && data.time !== '' ? Math.round(Number(data.time)) : null
       };
     }
 

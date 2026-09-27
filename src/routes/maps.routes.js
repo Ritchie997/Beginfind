@@ -39,6 +39,7 @@ function editorPayload(map, world) {
     })),
     zoneTypes: world.zoneTypes,
     markerTypes: world.markerTypes,
+    calendar: world.calendar,
     chunkSize: CHUNK_SIZE,
     maxSourceBytes: MAX_SOURCE_BYTES
   };
@@ -155,8 +156,11 @@ router.get('/maps/:id', auth.authenticateToken, auth.checkApproved, async (req, 
       basemaps: access.publicBasemaps(map),
       zones: visible.zones,
       markers: visible.markers,
+      events: visible.events,
+      timeline: map.timeline,
       zoneTypes: world.zoneTypes,
       markerTypes: world.markerTypes,
+      calendar: world.calendar,
       updated_at: map.updated_at,
       can_edit: canEdit
     });
@@ -180,12 +184,15 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
     }
     const zones = body.zones !== undefined ? store.normalizeZones(body.zones, { strict: true }) : null;
     const markers = Array.isArray(body.markers) ? body.markers : null;
+    const events = Array.isArray(body.events) ? body.events : null;
 
     const saved = await store.updateMap(map.id, (m) => {
       if (typeof body.title === 'string') m.title = body.title;
       if (Array.isArray(body.roles)) m.roles = body.roles;
       if (zones) m.zones = zones;
       if (markers) m.markers = markers; // нормализуются при записи (writeMap → normalizeMap)
+      if (events) m.events = events;
+      if (body.timeline && typeof body.timeline === 'object') m.timeline = body.timeline; // нормализуется при записи
       // Подложки: только порядок и названия существующих — статусы/файлы
       // ведёт сервер.
       if (Array.isArray(body.basemaps)) {
@@ -195,6 +202,8 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
           const bm = raw && byId.get(raw.id);
           if (!bm) return;
           if (typeof raw.title === 'string' && raw.title.trim()) bm.title = raw.title.trim().slice(0, 80);
+          if ('from' in raw) bm.from = raw.from; // интервал показа — нормализуется при записи
+          if ('to' in raw) bm.to = raw.to;
           ordered.push(bm);
           byId.delete(raw.id);
         });
@@ -231,7 +240,7 @@ router.post('/maps/:id/basemaps', auth.authenticateToken, auth.checkApproved, au
 
     const ext = path.extname(String(req.body.filename || '')).toLowerCase();
     const size = Number(req.body.size);
-    if (!SOURCE_EXTENSIONS.has(ext)) return res.status(400).json({ error: 'Подложка — изображение jpg, png, webp или tiff' });
+    if (!SOURCE_EXTENSIONS.has(ext)) return res.status(400).json({ error: 'Фон карты — изображение jpg, png, webp или tiff' });
     if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'Некорректный размер файла' });
     if (size > MAX_SOURCE_BYTES) return res.status(400).json({ error: `Файл больше ${Math.round(MAX_SOURCE_BYTES / 1024 / 1024)} МБ` });
 
@@ -241,7 +250,7 @@ router.post('/maps/:id/basemaps', auth.authenticateToken, auth.checkApproved, au
     await store.updateMap(map.id, (m) => {
       m.basemaps.push({
         id: basemapId,
-        title: String(req.body.title || '').trim() || path.basename(String(req.body.filename), ext).slice(0, 80) || 'Подложка',
+        title: String(req.body.title || '').trim() || path.basename(String(req.body.filename), ext).slice(0, 80) || 'Фон',
         status: 'uploading',
         ext,
         declaredSize: size,
@@ -260,8 +269,8 @@ async function loadUploadingBasemap(req, res) {
   if (!map) return null;
   if (!(await access.canEditMap(req.user, map))) { res.status(403).json({ error: 'Править эту карту вам нельзя' }); return null; }
   const bm = map.basemaps.find((b) => b.id === req.params.bid);
-  if (!bm) { res.status(404).json({ error: 'Подложка не найдена' }); return null; }
-  if (bm.status !== 'uploading') { res.status(409).json({ error: 'Эта подложка уже загружена' }); return null; }
+  if (!bm) { res.status(404).json({ error: 'Фон не найден' }); return null; }
+  if (bm.status !== 'uploading') { res.status(409).json({ error: 'Этот фон уже загружен' }); return null; }
   return { map, bm };
 }
 
@@ -321,7 +330,7 @@ router.post('/maps/:id/basemaps/:bid/retile', auth.authenticateToken, auth.check
     if (!map) return;
     if (!(await access.canEditMap(req.user, map))) return res.status(403).json({ error: 'Править эту карту вам нельзя' });
     const bm = map.basemaps.find((b) => b.id === req.params.bid);
-    if (!bm || !fs.existsSync(store.sourcePath(map.id, bm))) return res.status(404).json({ error: 'Исходник подложки не найден' });
+    if (!bm || !fs.existsSync(store.sourcePath(map.id, bm))) return res.status(404).json({ error: 'Исходный файл фона не найден' });
     await store.updateMap(map.id, (m) => {
       const b = m.basemaps.find((x) => x.id === bm.id);
       if (b) Object.assign(b, { status: 'queued', error: null });
@@ -340,7 +349,7 @@ router.delete('/maps/:id/basemaps/:bid', auth.authenticateToken, auth.checkAppro
     if (!map) return;
     if (!(await access.canEditMap(req.user, map))) return res.status(403).json({ error: 'Править эту карту вам нельзя' });
     const bm = map.basemaps.find((b) => b.id === req.params.bid);
-    if (!bm) return res.status(404).json({ error: 'Подложка не найдена' });
+    if (!bm) return res.status(404).json({ error: 'Фон не найден' });
     store.removeBasemapFiles(map.id, bm);
     await store.updateMap(map.id, (m) => {
       m.basemaps = m.basemaps.filter((b) => b.id !== bm.id);

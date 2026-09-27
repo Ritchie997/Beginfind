@@ -820,3 +820,239 @@ body.map-fs-open { overflow: hidden; }
 .world-save { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .world-unsaved { font-size: 12px; color: var(--yellow); }
 .world-unsaved[hidden] { display: none; }
+
+/* ===== Этап 3: таймлайн ===== */
+
+.map-timeline {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1000;
+  padding: 6px 10px 8px;
+  border-radius: 10px;
+  background: rgba(32, 34, 37, .92);
+  border: 1px solid var(--background-accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  color: var(--text-normal);
+}
+.map-tl-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.map-tl-date {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--header-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-tl-btn {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.map-tl-btn:hover { border-color: var(--blurple); }
+.map-tl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.map-tl-track { position: relative; min-width: 100%; padding-top: 22px; }
+/* События над ползунком; поля слева/справа — под ширину бегунка */
+.map-tl-events { position: absolute; left: 8px; right: 8px; top: 0; height: 22px; }
+.map-tl-range { display: block; width: 100%; margin: 0; accent-color: var(--blurple); cursor: pointer; }
+.map-tl-event { position: absolute; padding: 0; border: none; background: var(--blurple); cursor: pointer; }
+.map-tl-point { top: 5px; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; border: 2px solid #fff; }
+.map-tl-bar { top: calc(3px + var(--lane, 0) * 6px); height: 5px; border-radius: 3px; opacity: .75; }
+.map-tl-event:hover { filter: brightness(1.3); }
+.map-tl-event.is-current { background: var(--yellow); opacity: 1; }
+.map-tl-event.is-selected { background: #fff; opacity: 1; }
+
+/* Шкала занимает низ карты — кнопки масштаба и карточка поднимаются над ней */
+.map-viewer.has-timeline .leaflet-bottom { bottom: 84px; }
+.map-viewer.has-timeline .map-zone-card { bottom: 92px; }
+@media (hover: none) and (pointer: coarse) {
+  .map-viewer.has-timeline .map-zone-card { bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .map-tl-point { width: 14px; height: 14px; margin-left: -7px; top: 3px; }
+}
+
+/* Зоны и метки выбранного события */
+.map-zone.map-zone-event { stroke: #fff; stroke-dasharray: 6 4; stroke-width: 3; }
+.map-marker-event .map-marker { box-shadow: 0 0 0 3px #fff, 0 0 12px var(--marker-color); }
+
+.map-zone-card-when { margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+.map-card-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.map-card-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--background-accent);
+  border-radius: 12px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+}
+.map-card-chip:hover { border-color: var(--blurple); }
+
+/* ===== Редактор: время ===== */
+
+.me-timeline { left: 8px; right: 60px; }
+.me-canvas-wrap .me-hint { bottom: 100px; }
+.me-canvas-wrap .leaflet-bottom { bottom: 88px; }
+
+/* Зона/метка, которых нет в текущий момент, — бледные, но их можно выбрать */
+.map-zone.me-zone-absent { opacity: .28; stroke-dasharray: 3 5; }
+.map-marker.is-absent { opacity: .4; filter: grayscale(1); }
+
+.me-time { display: flex; align-items: center; gap: 4px; }
+.me-time-year,
+.me-time-era {
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.me-time-year { width: 92px; min-width: 0; }
+.me-time-era { min-width: 0; max-width: 130px; }
+.me-time .me-time-clear { width: 30px; height: 30px; }
+.me-time-now { margin-bottom: 6px; font-size: 18px; font-weight: 700; color: var(--header-primary); }
+.me-time-quick { display: flex; gap: 6px; margin-bottom: 10px; }
+.map-icon-btn.me-quick { width: auto; padding: 0 8px; font-size: 12px; }
+.me-props-sub {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.me-absent-badge { margin-left: 6px; color: var(--yellow); text-transform: none; letter-spacing: 0; }
+.me-versions { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.me-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.me-version.active { border-color: var(--blurple); }
+.me-version em { color: var(--text-muted); font-style: normal; }
+.me-bm-time { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+.me-events { max-height: 30vh; }
+.me-event-date { flex: 0 0 auto; font-size: 11px; color: var(--text-muted); }
+.me-event-form { margin-top: 10px; padding: 10px; border: 1px solid var(--background-accent); border-radius: 8px; }
+
+/* Окно «Копировать состояние» */
+.me-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .6);
+}
+.me-modal-box {
+  width: min(480px, calc(100% - 32px));
+  max-height: 85%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+}
+.me-copy-preview { margin: 8px 0 12px; }
+.me-copy-list { max-height: 200px; overflow-y: auto; margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+
+/* Мини-панель у выбранной метки: удалить прямо на карте */
+.me-marker-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-accent);
+  color: var(--text-normal);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .45);
+}
+.me-marker-popup .leaflet-popup-content { margin: 6px 6px 6px 10px; }
+.me-marker-popup .leaflet-popup-tip { background: var(--background-secondary); }
+.me-marker-popup-body { display: flex; align-items: center; gap: 8px; }
+.me-marker-popup-title { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+
+.eb-map-time { display: flex; gap: 4px; }
+.eb-map-time input { width: 100px; }
+.eb-map-field[hidden] { display: none; }
+
+/* Даты — одно число; пара «начало — конец» в строку */
+.me-time-year { width: 110px; }
+.me-time-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.me-periods { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.me-period { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--background-accent); border-radius: 8px; font-size: 12px; }
+.me-period .me-time-year { width: 80px; }
+.me-period-bm { flex: 1 1 100px; min-width: 0; height: 30px; border: 1px solid var(--background-accent); border-radius: 6px; background: var(--background-tertiary); color: var(--text-normal); }
+.eb-map-field input[data-map-time-year] { width: 140px; }
+
+/* «Типы мира» во вкладке «Зоны» */
+.me-world-details { margin-top: 16px; border-top: 1px solid var(--background-accent); padding-top: 10px; }
+.me-world-details > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  list-style: none;
+}
+.me-world-details > summary::-webkit-details-marker { display: none; }
+.me-world-details > summary::after { content: ' ▸'; }
+.me-world-details[open] > summary::after { content: ' ▾'; }
+.me-world-details[open] > summary { margin-bottom: 8px; color: var(--text-normal); }
+.me-type-row { display: flex; gap: 6px; align-items: center; }
+.me-type-row .form-select { flex: 1; min-width: 0; }
+.world-type.is-flash { animation: world-type-flash 1.2s ease-out; }
+@keyframes world-type-flash { from { box-shadow: 0 0 0 3px var(--blurple); } to { box-shadow: 0 0 0 0 transparent; } }
+
+/* Палитра типов для инструмента «Метка» */
+.me-marker-palette {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: calc(100% - 130px);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(32, 34, 37, .92);
+  border: 1px solid var(--background-accent);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .4);
+}
+.me-marker-palette[hidden] { display: none; }
+.me-palette-head { padding: 2px 6px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.me-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-normal);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.me-palette-item:hover { background: var(--background-accent); }
+.me-palette-item.active { border-color: var(--blurple); background: rgba(88, 101, 242, .2); }
+.me-palette-item .map-marker { width: 24px; height: 24px; flex: 0 0 auto; font-size: 11px; animation: none; }
+.me-palette-empty { padding: 6px; font-size: 12px; color: var(--text-muted); }

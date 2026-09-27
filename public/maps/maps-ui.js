@@ -84,12 +84,12 @@
 
     const actions = root.querySelector('.map-fs-actions');
     actions.innerHTML = `
-      ${data.basemaps.length > 1 ? `<select class="map-fs-select" data-act="basemap" title="Подложка">${data.basemaps.map((b) => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
+      ${data.basemaps.length > 1 ? `<select class="map-fs-select" data-act="basemap" title="Фон карты">${data.basemaps.map((b) => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
       <button type="button" class="map-fs-btn" data-act="zones" title="Список зон"><i class="fas fa-list"></i><span class="map-fs-btn-label"> Зоны</span></button>
       ${data.can_edit ? '<button type="button" class="map-fs-btn" data-act="edit" title="Редактировать карту"><i class="fas fa-pen"></i><span class="map-fs-btn-label"> Редактировать</span></button>' : ''}`;
 
     if (!data.basemaps.length) {
-      root.querySelector('.map-fs-viewer').innerHTML = `<div class="map-fs-empty"><i class="fas fa-image"></i><div>У карты ещё нет готовой подложки${data.can_edit ? ' — загрузите её в редакторе' : ''}.</div></div>`;
+      root.querySelector('.map-fs-viewer').innerHTML = `<div class="map-fs-empty"><i class="fas fa-image"></i><div>У карты ещё нет фона${data.can_edit ? ' — загрузите её в редакторе' : ''}.</div></div>`;
       bindPageActions(root, null, data);
       return;
     }
@@ -99,7 +99,11 @@
       view: params.view,
       focusZoneId: params.zoneId,
       basemapId: params.basemapId,
-      onSelect: (id, kind) => highlightInPanel(root, id, kind)
+      time: params.time,
+      onSelect: (id, kind) => highlightInPanel(root, id, kind),
+      // Список зон — только то, что существует в текущий момент таймлайна.
+      onTimeChange: () => root.querySelector('.map-fs-panel')?._render?.(),
+      onBasemapChange: (id) => { const sel = root.querySelector('[data-act="basemap"]'); if (sel) sel.value = id; }
     });
     current = viewer;
     const select = root.querySelector('[data-act="basemap"]');
@@ -136,11 +140,14 @@
     const markerTypes = window.MapCore.typeMap(data.markerTypes);
     const render = () => {
       const q = input.value.trim().toLowerCase().replace(/ё/g, 'е');
-      const html = renderZoneTree(data.zones, types, q) + renderMarkerList(data.markers || [], markerTypes, q);
+      const t = viewer ? viewer.time : null;
+      const exists = (o) => window.MapCore.existsAt(o, t);
+      const html = renderZoneTree(data.zones.filter(exists), types, q) + renderMarkerList((data.markers || []).filter(exists), markerTypes, q);
       list.innerHTML = html || '<div class="map-fs-zone-empty">Ничего не найдено</div>';
       if (viewer) highlightInPanel(root, viewer.selectedMarkerId || viewer.selectedId, viewer.selectedMarkerId ? 'marker' : 'zone');
     };
     input.addEventListener('input', render);
+    panel._render = render;
     panel.querySelector('[data-act="close-panel"]').addEventListener('click', () => { panel.hidden = true; });
     list.addEventListener('click', (e) => {
       const item = e.target.closest('[data-zone-id], [data-marker-id]');
@@ -318,6 +325,8 @@
     const state = {
       zone: result.data.zoneTypes.map((t) => ({ ...t })),
       marker: (result.data.markerTypes || []).map((t) => ({ ...t })),
+      era: ((result.data.calendar && result.data.calendar.eras) || window.MapCore.DEFAULT_CALENDAR.eras).map((e) => ({ ...e })),
+      format: (result.data.calendar && result.data.calendar.format) || window.MapCore.DEFAULT_CALENDAR.format,
       canEdit: !!result.data.can_edit,
       isDefault: !!result.data.isDefault,
       dirty: false
@@ -345,7 +354,9 @@
         </div>` : ''}`;
     };
     const emitChange = () => {
-      if (onChange) onChange({ zoneTypes: state.zone.map((t) => ({ ...t, parents: [...(t.parents || [])] })), markerTypes: state.marker.map((t) => ({ ...t })) });
+      const preview = root.querySelector('[data-el="cal-preview"]');
+      if (preview) preview.innerHTML = calPreview(state);
+      if (onChange) onChange({ zoneTypes: state.zone.map((t) => ({ ...t, parents: [...(t.parents || [])] })), markerTypes: state.marker.map((t) => ({ ...t })), calendar: calOf(state) });
     };
     const markDirty = () => {
       state.dirty = true;
@@ -363,6 +374,9 @@
     };
     render();
 
+    root.addEventListener('input', (e) => {
+      if (e.target.matches('[data-cal-format]')) { state.format = e.target.value; markDirty(); }
+    });
     root.oninput = root.onchange = (e) => {
       const r = rowOf(e.target);
       const f = e.target.dataset.field;
@@ -372,6 +386,7 @@
         const pid = e.target.value;
         t.parents = e.target.checked ? [...new Set([...t.parents, pid])] : t.parents.filter((p) => p !== pid);
       } else if (e.target.type === 'checkbox') t[f] = e.target.checked;
+      else if (f === 'start') t.start = e.target.value.trim() === '' ? null : Math.round(Number(e.target.value));
       else if (e.target.type === 'number' || e.target.type === 'range' || f === 'minZoomRel') t[f] = Number(e.target.value);
       else t[f] = e.target.value;
       if (f === 'color') r.row.style.setProperty('--zone-color', t.color);
@@ -385,7 +400,10 @@
       const r = rowOf(btn);
       switch (btn.dataset.act) {
         case 'add':
-          if (btn.dataset.kind === 'marker') state.marker.push({ id: `k${Date.now().toString(36)}`, name: 'Новая метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 });
+          if (btn.dataset.kind === 'era') {
+            const starts = state.era.map((x) => x.start).filter((x) => x !== null && Number.isFinite(x));
+            state.era.push({ id: `era${Date.now().toString(36)}`, name: 'Новая эпоха', short: 'Н.Э.', start: (starts.length ? Math.max(...starts) : 0) + 100, direction: 'forward' });
+          } else if (btn.dataset.kind === 'marker') state.marker.push({ id: `k${Date.now().toString(36)}`, name: 'Новая метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 });
           else state.zone.push({ id: `t${Date.now().toString(36)}`, name: 'Новый тип', topLevel: false, parents: [], color: '#5865f2', fillOpacity: 0.15, weight: 2, dashed: false, hoverEffect: 'fill', clipToParent: true, minZoomRel: 0 });
           state.dirty = true;
           render();
@@ -405,19 +423,54 @@
           if (r && r.index < r.list.length - 1) { [r.list[r.index + 1], r.list[r.index]] = [r.list[r.index], r.list[r.index + 1]]; state.dirty = true; render(); emitChange(); }
           break;
         case 'save-world': {
-          const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker });
+          const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker, calendar: calOf(state) });
           if (!res.success) { window.showMessage?.(`Не удалось сохранить: ${apiError(res)}`, 'error'); return; }
           state.zone = res.data.zoneTypes.map((t) => ({ ...t }));
           state.marker = (res.data.markerTypes || []).map((t) => ({ ...t }));
+          if (res.data.calendar) {
+            state.era = res.data.calendar.eras.map((x) => ({ ...x }));
+            state.format = res.data.calendar.format;
+          }
           state.isDefault = false;
           state.dirty = false;
           render();
-          if (onSaved) onSaved({ zoneTypes: res.data.zoneTypes, markerTypes: res.data.markerTypes || [] });
+          if (onSaved) onSaved({ zoneTypes: res.data.zoneTypes, markerTypes: res.data.markerTypes || [], calendar: res.data.calendar });
           window.showMessage?.('Настройки мира сохранены', 'success');
           break;
         }
       }
     };
+  }
+
+  function calOf(state) { return { eras: state.era, format: state.format }; }
+
+  // Пример подписей на стыках эпох — сразу видно, как считается год.
+  function calPreview(state) {
+    const cal = calOf(state);
+    const pts = [];
+    state.era.forEach((e) => { if (e.start !== null && Number.isFinite(e.start)) pts.push(e.start - 1, e.start); });
+    if (!pts.length) pts.push(0);
+    return 'Пример: ' + [...new Set(pts)].sort((a, b) => a - b).slice(0, 6)
+      .map((t) => `абс. ${t} → «${escapeHtml(window.MapCore.formatTime(cal, t))}»`).join(', ');
+  }
+
+  function renderEraRow(e, i, state) {
+    const dis = state.canEdit ? '' : 'disabled';
+    return `
+      <div class="world-type" data-kind="era" data-type-index="${i}" style="--zone-color:var(--blurple)">
+        <div class="world-type-head">
+          <input type="text" class="form-input" data-field="name" value="${escapeHtml(e.name)}" maxlength="60" placeholder="Название эпохи" ${dis}>
+          ${state.canEdit ? '<button class="map-icon-btn is-danger" data-act="remove-type" title="Удалить эпоху"><i class="fas fa-trash"></i></button>' : ''}
+        </div>
+        <div class="world-type-grid">
+          <label>Сокращение <input type="text" data-field="short" value="${escapeHtml(e.short || '')}" maxlength="20" ${dis}></label>
+          <label>Начало, абс. год <input type="number" data-field="start" value="${e.start === null || e.start === undefined ? '' : e.start}" placeholder="с начала времён" ${dis}></label>
+          <label>Счёт лет <select data-field="direction" ${dis}>
+            <option value="forward"${e.direction !== 'backward' ? ' selected' : ''}>прямой</option>
+            <option value="backward"${e.direction === 'backward' ? ' selected' : ''}>обратный</option>
+          </select></label>
+        </div>
+      </div>`;
   }
 
   function typeRowButtons(state) {
@@ -431,7 +484,7 @@
     const dis = state.canEdit ? '' : 'disabled';
     const others = state.zone.filter((o) => o.id !== t.id);
     return `
-      <div class="world-type" data-kind="zone" data-type-index="${i}" style="--zone-color:${escapeHtml(t.color)}">
+      <div class="world-type" data-kind="zone" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}">
         <div class="world-type-head">
           <input type="color" data-field="color" value="${escapeHtml(t.color)}" ${dis} title="Цвет">
           <input type="text" class="form-input" data-field="name" value="${escapeHtml(t.name)}" maxlength="60" ${dis}>
@@ -456,7 +509,7 @@
   function renderMarkerTypeRow(t, i, state) {
     const dis = state.canEdit ? '' : 'disabled';
     return `
-      <div class="world-type" data-kind="marker" data-type-index="${i}" style="--zone-color:${escapeHtml(t.color)}">
+      <div class="world-type" data-kind="marker" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}">
         <div class="world-type-head">
           <span class="world-icon-preview" style="--marker-color:${escapeHtml(t.color)}"><i class="fas fa-${escapeHtml(t.icon)}"></i></span>
           <input type="color" data-field="color" value="${escapeHtml(t.color)}" ${dis} title="Цвет">

@@ -107,6 +107,45 @@ function normalizeZoneType(raw) {
   };
 }
 
+// ===== Календарь мира =====
+// Время карт — целое число «абсолютный год». Календарь превращает его в
+// подпись: эпохи (с какого абсолютного года начинается, направление счёта)
+// и шаблон подписи. Эра с прямым счётом: год = t − start + 1; с обратным
+// (как «до н. э.»): год = начало следующей эры − t.
+
+function defaultCalendar() {
+  return {
+    eras: [
+      { id: 'before', name: 'До Основания', short: 'до О.', start: null, direction: 'backward' },
+      { id: 'founding', name: 'Эпоха Основания', short: 'Э.О.', start: 0, direction: 'forward' }
+    ],
+    format: '{year} {short}'
+  };
+}
+
+function normalizeCalendar(raw) {
+  if (!isPlainObject(raw) || !Array.isArray(raw.eras)) return defaultCalendar();
+  const seen = new Set();
+  let eras = raw.eras.slice(0, 50).map((e) => {
+    if (!isPlainObject(e)) return null;
+    const name = str(e.name, 60);
+    if (!name) return null;
+    const start = e.start === null || e.start === '' || e.start === undefined ? null : Math.round(Number(e.start));
+    return {
+      id: /^[a-z0-9_-]{1,40}$/i.test(e.id || '') ? e.id : genId(),
+      name,
+      short: str(e.short, 20),
+      start: Number.isFinite(start) ? Math.max(-1e9, Math.min(1e9, start)) : null,
+      direction: e.direction === 'backward' ? 'backward' : 'forward'
+    };
+  }).filter((e) => e && !seen.has(e.id) && seen.add(e.id));
+  // Только одна эра может идти «с начала времён» (start = null) — первая.
+  eras.sort((a, b) => (a.start === null ? -Infinity : a.start) - (b.start === null ? -Infinity : b.start));
+  eras = eras.filter((e, i) => e.start !== null || i === 0);
+  if (!eras.length) return defaultCalendar();
+  return { eras, format: str(raw.format, 60) || '{year} {short}' };
+}
+
 function normalizeWorld(raw) {
   const data = isPlainObject(raw) ? raw : {};
   let zoneTypes = Array.isArray(data.zoneTypes)
@@ -130,8 +169,7 @@ function normalizeWorld(raw) {
   return {
     zoneTypes,
     markerTypes,
-    // Этап 3 (календарь мира) — пока храним как есть.
-    calendar: isPlainObject(data.calendar) ? data.calendar : null
+    calendar: normalizeCalendar(data.calendar)
   };
 }
 
@@ -164,4 +202,4 @@ function deleteWorld(serverId) {
   try { fs.unlinkSync(worldFile(serverId)); } catch (e) { /* нет файла — нечего удалять */ }
 }
 
-module.exports = { getWorld, saveWorld, deleteWorld, defaultZoneTypes, defaultMarkerTypes, HOVER_EFFECTS, MARKER_ICONS };
+module.exports = { getWorld, saveWorld, deleteWorld, defaultZoneTypes, defaultMarkerTypes, defaultCalendar, HOVER_EFFECTS, MARKER_ICONS };

@@ -197,7 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
-      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null };
+      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, time: null };
       default: return {};
     }
   }
@@ -1757,7 +1757,10 @@
         <div class="eb-map-preview" hidden></div>
         <div class="eb-map-row eb-map-extra" hidden>
           <label class="eb-map-field eb-map-field-grow"><span>Подсветить зону</span><select data-map-field="focusZoneId"><option value="">— нет —</option></select></label>
-          <label class="eb-map-field" data-map-basemap-wrap hidden><span>Подложка</span><select data-map-field="basemapId"></select></label>
+          <label class="eb-map-field" data-map-basemap-wrap hidden><span>Фон</span><select data-map-field="basemapId"></select></label>
+          <label class="eb-map-field" data-map-time-wrap hidden><span>Дата на шкале (пусто — как у карты)</span>
+            <input type="number" step="1" data-map-time-year placeholder="как у карты">
+          </label>
         </div>
         <div class="eb-map-row eb-map-extra" hidden>
           <button type="button" class="eb-map-btn" data-map-act="save-view"><i class="fas fa-crosshairs"></i> Запомнить этот вид</button>
@@ -1802,11 +1805,11 @@
           const data = await window.MapCore.fetchViewerMap(d.mapId);
           if (!preview.isConnected) return;
           if (!data.basemaps.length) {
-            preview.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет готовой подложки</div>';
+            preview.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет фона</div>';
             return;
           }
           const viewer = new window.MapCore.MapViewer(preview, data, {
-            mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId,
+            mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId, time: d.time,
             // в редакторе статьи никуда не уходим (зона или метка — неважно)
             onZoneActivate: () => window.showMessage?.('В редакторе статьи переход по карте отключён', 'info')
           });
@@ -1823,6 +1826,21 @@
           const bmSelect = wrap.querySelector('[data-map-field="basemapId"]');
           bmSelect.innerHTML = data.basemaps.map((b) => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join('');
           bmSelect.value = viewer.currentBasemapId || '';
+          // Момент таймлайна, на котором статья откроет карту (год + эпоха
+          // календаря мира). Только для карт, у которых есть время.
+          const timeWrap = wrap.querySelector('[data-map-time-wrap]');
+          timeWrap.hidden = !viewer.hasTime;
+          if (viewer.hasTime) {
+            const yearIn = wrap.querySelector('[data-map-time-year]');
+            yearIn.value = d.time !== null && d.time !== undefined ? d.time : '';
+            yearIn.onchange = () => {
+              const y = yearIn.value.trim();
+              d.time = y === '' ? null : Math.round(Number(y));
+              if (!Number.isFinite(d.time)) d.time = null;
+              if (d.time !== null) viewer.setTime(d.time);
+              changed();
+            };
+          }
         } catch (err) {
           preview.innerHTML = `<div class="blk-map-error"><i class="fas fa-map"></i> ${esc(err.message)}</div>`;
         }
