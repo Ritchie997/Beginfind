@@ -36,6 +36,46 @@ window.showMessage = function(text, type = 'info') {
   }, 5000);
 };
 
+// ===== Аватарки пользователей =====
+// Файл лежит в /uploads/avatar/<id>.<ext>, URL приходит с сервера полем
+// avatar (у автора статьи, в профиле) или authorAvatar (у комментария).
+// Нет картинки или она не загрузилась — кружок с первой буквой имени.
+function avatarInitial(name) {
+  return (String(name || '').trim().charAt(0) || '?').toUpperCase();
+}
+function escapeAvatarAttr(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// HTML кружка-аватарки. size — px; className — доп. класс для места показа.
+window.avatarHtml = function ({ name, avatar } = {}, size = 32, className = '') {
+  const letter = escapeAvatarAttr(avatarInitial(name));
+  const cls = `user-ava${className ? ' ' + className : ''}`;
+  const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;`;
+  if (avatar) {
+    // onerror: файл пропал — показываем букву вместо битой картинки.
+    return `<span class="${cls}" style="${style}" data-initial="${letter}"><img src="${escapeAvatarAttr(avatar)}" alt="" loading="lazy" onerror="this.parentElement.textContent=this.parentElement.dataset.initial"></span>`;
+  }
+  return `<span class="${cls}" style="${style}">${letter}</span>`;
+};
+
+// То же для уже существующего элемента (аватар в шапке, в профиле).
+window.applyAvatarTo = function (el, { name, avatar } = {}) {
+  if (!el) return;
+  const letter = avatarInitial(name);
+  el.classList.toggle('has-image', !!avatar);
+  if (avatar) {
+    el.textContent = '';
+    const img = document.createElement('img');
+    img.src = avatar;
+    img.alt = '';
+    img.onerror = () => { el.classList.remove('has-image'); el.textContent = letter; };
+    el.appendChild(img);
+  } else {
+    el.textContent = letter;
+  }
+};
+
 // Function to update user info in UI
 window.updateUserInfo = function() {
   try {
@@ -47,11 +87,11 @@ window.updateUserInfo = function() {
         usernameDisplay.textContent = currentUser.display_name || currentUser.username;
       }
 
-      // Update avatar (using first letter of display_name)
+      // Аватарка (или первая буква имени, если картинки нет)
       const userAvatar = document.querySelector('.user-avatar');
       if (userAvatar) {
         const name = currentUser.display_name || currentUser.username;
-        userAvatar.textContent = name.charAt(0).toUpperCase();
+        window.applyAvatarTo(userAvatar, { name, avatar: currentUser.avatar });
       }
     }
   } catch (error) {
@@ -523,6 +563,34 @@ class ApiClient {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  }
+
+  // Аватарка своего профиля: загрузить (поле avatar) / удалить.
+  async uploadAvatar(file) {
+    if (!authManager || !authManager.isAuthenticated()) {
+      return { success: false, error: 'Authentication required. Please log in.' };
+    }
+    const formData = new FormData();
+    formData.append('avatar', file);
+    try {
+      const response = await fetch(`${this.baseUrl}/api/profile/avatar`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authManager.getToken()}` },
+        body: formData
+      });
+      if (response.status === 401) {
+        authManager.logout();
+        return { success: false, error: 'Authentication required. Please log in.' };
+      }
+      const result = await response.json();
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteAvatar() {
+    return this.makeAuthenticatedRequest('/api/profile/avatar', 'DELETE');
   }
 
   // Methods for servers

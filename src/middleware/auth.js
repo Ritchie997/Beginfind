@@ -14,6 +14,7 @@ const sqlite3 = require('sqlite3').verbose();
 const { dbPath } = require('../config/paths');
 const { ensureUserSchema, PERMISSION_KEYS } = require('../db/migrate-users-schema');
 const { readSettings: readSystemSettings } = require('../services/system-settings');
+const { getAvatarUrl } = require('../services/avatars');
 
 /**
  * Проверяет участие пользователя в серверах и назначает роль "наблюдатель" если нужно
@@ -384,7 +385,8 @@ async function login(username, password) {
         admin_level: full && Number.isFinite(full.admin_level) ? full.admin_level : 0,
         permissions: full ? full.permissions : allPermissionsFalse(),
         is_role_manager: full ? full.is_role_manager : false,
-        is_observer: observerCheck?.assigned || false
+        is_observer: observerCheck?.assigned || false,
+        avatar: getAvatarUrl(row.id)
       };
 
       resolve(user);
@@ -579,7 +581,8 @@ async function getUserById(id) {
     role_name: full.role_name,
     admin_level: Number.isFinite(full.admin_level) ? full.admin_level : 0,
     permissions: full.permissions,
-    is_role_manager: full.is_role_manager
+    is_role_manager: full.is_role_manager,
+    avatar: getAvatarUrl(full.id)
   };
 }
 
@@ -613,6 +616,7 @@ async function getUserProfile(targetId, viewer) {
         status: target.status,
         created_at: target.created_at,
         bio: (row && row.bio) || '',
+        avatar: getAvatarUrl(target.id),
         can_edit_bio: isSelf,
         can_edit_name: isSelf
       };

@@ -1157,6 +1157,26 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   margin-bottom: 4px;
 }
 
+.ibripedia-comment-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+.ibripedia-comment-person:hover .ibripedia-comment-author { text-decoration: underline; }
+
+/* Автор + соавторы в шапке открытой статьи — каждый с аватаркой. */
+.ibripedia-view-meta .ibripedia-people {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ibripedia-view-meta .ibripedia-person { gap: 6px; color: var(--text-normal); }
+.ibripedia-view-meta .ibripedia-person[data-action]:hover { text-decoration: underline; }
+.ibripedia-people-plus { color: var(--text-muted); }
+
 .ibripedia-comment-author {
   font-weight: 600;
   color: var(--text-normal);

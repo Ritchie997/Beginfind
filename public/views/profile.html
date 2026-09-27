@@ -12,7 +12,15 @@
     <div id="profile-content" style="display: none;">
         <!-- Шапка профиля -->
         <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; padding: 24px; margin-bottom: 24px; background: var(--background-secondary, #2f3136); border-radius: 8px; border: 1px solid var(--background-accent, #4f545c);">
-            <div id="profile-avatar" style="flex-shrink: 0; width: 72px; height: 72px; border-radius: 50%; background: #5865f2; color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;"></div>
+            <div class="profile-avatar-wrap">
+                <div id="profile-avatar" style="flex-shrink: 0; width: 72px; height: 72px; border-radius: 50%; background: #5865f2; color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; overflow: hidden;"></div>
+                <!-- Только на СВОЁМ профиле (см. setupProfileAvatar в spa-router.js) -->
+                <div id="profile-avatar-actions" class="profile-avatar-actions" hidden>
+                    <button type="button" id="profile-avatar-upload-btn" title="Загрузить аватарку (jpg, png, gif, webp)"><i class="fas fa-camera"></i> Сменить</button>
+                    <button type="button" id="profile-avatar-remove-btn" class="is-danger" title="Убрать аватарку" hidden><i class="fas fa-trash"></i></button>
+                    <input type="file" id="profile-avatar-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+                </div>
+            </div>
             <div style="flex: 1; min-width: 200px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;">
                     <h2 id="profile-display-name" style="color: var(--header-primary, #fff); margin: 0; overflow-wrap: anywhere;"></h2>

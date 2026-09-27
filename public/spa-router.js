@@ -6024,7 +6024,7 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     contentEl.style.display = 'block';
 
     const displayName = profile.display_name || profile.username || '?';
-    document.getElementById('profile-avatar').textContent = displayName.charAt(0).toUpperCase();
+    window.applyAvatarTo(document.getElementById('profile-avatar'), { name: displayName, avatar: profile.avatar });
     document.getElementById('profile-display-name').textContent = displayName;
 
     // Логин приходит только самому пользователю и админам (см.
@@ -6078,6 +6078,7 @@ SPARouter.prototype.renderProfile = async function(targetId) {
       });
     }
 
+    this.setupProfileAvatar(profile);
     this.setupProfileName(profile);
     this.setupProfileBio(targetId, profile);
     this.setupProfileNote(targetId, profile);
@@ -6091,6 +6092,60 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     errorEl.style.display = 'block';
     document.getElementById('profile-error-text').textContent = error.message || '';
   }
+};
+
+// Аватарка своего профиля: загрузка/удаление (файл на сервере —
+// uploads/avatar/<id>.<ext>). Кнопки только у себя (can_edit_name — тот же
+// признак "это мой профиль").
+SPARouter.prototype.setupProfileAvatar = function(profile) {
+  const actions = document.getElementById('profile-avatar-actions');
+  const uploadBtn = document.getElementById('profile-avatar-upload-btn');
+  const removeBtn = document.getElementById('profile-avatar-remove-btn');
+  const input = document.getElementById('profile-avatar-input');
+  const avatarEl = document.getElementById('profile-avatar');
+  if (!actions || !uploadBtn || !removeBtn || !input) return;
+
+  actions.hidden = !profile.can_edit_name;
+  if (!profile.can_edit_name) return;
+
+  const apply = (avatar) => {
+    profile.avatar = avatar || null;
+    window.applyAvatarTo(avatarEl, { name: profile.display_name, avatar: profile.avatar });
+    removeBtn.hidden = !profile.avatar;
+    // Шапка берёт аватарку из закэшированного пользователя — обновляем.
+    const me = authManager.getUser();
+    if (me) authManager.setUser({ ...me, avatar: profile.avatar });
+    if (typeof window.updateUserInfo === 'function') window.updateUserInfo();
+  };
+  removeBtn.hidden = !profile.avatar;
+
+  uploadBtn.onclick = () => input.click();
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    uploadBtn.disabled = true;
+    try {
+      const result = await apiClient.uploadAvatar(file);
+      if (!result.success) throw new Error(result.error || 'Не удалось загрузить аватарку');
+      apply(result.data.avatar);
+      showMessage('Аватарка обновлена', 'success');
+    } catch (error) {
+      showMessage(error.message, 'error');
+    } finally {
+      uploadBtn.disabled = false;
+    }
+  };
+  removeBtn.onclick = async () => {
+    if (!confirm('Убрать аватарку?')) return;
+    const result = await apiClient.deleteAvatar();
+    if (!result.success) {
+      showMessage(result.data?.error || result.error || 'Не удалось убрать аватарку', 'error');
+      return;
+    }
+    apply(null);
+    showMessage('Аватарка убрана', 'success');
+  };
 };
 
 // Смена своего имени (никнейма) в личном профиле. Логин не меняется — вход
@@ -6135,7 +6190,7 @@ SPARouter.prototype.setupProfileName = function(profile) {
 
       profile.display_name = data.display_name;
       nameEl.textContent = data.display_name;
-      document.getElementById('profile-avatar').textContent = data.display_name.charAt(0).toUpperCase();
+      window.applyAvatarTo(document.getElementById('profile-avatar'), { name: data.display_name, avatar: profile.avatar });
 
       // Имя закэшировано в браузере (шапка/аватар) — обновляем и там.
       const me = authManager.getUser();

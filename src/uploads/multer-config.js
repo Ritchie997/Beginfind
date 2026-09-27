@@ -135,4 +135,33 @@ const uploadSticker = multer({
   }
 });
 
-module.exports = { uploadImage, uploadBackupZip, uploadSticker, ALLOWED_IMAGE_EXTENSIONS };
+// Аватарки профилей: пишем во временное имя внутри uploads/avatar/, а
+// окончательное имя <userId>.<ext> даёт avatars.setAvatarFromFile уже после
+// проверок (иначе неудачная загрузка затирала бы действующую аватарку).
+const avatarStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const { AVATAR_DIR } = require('../services/avatars');
+    cb(null, AVATAR_DIR);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `tmp-${Date.now()}-${Math.round(Math.random() * 1E9)}${ext}`);
+  }
+});
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB — аватарке больше не нужно
+  },
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (file.mimetype.startsWith('image/') && ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Разрешены только изображения (jpg, jpeg, png, gif, webp)!'));
+    }
+  }
+});
+
+module.exports = { uploadImage, uploadBackupZip, uploadSticker, uploadAvatar, ALLOWED_IMAGE_EXTENSIONS };

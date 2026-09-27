@@ -1,7 +1,11 @@
 // auth.routes.js — регистрация, вход, профиль, управление заявками (root).
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const auth = require('../middleware/auth');
+const avatars = require('../services/avatars');
+const { uploadAvatar } = require('../uploads/multer-config');
 const { readSettings } = require('../services/system-settings');
 const { getServersForUser } = require('../services/server-system-logic');
 
@@ -114,6 +118,36 @@ router.put('/profile', auth.authenticateToken, auth.checkApproved, async (req, r
     res.json({ message: 'Профиль обновлён', ...result });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// POST /api/profile/avatar — загрузить/заменить свою аватарку. Файл
+// сохраняется как public/uploads/avatar/<id пользователя>.<ext> (см.
+// src/services/avatars.js); ответ — новый URL (с ?v= против кэша).
+router.post('/profile/avatar', auth.authenticateToken, auth.checkApproved, uploadAvatar.single('avatar'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+  const maxFileSizeMb = readSettings().maxFileSize;
+  if (req.file.size > maxFileSizeMb * 1024 * 1024) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: `Файл больше ${maxFileSizeMb} МБ — лимит задан в Настройках` });
+  }
+  try {
+    const ext = path.extname(req.file.filename).toLowerCase();
+    const avatar = avatars.setAvatarFromFile(req.user.id, req.file.path, ext);
+    res.json({ avatar });
+  } catch (error) {
+    fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'Не удалось сохранить аватарку: ' + error.message });
+  }
+});
+
+// DELETE /api/profile/avatar — убрать свою аватарку (вернётся буква имени).
+router.delete('/profile/avatar', auth.authenticateToken, auth.checkApproved, (req, res) => {
+  try {
+    avatars.removeAvatar(req.user.id);
+    res.json({ avatar: null });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

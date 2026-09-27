@@ -829,7 +829,7 @@
             `<span class="ibripedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
           ).join('')}</div>` : ''}
           <div class="ibripedia-card-meta">
-            <span${article.author && article.author.id ? ` data-action="open-profile" data-value="${article.author.id}" style="cursor:pointer" title="Открыть профиль"` : ''}><i class="fas fa-user"></i> ${escapeHtml(authorName)}</span>
+            <span${article.author && article.author.id ? ` data-action="open-profile" data-value="${article.author.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: authorName, avatar: article.author && article.author.avatar }, 18)} ${escapeHtml(authorName)}</span>
             <span><i class="fas fa-calendar"></i> ${formatDate(article.created_at)}</span>
           </div>
           <!-- Тот же язык "пилюль", что и панель лайка/комментариев внутри
@@ -1144,9 +1144,14 @@
       if (titleEl) titleEl.textContent = article.title;
 
       const authorName = article.author ? article.author.display_name : 'Не указан';
-      const coAuthors = (article.co_authors || []).map((c) => c.display_name);
+      // Автор и соавторы — каждый с аватаркой и ссылкой на свой профиль.
+      const personChip = (p) => `<span class="ibripedia-person"${p.id ? ` data-action="open-profile" data-value="${p.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: p.display_name, avatar: p.avatar }, 22)} ${escapeHtml(p.display_name)}</span>`;
+      const people = [
+        personChip(article.author || { display_name: authorName }),
+        ...(article.co_authors || []).map(personChip)
+      ];
       const metaParts = [
-        `<span${article.author && article.author.id ? ` data-action="open-profile" data-value="${article.author.id}" style="cursor:pointer" title="Открыть профиль"` : ''}><i class="fas fa-user"></i> ${escapeHtml(authorName)}${coAuthors.length ? ' + ' + escapeHtml(coAuthors.join(', ')) : ''}</span>`,
+        `<span class="ibripedia-people">${people.join('<span class="ibripedia-people-plus">+</span>')}</span>`,
         `<span><i class="fas fa-calendar"></i> ${formatDate(article.created_at)}</span>`,
         `<span><i class="fas fa-eye"></i> <span id="ibripediaViewViewsCount">${article.viewsCount ?? 0}</span> просмотров</span>`
       ];
@@ -1930,7 +1935,10 @@
       return `
         <div class="ibripedia-comment${isReply ? ' ibripedia-comment-reply' : ''}" data-id="${comment.id}">
           <div class="ibripedia-comment-head">
-            <span class="ibripedia-comment-author">${escapeHtml(comment.authorName)}</span>
+            <span class="ibripedia-comment-person" data-action="open-profile" data-value="${comment.userId}" title="Открыть профиль">
+              ${window.avatarHtml({ name: comment.authorName, avatar: comment.authorAvatar }, isReply ? 22 : 28)}
+              <span class="ibripedia-comment-author">${escapeHtml(comment.authorName)}</span>
+            </span>
             <span class="ibripedia-comment-date">${formatDate(comment.createdAt)}</span>
             ${canDelete ? `<button type="button" class="ibripedia-comment-delete" data-action="delete-comment" data-id="${comment.id}" title="Удалить комментарий"><i class="fas fa-trash"></i></button>` : ''}
           </div>
@@ -1998,6 +2006,12 @@
 
       const deleteBtn = e.target.closest('[data-action="delete-comment"]');
       if (deleteBtn) { this.deleteComment(deleteBtn.getAttribute('data-id')); return; }
+
+      const personEl = e.target.closest('[data-action="open-profile"]');
+      if (personEl && personEl.getAttribute('data-value')) {
+        window.spaRouter?.navigateTo(`/profile/${personEl.getAttribute('data-value')}`);
+        return;
+      }
 
       this.handleReactionsClick(e);
     }

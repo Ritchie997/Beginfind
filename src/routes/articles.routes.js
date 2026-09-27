@@ -17,6 +17,7 @@ const { serversDb } = require('../db/connections');
 const articleLayers = require('../services/article-layers');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
+const { getAvatarUrl } = require('../services/avatars');
 
 const router = express.Router();
 
@@ -326,7 +327,7 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
 
   let author = null;
   if (resolvedAuthorId) {
-    author = { id: resolvedAuthorId, display_name: map.get(resolvedAuthorId) || article.legacyAuthorName || 'Неизвестный автор' };
+    author = { id: resolvedAuthorId, display_name: map.get(resolvedAuthorId) || article.legacyAuthorName || 'Неизвестный автор', avatar: getAvatarUrl(resolvedAuthorId) };
   } else if (article.legacyAuthorName) {
     // Текстовое имя есть, но ни с одним пользователем не сопоставилось —
     // показываем как есть, без id (фронт не сделает из него ссылку на профиль).
@@ -378,7 +379,7 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     layerOptions,
     server: serverName,
     author,
-    co_authors: (article.co_author_ids || []).map((id) => ({ id, display_name: map.get(id) || 'Неизвестный' })),
+    co_authors: (article.co_author_ids || []).map((id) => ({ id, display_name: map.get(id) || 'Неизвестный', avatar: getAvatarUrl(id) })),
     ...permissions
   };
 }
@@ -864,7 +865,7 @@ async function attachCommentReactions(comments, userId) {
   return comments.map((c) => {
     const raw = map.get(String(c.id)) || [];
     const reactions = raw.map((r) => ({ ...r, ...stickerMeta.get(r.shortcode) })).filter((r) => r.url);
-    return { ...c, reactions };
+    return { ...c, reactions, authorAvatar: getAvatarUrl(c.userId) };
   });
 }
 
