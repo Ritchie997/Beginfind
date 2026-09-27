@@ -70,7 +70,7 @@ function defaultZoneTypes() {
 function defaultMarkerTypes() {
   return [
     { id: 'city', name: 'Город', icon: 'city', color: '#5865f2', minZoomRel: 0 },
-    { id: 'capital', name: 'Столица', icon: 'crown', color: '#faa81a', minZoomRel: 0 },
+    { id: 'capital', name: 'Столица', icon: 'crown', color: '#faa81a', minZoomRel: 0, noCluster: true },
     { id: 'note', name: 'Пояснение', icon: 'circle-info', color: '#3ba55d', minZoomRel: 1 }
   ];
 }
@@ -84,7 +84,9 @@ function normalizeMarkerType(raw) {
     name,
     icon: MARKER_ICONS.includes(raw.icon) ? raw.icon : 'location-dot',
     color: hexColor(raw.color, '#5865f2'),
-    minZoomRel: minZoomRel(raw.minZoomRel)
+    minZoomRel: minZoomRel(raw.minZoomRel),
+    // Важные (столицы и т.п.) не прячутся в группу меток на отдалении.
+    noCluster: !!raw.noCluster
   };
 }
 

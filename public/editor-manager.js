@@ -1757,7 +1757,6 @@
         <div class="eb-map-preview" hidden></div>
         <div class="eb-map-row eb-map-extra" hidden>
           <label class="eb-map-field eb-map-field-grow"><span>Подсветить зону</span><select data-map-field="focusZoneId"><option value="">— нет —</option></select></label>
-          <label class="eb-map-field" data-map-basemap-wrap hidden><span>Фон</span><select data-map-field="basemapId"></select></label>
           <label class="eb-map-field" data-map-time-wrap hidden><span>Дата на шкале (пусто — как у карты)</span>
             <input type="number" step="1" data-map-time-year placeholder="как у карты">
           </label>
@@ -1821,11 +1820,6 @@
             .slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
             .map((z) => `<option value="${esc(z.id)}">${esc(z.title || 'Без названия')}</option>`).join('');
           zoneSelect.value = d.focusZoneId || '';
-          const bmWrap = wrap.querySelector('[data-map-basemap-wrap]');
-          bmWrap.hidden = data.basemaps.length < 2;
-          const bmSelect = wrap.querySelector('[data-map-field="basemapId"]');
-          bmSelect.innerHTML = data.basemaps.map((b) => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join('');
-          bmSelect.value = viewer.currentBasemapId || '';
           // Момент таймлайна, на котором статья откроет карту (год + эпоха
           // календаря мира). Только для карт, у которых есть время.
           const timeWrap = wrap.querySelector('[data-map-time-wrap]');

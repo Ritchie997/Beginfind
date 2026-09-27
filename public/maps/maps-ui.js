@@ -84,8 +84,7 @@
 
     const actions = root.querySelector('.map-fs-actions');
     actions.innerHTML = `
-      ${data.basemaps.length > 1 ? `<select class="map-fs-select" data-act="basemap" title="Фон карты">${data.basemaps.map((b) => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
-      <button type="button" class="map-fs-btn" data-act="zones" title="Список зон"><i class="fas fa-list"></i><span class="map-fs-btn-label"> Зоны</span></button>
+      <button type="button" class="map-fs-btn" data-act="zones" title="Что показывать и список зон и меток"><i class="fas fa-layer-group"></i><span class="map-fs-btn-label"> Слои</span></button>
       ${data.can_edit ? '<button type="button" class="map-fs-btn" data-act="edit" title="Редактировать карту"><i class="fas fa-pen"></i><span class="map-fs-btn-label"> Редактировать</span></button>' : ''}`;
 
     if (!data.basemaps.length) {
@@ -100,19 +99,17 @@
       focusZoneId: params.zoneId,
       basemapId: params.basemapId,
       time: params.time,
+      externalLayers: true, // флажки слоёв — в боковой панели страницы
       onSelect: (id, kind) => highlightInPanel(root, id, kind),
       // Список зон — только то, что существует в текущий момент таймлайна.
       onTimeChange: () => root.querySelector('.map-fs-panel')?._render?.(),
-      onBasemapChange: (id) => { const sel = root.querySelector('[data-act="basemap"]'); if (sel) sel.value = id; }
+      onGroupsChange: () => root.querySelector('.map-fs-panel')?._render?.(),
     });
     current = viewer;
-    const select = root.querySelector('[data-act="basemap"]');
-    if (select) select.value = viewer.currentBasemapId;
     bindPageActions(root, viewer, data);
   }
 
   function bindPageActions(root, viewer, data) {
-    root.querySelector('[data-act="basemap"]')?.addEventListener('change', (e) => viewer && viewer.setBasemap(e.target.value));
     root.querySelector('[data-act="edit"]')?.addEventListener('click', () => {
       if (window.MapCore.isTouchUi() && !confirm('Редактор карт сейчас рассчитан на компьютер (мышь и клавиатура). Открыть всё равно?')) return;
       openMapEditor(data.id);
@@ -133,7 +130,14 @@
         <input type="search" class="map-fs-search" placeholder="Найти зону или метку…" autocomplete="off">
         <button type="button" class="map-fs-btn" data-act="close-panel" title="Закрыть"><i class="fas fa-xmark"></i></button>
       </div>
-      <div class="map-fs-zone-list"></div>`;
+      <div class="map-fs-panel-scroll">
+        <details class="map-fs-layers-box" open>
+          <summary>Что показывать</summary>
+          <div class="map-fs-layers"></div>
+        </details>
+        <div class="map-fs-zone-list"></div>
+      </div>`;
+    if (viewer) viewer.mountLayersInto(panel.querySelector('.map-fs-layers'));
     const list = panel.querySelector('.map-fs-zone-list');
     const input = panel.querySelector('.map-fs-search');
     const types = window.MapCore.typeMap(data.zoneTypes);
@@ -142,14 +146,23 @@
       const q = input.value.trim().toLowerCase().replace(/ё/g, 'е');
       const t = viewer ? viewer.time : null;
       const exists = (o) => window.MapCore.existsAt(o, t);
-      const html = renderZoneTree(data.zones.filter(exists), types, q) + renderMarkerList((data.markers || []).filter(exists), markerTypes, q);
+      const html = renderZoneTree(data.zones.filter(exists), types, q, viewer) + renderMarkerList((data.markers || []).filter(exists), markerTypes, q, data.markerGroups || [], viewer);
       list.innerHTML = html || '<div class="map-fs-zone-empty">Ничего не найдено</div>';
       if (viewer) highlightInPanel(root, viewer.selectedMarkerId || viewer.selectedId, viewer.selectedMarkerId ? 'marker' : 'zone');
     };
-    input.addEventListener('input', render);
+    input.addEventListener('input', () => {
+      if (viewer) viewer.setSearchQuery(input.value);
+      render();
+    });
     panel._render = render;
     panel.querySelector('[data-act="close-panel"]').addEventListener('click', () => { panel.hidden = true; });
+    // Флажок группы в списке — то же, что в «Слоях».
+    list.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-list-group]');
+      if (cb && viewer) viewer.setGroupVisible(cb.dataset.listGroup, cb.checked);
+    });
     list.addEventListener('click', (e) => {
+      if (e.target.closest('[data-list-group]')) return;
       const item = e.target.closest('[data-zone-id], [data-marker-id]');
       if (!item || !viewer) return;
       if (item.dataset.markerId) viewer.selectMarker(item.dataset.markerId, { fly: true });
@@ -160,11 +173,12 @@
     if (!window.MapCore.isTouchUi()) input.focus();
   }
 
-  function renderZoneTree(zones, types, query) {
+  function renderZoneTree(zones, types, query, viewer = null) {
     if (!zones.length) return query ? '' : '<div class="map-fs-zone-empty">На карте пока нет зон</div>';
     const item = (z, depth) => {
       const t = types.get(z.typeId) || window.MapCore.FALLBACK_TYPE;
-      return `<button type="button" class="map-fs-zone" data-zone-id="${escapeHtml(z.id)}" style="padding-left:${10 + depth * 16}px">
+      const off = viewer && viewer.isZoneFiltered(z);
+      return `<button type="button" class="map-fs-zone${off ? ' is-off' : ''}" data-zone-id="${escapeHtml(z.id)}" style="padding-left:${10 + depth * 16}px">
         <span class="map-fs-zone-dot" style="background:${escapeHtml(t.color)}"></span>
         <span class="map-fs-zone-name">${escapeHtml(z.title || 'Без названия')}</span>
         <span class="map-fs-zone-type">${escapeHtml(t.name)}</span>
@@ -189,21 +203,42 @@
     return out.join('');
   }
 
-  function renderMarkerList(markers, types, query) {
+  // Метки — по группам карты: заголовок группы с флажком видимости (как в
+  // «Слоях»); метки выключенной группы остаются в списке полупрозрачными.
+  function renderMarkerList(markers, types, query, groups = [], viewer = null) {
     const norm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е');
     const found = markers
-      .filter((m) => !query || norm(m.title).includes(query) || norm(m.text).includes(query))
+      .filter((m) => {
+        if (!query) return true;
+        const g = m.groupId && groups.find((x) => x.id === m.groupId);
+        return norm(m.title).includes(query) || norm(m.text).includes(query) || (!!g && norm(g.name).includes(query));
+      })
       .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
     if (!found.length) return '';
-    return `<div class="map-fs-list-head">Метки</div>` + found.map((m) => {
+    const hidden = viewer ? viewer.hiddenGroups : new Set();
+    const row = (m) => {
       const t = types.get(m.typeId) || window.MapCore.FALLBACK_MARKER_TYPE;
-      return `<button type="button" class="map-fs-zone" data-marker-id="${escapeHtml(m.id)}">
+      const off = viewer ? viewer.isMarkerFiltered(m) : (m.groupId && hidden.has(m.groupId));
+      return `<button type="button" class="map-fs-zone${off ? ' is-off' : ''}" data-marker-id="${escapeHtml(m.id)}"${off ? ' title="Группа выключена — клик всё равно покажет метку"' : ''}>
         <i class="fas fa-${escapeHtml(t.icon)} map-fs-marker-icon" style="color:${escapeHtml(t.color)}"></i>
         <span class="map-fs-zone-name">${escapeHtml(m.title || t.name)}</span>
         <span class="map-fs-zone-type">${escapeHtml(t.name)}</span>
         ${m.locked ? '<i class="fas fa-lock map-fs-zone-lock" title="Статья закрыта"></i>' : ''}
       </button>`;
-    }).join('');
+    };
+    const known = new Set(groups.map((g) => g.id));
+    if (!groups.length) return `<div class="map-fs-list-head">Метки</div>` + found.map(row).join('');
+    let html = `<div class="map-fs-list-head">Метки</div>`;
+    groups.forEach((g) => {
+      const list = found.filter((m) => m.groupId === g.id);
+      if (!list.length) return;
+      const on = !hidden.has(g.id);
+      html += `<label class="map-fs-group-head${on ? '' : ' is-off'}"><input type="checkbox" data-list-group="${escapeHtml(g.id)}" ${on ? 'checked' : ''}> <span>${escapeHtml(g.name)}</span> <span class="map-fs-zone-type">${list.length}</span></label>`;
+      html += list.map(row).join('');
+    });
+    const loose = found.filter((m) => !m.groupId || !known.has(m.groupId));
+    if (loose.length) html += `<div class="map-fs-group-head map-fs-group-loose"><span>Без группы</span> <span class="map-fs-zone-type">${loose.length}</span></div>` + loose.map(row).join('');
+    return html;
   }
 
   function highlightInPanel(root, id, kind = 'zone') {
@@ -309,63 +344,56 @@
     return `<select data-field="minZoomRel" ${dis}>${MIN_ZOOM_LABELS.map((l, v) => `<option value="${v}"${Number(value || 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   }
 
-  // Редактор мира (мир = сервер). Живёт во вкладке «Мир» редактора карты.
-  // Сохраняется отдельно от карты (настройка всего мира, общая для всех его
-  // карт); onSaved(world) — редактор карты сразу перерисовывает зоны и метки.
-  // onChange(world) — на каждую правку, до сохранения: редактор карты
-  // сразу показывает, как будут выглядеть зоны и метки.
+  // Редактор мира (мир = сервер): типы зон и типы меток. Живёт во вкладке
+  // «Зоны» редактора карты. Отдельной кнопки сохранения нет — правки мира
+  // сохраняет обычное «Сохранить» редактора (см. controller.save ниже).
+  // onChange(world) — на каждую правку: редактор сразу перерисовывает карту
+  // и помечает, что есть несохранённые изменения.
+  //
+  // Возвращает controller: { isDirty(), save() → true/false, openType(kind, id) }.
   async function mountWorldEditor(container, serverId, { onSaved, onChange } = {}) {
     container.innerHTML = '<p class="maps-tab-loading">Загрузка настроек мира…</p>';
     const result = await api(`/api/servers/${encodeURIComponent(serverId)}/world`);
-    if (!container.isConnected) return;
+    if (!container.isConnected) return null;
     if (!result.success) {
       container.innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(apiError(result))}</div>`;
-      return;
+      return null;
     }
     const state = {
-      zone: result.data.zoneTypes.map((t) => ({ ...t })),
+      zone: result.data.zoneTypes.map((t) => ({ ...t, parents: [...(t.parents || [])] })),
       marker: (result.data.markerTypes || []).map((t) => ({ ...t })),
-      era: ((result.data.calendar && result.data.calendar.eras) || window.MapCore.DEFAULT_CALENDAR.eras).map((e) => ({ ...e })),
-      format: (result.data.calendar && result.data.calendar.format) || window.MapCore.DEFAULT_CALENDAR.format,
+      calendar: result.data.calendar || null, // не редактируется, но сохраняется как есть
       canEdit: !!result.data.can_edit,
       isDefault: !!result.data.isDefault,
-      dirty: false
+      dirty: false,
+      openSections: { zone: true, marker: true },
+      openRows: new Set() // `${kind}:${id}` — раскрытые типы
     };
     container.innerHTML = '<div class="world-tab-root"></div>';
     const root = container.firstElementChild;
+
+    const section = (kind, title, list, rowFn) => `
+      <details class="world-section" data-section="${kind}" ${state.openSections[kind] ? 'open' : ''}>
+        <summary>
+          <span>${title} (${list.length})</span>
+          ${state.canEdit ? `<button type="button" class="btn btn-secondary btn-sm world-add" data-act="add" data-kind="${kind}"><i class="fas fa-plus"></i> Тип</button>` : ''}
+        </summary>
+        <div class="world-types">${list.map((t, i) => rowFn(t, i, state)).join('') || '<div class="me-tree-empty">Типов нет</div>'}</div>
+      </details>`;
+
     const render = () => {
       root.innerHTML = `
-        ${!state.canEdit ? '<div class="server-permission-note"><i class="fas fa-circle-info"></i> Менять настройки мира может только администратор сервера.</div>' : ''}
+        ${!state.canEdit ? '<div class="server-permission-note"><i class="fas fa-circle-info"></i> Менять типы мира может только администратор сервера.</div>' : ''}
         ${state.isDefault ? '<div class="server-permission-note"><i class="fas fa-circle-info"></i> Сейчас действует шаблон мира — его можно менять.</div>' : ''}
-        <p class="world-hint">Общие для всех карт этого мира. «Видно с приближения» считается от вида всей карты: на общем виде — только крупное, при приближении проступает мелкое.</p>
-        <div class="world-head">
-          <span class="me-props-head">Типы зон (${state.zone.length})</span>
-          ${state.canEdit ? '<button class="btn btn-secondary btn-sm" data-act="add" data-kind="zone"><i class="fas fa-plus"></i> Тип</button>' : ''}
-        </div>
-        <div class="world-types">${state.zone.map((t, i) => renderZoneTypeRow(t, i, state)).join('')}</div>
-        <div class="world-head">
-          <span class="me-props-head">Типы меток (${state.marker.length})</span>
-          ${state.canEdit ? '<button class="btn btn-secondary btn-sm" data-act="add" data-kind="marker"><i class="fas fa-plus"></i> Тип</button>' : ''}
-        </div>
-        <div class="world-types">${state.marker.map((t, i) => renderMarkerTypeRow(t, i, state)).join('')}</div>
-        ${state.canEdit ? `<div class="world-save">
-          <span class="world-unsaved" data-el="world-unsaved" ${state.dirty ? '' : 'hidden'}>Изменения уже видны на карте, но ещё не сохранены</span>
-          <button class="btn btn-primary btn-sm" data-act="save-world" ${state.dirty ? '' : 'disabled'}><i class="fas fa-floppy-disk"></i> Сохранить мир</button>
-        </div>` : ''}`;
+        <p class="world-hint">Общие для всех карт этого мира. Правки видны на карте сразу и сохраняются кнопкой «Сохранить» редактора.</p>
+        ${section('zone', 'Типы зон', state.zone, renderZoneTypeRow)}
+        ${section('marker', 'Типы меток', state.marker, renderMarkerTypeRow)}`;
     };
+
     const emitChange = () => {
-      const preview = root.querySelector('[data-el="cal-preview"]');
-      if (preview) preview.innerHTML = calPreview(state);
-      if (onChange) onChange({ zoneTypes: state.zone.map((t) => ({ ...t, parents: [...(t.parents || [])] })), markerTypes: state.marker.map((t) => ({ ...t })), calendar: calOf(state) });
+      if (onChange) onChange({ zoneTypes: state.zone.map((t) => ({ ...t, parents: [...(t.parents || [])] })), markerTypes: state.marker.map((t) => ({ ...t })) });
     };
-    const markDirty = () => {
-      state.dirty = true;
-      const btn = root.querySelector('[data-act="save-world"]');
-      if (btn) btn.disabled = false;
-      const note = root.querySelector('[data-el="world-unsaved"]');
-      if (note) note.hidden = false;
-      emitChange();
-    };
+    const markDirty = () => { state.dirty = true; emitChange(); };
     const rowOf = (el) => {
       const row = el.closest('[data-type-index]');
       if (!row) return null;
@@ -374,9 +402,16 @@
     };
     render();
 
-    root.addEventListener('input', (e) => {
-      if (e.target.matches('[data-cal-format]')) { state.format = e.target.value; markDirty(); }
-    });
+    // Раскрытые разделы и типы переживают перерисовку (добавление, удаление…).
+    root.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (d.matches('details.world-section')) state.openSections[d.dataset.section] = d.open;
+      else if (d.matches('details.world-type')) {
+        const key = `${d.dataset.kind}:${d.dataset.typeId}`;
+        if (d.open) state.openRows.add(key); else state.openRows.delete(key);
+      }
+    }, true);
+
     root.oninput = root.onchange = (e) => {
       const r = rowOf(e.target);
       const f = e.target.dataset.field;
@@ -386,109 +421,105 @@
         const pid = e.target.value;
         t.parents = e.target.checked ? [...new Set([...t.parents, pid])] : t.parents.filter((p) => p !== pid);
       } else if (e.target.type === 'checkbox') t[f] = e.target.checked;
-      else if (f === 'start') t.start = e.target.value.trim() === '' ? null : Math.round(Number(e.target.value));
       else if (e.target.type === 'number' || e.target.type === 'range' || f === 'minZoomRel') t[f] = Number(e.target.value);
       else t[f] = e.target.value;
-      if (f === 'color') r.row.style.setProperty('--zone-color', t.color);
-      if (f === 'icon') { const prev = r.row.querySelector('.world-icon-preview i'); if (prev) prev.className = `fas fa-${t.icon}`; }
+      if (f === 'color') {
+        r.row.style.setProperty('--zone-color', t.color);
+        r.row.querySelectorAll('.world-swatch, .world-icon-preview').forEach((el) => el.style.setProperty('--marker-color', t.color));
+      }
+      if (f === 'icon') r.row.querySelectorAll('.world-icon-preview i').forEach((i) => { i.className = `fas fa-${t.icon}`; });
+      if (f === 'name') { const nm = r.row.querySelector('.world-type-title'); if (nm) nm.textContent = t.name; }
       markDirty();
-      if (f === 'name' && e.type === 'change') render(); // имена в списках родителей
+      if (f === 'name' && e.type === 'change') render(); // имена в списках «может лежать внутри»
     };
-    root.onclick = async (e) => {
+
+    root.onclick = (e) => {
       const btn = e.target.closest('[data-act]');
       if (!btn) return;
+      e.preventDefault(); // кнопки в заголовке <summary> не сворачивают его
       const r = rowOf(btn);
       switch (btn.dataset.act) {
-        case 'add':
-          if (btn.dataset.kind === 'era') {
-            const starts = state.era.map((x) => x.start).filter((x) => x !== null && Number.isFinite(x));
-            state.era.push({ id: `era${Date.now().toString(36)}`, name: 'Новая эпоха', short: 'Н.Э.', start: (starts.length ? Math.max(...starts) : 0) + 100, direction: 'forward' });
-          } else if (btn.dataset.kind === 'marker') state.marker.push({ id: `k${Date.now().toString(36)}`, name: 'Новая метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 });
-          else state.zone.push({ id: `t${Date.now().toString(36)}`, name: 'Новый тип', topLevel: false, parents: [], color: '#5865f2', fillOpacity: 0.15, weight: 2, dashed: false, hoverEffect: 'fill', clipToParent: true, minZoomRel: 0 });
-          state.dirty = true;
+        case 'add': {
+          const kind = btn.dataset.kind;
+          const id = `${kind === 'marker' ? 'k' : 't'}${Date.now().toString(36)}`;
+          if (kind === 'marker') state.marker.push({ id, name: 'Новая метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0, noCluster: false });
+          else state.zone.push({ id, name: 'Новый тип', topLevel: false, parents: [], color: '#5865f2', fillOpacity: 0.15, weight: 2, dashed: false, hoverEffect: 'fill', clipToParent: true, minZoomRel: 0 });
+          state.openSections[kind] = true;
+          state.openRows.add(`${kind}:${id}`);
           render();
-          emitChange();
-          break;
-        case 'remove-type':
-          if (!r || !confirm(`Удалить тип «${r.t.name}»? Уже нарисованное останется, но будет показано стилем по умолчанию.`)) return;
-          r.list.splice(r.index, 1);
-          state.dirty = true;
-          render();
-          emitChange();
-          break;
-        case 'type-up':
-          if (r && r.index > 0) { [r.list[r.index - 1], r.list[r.index]] = [r.list[r.index], r.list[r.index - 1]]; state.dirty = true; render(); emitChange(); }
-          break;
-        case 'type-down':
-          if (r && r.index < r.list.length - 1) { [r.list[r.index + 1], r.list[r.index]] = [r.list[r.index], r.list[r.index + 1]]; state.dirty = true; render(); emitChange(); }
-          break;
-        case 'save-world': {
-          const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker, calendar: calOf(state) });
-          if (!res.success) { window.showMessage?.(`Не удалось сохранить: ${apiError(res)}`, 'error'); return; }
-          state.zone = res.data.zoneTypes.map((t) => ({ ...t }));
-          state.marker = (res.data.markerTypes || []).map((t) => ({ ...t }));
-          if (res.data.calendar) {
-            state.era = res.data.calendar.eras.map((x) => ({ ...x }));
-            state.format = res.data.calendar.format;
-          }
-          state.isDefault = false;
-          state.dirty = false;
-          render();
-          if (onSaved) onSaved({ zoneTypes: res.data.zoneTypes, markerTypes: res.data.markerTypes || [], calendar: res.data.calendar });
-          window.showMessage?.('Настройки мира сохранены', 'success');
+          markDirty();
           break;
         }
+        case 'remove-type':
+          if (!r) return;
+          (async () => {
+            const msg = `Тип «${r.t.name}» будет удалён. Уже нарисованное останется, но будет показано стилем по умолчанию.`;
+            const ok = window.confirmDialog ? await window.confirmDialog.open({ title: 'Удалить тип?', message: msg }) : confirm(msg);
+            if (!ok) return;
+            r.list.splice(r.index, 1);
+            render();
+            markDirty();
+          })();
+          break;
+        case 'type-up':
+          if (r && r.index > 0) { [r.list[r.index - 1], r.list[r.index]] = [r.list[r.index], r.list[r.index - 1]]; render(); markDirty(); }
+          break;
+        case 'type-down':
+          if (r && r.index < r.list.length - 1) { [r.list[r.index + 1], r.list[r.index]] = [r.list[r.index], r.list[r.index + 1]]; render(); markDirty(); }
+          break;
+      }
+    };
+
+    return {
+      isDirty: () => state.dirty && state.canEdit,
+      // Сохранение мира — вызывается обычным «Сохранить» редактора.
+      async save() {
+        if (!state.dirty || !state.canEdit) return true;
+        const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker, calendar: state.calendar });
+        if (!res.success) { window.showMessage?.(`Не удалось сохранить типы мира: ${apiError(res)}`, 'error'); return false; }
+        state.zone = res.data.zoneTypes.map((t) => ({ ...t, parents: [...(t.parents || [])] }));
+        state.marker = (res.data.markerTypes || []).map((t) => ({ ...t }));
+        state.isDefault = false;
+        state.dirty = false;
+        render();
+        if (onSaved) onSaved({ zoneTypes: res.data.zoneTypes, markerTypes: res.data.markerTypes || [] });
+        return true;
+      },
+      // Раскрыть раздел и тип (кнопка ⚙ в свойствах зоны/метки).
+      openType(kind, id) {
+        state.openSections[kind] = true;
+        state.openRows.add(`${kind}:${id}`);
+        const sec = root.querySelector(`details.world-section[data-section="${kind}"]`);
+        if (sec) sec.open = true;
+        const row = root.querySelector(`details.world-type[data-kind="${kind}"][data-type-id="${CSS.escape(id || '')}"]`);
+        if (row) row.open = true;
+        return row;
       }
     };
   }
 
-  function calOf(state) { return { eras: state.era, format: state.format }; }
-
-  // Пример подписей на стыках эпох — сразу видно, как считается год.
-  function calPreview(state) {
-    const cal = calOf(state);
-    const pts = [];
-    state.era.forEach((e) => { if (e.start !== null && Number.isFinite(e.start)) pts.push(e.start - 1, e.start); });
-    if (!pts.length) pts.push(0);
-    return 'Пример: ' + [...new Set(pts)].sort((a, b) => a - b).slice(0, 6)
-      .map((t) => `абс. ${t} → «${escapeHtml(window.MapCore.formatTime(cal, t))}»`).join(', ');
-  }
-
-  function renderEraRow(e, i, state) {
-    const dis = state.canEdit ? '' : 'disabled';
-    return `
-      <div class="world-type" data-kind="era" data-type-index="${i}" style="--zone-color:var(--blurple)">
-        <div class="world-type-head">
-          <input type="text" class="form-input" data-field="name" value="${escapeHtml(e.name)}" maxlength="60" placeholder="Название эпохи" ${dis}>
-          ${state.canEdit ? '<button class="map-icon-btn is-danger" data-act="remove-type" title="Удалить эпоху"><i class="fas fa-trash"></i></button>' : ''}
-        </div>
-        <div class="world-type-grid">
-          <label>Сокращение <input type="text" data-field="short" value="${escapeHtml(e.short || '')}" maxlength="20" ${dis}></label>
-          <label>Начало, абс. год <input type="number" data-field="start" value="${e.start === null || e.start === undefined ? '' : e.start}" placeholder="с начала времён" ${dis}></label>
-          <label>Счёт лет <select data-field="direction" ${dis}>
-            <option value="forward"${e.direction !== 'backward' ? ' selected' : ''}>прямой</option>
-            <option value="backward"${e.direction === 'backward' ? ' selected' : ''}>обратный</option>
-          </select></label>
-        </div>
-      </div>`;
-  }
-
   function typeRowButtons(state) {
     return state.canEdit ? `
-      <button class="map-icon-btn" data-act="type-up" title="Выше"><i class="fas fa-arrow-up"></i></button>
-      <button class="map-icon-btn" data-act="type-down" title="Ниже"><i class="fas fa-arrow-down"></i></button>
-      <button class="map-icon-btn is-danger" data-act="remove-type" title="Удалить тип"><i class="fas fa-trash"></i></button>` : '';
+      <span class="world-row-btns">
+        <button class="map-icon-btn" data-act="type-up" title="Выше"><i class="fas fa-arrow-up"></i></button>
+        <button class="map-icon-btn" data-act="type-down" title="Ниже"><i class="fas fa-arrow-down"></i></button>
+        <button class="map-icon-btn is-danger" data-act="remove-type" title="Удалить тип"><i class="fas fa-trash"></i></button>
+      </span>` : '';
   }
 
   function renderZoneTypeRow(t, i, state) {
     const dis = state.canEdit ? '' : 'disabled';
     const others = state.zone.filter((o) => o.id !== t.id);
     return `
-      <div class="world-type" data-kind="zone" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}">
+      <details class="world-type" data-kind="zone" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}" ${state.openRows.has(`zone:${t.id}`) ? 'open' : ''}>
+        <summary class="world-type-summary">
+          <span class="world-swatch" style="background:${escapeHtml(t.color)}"></span>
+          <span class="world-type-title">${escapeHtml(t.name)}</span>
+          ${typeRowButtons(state)}
+        </summary>
         <div class="world-type-head">
           <input type="color" data-field="color" value="${escapeHtml(t.color)}" ${dis} title="Цвет">
           <input type="text" class="form-input" data-field="name" value="${escapeHtml(t.name)}" maxlength="60" ${dis}>
-          ${typeRowButtons(state)}
         </div>
         <div class="world-type-grid">
           <label class="checkbox-field"><input type="checkbox" data-field="topLevel" ${t.topLevel ? 'checked' : ''} ${dis}> Может быть на верхнем уровне</label>
@@ -503,24 +534,28 @@
           <span>Может лежать внутри:</span>
           ${others.length ? others.map((o) => `<label class="checkbox-field"><input type="checkbox" data-field="parent" value="${escapeHtml(o.id)}" ${t.parents.includes(o.id) ? 'checked' : ''} ${dis}> ${escapeHtml(o.name)}</label>`).join('') : '<em>других типов нет</em>'}
         </div>
-      </div>`;
+      </details>`;
   }
 
   function renderMarkerTypeRow(t, i, state) {
     const dis = state.canEdit ? '' : 'disabled';
     return `
-      <div class="world-type" data-kind="marker" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}">
-        <div class="world-type-head">
+      <details class="world-type" data-kind="marker" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}" ${state.openRows.has(`marker:${t.id}`) ? 'open' : ''}>
+        <summary class="world-type-summary">
           <span class="world-icon-preview" style="--marker-color:${escapeHtml(t.color)}"><i class="fas fa-${escapeHtml(t.icon)}"></i></span>
+          <span class="world-type-title">${escapeHtml(t.name)}</span>
+          ${typeRowButtons(state)}
+        </summary>
+        <div class="world-type-head">
           <input type="color" data-field="color" value="${escapeHtml(t.color)}" ${dis} title="Цвет">
           <input type="text" class="form-input" data-field="name" value="${escapeHtml(t.name)}" maxlength="60" ${dis}>
-          ${typeRowButtons(state)}
         </div>
         <div class="world-type-grid">
           <label>Иконка <select data-field="icon" ${dis}>${Object.entries(MARKER_ICONS).map(([v, l]) => `<option value="${v}"${t.icon === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
           <label>Видно ${minZoomSelect(t.minZoomRel, dis)}</label>
+          <label class="checkbox-field"><input type="checkbox" data-field="noCluster" ${t.noCluster ? 'checked' : ''} ${dis}> Не прятать в группу (важные)</label>
         </div>
-      </div>`;
+      </details>`;
   }
 
   window.MapsUI = {

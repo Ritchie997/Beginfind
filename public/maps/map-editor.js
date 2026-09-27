@@ -84,7 +84,9 @@
       this.basemaps = data.basemaps || [];
       this.markerTypes = data.markerTypes || [];
       this.mtypes = MC().typeMap(this.markerTypes);
-      this.doc = { title: data.title, roles: data.roles || [], zones: data.zones || [], markers: data.markers || [], events: data.events || [], timeline: data.timeline || { initial: null } };
+      this.doc = { title: data.title, roles: data.roles || [], zones: data.zones || [], markers: data.markers || [], markerGroups: data.markerGroups || [], events: data.events || [], timeline: data.timeline || { initial: null } };
+      this.hiddenGroupsEd = new Set(); // группы, скрытые на карте редактора («глазик»)
+      this.newMarkerGroupId = null; // в какую группу пойдут новые метки
       this.calendar = data.calendar || null;
       this.selectedEventId = null;
       // Текущий момент редактора: начальный момент карты, иначе самый ранний
@@ -211,8 +213,10 @@
       this._worldMounted = true;
       this._worldReady = window.MapsUI.mountWorldEditor(this.el('world'), this.serverId, {
         onSaved: (world) => this.applyZoneTypes(world),
-        onChange: (world) => this.previewWorld(world)
-      });
+        // Правка типа — сразу на карте и «есть несохранённые изменения»:
+        // мир сохраняет обычное «Сохранить» (см. save).
+        onChange: (world) => { this.previewWorld(world); this.markDirty(); }
+      }).then((ctl) => { this._worldCtl = ctl; return ctl; });
       return this._worldReady;
     }
 
@@ -220,8 +224,8 @@
     async openTypeSettings(kind, typeId) {
       const details = this.el('world-details');
       details.open = true;
-      await this.mountWorld();
-      const row = this.el('world').querySelector(`.world-type[data-kind="${kind}"][data-type-id="${CSS.escape(typeId || '')}"]`);
+      const ctl = await this.mountWorld();
+      const row = ctl && ctl.openType(kind, typeId);
       if (!row) return;
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
       row.classList.remove('is-flash');
@@ -465,7 +469,11 @@
         ? this.markerTypes.map((t) => `<button type="button" class="me-palette-item${t.id === this.newMarkerTypeId ? ' active' : ''}" data-new-type="${esc(t.id)}">
             <span class="map-marker" style="--marker-color:${esc(t.color)}"><i class="fas fa-${esc(t.icon)}"></i></span>${esc(t.name)}
           </button>`).join('')
-        : '<div class="me-palette-empty">Нет типов меток</div>');
+        : '<div class="me-palette-empty">Нет типов меток</div>')
+        + (this.doc.markerGroups.length ? `<div class="me-palette-head">В группу:</div>
+          <select class="me-palette-group">${['<option value="">Без группы</option>', ...this.doc.markerGroups.map((g) => `<option value="${esc(g.id)}"${g.id === this.newMarkerGroupId ? ' selected' : ''}>${esc(g.name)}</option>`)].join('')}</select>` : '');
+      const groupSel = el.querySelector('.me-palette-group');
+      if (groupSel) groupSel.onchange = () => { this.newMarkerGroupId = groupSel.value || null; };
       el.onclick = (e) => {
         const b = e.target.closest('[data-new-type]');
         if (!b) return;
@@ -544,6 +552,7 @@
       this.markerLayer.clearLayers();
       this.markerLayers.clear();
       (this.doc.markers || []).forEach((m) => {
+        if (m.groupId && this.hiddenGroupsEd.has(m.groupId) && m.id !== this.selectedMarkerId) return; // группа скрыта «глазиком»
         const marker = L.marker(MC().toLatLng(m.pos), { icon: this.markerIcon(m), draggable: true, keyboard: false, riseOnHover: true });
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
@@ -566,6 +575,24 @@
         marker.addTo(this.markerLayer);
         this.markerLayers.set(m.id, marker);
       });
+      this.applyMarkerSearchOpacity();
+    }
+
+    // Поиск в списке: название, описание или имя группы метки.
+    markerMatches(m, q) {
+      const norm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е');
+      const g = m.groupId && (this.doc.markerGroups || []).find((x) => x.id === m.groupId);
+      return norm(m.title).includes(q) || norm(m.text).includes(q) || (!!g && norm(g.name).includes(q));
+    }
+
+    // Пока в поиске что-то набрано, не совпавшие метки на карте редактора
+    // полупрозрачные.
+    applyMarkerSearchOpacity() {
+      const q = String(this._treeQuery || '').toLowerCase().replace(/ё/g, 'е').trim();
+      this.markerLayers.forEach((layer, id) => {
+        const m = this.markerById(id);
+        layer.setOpacity(!q || !m || this.markerMatches(m, q) ? 1 : 0.25);
+      });
     }
 
     refreshMarkerIcon(id) {
@@ -582,6 +609,7 @@
         id: genId('k'),
         typeId: type ? type.id : null,
         zoneId: this.zoneForPoint(pos),
+        groupId: this.doc.markerGroups.some((g) => g.id === this.newMarkerGroupId) ? this.newMarkerGroupId : null,
         title: `${type ? type.name : 'Метка'} ${n}`,
         text: '',
         article: null,
@@ -911,8 +939,29 @@
 
     // ----- Дерево зон -----
 
+    // Список зон и меток: поиск, сворачиваемые разделы и ветки дерева —
+    // при большом числе зон до нужной иначе не долистаться.
     renderTree() {
       const tree = this.el('tree');
+      this._treeOpen = this._treeOpen || { zones: true, markers: true };
+      this._collapsed = this._collapsed || new Set();
+      if (!tree.querySelector('.me-tree-search')) {
+        tree.innerHTML = '<input type="search" class="me-tree-search form-input" placeholder="Найти зону или метку…" autocomplete="off"><div data-el="tree-body"></div>';
+        const search = tree.querySelector('.me-tree-search');
+        search.addEventListener('input', () => { this._treeQuery = search.value; this.renderTree(); this.applyMarkerSearchOpacity(); });
+        this.bindTreeEvents(tree);
+      }
+      const body = tree.querySelector('[data-el="tree-body"]');
+      const norm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е');
+      const q = norm(this._treeQuery).trim();
+
+      // Выбранная зона всегда видна: разворачиваем её предков.
+      if (this.selectedId) {
+        let p = this.zoneById(this.selectedId)?.parentId;
+        let guard = 0;
+        while (p && guard++ < 64) { this._collapsed.delete(p); p = this.zoneById(p)?.parentId; }
+      }
+
       const zones = this.doc.zones;
       const ids = new Set(zones.map((z) => z.id));
       const children = new Map();
@@ -921,43 +970,119 @@
         if (!children.has(key)) children.set(key, []);
         children.get(key).push(z);
       });
+      const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', 'ru');
+      const zoneRow = (z, depth, hasKids) => {
+        const t = this.types.get(z.typeId) || MC().FALLBACK_TYPE;
+        const caret = hasKids
+          ? `<button type="button" class="me-tree-caret" data-toggle-zone="${esc(z.id)}" title="${this._collapsed.has(z.id) ? 'Развернуть' : 'Свернуть'}"><i class="fas fa-caret-${this._collapsed.has(z.id) ? 'right' : 'down'}"></i></button>`
+          : '<span class="me-tree-caret-space"></span>';
+        return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
+          ${caret}
+          <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
+          <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
+          <span class="me-tree-type">${esc(t.name)}</span>
+          ${z.roles && z.roles.length ? '<i class="fas fa-lock me-tree-flag" title="Доступ ограничен ролями"></i>' : ''}
+          ${z.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
+        </div>`;
+      };
       const rows = [];
-      const walk = (key, depth) => (children.get(key) || [])
-        .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
-        .forEach((z) => {
-          const t = this.types.get(z.typeId) || MC().FALLBACK_TYPE;
-          rows.push(`<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${8 + depth * 16}px">
-            <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
-            <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
-            <span class="me-tree-type">${esc(t.name)}</span>
-            ${z.roles && z.roles.length ? '<i class="fas fa-lock me-tree-flag" title="Доступ ограничен ролями"></i>' : ''}
-            ${z.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
-          </div>`);
-          walk(z.id, depth + 1);
+      if (q) {
+        zones.filter((z) => norm(z.title).includes(q)).sort(byTitle).forEach((z) => rows.push(zoneRow(z, 0, false)));
+      } else {
+        const walk = (key, depth) => (children.get(key) || []).sort(byTitle).forEach((z) => {
+          const kids = (children.get(z.id) || []).length > 0;
+          rows.push(zoneRow(z, depth, kids));
+          if (kids && !this._collapsed.has(z.id)) walk(z.id, depth + 1);
         });
-      walk('', 0);
-      const markers = (this.doc.markers || []).slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
-      const markerRows = markers.map((m) => {
+        walk('', 0);
+      }
+
+      const markers = (this.doc.markers || []).filter((m) => !q || this.markerMatches(m, q)).sort(byTitle);
+      const markerRow = (m) => {
         const t = this.markerType(m);
-        return `<div class="me-tree-item${m.id === this.selectedMarkerId ? ' active' : ''}" data-marker-id="${esc(m.id)}">
+        return `<div class="me-tree-item${m.id === this.selectedMarkerId ? ' active' : ''}${this.existsNow(m) ? '' : ' is-absent'}" data-marker-id="${esc(m.id)}">
           <i class="fas fa-${esc(t.icon)} map-fs-marker-icon" style="color:${esc(t.color)}"></i>
           <span class="me-tree-name">${esc(m.title || t.name)}</span>
           <span class="me-tree-type">${esc(t.name)}</span>
           ${m.roles && m.roles.length ? '<i class="fas fa-lock me-tree-flag" title="Доступ ограничен ролями"></i>' : ''}
           ${m.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
         </div>`;
+      };
+      // Метки по группам: заголовок группы — «глазик» (видимость на карте
+      // редактора), название (правится прямо тут), «скрыта у читателя по
+      // умолчанию», удалить. При поиске — плоский список.
+      const groups = this.doc.markerGroups || [];
+      let markerRows;
+      if (q || !groups.length) {
+        markerRows = markers.map(markerRow);
+      } else {
+        markerRows = [];
+        groups.forEach((g) => {
+          const list = markers.filter((m) => m.groupId === g.id);
+          const hidden = this.hiddenGroupsEd.has(g.id);
+          markerRows.push(`<div class="me-group-head${hidden ? ' is-hidden' : ''}" data-group-id="${esc(g.id)}">
+            <button type="button" class="me-tree-caret" data-group-eye="${esc(g.id)}" title="${hidden ? 'Показать на карте редактора' : 'Скрыть на карте редактора'}"><i class="fas fa-eye${hidden ? '-slash' : ''}"></i></button>
+            <input type="text" class="me-group-name" data-group-name="${esc(g.id)}" value="${esc(g.name)}" maxlength="60" title="Название группы">
+            <span class="me-tree-type">${list.length}</span>
+            <button type="button" class="me-tree-caret${g.hiddenByDefault ? ' is-on' : ''}" data-group-default="${esc(g.id)}" title="${g.hiddenByDefault ? 'У читателя скрыта по умолчанию — нажмите, чтобы показывать сразу' : 'У читателя видна сразу — нажмите, чтобы скрыть по умолчанию'}"><i class="fas fa-user-${g.hiddenByDefault ? 'slash' : 'check'}"></i></button>
+            <button type="button" class="me-tree-caret is-danger" data-group-del="${esc(g.id)}" title="Удалить группу (метки останутся без группы)"><i class="fas fa-trash"></i></button>
+          </div>`);
+          list.forEach((m) => markerRows.push(markerRow(m)));
+        });
+        const loose = markers.filter((m) => !m.groupId || !groups.some((g) => g.id === m.groupId));
+        if (loose.length) {
+          markerRows.push('<div class="me-group-head me-group-loose"><span class="me-tree-caret-space"></span><span class="me-tree-name">Без группы</span><span class="me-tree-type">' + loose.length + '</span></div>');
+          loose.forEach((m) => markerRows.push(markerRow(m)));
+        }
+      }
+      const zoneCount = q ? `${rows.length} из ${zones.length}` : zones.length;
+      const markerCount = q ? `${markers.length} из ${(this.doc.markers || []).length}` : markers.length;
+      body.innerHTML = `
+        <details class="me-tree-section" data-section="zones" ${this._treeOpen.zones || q ? 'open' : ''}>
+          <summary>Зоны (${zoneCount})${!q && zones.some((z) => (children.get(z.id) || []).length) ? '<span class="me-tree-bulk"><button type="button" data-tree-bulk="collapse" title="Свернуть все ветки"><i class="fas fa-compress"></i></button><button type="button" data-tree-bulk="expand" title="Развернуть все ветки"><i class="fas fa-expand"></i></button></span>' : ''}</summary>
+          <div class="me-tree-list">${rows.join('') || `<div class="me-tree-empty">${q ? 'Ничего не найдено' : 'Нарисуйте первую зону инструментом «Лассо» или «Многоугольник»'}</div>`}</div>
+          <div class="me-tree-root-drop" data-root-drop>Перетащите сюда — сделать зоной верхнего уровня</div>
+        </details>
+        <details class="me-tree-section" data-section="markers" ${this._treeOpen.markers || q ? 'open' : ''}>
+          <summary>Метки (${markerCount})<span class="me-tree-bulk"><button type="button" data-group-add title="Новая группа меток"><i class="fas fa-folder-plus"></i></button></span></summary>
+          <div class="me-tree-list me-tree-list-markers">${markerRows.join('') || `<div class="me-tree-empty">${q ? 'Ничего не найдено' : 'Инструмент «Метка» (M) — клик по карте ставит метку'}</div>`}</div>
+        </details>`;
+      body.querySelectorAll('details[data-section]').forEach((d) => {
+        d.addEventListener('toggle', () => { if (!q) this._treeOpen[d.dataset.section] = d.open; });
       });
-      tree.innerHTML = `
-        <div class="me-tree-head">Зоны (${zones.length})</div>
-        <div class="me-tree-list">${rows.join('') || '<div class="me-tree-empty">Нарисуйте первую зону инструментом «Лассо» или «Многоугольник»</div>'}</div>
-        <div class="me-tree-root-drop" data-root-drop>Перетащите сюда — сделать зоной верхнего уровня</div>
-        <div class="me-tree-head">Метки (${markers.length})</div>
-        <div class="me-tree-list me-tree-list-markers">${markerRows.join('') || '<div class="me-tree-empty">Инструмент «Метка» (M) — клик по карте ставит метку</div>'}</div>`;
-      this.bindTreeEvents(tree);
+      // Прокрутить список к выбранному.
+      const active = body.querySelector('.me-tree-item.active');
+      if (active) active.scrollIntoView({ block: 'nearest' });
     }
 
     bindTreeEvents(tree) {
+      tree.addEventListener('change', (e) => {
+        const nameIn = e.target.closest('[data-group-name]');
+        if (!nameIn) return;
+        const g = this.doc.markerGroups.find((x) => x.id === nameIn.dataset.groupName);
+        if (!g || !nameIn.value.trim()) { nameIn.value = g ? g.name : ''; return; }
+        this.pushHistory();
+        g.name = nameIn.value.trim().slice(0, 60);
+        this.markDirty();
+        this.renderMarkerPalette();
+      });
       tree.onclick = (e) => {
+        if (this.onGroupClick(e)) return;
+        const caret = e.target.closest('[data-toggle-zone]');
+        if (caret) {
+          const id = caret.dataset.toggleZone;
+          if (this._collapsed.has(id)) this._collapsed.delete(id); else this._collapsed.add(id);
+          this.renderTree();
+          return;
+        }
+        const bulk = e.target.closest('[data-tree-bulk]');
+        if (bulk) {
+          e.preventDefault();
+          if (bulk.dataset.treeBulk === 'expand') this._collapsed.clear();
+          else this.doc.zones.forEach((z) => { if (this.doc.zones.some((c) => c.parentId === z.id)) this._collapsed.add(z.id); });
+          this.renderTree();
+          return;
+        }
         const mItem = e.target.closest('[data-marker-id]');
         if (mItem) { this.selectMarker(mItem.dataset.markerId, { fly: true }); return; }
         const item = e.target.closest('[data-zone-id]');
@@ -989,6 +1114,62 @@
         e.preventDefault();
         this.reparent(dragId, target.dataset.zoneId || null);
       };
+    }
+
+    // Кнопки групп меток в списке. true — клик обработан.
+    onGroupClick(e) {
+      const add = e.target.closest('[data-group-add]');
+      if (add) {
+        e.preventDefault();
+        this.pushHistory();
+        const g = { id: genId('g'), name: `Группа ${this.doc.markerGroups.length + 1}`, hiddenByDefault: false };
+        this.doc.markerGroups = [...this.doc.markerGroups, g];
+        this._treeOpen.markers = true;
+        this.markDirty();
+        this.renderTree();
+        this.renderMarkerPalette();
+        const input = this.el('tree').querySelector(`[data-group-name="${CSS.escape(g.id)}"]`);
+        if (input) { input.focus(); input.select(); }
+        return true;
+      }
+      const eye = e.target.closest('[data-group-eye]');
+      if (eye) {
+        const id = eye.dataset.groupEye;
+        if (this.hiddenGroupsEd.has(id)) this.hiddenGroupsEd.delete(id); else this.hiddenGroupsEd.add(id);
+        this.renderMarkerLayers();
+        this.renderTree();
+        return true;
+      }
+      const dflt = e.target.closest('[data-group-default]');
+      if (dflt) {
+        const g = this.doc.markerGroups.find((x) => x.id === dflt.dataset.groupDefault);
+        if (!g) return true;
+        this.pushHistory();
+        g.hiddenByDefault = !g.hiddenByDefault;
+        this.markDirty();
+        this.renderTree();
+        return true;
+      }
+      const del = e.target.closest('[data-group-del]');
+      if (del) {
+        const g = this.doc.markerGroups.find((x) => x.id === del.dataset.groupDel);
+        if (!g) return true;
+        (async () => {
+          if (!(await this.askDelete(`Группа «${g.name}» будет удалена. Её метки останутся на карте, но без группы.`, 'Удалить группу?'))) return;
+          this.pushHistory();
+          this.doc.markerGroups = this.doc.markerGroups.filter((x) => x.id !== g.id);
+          (this.doc.markers || []).forEach((m) => { if (m.groupId === g.id) m.groupId = null; });
+          this.hiddenGroupsEd.delete(g.id);
+          if (this.newMarkerGroupId === g.id) this.newMarkerGroupId = null;
+          this.markDirty();
+          this.renderMarkerLayers();
+          this.renderTree();
+          this.renderProps();
+          this.renderMarkerPalette();
+        })();
+        return true;
+      }
+      return !!e.target.closest('[data-group-name]'); // клик в поле названия — не выбор
     }
 
     // Смена родителя. Если тип зоны обрезается по родителю — обрезаем по
@@ -1084,6 +1265,7 @@
       this.bindZoneStyleSection(box, zone);
       box.querySelector('[data-type-settings="zone"]').onclick = () => this.openTypeSettings('zone', zone.typeId);
       this.bindItemTimeSection(box, zone, true);
+      this.bindSections(box);
       box.querySelector('[data-prop-act="vertex"]').onclick = () => this.setTool('vertex');
       box.querySelector('[data-prop-act="clip"]').onclick = () => this.clipToParent(zone);
       box.querySelector('[data-prop-act="delete"]').onclick = () => this.deleteZone(zone.id);
@@ -1111,6 +1293,8 @@
       const on = !!zone.style;
       const effects = { fill: 'Заливка ярче', outline: 'Толще граница', glow: 'Свечение', pulse: 'Пульсация' };
       return `
+        <details class="me-props-details" data-sec="style" ${this.secOpen('style', false) ? 'open' : ''}>
+        <summary>Оформление${on ? ' <span class="me-sec-badge">свой стиль</span>' : ''}</summary>
         <label class="checkbox-field me-style-toggle"><input type="checkbox" data-style-toggle ${on ? 'checked' : ''}> Свой стиль (поверх типа «${esc(type.name)}»)</label>
         <div class="me-style" ${on ? '' : 'hidden'}>
           <label>Цвет <input type="color" data-style="color" value="${esc(st.color)}"></label>
@@ -1118,7 +1302,21 @@
           <label>Граница <input type="number" min="0" max="10" step="0.5" data-style="weight" value="${st.weight}"></label>
           <label class="checkbox-field"><input type="checkbox" data-style="dashed" ${st.dashed ? 'checked' : ''}> Пунктир</label>
           <label>При наведении <select data-style="hoverEffect">${Object.entries(effects).map(([v, l]) => `<option value="${v}"${st.hoverEffect === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-        </div>`;
+        </div>
+        </details>`;
+    }
+
+    // Состояние сворачиваемых блоков свойств (Время, Оформление, Видимость)
+    // запоминается, пока открыт редактор.
+    secOpen(key, dflt) {
+      this._secOpen = this._secOpen || {};
+      return key in this._secOpen ? this._secOpen[key] : dflt;
+    }
+
+    bindSections(box) {
+      box.querySelectorAll('details[data-sec]').forEach((d) => {
+        d.addEventListener('toggle', () => { this._secOpen = this._secOpen || {}; this._secOpen[d.dataset.sec] = d.open; });
+      });
     }
 
     bindZoneStyleSection(box, zone) {
@@ -1151,6 +1349,45 @@
       });
     }
 
+    // ----- Важность метки: видимость и группировка поверх типа -----
+
+    renderMarkerVisibilitySection(m) {
+      const t = this.markerType(m);
+      const levels = ['Всегда', 'С приближения ×2', '×4', '×8', '×16', '×32', '×64'];
+      const typeLevel = levels[t.minZoomRel || 0] || 'Всегда';
+      const own = m.minZoomRel !== null && m.minZoomRel !== undefined;
+      const clusterOwn = m.noCluster !== null && m.noCluster !== undefined;
+      return `
+        <details class="me-props-details" data-sec="visibility" ${this.secOpen('visibility', own || clusterOwn) ? 'open' : ''}>
+        <summary>Важность и видимость${own || clusterOwn ? ' <span class="me-sec-badge">своя</span>' : ''}</summary>
+        <label class="me-field"><span>Видно</span>
+          <select class="form-select" data-mvis="minZoomRel">
+            <option value=""${own ? '' : ' selected'}>Как у типа — ${esc(typeLevel)}</option>
+            ${levels.map((l, i) => `<option value="${i}"${own && m.minZoomRel === i ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </label>
+        <label class="me-field"><span>На отдалении</span>
+          <select class="form-select" data-mvis="noCluster">
+            <option value=""${clusterOwn ? '' : ' selected'}>Как у типа — ${t.noCluster ? 'не прятать в группу' : 'можно группировать'}</option>
+            <option value="yes"${clusterOwn && m.noCluster ? ' selected' : ''}>Не прятать в группу (важная)</option>
+            <option value="no"${clusterOwn && !m.noCluster ? ' selected' : ''}>Можно группировать с соседними</option>
+          </select>
+        </label>
+        </details>`;
+    }
+
+    bindMarkerVisibilitySection(box, m) {
+      box.querySelectorAll('[data-mvis]').forEach((sel) => {
+        sel.addEventListener('change', () => {
+          this.pushHistory();
+          if (sel.dataset.mvis === 'minZoomRel') m.minZoomRel = sel.value === '' ? null : Number(sel.value);
+          else m.noCluster = sel.value === '' ? null : sel.value === 'yes';
+          this.markDirty();
+          this.renderProps();
+        });
+      });
+    }
+
     // ----- Свойства выбранной метки -----
 
     renderMarkerProps(box, m) {
@@ -1160,24 +1397,32 @@
       box.innerHTML = `
         <div class="me-props-head">Свойства метки</div>
         <label class="me-field"><span>Название</span><input type="text" class="form-input" data-mprop="title" value="${esc(m.title)}" maxlength="120"></label>
+        ${this.doc.markerGroups.length ? `<label class="me-field"><span>Группа</span><select class="form-select" data-mprop="groupId"><option value="">Без группы</option>${this.doc.markerGroups.map((g) => `<option value="${esc(g.id)}"${g.id === m.groupId ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select></label>` : ''}
         <div class="me-field"><span>Тип</span><div class="me-type-row"><select class="form-select" data-mprop="typeId">${typeOptions || '<option value="">—</option>'}</select><button type="button" class="map-icon-btn" data-type-settings="marker" title="Настроить этот тип: иконка, цвет, видимость"><i class="fas fa-gear"></i></button></div></div>
-        <label class="me-field"><span>Описание (всплывает по клику)</span><textarea class="form-input me-textarea" data-mprop="text" maxlength="2000" rows="4" placeholder="Короткое пояснение к месту…">${esc(m.text || '')}</textarea></label>
-        <label class="me-field"><span>Статья</span>
-          <input type="text" class="form-input" data-mprop="article" list="me-articles-list" value="${esc(articleTitle)}" placeholder="Название статьи…">
-          <small class="me-field-note" data-el="article-note">${this.articleNote(m, 'метка')}</small>
-        </label>
-        <div class="me-field"><span>Кому видна метка</span>
-          <div class="chip-field" data-el="marker-roles">
-            <div class="chip-field-box"><div class="chip-field-chips"></div><input type="text" class="chip-field-input" placeholder="Пусто — видна всем, кто видит карту"></div>
-            <div class="chip-field-dropdown" hidden></div><input type="hidden" class="chip-field-hidden">
+        <details class="me-props-details" data-sec="m-content" ${this.secOpen('m-content', !!(m.text || m.article)) ? 'open' : ''}>
+          <summary>Описание и статья${m.text || m.article ? ` <span class="me-sec-badge">${[m.text ? 'описание' : '', m.article ? 'статья' : ''].filter(Boolean).join(' · ')}</span>` : ''}</summary>
+          <label class="me-field"><span>Описание (всплывает по клику)</span><textarea class="form-input me-textarea" data-mprop="text" maxlength="2000" rows="4" placeholder="Короткое пояснение к месту…">${esc(m.text || '')}</textarea></label>
+          <label class="me-field"><span>Статья</span>
+            <input type="text" class="form-input" data-mprop="article" list="me-articles-list" value="${esc(articleTitle)}" placeholder="Название статьи…">
+            <small class="me-field-note" data-el="article-note">${this.articleNote(m, 'метка')}</small>
+          </label>
+        </details>
+        <details class="me-props-details" data-sec="m-access" ${this.secOpen('m-access', !!(m.roles && m.roles.length)) ? 'open' : ''}>
+          <summary>Доступ${m.roles && m.roles.length ? ` <span class="me-sec-badge">ролей: ${m.roles.length}</span>` : ''}</summary>
+          <div class="me-field"><span>Кому видна метка</span>
+            <div class="chip-field" data-el="marker-roles">
+              <div class="chip-field-box"><div class="chip-field-chips"></div><input type="text" class="chip-field-input" placeholder="Пусто — видна всем, кто видит карту"></div>
+              <div class="chip-field-dropdown" hidden></div><input type="hidden" class="chip-field-hidden">
+            </div>
           </div>
-        </div>
-        <label class="me-field"><span>Если статья читателю закрыта</span>
-          <select class="form-select" data-mprop="lockedMode">
-            <option value="lock"${m.lockedMode !== 'hide' ? ' selected' : ''}>Показать метку с замком</option>
-            <option value="hide"${m.lockedMode === 'hide' ? ' selected' : ''}>Скрыть метку</option>
-          </select>
-        </label>
+          <label class="me-field"><span>Если статья читателю закрыта</span>
+            <select class="form-select" data-mprop="lockedMode">
+              <option value="lock"${m.lockedMode !== 'hide' ? ' selected' : ''}>Показать метку с замком</option>
+              <option value="hide"${m.lockedMode === 'hide' ? ' selected' : ''}>Скрыть метку</option>
+            </select>
+          </label>
+        </details>
+        ${this.renderMarkerVisibilitySection(m)}
         ${this.renderItemTimeSection(m, false)}
         <div class="me-props-info">${zone ? `Стоит в зоне «${esc(zone.title || 'без названия')}» — скрыта вместе с ней` : 'Стоит вне зон'}</div>
         <div class="me-props-actions">
@@ -1191,6 +1436,8 @@
       box.querySelector('[data-mprop="article"]').addEventListener('change', () => this.renderTree());
       box.querySelector('[data-mprop-act="delete"]').onclick = () => this.deleteMarker(m.id);
       this.bindItemTimeSection(box, m, false);
+      this.bindMarkerVisibilitySection(box, m);
+      this.bindSections(box);
       box.querySelector('[data-type-settings="marker"]').onclick = () => this.openTypeSettings('marker', m.typeId);
 
       if (window.ChipField) {
@@ -1219,6 +1466,7 @@
         if (el) el.textContent = v || this.markerType(m).name;
         this.markerLayers.get(m.id)?.setTooltipContent(esc(v || this.markerType(m).name));
       } else if (f === 'typeId') { m.typeId = v || null; this.refreshMarkerIcon(m.id); this.renderTree(); }
+      else if (f === 'groupId') { m.groupId = v || null; this.renderTree(); }
       else if (f === 'text') m.text = v;
       else if (f === 'lockedMode') m.lockedMode = v === 'hide' ? 'hide' : 'lock';
       else if (f === 'article') {
@@ -1659,15 +1907,18 @@
             <button type="button" class="btn btn-secondary btn-sm" data-ver-new><i class="fas fa-code-branch"></i> Новая версия границы с ${esc(this.fmt(this.time))} года</button>
           </div>`;
       }
+      const bounded = item.from != null || item.to != null || (isZone && (item.shapes || []).length > 1);
       return `
-        <div class="me-props-sub">Время ${this.existsNow(item) ? '' : '<span class="me-absent-badge">сейчас не существует</span>'}</div>
+        <details class="me-props-details" data-sec="time" ${this.secOpen('time', bounded) || !this.existsNow(item) ? 'open' : ''}>
+        <summary>Время${bounded ? ` <span class="me-sec-badge">${esc(MC().formatRange(this.cal(), item.from, item.to) || 'версии границы')}</span>` : ''}${this.existsNow(item) ? '' : ' <span class="me-absent-badge">сейчас не существует</span>'}</summary>
         <div class="me-field"><span>Существует с</span>${this.timeInputHtml('from', item.from, { emptyLabel: 'начала времён' })}</div>
         <div class="me-field"><span>по (в этот год уже нет)</span>${this.timeInputHtml('to', item.to, { emptyLabel: 'конца времён' })}</div>
         <div class="me-time-quick">
           <button type="button" class="map-icon-btn me-quick" data-time-quick="from">с текущего</button>
           <button type="button" class="map-icon-btn me-quick" data-time-quick="to">до текущего</button>
         </div>
-        ${versions}`;
+        ${versions}
+        </details>`;
     }
 
     bindItemTimeSection(box, item, isZone) {
@@ -2043,7 +2294,7 @@
     // ----- История, черновик, сохранение -----
 
     snapshot() {
-      return JSON.stringify({ title: this.doc.title, roles: this.doc.roles, zones: this.doc.zones, markers: this.doc.markers, events: this.doc.events, timeline: this.doc.timeline });
+      return JSON.stringify({ title: this.doc.title, roles: this.doc.roles, zones: this.doc.zones, markers: this.doc.markers, markerGroups: this.doc.markerGroups, events: this.doc.events, timeline: this.doc.timeline });
     }
 
     pushHistory() {
@@ -2055,7 +2306,7 @@
 
     restore(snap) {
       const s = JSON.parse(snap);
-      this.doc = { title: s.title, roles: s.roles, zones: s.zones, markers: s.markers || [], events: s.events || [], timeline: s.timeline || { initial: null } };
+      this.doc = { title: s.title, roles: s.roles, zones: s.zones, markers: s.markers || [], markerGroups: s.markerGroups || [], events: s.events || [], timeline: s.timeline || { initial: null } };
       if (!this.eventById(this.selectedEventId)) this.selectedEventId = null;
       if (!this.markerById(this.selectedMarkerId)) this.selectedMarkerId = null;
       this.root.querySelector('.me-title-input').value = this.doc.title;
@@ -2121,6 +2372,7 @@
           roles: this.doc.roles,
           zones: this.doc.zones,
           markers: this.doc.markers,
+          markerGroups: this.doc.markerGroups,
           events: this.doc.events,
           timeline: this.doc.timeline,
           basemaps: this.basemaps.map((b) => ({ id: b.id, title: b.title, from: b.from ?? null, to: b.to ?? null }))
@@ -2143,7 +2395,7 @@
         : `Есть несохранённый черновик этой карты от ${when}. Восстановить его?`;
       if (!confirm(msg)) { this.clearDraft(); return; }
       this.pushHistory();
-      this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline };
+      this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline, markerGroups: draft.markerGroups || this.doc.markerGroups || [] };
       this.root.querySelector('.me-title-input').value = this.doc.title;
       const titles = new Map((draft.basemaps || []).map((b) => [b.id, b.title]));
       this.basemaps.forEach((b) => { if (titles.has(b.id)) b.title = titles.get(b.id); });
@@ -2155,11 +2407,17 @@
       if (this._saving) return;
       this._saving = true;
       this.setStatus('Сохранение…', 'saving');
+      // Правки типов мира — тем же «Сохранить».
+      if (this._worldCtl && this._worldCtl.isDirty()) {
+        const ok = await this._worldCtl.save();
+        if (!ok) { this._saving = false; this.setStatus('Не сохранено', 'error'); return; }
+      }
       const body = {
         title: this.doc.title,
         roles: this.doc.roles,
         zones: this.doc.zones,
         markers: this.doc.markers,
+        markerGroups: this.doc.markerGroups,
         events: this.doc.events,
         timeline: this.doc.timeline,
         basemaps: this.basemaps.map((b) => ({ id: b.id, title: b.title, from: b.from ?? null, to: b.to ?? null })),

@@ -156,6 +156,7 @@ router.get('/maps/:id', auth.authenticateToken, auth.checkApproved, async (req, 
       basemaps: access.publicBasemaps(map),
       zones: visible.zones,
       markers: visible.markers,
+      markerGroups: map.markerGroups,
       events: visible.events,
       timeline: map.timeline,
       zoneTypes: world.zoneTypes,
@@ -192,6 +193,7 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
       if (zones) m.zones = zones;
       if (markers) m.markers = markers; // нормализуются при записи (writeMap → normalizeMap)
       if (events) m.events = events;
+      if (Array.isArray(body.markerGroups)) m.markerGroups = body.markerGroups;
       if (body.timeline && typeof body.timeline === 'object') m.timeline = body.timeline; // нормализуется при записи
       // Подложки: только порядок и названия существующих — статусы/файлы
       // ведёт сервер.

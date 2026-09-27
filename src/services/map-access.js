@@ -181,7 +181,7 @@ async function buildViewerMap(user, map) {
         article = null;
       } else articleTitle = info.title;
     }
-    markers.push({ id: m.id, typeId: m.typeId, title: m.title, text: m.text, article, articleTitle, articleMissing, locked, from: m.from, to: m.to, pos: m.pos });
+    markers.push({ id: m.id, typeId: m.typeId, title: m.title, text: m.text, article, articleTitle, articleMissing, locked, from: m.from, to: m.to, minZoomRel: m.minZoomRel, noCluster: m.noCluster, groupId: m.groupId, pos: m.pos });
   }
 
   // События: связи — только с видимыми читателю зонами и метками; закрытая

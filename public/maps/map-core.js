@@ -335,6 +335,12 @@
       });
       this.selectedEventId = null;
       this._morphs = new Map();
+      // Группы меток: скрытые читателем (изначально — «скрыта по умолчанию»).
+      this.markerGroups = this.data.markerGroups || [];
+      this.hiddenGroups = new Set(this.markerGroups.filter((g) => g.hiddenByDefault).map((g) => g.id));
+      // Скрытые читателем типы зон и меток («Слои»); '__none' — без типа.
+      this.hiddenZoneTypes = new Set();
+      this.hiddenMarkerTypes = new Set();
       this.opts = opts;
       this.types = typeMap(mapData.zoneTypes);
       this.markerTypes = typeMap(mapData.markerTypes);
@@ -386,10 +392,11 @@
       if (embed) this.setupEmbedGestures();
 
       this.basemapLayer = null;
-      const initialBasemap = this.basemapForTime(this.time) || data.basemaps.find((b) => b.id === opts.basemapId) || data.basemaps[0] || null;
+      // Фон выбирает только шкала (фон по периодам); вне периодов — первый фон карты.
+      const initialBasemap = this.basemapForTime(this.time) || data.basemaps[0] || null;
       if (initialBasemap) this.setBasemap(initialBasemap.id);
       else this.container.classList.add('map-viewer-no-basemap');
-      this._chosenBasemap = opts.basemapId || null; // стартовый фон периода — не ручной выбор
+      this._chosenBasemap = null; // ручного выбора фона у читателя нет
 
       this.zonesPane = this.map.createPane('zonesPane');
       this.zonesPane.style.zIndex = 450;
@@ -422,6 +429,10 @@
         if (this._pendingInitialView && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.applyInitialViewOnce();
       });
       this._resizeObserver.observe(this.container);
+
+      // Плавающая кнопка «Слои» — только в блоке статьи: на странице карты
+      // флажки слоёв живут в общей боковой панели вместе со списком (maps-ui).
+      if (!this.opts.externalLayers && (this.data.zones.length || (this.data.markers || []).length)) this.buildLayersControl();
 
       if (this.hasTime) {
         this.buildTimeline();
@@ -566,7 +577,10 @@
             else placed.push(rect);
           }
           const el = l.marker.getElement();
-          if (el) el.classList.toggle('is-hidden', !show);
+          if (el) {
+            el.classList.toggle('is-hidden', !show);
+            el.classList.toggle('is-filtered', this.isZoneFiltered(l.zone));
+          }
           if (show) this.labelVisible.add(id);
         });
     }
@@ -642,7 +656,12 @@
       if (!this.map || !this.map._loaded) return;
       this.zoneLayers.forEach((layer, id) => {
         const el = layer.getElement && layer.getElement();
-        if (el) el.classList.toggle('map-zone-zoomhidden', !this.zoneZoomVisible(this.zoneById(id)));
+        if (el) {
+          const z = this.zoneById(id);
+          el.classList.toggle('map-zone-zoomhidden', !this.zoneZoomVisible(z));
+          // Выключено в «Слоях» — остаётся на карте полупрозрачным.
+          el.classList.toggle('map-zone-filtered', !!z && this.isZoneFiltered(z));
+        }
       });
       this.updateMarkerVisibility();
     }
@@ -666,16 +685,29 @@
 
     // Близкие метки на отдалении группируются (Leaflet.markercluster, если
     // плагин загрузился; иначе — просто слой меток).
+    // Важность метки: своя настройка метки, иначе — её типа.
+    markerMinZoom(m) {
+      return m.minZoomRel !== null && m.minZoomRel !== undefined ? m.minZoomRel : (this.markerType(m).minZoomRel || 0);
+    }
+    markerPinned(m) {
+      return m.noCluster !== null && m.noCluster !== undefined ? !!m.noCluster : !!this.markerType(m).noCluster;
+    }
+
     renderMarkers() {
       if (this.markerGroup) this.markerGroup.remove();
+      if (this.pinnedGroup) this.pinnedGroup.remove();
       this.markerLayers.clear();
+      // Важные метки (столицы и т.п.) — отдельным слоем: не прячутся в
+      // группу на отдалении и рисуются поверх остальных.
+      this.pinnedGroup = L.layerGroup().addTo(this.map);
       this.markerGroup = L.markerClusterGroup
         ? L.markerClusterGroup({
           showCoverageOnHover: false,
           maxClusterRadius: 44,
           spiderfyOnMaxZoom: true,
+          // Группа, где все метки выключены в «Слоях», — тоже полупрозрачная.
           iconCreateFunction: (cluster) => L.divIcon({
-            className: 'map-marker-cluster',
+            className: 'map-marker-cluster' + (cluster.getAllChildMarkers().every((mk) => (mk.options.opacity ?? 1) < 1) ? ' is-filtered' : ''),
             html: `<span>${cluster.getChildCount()}</span>`,
             iconSize: [38, 38]
           })
@@ -683,7 +715,8 @@
         : L.layerGroup();
       this.markerGroup.addTo(this.map);
       (this.data.markers || []).forEach((m) => {
-        const marker = L.marker(toLatLng(m.pos), { icon: this.markerIcon(m, false), keyboard: false, riseOnHover: true });
+        const pinned = this.markerPinned(m);
+        const marker = L.marker(toLatLng(m.pos), { icon: this.markerIcon(m, false), keyboard: false, riseOnHover: true, zIndexOffset: pinned ? 1000 : 0 });
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
           this._zoneClickedAt = Date.now();
@@ -694,7 +727,7 @@
           if (m.article && !m.locked) this.activate(m);
         });
         if (!this.touch) marker.bindTooltip(escapeHtml(m.title || this.markerType(m).name), { direction: 'top', offset: [0, -16], className: 'map-zone-tooltip' });
-        this.markerLayers.set(m.id, { marker, data: m, shown: false });
+        this.markerLayers.set(m.id, { marker, data: m, shown: false, group: pinned ? this.pinnedGroup : this.markerGroup });
       });
       this.updateMarkerVisibility();
     }
@@ -704,9 +737,11 @@
       const add = [];
       const remove = [];
       this.markerLayers.forEach((e, id) => {
-        const vis = existsAt(e.data, this.time) && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerType(e.data).minZoomRel));
-        if (vis && !e.shown) { add.push(e.marker); e.shown = true; }
-        else if (!vis && e.shown) { remove.push(e.marker); e.shown = false; }
+        const vis = existsAt(e.data, this.time) && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerMinZoom(e.data)));
+        // Выключено в «Слоях» — метка остаётся, но полупрозрачная.
+        e.marker.setOpacity(id !== this.selectedMarkerId && this.isMarkerFiltered(e.data) ? 0.25 : 1);
+        if (vis && !e.shown) { e.shown = true; if (e.group === this.markerGroup) add.push(e.marker); else e.group.addLayer(e.marker); }
+        else if (!vis && e.shown) { e.shown = false; if (e.group === this.markerGroup) remove.push(e.marker); else e.group.removeLayer(e.marker); }
       });
       if (remove.length) {
         if (this.markerGroup.removeLayers) this.markerGroup.removeLayers(remove);
@@ -715,6 +750,11 @@
       if (add.length) {
         if (this.markerGroup.addLayers) this.markerGroup.addLayers(add);
         else add.forEach((mk) => this.markerGroup.addLayer(mk));
+      }
+      // Перерисовать значки групп (прозрачность) — только когда группа уже
+      // на загруженной карте, иначе плагин падает.
+      if (this.markerGroup.refreshClusters && this.markerGroup._map && this.map && this.map._loaded) {
+        try { this.markerGroup.refreshClusters(); } catch (err) { /* значки обновятся при следующем масштабировании */ }
       }
     }
 
@@ -740,7 +780,7 @@
       if (e) e.marker.setIcon(this.markerIcon(e.data, true));
       this.updateMarkerVisibility();
       if (e && fly) {
-        if (this.markerGroup.zoomToShowLayer) this.markerGroup.zoomToShowLayer(e.marker, () => this.map.panTo(e.marker.getLatLng()));
+        if (e.group === this.markerGroup && this.markerGroup.zoomToShowLayer) this.markerGroup.zoomToShowLayer(e.marker, () => this.map.panTo(e.marker.getLatLng()));
         else this.map.flyTo(e.marker.getLatLng(), Math.max(this.map.getZoom(), (this.fullZoom || 0) + 2), { duration: 0.6 });
       }
       this.renderCard();
@@ -825,6 +865,145 @@
         ${text ? `<div class="map-zone-card-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>` : ''}
         <div class="map-zone-card-actions">${this.cardAction(m, 'метки')}</div>`;
       this.cardEl.hidden = false;
+    }
+
+    // ===== Группы меток: «Слои» — читатель включает и выключает группы =====
+
+    // «Слои»: читатель сам выбирает, что видно, — по типам зон, типам меток
+    // и группам меток. У каждой строки «только» (оставить один этот слой в
+    // разделе), у раздела — «все» / «ничего».
+    buildLayersControl() {
+      const el = document.createElement('div');
+      el.className = 'map-layers';
+      el.innerHTML = `
+        <button type="button" class="map-layers-btn" title="Что показывать на карте"><i class="fas fa-layer-group"></i><span class="map-layers-label"> Слои</span></button>
+        <div class="map-layers-panel" hidden></div>`;
+      this.container.appendChild(el);
+      this.layersEl = el;
+      const panel = el.querySelector('.map-layers-panel');
+      el.querySelector('.map-layers-btn').addEventListener('click', () => {
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) this.mountLayersInto(panel);
+      });
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+    }
+
+    // Флажки слоёв в любом контейнере: плавающая панель блока статьи или
+    // боковая панель страницы карты.
+    mountLayersInto(panel) {
+      this.layersTarget = panel;
+      if (!panel._layersBound) {
+        panel._layersBound = true;
+        this.bindLayersPanel(panel);
+      }
+      this.renderLayersPanel();
+    }
+
+    bindLayersPanel(panel) {
+      panel.addEventListener('change', (e) => {
+        const cb = e.target.closest('[data-layer]');
+        if (!cb) return;
+        const [kind, ...rest] = cb.dataset.layer.split(':');
+        this.setLayerVisible(kind, rest.join(':'), cb.checked);
+      });
+      panel.addEventListener('click', (e) => {
+        const solo = e.target.closest('[data-solo]');
+        const all = e.target.closest('[data-all]');
+        const none = e.target.closest('[data-none]');
+        if (!solo && !all && !none) return;
+        e.preventDefault();
+        if (solo) {
+          const [kind, ...rest] = solo.dataset.solo.split(':');
+          const id = rest.join(':');
+          this.layerIds(kind).forEach((x) => this.layerSet(kind)[x === id ? 'delete' : 'add'](x));
+        } else if (all) this.layerSet(all.dataset.all).clear();
+        else this.layerIds(none.dataset.none).forEach((x) => this.layerSet(none.dataset.none).add(x));
+        this.afterLayersChange();
+      });
+    }
+
+    layerSet(kind) {
+      return kind === 'zt' ? this.hiddenZoneTypes : kind === 'mt' ? this.hiddenMarkerTypes : this.hiddenGroups;
+    }
+
+    // Все слои раздела, которые реально встречаются на карте.
+    layerIds(kind) {
+      const key = (v) => v || '__none';
+      if (kind === 'zt') return [...new Set(this.data.zones.map((z) => key(z.typeId)))];
+      if (kind === 'mt') return [...new Set((this.data.markers || []).map((m) => key(m.typeId)))];
+      return this.markerGroups.map((g) => g.id);
+    }
+
+    setLayerVisible(kind, id, on) {
+      this.layerSet(kind)[on ? 'delete' : 'add'](id);
+      this.afterLayersChange();
+    }
+
+    // Совместимость со списком на странице карты (флажок группы).
+    setGroupVisible(id, on) { this.setLayerVisible('g', id, on); }
+
+    // Скрыт ли объект фильтрами «Слоёв» (список на странице карты рисует
+    // такие полупрозрачными).
+    isMarkerFiltered(m) {
+      return this.hiddenMarkerTypes.has(m.typeId || '__none') || (!!m.groupId && this.hiddenGroups.has(m.groupId)) || !this.matchesSearch(m);
+    }
+
+    // Поиск в панели «Слои»: метки, не совпавшие с запросом (по названию,
+    // описанию или имени группы), на карте становятся полупрозрачными.
+    matchesSearch(m) {
+      const q = this.searchQuery;
+      if (!q) return true;
+      const norm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е');
+      const group = m.groupId && this.markerGroups.find((g) => g.id === m.groupId);
+      return norm(m.title).includes(q) || norm(m.text).includes(q) || (!!group && norm(group.name).includes(q));
+    }
+
+    setSearchQuery(q) {
+      const norm = String(q || '').toLowerCase().replace(/ё/g, 'е').trim();
+      if (norm === (this.searchQuery || '')) return;
+      this.searchQuery = norm;
+      this.updateMarkerVisibility();
+    }
+    isZoneFiltered(z) {
+      return this.hiddenZoneTypes.has(z.typeId || '__none');
+    }
+
+    afterLayersChange() {
+      this.updateZoomVisibility();
+      this.updateLabels();
+      if (this.layersTarget && this.layersTarget.isConnected && !this.layersTarget.hidden) this.renderLayersPanel();
+      if (this.opts.onGroupsChange) this.opts.onGroupsChange();
+    }
+
+    renderLayersPanel() {
+      const panel = this.layersTarget;
+      if (!panel) return;
+      const markers = this.data.markers || [];
+      const zones = this.data.zones;
+      const section = (kind, title, rows) => (rows.length ? `
+        <div class="map-layers-section">
+          <div class="map-layers-head"><span>${title}</span>
+            <button type="button" data-all="${kind}">все</button><button type="button" data-none="${kind}">ничего</button>
+          </div>
+          ${rows.map((r) => `
+            <div class="map-layers-item">
+              <label><input type="checkbox" data-layer="${kind}:${escapeHtml(r.id)}" ${this.layerSet(kind).has(r.id) ? '' : 'checked'}> ${r.icon} ${escapeHtml(r.name)}</label>
+              <span class="map-layers-count">${r.count}</span>
+              <button type="button" class="map-layers-solo" data-solo="${kind}:${escapeHtml(r.id)}" title="Показать только это">только</button>
+            </div>`).join('')}
+        </div>` : '');
+      const zoneRows = this.layerIds('zt').map((id) => {
+        const t = this.types.get(id) || FALLBACK_TYPE;
+        return { id, name: id === '__none' ? 'Без типа' : t.name, count: zones.filter((z) => (z.typeId || '__none') === id).length, icon: `<span class="map-layers-swatch" style="background:${escapeHtml(t.color)}"></span>` };
+      });
+      const markerRows = this.layerIds('mt').map((id) => {
+        const t = this.markerTypes.get(id) || FALLBACK_MARKER_TYPE;
+        return { id, name: id === '__none' ? 'Без типа' : t.name, count: markers.filter((m) => (m.typeId || '__none') === id).length, icon: `<i class="fas fa-${escapeHtml(t.icon)}" style="color:${escapeHtml(t.color)}"></i>` };
+      });
+      const groupRows = this.markerGroups.map((g) => ({ id: g.id, name: g.name, count: markers.filter((m) => m.groupId === g.id).length, icon: '<i class="fas fa-folder"></i>' }));
+      panel.innerHTML = section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
+        || '<div class="map-layers-note">На карте пока нечего скрывать</div>';
     }
 
     // ===== Таймлайн (этап 3) =====
@@ -1198,9 +1377,7 @@
     bar.className = 'blk-map-controls';
     const basemaps = viewer.data.basemaps;
     bar.innerHTML = `
-      ${basemaps.length > 1 ? `<select class="blk-map-basemap" title="Фон карты">${basemaps.map((b) => `<option value="${escapeHtml(b.id)}"${b.id === viewer.currentBasemapId ? ' selected' : ''}>${escapeHtml(b.title)}</option>`).join('')}</select>` : ''}
       ${inEditor ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
-    bar.querySelector('.blk-map-basemap')?.addEventListener('change', (e) => viewer.setBasemap(e.target.value));
     bar.querySelector('.blk-map-fullscreen')?.addEventListener('click', () => {
       window.MapsUI?.openMapPage(mapId, { zoneId: viewer.selectedId, view: viewer.getView(), basemapId: viewer.currentBasemapId, time: viewer.time });
     });

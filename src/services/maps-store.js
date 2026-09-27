@@ -186,11 +186,16 @@ function normalizeMarker(raw) {
     id: validId(raw.id) ? raw.id : genId('k'),
     typeId: validId(raw.typeId) ? raw.typeId : null,
     zoneId: validId(raw.zoneId) ? raw.zoneId : null,
+    groupId: validId(raw.groupId) ? raw.groupId : null,
     title: str(raw.title, 120),
     text: typeof raw.text === 'string' ? raw.text.slice(0, 2000) : '',
     article: str(raw.article, 120) || null,
     roles: normalizeLayerRoles(raw.roles),
     lockedMode: LOCKED_MODES.includes(raw.lockedMode) ? raw.lockedMode : 'lock',
+    // Важность метки поверх её типа: с какого приближения видна (null — как
+    // у типа) и можно ли прятать её в группу на отдалении (null — как у типа).
+    minZoomRel: raw.minZoomRel === null || raw.minZoomRel === undefined || raw.minZoomRel === '' ? null : Math.min(8, Math.max(0, parseInt(raw.minZoomRel, 10) || 0)),
+    noCluster: typeof raw.noCluster === 'boolean' ? raw.noCluster : null,
     ...normalizeInterval(raw),
     pos: [round1(x), round1(y)]
   };
@@ -230,14 +235,29 @@ function normalizeEvents(raw, zones, markers) {
     .sort((a, b) => a.from - b.from);
 }
 
-function normalizeMarkers(raw, zones) {
+// Группы меток карты — чтобы читатель (и автор в редакторе) включал и
+// выключал видимость целых наборов меток: «Путь героя», «Битвы»… Метка —
+// в одной группе или ни в одной (groupId = null).
+function normalizeMarkerGroups(raw) {
+  const seen = new Set();
+  return (Array.isArray(raw) ? raw : []).slice(0, 100).map((g) => {
+    if (!isPlainObject(g)) return null;
+    const name = str(g.name, 60);
+    if (!name) return null;
+    return { id: validId(g.id) ? g.id : genId('g'), name, hiddenByDefault: !!g.hiddenByDefault };
+  }).filter((g) => g && !seen.has(g.id) && seen.add(g.id));
+}
+
+function normalizeMarkers(raw, zones, groups) {
   const zoneIds = new Set((zones || []).map((z) => z.id));
+  const groupIds = new Set((groups || []).map((g) => g.id));
   const seen = new Set();
   return (Array.isArray(raw) ? raw : [])
     .slice(0, MAX_MARKERS)
     .map(normalizeMarker)
     .filter((m) => m && !seen.has(m.id) && seen.add(m.id))
-    .map((m) => (m.zoneId && !zoneIds.has(m.zoneId) ? { ...m, zoneId: null } : m));
+    .map((m) => (m.zoneId && !zoneIds.has(m.zoneId) ? { ...m, zoneId: null } : m))
+    .map((m) => (m.groupId && !groupIds.has(m.groupId) ? { ...m, groupId: null } : m));
 }
 
 // strict — проверять лимит точек (при сохранении из редактора). При чтении
@@ -309,7 +329,8 @@ function normalizeMap(raw) {
     created_at: str(data.created_at, 40) || new Date().toISOString(),
     updated_at: str(data.updated_at, 40) || new Date().toISOString()
   };
-  map.markers = normalizeMarkers(data.markers, map.zones);
+  map.markerGroups = normalizeMarkerGroups(data.markerGroups);
+  map.markers = normalizeMarkers(data.markers, map.zones, map.markerGroups);
   map.events = normalizeEvents(data.events, map.zones, map.markers);
   map.timeline = normalizeTimeline(data.timeline, new Set(map.basemaps.map((b) => b.id)));
   return map;
