@@ -38,9 +38,20 @@ async function canViewMap(user, map, serverRoleIds) {
   return rolesMatch(map.roles, user, ids);
 }
 
+function isServerOwner(userId, serverId) {
+  return new Promise((resolve) => {
+    serversDb.get('SELECT owner_id FROM servers WHERE id = ?', [serverId], (err, row) => {
+      resolve(!err && !!row && Number(row.owner_id) === Number(userId));
+    });
+  });
+}
+
+// Админ мира: владелец сайта, владелец сервера (owner_id — роль admin у него
+// может отсутствовать, например после передачи владения) или роль admin сервера.
 async function isServerAdmin(user, serverId) {
   if (!serverId) return false;
   if (user.is_root) return true;
+  if (await isServerOwner(user.id, serverId)) return true;
   try { return await isAdminOnServer(user.id, serverId); } catch (e) { return false; }
 }
 
