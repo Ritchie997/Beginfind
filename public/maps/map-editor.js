@@ -1024,6 +1024,7 @@
             <button type="button" class="me-tree-caret" data-group-eye="${esc(g.id)}" title="${hidden ? 'Показать на карте редактора' : 'Скрыть на карте редактора'}"><i class="fas fa-eye${hidden ? '-slash' : ''}"></i></button>
             <input type="text" class="me-group-name" data-group-name="${esc(g.id)}" value="${esc(g.name)}" maxlength="60" title="Название группы">
             <span class="me-tree-type">${list.length}</span>
+            <button type="button" class="me-tree-caret${g.ownCluster ? ' is-on' : ''}" data-group-cluster="${esc(g.id)}" title="${g.ownCluster ? 'Свои кружки: на отдалении метки группы собираются только между собой. Нажмите, чтобы смешивать с остальными' : 'На отдалении метки группы смешиваются с остальными в общие кружки. Нажмите, чтобы собирать их отдельно'}"><i class="fas fa-object-group"></i></button>
             <button type="button" class="me-tree-caret${g.hiddenByDefault ? ' is-on' : ''}" data-group-default="${esc(g.id)}" title="${g.hiddenByDefault ? 'У читателя скрыта по умолчанию — нажмите, чтобы показывать сразу' : 'У читателя видна сразу — нажмите, чтобы скрыть по умолчанию'}"><i class="fas fa-user-${g.hiddenByDefault ? 'slash' : 'check'}"></i></button>
             <button type="button" class="me-tree-caret is-danger" data-group-del="${esc(g.id)}" title="Удалить группу (метки останутся без группы)"><i class="fas fa-trash"></i></button>
           </div>`);
@@ -1122,7 +1123,7 @@
       if (add) {
         e.preventDefault();
         this.pushHistory();
-        const g = { id: genId('g'), name: `Группа ${this.doc.markerGroups.length + 1}`, hiddenByDefault: false };
+        const g = { id: genId('g'), name: `Группа ${this.doc.markerGroups.length + 1}`, hiddenByDefault: false, ownCluster: true };
         this.doc.markerGroups = [...this.doc.markerGroups, g];
         this._treeOpen.markers = true;
         this.markDirty();
@@ -1138,6 +1139,17 @@
         if (this.hiddenGroupsEd.has(id)) this.hiddenGroupsEd.delete(id); else this.hiddenGroupsEd.add(id);
         this.renderMarkerLayers();
         this.renderTree();
+        return true;
+      }
+      const clusterBtn = e.target.closest('[data-group-cluster]');
+      if (clusterBtn) {
+        const g = this.doc.markerGroups.find((x) => x.id === clusterBtn.dataset.groupCluster);
+        if (!g) return true;
+        this.pushHistory();
+        g.ownCluster = !g.ownCluster;
+        this.markDirty();
+        this.renderTree();
+        this.toast(g.ownCluster ? `«${g.name}»: на карте метки группы будут собираться в свои кружки` : `«${g.name}»: метки группы снова в общих кружках`);
         return true;
       }
       const dflt = e.target.closest('[data-group-default]');

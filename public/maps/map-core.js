@@ -693,27 +693,36 @@
       return m.noCluster !== null && m.noCluster !== undefined ? !!m.noCluster : !!this.markerType(m).noCluster;
     }
 
+    // Слой-кружки для меток: общий и отдельные для групп с «Свои кружки».
+    makeClusterLayer(label) {
+      if (!L.markerClusterGroup) return L.layerGroup();
+      return L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 44,
+        spiderfyOnMaxZoom: true,
+        // Кружок, где все метки выключены в «Слоях», — тоже полупрозрачный.
+        // У кружков группы — её название во всплывающей подсказке.
+        iconCreateFunction: (cluster) => L.divIcon({
+          className: 'map-marker-cluster' + (label ? ' is-group' : '') + (cluster.getAllChildMarkers().every((mk) => (mk.options.opacity ?? 1) < 1) ? ' is-filtered' : ''),
+          html: `<span${label ? ` title="${escapeHtml(label)}"` : ''}>${cluster.getChildCount()}</span>`,
+          iconSize: [38, 38]
+        })
+      });
+    }
+
     renderMarkers() {
-      if (this.markerGroup) this.markerGroup.remove();
-      if (this.pinnedGroup) this.pinnedGroup.remove();
+      [this.markerGroup, this.pinnedGroup, ...Object.values(this.groupClusters || {})].forEach((g) => g && g.remove());
       this.markerLayers.clear();
       // Важные метки (столицы и т.п.) — отдельным слоем: не прячутся в
-      // группу на отдалении и рисуются поверх остальных.
+      // кружки на отдалении и рисуются поверх остальных.
       this.pinnedGroup = L.layerGroup().addTo(this.map);
-      this.markerGroup = L.markerClusterGroup
-        ? L.markerClusterGroup({
-          showCoverageOnHover: false,
-          maxClusterRadius: 44,
-          spiderfyOnMaxZoom: true,
-          // Группа, где все метки выключены в «Слоях», — тоже полупрозрачная.
-          iconCreateFunction: (cluster) => L.divIcon({
-            className: 'map-marker-cluster' + (cluster.getAllChildMarkers().every((mk) => (mk.options.opacity ?? 1) < 1) ? ' is-filtered' : ''),
-            html: `<span>${cluster.getChildCount()}</span>`,
-            iconSize: [38, 38]
-          })
-        })
-        : L.layerGroup();
-      this.markerGroup.addTo(this.map);
+      this.markerGroup = this.makeClusterLayer(null).addTo(this.map);
+      // Группы с «Свои кружки» — каждая в своём слое кружков: города
+      // собираются с городами, руины с руинами.
+      this.groupClusters = {};
+      this.markerGroups.filter((g) => g.ownCluster).forEach((g) => {
+        this.groupClusters[g.id] = this.makeClusterLayer(g.name).addTo(this.map);
+      });
       (this.data.markers || []).forEach((m) => {
         const pinned = this.markerPinned(m);
         const marker = L.marker(toLatLng(m.pos), { icon: this.markerIcon(m, false), keyboard: false, riseOnHover: true, zIndexOffset: pinned ? 1000 : 0 });
@@ -727,34 +736,34 @@
           if (m.article && !m.locked) this.activate(m);
         });
         if (!this.touch) marker.bindTooltip(escapeHtml(m.title || this.markerType(m).name), { direction: 'top', offset: [0, -16], className: 'map-zone-tooltip' });
-        this.markerLayers.set(m.id, { marker, data: m, shown: false, group: pinned ? this.pinnedGroup : this.markerGroup });
+        const group = pinned ? this.pinnedGroup : (m.groupId && this.groupClusters[m.groupId]) || this.markerGroup;
+        this.markerLayers.set(m.id, { marker, data: m, shown: false, group });
       });
       this.updateMarkerVisibility();
     }
 
     updateMarkerVisibility() {
       if (!this.markerGroup) return;
-      const add = [];
-      const remove = [];
+      const add = new Map(); // слой → метки
+      const remove = new Map();
+      const push = (map, layer, mk) => { if (!map.has(layer)) map.set(layer, []); map.get(layer).push(mk); };
       this.markerLayers.forEach((e, id) => {
         const vis = existsAt(e.data, this.time) && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerMinZoom(e.data)));
-        // Выключено в «Слоях» — метка остаётся, но полупрозрачная.
+        // Выключено в «Слоях» или не подходит под поиск — полупрозрачная.
         e.marker.setOpacity(id !== this.selectedMarkerId && this.isMarkerFiltered(e.data) ? 0.25 : 1);
-        if (vis && !e.shown) { e.shown = true; if (e.group === this.markerGroup) add.push(e.marker); else e.group.addLayer(e.marker); }
-        else if (!vis && e.shown) { e.shown = false; if (e.group === this.markerGroup) remove.push(e.marker); else e.group.removeLayer(e.marker); }
+        if (vis && !e.shown) { e.shown = true; push(add, e.group, e.marker); }
+        else if (!vis && e.shown) { e.shown = false; push(remove, e.group, e.marker); }
       });
-      if (remove.length) {
-        if (this.markerGroup.removeLayers) this.markerGroup.removeLayers(remove);
-        else remove.forEach((mk) => this.markerGroup.removeLayer(mk));
-      }
-      if (add.length) {
-        if (this.markerGroup.addLayers) this.markerGroup.addLayers(add);
-        else add.forEach((mk) => this.markerGroup.addLayer(mk));
-      }
-      // Перерисовать значки групп (прозрачность) — только когда группа уже
+      remove.forEach((list, layer) => { if (layer.removeLayers) layer.removeLayers(list); else list.forEach((mk) => layer.removeLayer(mk)); });
+      add.forEach((list, layer) => { if (layer.addLayers) layer.addLayers(list); else list.forEach((mk) => layer.addLayer(mk)); });
+      // Перерисовать значки кружков (прозрачность) — только когда слой уже
       // на загруженной карте, иначе плагин падает.
-      if (this.markerGroup.refreshClusters && this.markerGroup._map && this.map && this.map._loaded) {
-        try { this.markerGroup.refreshClusters(); } catch (err) { /* значки обновятся при следующем масштабировании */ }
+      if (this.map && this.map._loaded) {
+        [this.markerGroup, ...Object.values(this.groupClusters || {})].forEach((layer) => {
+          if (layer.refreshClusters && layer._map) {
+            try { layer.refreshClusters(); } catch (err) { /* обновятся при следующем масштабировании */ }
+          }
+        });
       }
     }
 
@@ -780,7 +789,7 @@
       if (e) e.marker.setIcon(this.markerIcon(e.data, true));
       this.updateMarkerVisibility();
       if (e && fly) {
-        if (e.group === this.markerGroup && this.markerGroup.zoomToShowLayer) this.markerGroup.zoomToShowLayer(e.marker, () => this.map.panTo(e.marker.getLatLng()));
+        if (e.group.zoomToShowLayer) e.group.zoomToShowLayer(e.marker, () => this.map.panTo(e.marker.getLatLng()));
         else this.map.flyTo(e.marker.getLatLng(), Math.max(this.map.getZoom(), (this.fullZoom || 0) + 2), { duration: 0.6 });
       }
       this.renderCard();

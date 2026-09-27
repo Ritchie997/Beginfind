@@ -244,7 +244,9 @@ function normalizeMarkerGroups(raw) {
     if (!isPlainObject(g)) return null;
     const name = str(g.name, 60);
     if (!name) return null;
-    return { id: validId(g.id) ? g.id : genId('g'), name, hiddenByDefault: !!g.hiddenByDefault };
+    // ownCluster — на отдалении метки группы собираются в свои кружки, не
+    // смешиваясь с остальными (города отдельно, руины отдельно).
+    return { id: validId(g.id) ? g.id : genId('g'), name, hiddenByDefault: !!g.hiddenByDefault, ownCluster: !!g.ownCluster };
   }).filter((g) => g && !seen.has(g.id) && seen.add(g.id));
 }
 

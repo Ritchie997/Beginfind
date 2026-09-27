@@ -1274,3 +1274,6 @@ details.world-type:not([open]) .world-row-btns { opacity: .6; }
 .map-fs-layers-box > summary::-webkit-details-marker { display: none; }
 .map-fs-layers-box > summary::before { content: '▸ '; }
 .map-fs-layers-box[open] > summary::before { content: '▾ '; }
+
+/* Кружок группы с «Свои кружки» — с фиолетовой окантовкой, чтобы отличать от общих */
+.map-marker-cluster.is-group span { border-color: #eb459e; }
