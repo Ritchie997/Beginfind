@@ -2720,6 +2720,9 @@ class SPARouter {
             <option value="created">Недавно созданные</option>
             <option value="title">По названию</option>
           </select>
+          <button type="button" class="drafts-modal-select-btn" data-action="toggle-select" title="Выбрать несколько черновиков для удаления">
+            <i class="far fa-check-square"></i> <span>Выбрать</span>
+          </button>
         </div>
         <div class="drafts-modal-status" id="draftsModalStatus" hidden></div>
         <div class="drafts-modal-body">
@@ -2728,6 +2731,10 @@ class SPARouter {
         </div>
         <div class="modal-footer">
           <span class="drafts-modal-count" id="draftsModalCount"></span>
+          <div class="drafts-modal-select-actions" hidden>
+            <button type="button" class="btn btn-secondary" data-action="select-all"><i class="fas fa-check-double"></i> Все</button>
+            <button type="button" class="btn btn-danger" data-action="delete-selected"><i class="fas fa-trash"></i> Удалить</button>
+          </div>
           <button type="button" class="btn btn-secondary" data-action="close">Закрыть</button>
         </div>
       </div>
@@ -2741,7 +2748,10 @@ class SPARouter {
       status: overlay.querySelector('#draftsModalStatus'),
       grid: overlay.querySelector('#draftsModalGrid'),
       empty: overlay.querySelector('#draftsModalEmpty'),
-      count: overlay.querySelector('#draftsModalCount')
+      count: overlay.querySelector('#draftsModalCount'),
+      selectBtn: overlay.querySelector('[data-action="toggle-select"]'),
+      selectActions: overlay.querySelector('.drafts-modal-select-actions'),
+      deleteSelectedBtn: overlay.querySelector('[data-action="delete-selected"]')
     };
     this._draftsModalEls = els;
 
@@ -2753,6 +2763,15 @@ class SPARouter {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay || e.target.closest('[data-action="close"]')) {
         this.closeDraftsModal();
+        return;
+      }
+      if (e.target.closest('[data-action="toggle-select"]')) { this.setDraftsSelectMode(!this._draftsSelectMode); return; }
+      if (e.target.closest('[data-action="select-all"]')) { this.selectAllVisibleDrafts(); return; }
+      if (e.target.closest('[data-action="delete-selected"]')) { this.deleteSelectedDrafts(); return; }
+      // Режим выбора: клик по карточке только отмечает её.
+      if (this._draftsSelectMode) {
+        const selCard = e.target.closest('.drafts-card');
+        if (selCard) this.toggleDraftSelected(selCard.dataset.id);
         return;
       }
       const deleteBtn = e.target.closest('[data-action="delete-draft"]');
@@ -2774,7 +2793,11 @@ class SPARouter {
     overlay.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        this.closeDraftsModal();
+        if (this._draftsSelectMode) this.setDraftsSelectMode(false);
+        else this.closeDraftsModal();
+      } else if (this._draftsSelectMode && (e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('drafts-card')) {
+        e.preventDefault();
+        this.toggleDraftSelected(e.target.dataset.id);
       } else if (e.key === 'Enter' && e.target === els.search) {
         // Enter в поиске — открыть первый найденный черновик.
         const first = els.grid.querySelector('.drafts-card');
@@ -2797,6 +2820,7 @@ class SPARouter {
     const els = this.ensureDraftsModal();
     els.overlay.hidden = false;
     els.search.value = '';
+    this.setDraftsSelectMode(false);
     els.grid.innerHTML = '<div class="drafts-modal-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка черновиков...</div>';
     els.empty.hidden = true;
     els.status.hidden = true;
@@ -2873,6 +2897,86 @@ class SPARouter {
 
     els.empty.hidden = true;
     els.grid.innerHTML = items.map((d) => this.buildDraftCardHtml(d, terms)).join('');
+    this.updateDraftsSelectUI();
+  }
+
+  // ===== Выбор нескольких черновиков для удаления (только свои черновики,
+  // поэтому доступно всем) =====
+
+  setDraftsSelectMode(on) {
+    this._draftsSelectMode = !!on;
+    this._draftsSelected = new Set();
+    this.renderDraftsModal();
+    this.updateDraftsSelectUI();
+  }
+
+  toggleDraftSelected(id) {
+    if (!id) return;
+    if (!this._draftsSelected) this._draftsSelected = new Set();
+    if (this._draftsSelected.has(id)) this._draftsSelected.delete(id);
+    else this._draftsSelected.add(id);
+    this.updateDraftsSelectUI();
+  }
+
+  // "Все" — только видимые сейчас карточки (с учётом поиска).
+  selectAllVisibleDrafts() {
+    const els = this._draftsModalEls;
+    if (!els) return;
+    els.grid.querySelectorAll('.drafts-card[data-id]').forEach((c) => this._draftsSelected.add(c.dataset.id));
+    this.updateDraftsSelectUI();
+  }
+
+  updateDraftsSelectUI() {
+    const els = this._draftsModalEls;
+    if (!els) return;
+    const on = !!this._draftsSelectMode;
+    const selected = this._draftsSelected || new Set();
+    // Отметки только на существующих черновиках (список мог обновиться).
+    const ids = new Set((this._draftsModalItems || []).map((d) => d.id));
+    selected.forEach((id) => { if (!ids.has(id)) selected.delete(id); });
+
+    els.grid.classList.toggle('is-selecting', on);
+    els.grid.querySelectorAll('.drafts-card[data-id]').forEach((c) => c.classList.toggle('is-selected', on && selected.has(c.dataset.id)));
+    if (els.selectBtn) {
+      els.selectBtn.classList.toggle('active', on);
+      els.selectBtn.querySelector('span').textContent = on ? 'Отмена' : 'Выбрать';
+    }
+    if (els.selectActions) els.selectActions.hidden = !on;
+    if (els.deleteSelectedBtn) {
+      els.deleteSelectedBtn.disabled = !selected.size;
+      els.deleteSelectedBtn.innerHTML = `<i class="fas fa-trash"></i> Удалить${selected.size ? ` (${selected.size})` : ''}`;
+    }
+    if (on) els.count.textContent = selected.size ? `Выбрано: ${selected.size}` : 'Нажмите на черновики для выбора';
+  }
+
+  async deleteSelectedDrafts() {
+    const ids = Array.from(this._draftsSelected || []);
+    if (!ids.length) return;
+    const ok = window.confirmDialog
+      ? await window.confirmDialog.open({ message: `Удалить выбранные черновики (${ids.length})? Они пропадут на всех устройствах.` })
+      : confirm(`Удалить выбранные черновики (${ids.length})?`);
+    if (!ok) return;
+
+    const items = this._draftsModalItems || [];
+    let offlineOnly = 0;
+    for (const id of ids) {
+      const item = items.find((d) => d.id === id);
+      const removed = await this.removeDraftEverywhere(id);
+      if (!removed && !(item && !item.onServer)) offlineOnly++;
+      if (id === this.currentDraftId) {
+        this.currentDraftId = null;
+        this.currentDraftRev = null;
+      }
+    }
+    if (offlineOnly) {
+      showMessage(`Удалено: ${ids.length}. Нет связи с сервером — ${offlineOnly} удалены только на этом устройстве и могут снова появиться в списке`, 'warning');
+    } else {
+      showMessage(`Удалено черновиков: ${ids.length}`, 'success');
+    }
+    this._draftsSelectMode = false;
+    this._draftsSelected = new Set();
+    await this.refreshDraftsModalIfOpen();
+    this.updateDraftsSelectUI();
   }
 
   escapeDraftHtml(str) {
@@ -2941,6 +3045,7 @@ class SPARouter {
         ${d.image
           ? `<div class="ibripedia-card-cover"><img src="${esc(d.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.parentElement.innerHTML='<i class=&quot;fas fa-file-alt&quot;></i>'"></div>`
           : '<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>'}
+        <div class="drafts-card-check" aria-hidden="true"><i class="fas fa-check"></i></div>
         <div class="drafts-card-badges">
           ${isCurrent ? '<span class="drafts-card-badge is-current"><i class="fas fa-pen"></i> Открыт</span>' : ''}
           ${d.locked ? '<span class="drafts-card-badge is-locked" title="Закрытая статья"><i class="fas fa-lock"></i></span>' : ''}

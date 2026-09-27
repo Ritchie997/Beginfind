@@ -241,6 +241,96 @@
   color: #fff;
 }
 
+/* === Выбор нескольких статей для удаления (setSelectMode в ibripedia.js) === */
+.ibripedia-select-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  color: var(--header-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: auto; /* рядом с переключателем вида, а не посередине строки */
+}
+@media (max-width: 420px) {
+  .ibripedia-select-toggle span { display: none; }
+}
+.ibripedia-select-toggle[hidden] { display: none; }
+.ibripedia-select-toggle:hover { color: var(--text-normal); border-color: var(--blurple); }
+.ibripedia-select-toggle.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+
+.ibripedia-card-check {
+  display: none;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.5);
+  color: transparent;
+  font-size: 12px;
+}
+.ibripedia-grid.is-selecting .ibripedia-card-check { display: flex; }
+.ibripedia-grid.is-selecting .ibripedia-card-lock { left: 42px; }
+.ibripedia-grid.is-selecting .ibripedia-card-menu { display: none; }
+.ibripedia-grid.is-selecting .ibripedia-card:not([data-can-delete]) { opacity: .45; }
+.ibripedia-grid.is-selecting .ibripedia-card.is-selected {
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px var(--blurple);
+}
+.ibripedia-card.is-selected .ibripedia-card-check {
+  background: var(--blurple);
+  border-color: var(--blurple);
+  color: #fff;
+}
+
+.ibripedia-select-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--blurple);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.ibripedia-select-bar[hidden] { display: none; }
+.ibripedia-select-bar-count { margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibripedia-select-bar button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--background-accent);
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ibripedia-select-bar button:hover:not(:disabled) { filter: brightness(1.15); }
+.ibripedia-select-bar button:disabled { opacity: .5; cursor: default; }
+.ibripedia-select-bar button.ibripedia-select-bar-danger { background: var(--red); color: #fff; }
+
 /* === Сетка карточек ===
    auto-fit + minmax(320px, 1fr) внутри контейнера с max-width:1180px даёт
    ровно 2-3 карточки в ряд на десктопе (как просили), 1 — на мобильном, и

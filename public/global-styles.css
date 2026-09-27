@@ -2254,6 +2254,55 @@ html {
 .drafts-card:focus-within .drafts-card-delete { opacity: 1; }
 .drafts-card-delete:hover { background: var(--red); }
 
+/* --- Выбор нескольких черновиков (setDraftsSelectMode в spa-router.js) --- */
+.drafts-modal-select-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.drafts-modal-select-btn:hover { border-color: var(--blurple); }
+.drafts-modal-select-btn.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+.drafts-modal-select-actions { display: flex; gap: 8px; }
+.drafts-modal-select-actions[hidden] { display: none; }
+.drafts-modal-select-actions .btn:disabled { opacity: .5; cursor: default; }
+
+.drafts-card-check {
+    display: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 2px solid #fff;
+    background: rgba(0, 0, 0, 0.5);
+    color: transparent;
+    font-size: 12px;
+}
+.drafts-modal-grid.is-selecting .drafts-card-check { display: flex; }
+.drafts-modal-grid.is-selecting .drafts-card-delete { display: none; }
+.drafts-modal-grid.is-selecting .drafts-card.is-selected {
+    border-color: var(--blurple);
+    box-shadow: 0 0 0 2px var(--blurple);
+}
+.drafts-card.is-selected .drafts-card-check {
+    background: var(--blurple);
+    border-color: var(--blurple);
+    color: #fff;
+}
+
 /* Тач-экраны: наведения нет — кнопка удаления видна всегда. */
 @media (hover: none) {
     .drafts-card-delete { opacity: 1; }

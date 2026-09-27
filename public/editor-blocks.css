@@ -160,6 +160,54 @@ body.eb-drag-active * {
   from { background: rgba(88, 101, 242, .22); border-color: var(--blurple); }
 }
 
+/* --- выделение нескольких блоков (toggleBlockSelection) --- */
+.eb-block.eb-selected,
+.eb-block.eb-selected:hover,
+.eb-block.eb-selected:focus-within {
+  border-color: var(--blurple);
+  background: rgba(88, 101, 242, .12);
+}
+.eb-block.eb-selected > .eb-block-controls { opacity: 1; }
+.eb-block.eb-selected > .eb-block-controls .eb-drag-handle,
+.eb-block.eb-selected > .eb-block-more-btn { color: var(--blurple); }
+.eb-select-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--blurple);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.eb-select-bar[hidden],
+body:not(.articles-page) .eb-select-bar { display: none; }
+.eb-select-bar-count { margin-right: 6px; white-space: nowrap; }
+.eb-select-bar button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--background-accent);
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.eb-select-bar button:hover { filter: brightness(1.15); }
+.eb-select-bar button.eb-select-bar-danger { background: var(--red); color: #fff; }
+body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+
 /* --- буфер блоков (copyBlock/pasteBlockInto) --- */
 .articles-page .toolbar-button.eb-paste-empty { opacity: .4; }
 .eb-toast {

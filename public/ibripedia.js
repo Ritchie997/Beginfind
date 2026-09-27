@@ -351,6 +351,10 @@
       // бэклинкам, пока витрина и так скрыта, это значение не трогают, чтобы
       // "Назад" всегда возвращал к исходному месту в библиотеке.
       this._libraryScrollY = 0;
+
+      // Режим выбора карточек для массового удаления (см. setSelectMode).
+      this.selectMode = false;
+      this.selectedSlugs = new Set();
     }
 
     async init() {
@@ -372,6 +376,16 @@
       this.filtersToggleBtn = document.getElementById('ibripediaFiltersToggleBtn');
       this.filtersPanelEl = document.getElementById('ibripediaFiltersPanel');
       this.filtersCountEl = document.getElementById('ibripediaFiltersCount');
+      this.selectBtn = document.getElementById('ibripediaSelectBtn');
+      this.selectBarEl = document.getElementById('ibripediaSelectBar');
+      this.selectCountEl = document.getElementById('ibripediaSelectCount');
+      this.selectMode = false;
+      this.selectedSlugs.clear();
+      // Массовое удаление — только владелец (is_root) и доверенный админ
+      // (is_role_manager); остальные удаляют статьи по одной через меню ⋮.
+      const me = window.authManager?.getCurrentUser?.();
+      this.canBulkDelete = !!(me && (me.is_root || me.is_role_manager));
+      if (this.selectBtn) this.selectBtn.hidden = !this.canBulkDelete;
 
       // Просмотр статьи: оглавление/закладки/поиск по тексту
       this.contentEl = document.getElementById('ibripediaViewContent');
@@ -524,6 +538,16 @@
         btn.addEventListener('click', () => this.setViewMode(btn.getAttribute('data-view')));
       });
 
+      this.selectBtn?.addEventListener('click', () => this.setSelectMode(!this.selectMode));
+      this.selectBarEl?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-select-act]');
+        if (!btn) return;
+        const act = btn.getAttribute('data-select-act');
+        if (act === 'all') this.selectAllCards();
+        else if (act === 'delete') this.deleteSelectedArticles();
+        else if (act === 'cancel') this.setSelectMode(false);
+      });
+
       document.getElementById('ibripediaBackBtn')?.addEventListener('click', () => this.closeArticleView());
       document.getElementById('ibripediaEditBtn')?.addEventListener('click', () => this.editCurrentArticle());
       document.getElementById('ibripediaDeleteBtn')?.addEventListener('click', () => this.deleteArticle(this.currentSlug));
@@ -544,6 +568,7 @@
       // "/" фокусирует поиск — обычный для вики/поисковых интерфейсов
       // шорткат, не мешает, если фокус уже в каком-то текстовом поле.
       this._keydownHandler = (e) => {
+        if (e.key === 'Escape' && this.selectMode) { this.setSelectMode(false); return; }
         if (e.key !== '/' || (this.viewEl && !this.viewEl.hidden)) return;
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -700,6 +725,10 @@
       this.offset = 0;
       this.hasMore = true;
       this.total = 0;
+      // Список пересобирается (фильтры/поиск) — старые отметки не видны,
+      // удалять их "вслепую" нельзя.
+      this.selectedSlugs.clear();
+      this.updateSelectBar();
       if (this.gridEl) this.gridEl.innerHTML = '';
       if (this.emptyEl) this.emptyEl.hidden = true;
       this.renderSkeletons();
@@ -737,7 +766,11 @@
         const articles = Array.isArray(payload.data) ? payload.data : [];
         this.total = payload.total || 0;
 
-        articles.forEach((a) => this.gridEl.appendChild(this.buildCard(a)));
+        articles.forEach((a) => {
+        const card = this.buildCard(a);
+        if (this.selectedSlugs.has(card.dataset.slug)) card.classList.add('is-selected');
+        this.gridEl.appendChild(card);
+      });
         this.offset += articles.length;
         this.hasMore = articles.length > 0 && this.offset < this.total;
 
@@ -771,6 +804,7 @@
       const el = document.createElement('article');
       el.className = 'ibripedia-card';
       el.dataset.slug = article.slug || article.id;
+      if (article.can_delete) el.dataset.canDelete = '1';
 
       const tags = article.tags || [];
       const authorName = article.author ? article.author.display_name : 'Не указан';
@@ -779,6 +813,7 @@
         ${article.image
           ? `<div class="ibripedia-card-cover"><img src="${escapeHtml(article.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.remove()"></div>`
           : `<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>`}
+        ${article.can_delete ? `<div class="ibripedia-card-check" aria-hidden="true"><i class="fas fa-check"></i></div>` : ''}
         ${article.locked ? `<div class="ibripedia-card-lock" title="Закрытая статья"><i class="fas fa-lock"></i></div>` : ''}
         ${article.can_edit || article.can_delete ? `<div class="ibripedia-card-menu">
           <button type="button" class="ibripedia-card-menu-btn" title="Действия">&#8942;</button>
@@ -822,6 +857,25 @@
     }
 
     handleGridClick(e) {
+      // В режиме выбора клик по карточке только отмечает её — не открывает
+      // статью, не ставит лайк и т.п.
+      if (this.selectMode) {
+        const card = e.target.closest('.ibripedia-card');
+        if (!card) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!card.dataset.canDelete) {
+          showMessage('Эту статью у вас нет прав удалять', 'warning');
+          return;
+        }
+        const slug = card.dataset.slug;
+        if (this.selectedSlugs.has(slug)) this.selectedSlugs.delete(slug);
+        else this.selectedSlugs.add(slug);
+        card.classList.toggle('is-selected', this.selectedSlugs.has(slug));
+        this.updateSelectBar();
+        return;
+      }
+
       const menuBtn = e.target.closest('.ibripedia-card-menu-btn');
       if (menuBtn) {
         e.stopPropagation();
@@ -923,6 +977,68 @@
       } catch (e) {
         showMessage('Ошибка при удалении статьи', 'error');
       }
+    }
+
+    // ===== Выбор нескольких статей для удаления =====
+
+    setSelectMode(on) {
+      this.selectMode = !!on && !!this.canBulkDelete;
+      this.selectedSlugs.clear();
+      document.querySelectorAll('.ibripedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
+      this.gridEl?.classList.toggle('is-selecting', this.selectMode);
+      this.gridEl?.querySelectorAll('.ibripedia-card.is-selected').forEach((c) => c.classList.remove('is-selected'));
+      if (this.selectBtn) {
+        this.selectBtn.classList.toggle('active', this.selectMode);
+        this.selectBtn.querySelector('span').textContent = this.selectMode ? 'Отмена' : 'Выбрать';
+      }
+      this.updateSelectBar();
+    }
+
+    selectAllCards() {
+      this.gridEl?.querySelectorAll('.ibripedia-card[data-can-delete]').forEach((card) => {
+        this.selectedSlugs.add(card.dataset.slug);
+        card.classList.add('is-selected');
+      });
+      this.updateSelectBar();
+    }
+
+    updateSelectBar() {
+      if (!this.selectBarEl) return;
+      this.selectBarEl.hidden = !this.selectMode;
+      if (!this.selectMode) return;
+      const n = this.selectedSlugs.size;
+      if (this.selectCountEl) this.selectCountEl.textContent = n ? `Выбрано: ${n}` : 'Нажмите на статьи для выбора';
+      const delBtn = this.selectBarEl.querySelector('[data-select-act="delete"]');
+      if (delBtn) delBtn.disabled = n === 0;
+    }
+
+    async deleteSelectedArticles() {
+      const slugs = Array.from(this.selectedSlugs);
+      if (!slugs.length) return;
+      if (!confirm(`Удалить выбранные статьи (${slugs.length})? Это действие необратимо.`)) return;
+
+      const delBtn = this.selectBarEl?.querySelector('[data-select-act="delete"]');
+      if (delBtn) delBtn.disabled = true;
+
+      let ok = 0;
+      const failed = [];
+      for (const slug of slugs) {
+        try {
+          const result = await window.apiClient.deleteArticle(slug);
+          if (result.success) ok++;
+          else failed.push(slug);
+        } catch (e) {
+          failed.push(slug);
+        }
+      }
+
+      if (failed.length) {
+        showMessage(`Удалено: ${ok}, не удалось удалить: ${failed.length}`, ok ? 'warning' : 'error');
+      } else {
+        showMessage(`Удалено статей: ${ok}`, 'success');
+      }
+      this.setSelectMode(false);
+      await this.resetAndLoad();
     }
 
     // "Случайная статья" — учитывает текущие фильтры (this.total — от

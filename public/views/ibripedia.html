@@ -29,6 +29,7 @@
         </button>
 
         <span id="ibripediaCount" class="ibripedia-count"></span>
+        <button type="button" id="ibripediaSelectBtn" class="ibripedia-select-toggle" title="Выбрать несколько статей для удаления"><i class="far fa-check-square"></i> <span>Выбрать</span></button>
         <div class="ibripedia-view-toggle" role="group" aria-label="Вид списка">
           <button type="button" class="ibripedia-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
           <button type="button" class="ibripedia-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
@@ -98,6 +99,14 @@
 
     <div id="ibripediaLoadingMore" class="ibripedia-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
     <div id="ibripediaSentinel" class="ibripedia-sentinel"></div>
+
+    <!-- Панель режима выбора (см. setSelectMode в ibripedia.js) -->
+    <div id="ibripediaSelectBar" class="ibripedia-select-bar" hidden>
+      <span id="ibripediaSelectCount" class="ibripedia-select-bar-count"></span>
+      <button type="button" data-select-act="all"><i class="fas fa-check-double"></i> Все</button>
+      <button type="button" data-select-act="delete" class="ibripedia-select-bar-danger"><i class="fas fa-trash"></i> Удалить</button>
+      <button type="button" data-select-act="cancel" title="Отмена (Esc)"><i class="fas fa-xmark"></i></button>
+    </div>
   </section>
 
   <!-- ===== Просмотр одной статьи ===== -->

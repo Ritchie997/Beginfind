@@ -149,6 +149,35 @@
     code: 'fa-file-code', divider: 'fa-minus'
   };
 
+  // Обход всех блоков документа, включая вложенные в columns/spoiler-section.
+  function walkBlocks(list, fn) {
+    (list || []).forEach((b) => {
+      fn(b);
+      const dt = b.data || {};
+      if (Array.isArray(dt.blocks)) walkBlocks(dt.blocks, fn);
+      if (Array.isArray(dt.columns)) dt.columns.forEach((c) => walkBlocks(c.blocks, fn));
+    });
+  }
+
+  // Удаляет из списка (и из вложенных) блоки, чьи id есть в ids.
+  function removeBlocksByIds(list, ids) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const b = list[i];
+      if (ids.has(b.id)) { list.splice(i, 1); continue; }
+      const dt = b.data || {};
+      if (Array.isArray(dt.blocks)) removeBlocksByIds(dt.blocks, ids);
+      if (Array.isArray(dt.columns)) dt.columns.forEach((c) => { if (Array.isArray(c.blocks)) removeBlocksByIds(c.blocks, ids); });
+    }
+  }
+
+  // 1 блок, 2 блока, 5 блоков.
+  function pluralBlocks(n) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return `${n} блок`;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return `${n} блока`;
+    return `${n} блоков`;
+  }
+
   function makeBlock(type, data) {
     return { id: genId(), type, data };
   }
@@ -342,6 +371,8 @@
       this._lastObservedArticleId = undefined;
       this._loadedArticleTitle = null;
       this._suggestEl = null;
+      this._selectedIds = new Set(); // выделенные блоки для массового удаления (см. toggleBlockSelection)
+      this._selectAnchor = null; // { list, block } — от него Shift+клик выделяет диапазон
     }
 
     // Вызывается spa-router'ом при каждом открытии страницы /articles.
@@ -428,6 +459,8 @@
               doc = { version: 1, blocks: [] };
             }
             if (!doc || !Array.isArray(doc.blocks)) doc = { version: 1, blocks: [] };
+            self._selectedIds.clear();
+            self._selectAnchor = null;
             if (self.container) { self.doc = doc; self.renderAll(); self.scheduleRenderPreview(); }
             else self._pendingDoc = doc;
           }
@@ -461,6 +494,9 @@
       this.closeHighlightPicker();
       this.closeBlockTypeMenu();
       this.closeBlockActionsMenu();
+      this._selectedIds.clear();
+      this._selectAnchor = null;
+      this.updateSelectionBar();
     }
 
     // ===== Документ: вставка/удаление/перемещение блоков =====
@@ -555,6 +591,99 @@
       el.classList.add('eb-toast-visible');
       clearTimeout(this._toastTimer);
       this._toastTimer = setTimeout(() => el.classList.remove('eb-toast-visible'), 2600);
+    }
+
+    // ===== Выделение нескольких блоков для удаления: клик по ручке блока
+    // (Shift+клик — диапазон в том же списке), на тач-экране — пункт
+    // "Выделить" в меню блока, а дальше тап по ручке переключает выделение.
+    // Внизу экрана — панель "Выбрано N · Удалить". =====
+
+    toggleBlockSelection(list, block, { range = false } = {}) {
+      // Убираем каретку из полей — иначе Delete после выделения стирал бы
+      // текст, а не выделенные блоки.
+      const ae = document.activeElement;
+      if (ae && this.container && this.container.contains(ae)) ae.blur();
+      const anchor = this._selectAnchor;
+      if (range && anchor && anchor.list === list && list.includes(anchor.block)) {
+        const a = list.indexOf(anchor.block), b = list.indexOf(block);
+        list.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((x) => this._selectedIds.add(x.id));
+      } else {
+        if (this._selectedIds.has(block.id)) this._selectedIds.delete(block.id);
+        else this._selectedIds.add(block.id);
+        this._selectAnchor = { list, block };
+      }
+      this.updateSelectionUI();
+    }
+
+    selectAllBlocks() {
+      this.doc.blocks.forEach((b) => this._selectedIds.add(b.id));
+      this.updateSelectionUI();
+    }
+
+    clearBlockSelection() {
+      if (!this._selectedIds.size) return;
+      this._selectedIds.clear();
+      this._selectAnchor = null;
+      this.updateSelectionUI();
+    }
+
+    deleteSelectedBlocks() {
+      const n = this._selectedIds.size;
+      if (!n) return;
+      if (!confirm(`Удалить выбранные: ${pluralBlocks(n)}?`)) return;
+      removeBlocksByIds(this.doc.blocks, this._selectedIds);
+      this._selectedIds.clear();
+      this._selectAnchor = null;
+      if (this._active) {
+        let alive = false;
+        walkBlocks(this.doc.blocks, (b) => { if (b === this._active.block) alive = true; });
+        if (!alive) this._active = null;
+      }
+      this.renderAll();
+      this.scheduleRenderPreview();
+      this.showEditorToast(`Удалено: ${pluralBlocks(n)}`);
+    }
+
+    // Классы на уже отрисованных блоках — без полной перерисовки (она
+    // сбрасывала бы фокус и курсор в полях).
+    updateSelectionUI() {
+      if (this.container) {
+        this.container.querySelectorAll('.eb-block[data-block-id]').forEach((el) => {
+          el.classList.toggle('eb-selected', this._selectedIds.has(el.dataset.blockId));
+        });
+      }
+      this.updateSelectionBar();
+    }
+
+    ensureSelectionBarEl() {
+      if (this._selectBarEl) return this._selectBarEl;
+      const el = document.createElement('div');
+      el.className = 'eb-select-bar';
+      el.hidden = true;
+      el.innerHTML = `
+        <span class="eb-select-bar-count"></span>
+        <button type="button" data-act="all"><i class="fas fa-check-double"></i> Все</button>
+        <button type="button" data-act="delete" class="eb-select-bar-danger"><i class="fas fa-trash"></i> Удалить</button>
+        <button type="button" data-act="clear" title="Снять выделение (Esc)"><i class="fas fa-xmark"></i></button>`;
+      el.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        if (btn.dataset.act === 'all') this.selectAllBlocks();
+        else if (btn.dataset.act === 'delete') this.deleteSelectedBlocks();
+        else if (btn.dataset.act === 'clear') this.clearBlockSelection();
+      });
+      document.body.appendChild(el);
+      this._selectBarEl = el;
+      return el;
+    }
+
+    updateSelectionBar() {
+      const n = this._selectedIds.size;
+      document.body.classList.toggle('eb-has-selection', n > 0);
+      if (!n && !this._selectBarEl) return;
+      const el = this.ensureSelectionBarEl();
+      el.hidden = !n;
+      if (n) el.querySelector('.eb-select-bar-count').textContent = `Выбрано: ${pluralBlocks(n)}`;
     }
 
     // ===== Перетаскивание блоков за ручку (грип в стеке кнопок на десктопе,
@@ -813,6 +942,15 @@
       this.container.style.minHeight = '';
       if (scroller.scrollTop !== prevScroll) scrollToInstant(prevScroll);
 
+      // Выделение переживает перерисовку, но блоки, которых больше нет
+      // (удалены по одному, вставлен другой документ), из него выпадают.
+      if (this._selectedIds.size) {
+        const alive = new Set();
+        walkBlocks(this.doc.blocks, (b) => alive.add(b.id));
+        this._selectedIds.forEach((id) => { if (!alive.has(id)) this._selectedIds.delete(id); });
+      }
+      this.updateSelectionBar();
+
       if (this._pendingFocusBlockId) {
         const id = this._pendingFocusBlockId;
         this._pendingFocusBlockId = null;
@@ -835,11 +973,17 @@
     renderBlockWrapper(block, list, ctx) {
       const wrap = document.createElement('div');
       wrap.className = 'eb-block eb-' + block.type + (block.type === 'heading' ? ` eb-heading-${block.data.level}` : '');
+      if (this._selectedIds.has(block.id)) wrap.classList.add('eb-selected');
       wrap.dataset.blockId = block.id;
 
       const controls = document.createElement('div');
       controls.className = 'eb-block-controls';
-      const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Потяните, чтобы переместить блок'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Нажмите — выделить блок (Shift — диапазон), потяните — переместить'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      dragBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._suppressHandleClick) return;
+        this.toggleBlockSelection(list, block, { range: e.shiftKey });
+      });
       this.attachDragHandle(dragBtn, wrap, list, block);
       const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.title = 'Копировать блок (вставить можно и в другой статье)'; copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
       copyBtn.addEventListener('click', () => this.copyBlock(block));
@@ -864,6 +1008,8 @@
       moreBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this._suppressHandleClick) return;
+        // Пока идёт выделение, тап по ручке выделяет/снимает блок, а не открывает меню.
+        if (this._selectedIds.size) { this.toggleBlockSelection(list, block); return; }
         this.openBlockActionsMenu(moreBtn, list, block);
       });
       this.attachDragHandle(moreBtn, wrap, list, block);
@@ -2105,6 +2251,7 @@
       if (readBlockClipboard()) {
         items.push({ icon: 'fa-paste', label: 'Вставить скопированный ниже', action: () => this.pasteBlockInto(list, list.indexOf(block) + 1) });
       }
+      items.push({ icon: 'fa-check-square', label: 'Выделить (удалить несколько)', action: () => this.toggleBlockSelection(list, block) });
       items.push({ icon: 'fa-trash', label: 'Удалить блок', action: () => this.removeBlockFrom(list, block) });
       items.forEach(({ icon, label, action }) => {
         const btn = document.createElement('button');
@@ -2314,6 +2461,18 @@
         if (mod && e.key.toLowerCase() === 's' && this.container.contains(document.activeElement)) {
           e.preventDefault();
           document.getElementById('saveArticleBtn')?.click();
+        }
+
+        // Delete/Backspace — удалить выделенные блоки, Esc — снять выделение.
+        // Только вне полей ввода: там эти клавиши редактируют текст.
+        if (!this._selectedIds.size || e.defaultPrevented || this._drag) return;
+        const ae = document.activeElement;
+        const typing = ae && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
+        if (e.key === 'Escape') {
+          this.clearBlockSelection();
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) {
+          e.preventDefault();
+          this.deleteSelectedBlocks();
         }
       });
     }
