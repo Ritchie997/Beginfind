@@ -18,6 +18,18 @@ async function isServerAdmin(user, serverId) {
   return isAdminOnServer(user.id, serverId);
 }
 
+// Одиночный SELECT к указанной БД (отдельное соединение на запрос, как и
+// в остальном файле).
+function dbGet(dbFile, sql, params) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath(dbFile));
+    db.get(sql, params, (err, row) => {
+      db.close();
+      if (err) reject(err); else resolve(row);
+    });
+  });
+}
+
 // Получение всех серверов
 router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -205,18 +217,39 @@ router.post('/servers/:id/roles', auth.authenticateToken, auth.checkApproved, as
 // для произвольного userId/serverId).
 router.post('/servers/:serverId/users/:userId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { serverId, userId } = req.params;
+    const { serverId } = req.params;
+    const userId = Number(req.params.userId);
     const currentUserId = req.user.id;
 
-    if (parseInt(userId) !== currentUserId) {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'Некорректный ID пользователя' });
+    }
+
+    if (userId !== currentUserId) {
       const isAdmin = await isServerAdmin(req.user, parseInt(serverId));
       if (!isAdmin) {
         return res.status(403).json({ error: 'Можно добавить только себя, либо быть администратором сервера' });
       }
     }
 
+    // Пользователи и сервера лежат в разных БД, поэтому внешний ключ на
+    // users не работает — раньше членство создавалось для любого числа,
+    // и "фантомный" участник увеличивал счётчик, не появляясь в списке.
+    const targetUser = await dbGet('users.db', 'SELECT id FROM users WHERE id = ?', [userId]);
+    if (!targetUser) {
+      return res.status(404).json({ error: `Пользователь с ID ${userId} не найден` });
+    }
+    const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [serverId]);
+    if (!server) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+    const existing = await dbGet('servers.db', 'SELECT 1 FROM user_server_memberships WHERE user_id = ? AND server_id = ?', [userId, serverId]);
+    if (existing) {
+      return res.status(409).json({ error: 'Пользователь уже состоит на этом сервере' });
+    }
+
     const result = await serverSystem.addUserToServer(userId, serverId);
-    await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'member_added', { targetUserId: parseInt(userId), self: parseInt(userId) === currentUserId });
+    await serverSystem.logServerAction(serverId, currentUserId, (req.user.display_name || req.user.username), 'member_added', { targetUserId: userId, self: userId === currentUserId });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
