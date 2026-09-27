@@ -11,9 +11,17 @@
 // клиенте Leaflet в CRS.Simple с zoomOffset = maxZoom: при зуме 0 один
 // пиксель карты = один пиксель исходника (см. public/maps/map-core.js).
 //
+// Тайлы — WebP без потерь: карта не пережимается, мелкие подписи и линии
+// остаются как в исходнике (ценой размера тайлов и времени нарезки).
+//
 // Нарезка идёт во временную папку и подменяет готовую только при успехе —
 // перенарезка (например, после восстановления из бэкапа) не оставляет карту
 // без тайлов на время работы.
+//
+// Замена картинки фона (kind 'replace'): новый файл того же разрешения
+// нарезается так же во временную папку и подменяет старый фон только при
+// успехе. Координаты зон и меток — пиксели исходника, поэтому при том же
+// размере они остаются на своих местах.
 
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +40,7 @@ function getSharp() {
   return sharp;
 }
 
-const queue = []; // [{ mapId, basemapId, kind: 'tiles' | 'preview' }]
+const queue = []; // [{ mapId, basemapId, kind: 'tiles' | 'preview' | 'replace' }]
 let running = false;
 
 const PREVIEW_FILE = 'preview.webp';
@@ -75,6 +83,38 @@ async function processPreviewJob({ mapId, basemapId }) {
   }
 }
 
+// Размер картинки с учётом EXIF-поворота и проверкой предела.
+async function readSize(src) {
+  const meta = await getSharp()(src, { limitInputPixels: false }).metadata();
+  const w = meta.autoOrient ? meta.autoOrient.width : meta.width;
+  const h = meta.autoOrient ? meta.autoOrient.height : meta.height;
+  if (!w || !h) throw new Error('Не удалось прочитать размер изображения');
+  if (w * h > MAX_PIXELS) throw new Error(`Изображение слишком большое (${w}×${h}); максимум — ${MAX_PIXELS.toLocaleString('ru-RU')} пикселей`);
+  return { w, h };
+}
+
+// Картинка → тайлы и миниатюра в workDir.
+async function tileInto(src, workDir) {
+  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(workDir), { recursive: true });
+  await getSharp()(src, { limitInputPixels: false })
+    .rotate() // учесть EXIF-ориентацию (фото с телефона)
+    .ensureAlpha() // поля за краем картинки — прозрачные, а не белые
+    .webp({ lossless: true, effort: 2 }) // без сжатия с потерями
+    .tile({ size: TILE_SIZE, layout: 'google', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .toFile(workDir);
+  await makePreview(src, path.join(workDir, PREVIEW_FILE));
+}
+
+// Готовая папка тайлов ← workDir (старая удаляется только после подмены).
+function swapTiles(workDir, finalDir) {
+  const oldDir = `${finalDir}.old`;
+  fs.rmSync(oldDir, { recursive: true, force: true });
+  if (fs.existsSync(finalDir)) fs.renameSync(finalDir, oldDir);
+  fs.renameSync(workDir, finalDir);
+  fs.rmSync(oldDir, { recursive: true, force: true });
+}
+
 function setBasemap(mapId, basemapId, patch) {
   return store.updateMap(mapId, (map) => {
     const bm = map.basemaps.find((b) => b.id === basemapId);
@@ -97,15 +137,9 @@ async function processJob({ mapId, basemapId }) {
   await setBasemap(mapId, basemapId, { status: 'processing', error: null });
   const finalDir = store.tilesDir(mapId, basemapId);
   const workDir = `${finalDir}.work`;
-  const oldDir = `${finalDir}.old`;
 
   try {
-    const s = getSharp();
-    const meta = await s(src, { limitInputPixels: false }).metadata();
-    const w = meta.autoOrient ? meta.autoOrient.width : meta.width;
-    const h = meta.autoOrient ? meta.autoOrient.height : meta.height;
-    if (!w || !h) throw new Error('Не удалось прочитать размер изображения');
-    if (w * h > MAX_PIXELS) throw new Error(`Изображение слишком большое (${w}×${h}); максимум — ${MAX_PIXELS.toLocaleString('ru-RU')} пикселей`);
+    const { w, h } = await readSize(src);
 
     // Все подложки карты — в одной системе координат (размер первой).
     const fresh = store.getMap(mapId);
@@ -113,21 +147,8 @@ async function processJob({ mapId, basemapId }) {
       throw new Error(`Размер ${w}×${h} не совпадает с размером карты ${fresh.size.w}×${fresh.size.h} — все фоны одной карты должны быть одинакового размера`);
     }
 
-    fs.rmSync(workDir, { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(workDir), { recursive: true });
-
-    await s(src, { limitInputPixels: false })
-      .rotate() // учесть EXIF-ориентацию (фото с телефона)
-      .ensureAlpha() // поля за краем картинки — прозрачные, а не белые
-      .webp({ quality: 82, effort: 3 })
-      .tile({ size: TILE_SIZE, layout: 'google', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .toFile(workDir);
-    await makePreview(src, path.join(workDir, PREVIEW_FILE));
-
-    fs.rmSync(oldDir, { recursive: true, force: true });
-    if (fs.existsSync(finalDir)) fs.renameSync(finalDir, oldDir);
-    fs.renameSync(workDir, finalDir);
-    fs.rmSync(oldDir, { recursive: true, force: true });
+    await tileInto(src, workDir);
+    swapTiles(workDir, finalDir);
 
     const maxZoom = Math.max(0, Math.ceil(Math.log2(Math.max(w, h) / TILE_SIZE)));
     await store.updateMap(mapId, (m) => {
@@ -144,6 +165,67 @@ async function processJob({ mapId, basemapId }) {
   }
 }
 
+function setReplace(mapId, basemapId, patch) {
+  return store.updateMap(mapId, (map) => {
+    const bm = map.basemaps.find((b) => b.id === basemapId);
+    if (bm && bm.replace) bm.replace = { ...bm.replace, ...patch };
+    return map;
+  }, { touch: false });
+}
+
+async function processReplaceJob({ mapId, basemapId }) {
+  const map = store.getMap(mapId);
+  const basemap = map && map.basemaps.find((b) => b.id === basemapId);
+  if (!basemap || !basemap.replace || !basemap.replace.ext) return; // отменили или удалили
+  const src = store.replaceSourcePath(mapId, basemap);
+  if (!fs.existsSync(src)) {
+    await setReplace(mapId, basemapId, { status: 'error', error: 'Файл замены не найден' });
+    return;
+  }
+  await setReplace(mapId, basemapId, { status: 'processing', error: null });
+  const finalDir = store.tilesDir(mapId, basemapId);
+  const workDir = `${finalDir}.work`;
+  try {
+    const { w, h } = await readSize(src);
+    const need = basemap.width && basemap.height ? { w: basemap.width, h: basemap.height } : map.size;
+    if (need && (need.w !== w || need.h !== h)) {
+      throw new Error(`Разрешение ${w}×${h} не совпадает с фоном ${need.w}×${need.h} — заменить можно только картинкой того же размера`);
+    }
+    await tileInto(src, workDir);
+
+    // Замену могли отменить или фон удалить, пока шла нарезка.
+    const fresh = store.getMap(mapId);
+    const cur = fresh && fresh.basemaps.find((b) => b.id === basemapId);
+    if (!cur || !cur.replace) {
+      fs.rmSync(workDir, { recursive: true, force: true });
+      return;
+    }
+
+    swapTiles(workDir, finalDir);
+    // Исходник: новый файл встаёт на место старого (расширение могло смениться).
+    const { ext: newExt, declaredSize } = basemap.replace;
+    try { fs.unlinkSync(store.sourcePath(mapId, cur)); } catch (e) { /* нет — не страшно */ }
+    fs.renameSync(src, store.sourcePath(mapId, { ...cur, ext: newExt }));
+    const maxZoom = Math.max(0, Math.ceil(Math.log2(Math.max(w, h) / TILE_SIZE)));
+    await store.updateMap(mapId, (m) => {
+      const bm = m.basemaps.find((b) => b.id === basemapId);
+      if (bm) {
+        Object.assign(bm, {
+          status: 'ready', error: null, ext: newExt, declaredSize,
+          width: w, height: h, maxZoom, tilesVersion: (bm.tilesVersion || 0) + 1, replace: null
+        });
+      }
+      return m;
+    }, { touch: false });
+    console.log(`[maps] Фон ${mapId}/${basemapId} заменён: ${w}×${h}`);
+  } catch (err) {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    try { fs.unlinkSync(src); } catch (e) { /* уже нет */ }
+    console.error(`[maps] Ошибка замены фона ${mapId}/${basemapId}:`, err.message);
+    await setReplace(mapId, basemapId, { status: 'error', error: err.message }).catch(() => {});
+  }
+}
+
 async function runNext() {
   if (running) return;
   const job = queue.shift();
@@ -151,6 +233,7 @@ async function runNext() {
   running = true;
   try {
     if (job.kind === 'preview') await processPreviewJob(job);
+    else if (job.kind === 'replace') await processReplaceJob(job);
     else await processJob(job);
   } finally {
     running = false;
@@ -159,8 +242,8 @@ async function runNext() {
 }
 
 // Номер в очереди (1 — обрабатывается сейчас или следующая) — для статуса в UI.
-function queuePosition(mapId, basemapId) {
-  const i = queue.findIndex((j) => j.mapId === mapId && j.basemapId === basemapId && j.kind !== 'preview');
+function queuePosition(mapId, basemapId, kind = 'tiles') {
+  const i = queue.findIndex((j) => j.mapId === mapId && j.basemapId === basemapId && j.kind === kind);
   return i === -1 ? null : i + 1;
 }
 
@@ -171,6 +254,7 @@ function rescan() {
   let count = 0;
   for (const map of store.listMaps()) {
     for (const bm of map.basemaps) {
+      if (bm.replace && (bm.replace.status === 'queued' || bm.replace.status === 'processing')) enqueue(map.id, bm.id, 'replace');
       const src = store.sourcePath(map.id, bm);
       if (!bm.ext || !fs.existsSync(src)) continue;
       const tilesMissing = !fs.existsSync(path.join(store.tilesDir(map.id, bm.id), '0'));

@@ -15,7 +15,19 @@
   'use strict';
 
   const TILE_SIZE = 256;
-  const MAX_VIEW_ZOOM = 1; // просмотр: максимум 2× от исходника
+  // Предел приближения (зум 0 — пиксель в пиксель с исходником, +1 — ×2…).
+  // Почти впритык — чтобы на гигантских картах можно было раскрыть все
+  // метки, — но не бесконечно: дальше ×32 (×64 в редакторе) смотреть не на что.
+  const MAX_VIEW_ZOOM = 5;
+  const MAX_EDITOR_ZOOM = 6;
+  const TILE_MAX_ZOOM = 8; // тайловый слой не должен пропадать раньше карты
+
+  // Сильнее ×2 картинка растянута: показываем чёткие пиксели, а не муть.
+  function bindPixelZoom(map, container) {
+    const update = () => container.classList.toggle('map-zoom-pixels', map.getZoom() >= 2);
+    map.on('zoomend', update);
+    update();
+  }
 
   function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -312,7 +324,7 @@
       minNativeZoom: -basemap.maxZoom,
       maxNativeZoom: 0,
       minZoom: -basemap.maxZoom - 2,
-      maxZoom: 4,
+      maxZoom: TILE_MAX_ZOOM,
       noWrap: true,
       bounds: imageBounds(size),
       keepBuffer: 1,
@@ -401,7 +413,6 @@
         minZoom: -maxZoom - 2,
         // Целый шаг масштаба: тайлы есть только для целых уровней, на
         // промежуточных браузер растягивает их и картинка мутнеет.
-        // Приближение — не больше 2× от оригинала: дальше только растянутые пиксели.
         maxZoom: MAX_VIEW_ZOOM,
         zoomSnap: 1,
         zoomDelta: 1,
@@ -418,6 +429,7 @@
         maxBoundsViscosity: 0.8
       });
       if (!this.touch && this.map.zoomControl) this.map.zoomControl.setPosition('bottomright');
+      bindPixelZoom(this.map, this.mapEl);
 
       if (embed) this.setupEmbedGestures();
 
@@ -667,9 +679,11 @@
     // ----- Видимость по масштабу («Видно с приближения» у типа) -----
     // minZoomRel считается от вида всей карты: 0 — всегда, 1 — с ×2, 2 — с ×4…
 
+    // Порог не выше предела приближения: на самом близком зуме видно всё,
+    // сколь бы «глубоко» ни была спрятана метка или зона.
     isVisibleAtZoom(rel) {
       if (!rel || this.fullZoom == null || !this.map) return true;
-      return this.map.getZoom() >= this.fullZoom + rel;
+      return this.map.getZoom() >= Math.min(this.fullZoom + rel, this.map.getMaxZoom());
     }
 
     zoneZoomVisible(zone) {
@@ -730,6 +744,8 @@
         showCoverageOnHover: false,
         maxClusterRadius: 44,
         spiderfyOnMaxZoom: true,
+        // На пределе приближения кружков нет — все метки по отдельности.
+        disableClusteringAtZoom: this.map ? this.map.getMaxZoom() : MAX_VIEW_ZOOM,
         // Кружок, где все метки выключены в «Слоях», — тоже полупрозрачный.
         // У кружков группы — её название во всплывающей подсказке.
         iconCreateFunction: (cluster) => L.divIcon({
@@ -1425,6 +1441,8 @@
 
   window.MapCore = {
     TILE_SIZE,
+    MAX_EDITOR_ZOOM,
+    bindPixelZoom,
     escapeHtml,
     isTouchUi,
     toLatLng,

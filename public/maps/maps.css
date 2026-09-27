@@ -596,6 +596,11 @@ body.map-fs-open { overflow: hidden; }
 .me-bm-ok { color: var(--green); }
 .me-bm-wait { color: var(--yellow); }
 .me-bm-err { color: var(--red); }
+.me-bm-replace { justify-content: flex-start; margin-top: 4px; }
+.me-bm-replace .map-icon-btn { margin-left: auto; }
+
+/* Сильное приближение (×4 и ближе): пиксели фона чёткими квадратами, без размытия */
+.map-zoom-pixels .map-tiles img { image-rendering: pixelated; }
 .me-upload-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .me-upload { margin-top: 10px; font-size: 12px; }
 .me-upload[hidden] { display: none; }

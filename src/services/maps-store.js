@@ -327,7 +327,22 @@ function normalizeBasemap(raw) {
     tilesVersion: Number.isInteger(raw.tilesVersion) ? raw.tilesVersion : 0,
     // Подложка по времени: показывается сама, когда таймлайн в её интервале.
     ...normalizeInterval(raw),
+    // Идущая замена картинки фона (того же разрешения): старые тайлы
+    // работают, пока новые не нарезаны; при ошибке остаются как были.
+    replace: normalizeReplace(raw.replace),
     created_at: str(raw.created_at, 40) || new Date().toISOString()
+  };
+}
+
+const REPLACE_STATUSES = ['uploading', 'queued', 'processing', 'error'];
+function normalizeReplace(raw) {
+  if (!isPlainObject(raw) || !REPLACE_STATUSES.includes(raw.status)) return null;
+  return {
+    status: raw.status,
+    error: raw.status === 'error' ? str(raw.error, 300) || 'Ошибка обработки' : null,
+    ext: /^\.[a-z0-9]{2,5}$/.test(raw.ext || '') ? raw.ext : null,
+    declaredSize: Number.isFinite(Number(raw.declaredSize)) ? Number(raw.declaredSize) : null,
+    filename: str(raw.filename, 120) || null
   };
 }
 
@@ -449,10 +464,26 @@ function tilesUrl(mapId, basemap) {
   return `/uploads/maps/${mapId}/${basemap.id}/{z}/{y}/{x}.webp?v=${basemap.tilesVersion || 0}`;
 }
 
+// Файлы замены фона: <basemapId>.replace.part (пока грузится) и
+// <basemapId>.replace<ext> (загружен, ждёт нарезки).
+function replacePartPath(mapId, basemapId) {
+  return path.join(sourceDir(mapId), `${basemapId}.replace.part`);
+}
+function replaceSourcePath(mapId, basemap) {
+  return path.join(sourceDir(mapId), `${basemap.id}.replace${(basemap.replace && basemap.replace.ext) || ''}`);
+}
+function removeReplaceFiles(mapId, basemap) {
+  for (const p of [replacePartPath(mapId, basemap.id), basemap.replace && basemap.replace.ext ? replaceSourcePath(mapId, basemap) : null]) {
+    if (!p) continue;
+    try { fs.unlinkSync(p); } catch (e) { /* нет файла */ }
+  }
+}
+
 function removeBasemapFiles(mapId, basemap) {
   for (const p of [sourcePath(mapId, basemap), partPath(mapId, basemap.id)]) {
     try { fs.unlinkSync(p); } catch (e) { /* нет файла */ }
   }
+  removeReplaceFiles(mapId, basemap);
   fs.rmSync(tilesDir(mapId, basemap.id), { recursive: true, force: true });
 }
 
@@ -475,5 +506,8 @@ module.exports = {
   partPath,
   tilesDir,
   tilesUrl,
+  replacePartPath,
+  replaceSourcePath,
+  removeReplaceFiles,
   removeBasemapFiles
 };

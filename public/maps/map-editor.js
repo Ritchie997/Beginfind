@@ -39,6 +39,20 @@
 
   const RU_TO_LAT = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
   // Зеркало src/services/slugify.js — slug статьи по введённому названию.
+  // Размер картинки по заголовку файла (без чтения на сервер); null — браузер
+  // не умеет этот формат (tiff) или не успел: тогда проверит сервер.
+  function readImageSize(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const done = (v) => { clearTimeout(timer); URL.revokeObjectURL(url); img.onload = img.onerror = null; resolve(v); };
+      const timer = setTimeout(() => done(null), 8000);
+      img.onload = () => done(img.naturalWidth && img.naturalHeight ? { w: img.naturalWidth, h: img.naturalHeight } : null);
+      img.onerror = () => done(null);
+      img.src = url;
+    });
+  }
+
   function slugify(text) {
     return String(text || '').split('').map((ch) => {
       const lower = ch.toLowerCase();
@@ -268,8 +282,8 @@
         crs: L.CRS.Simple,
         minZoom: -maxZoom - 3,
         // Шаг — целый, как в просмотре (без мутных промежуточных масштабов);
-        // приближение глубже, чем в просмотре (до 8×) — чтобы точно ставить точки.
-        maxZoom: 3,
+        // приближение глубже, чем в просмотре — чтобы точно ставить точки.
+        maxZoom: MC().MAX_EDITOR_ZOOM,
         zoomSnap: 1,
         zoomDelta: 1,
         wheelPxPerZoomLevel: 100,
@@ -278,6 +292,7 @@
         boxZoom: false
       });
       this.map.zoomControl.setPosition('bottomright');
+      MC().bindPixelZoom(this.map, this.canvasEl);
       this.zonesPane = this.map.createPane('zonesPane');
       this.zonesPane.style.zIndex = 450;
       this.renderer = L.svg({ padding: 0.5, pane: 'zonesPane' });
@@ -661,8 +676,8 @@
 
     // Подтверждение удаления — модальное окно приложения (confirm-dialog.js),
     // запасной вариант — системный confirm.
-    async askDelete(message, title = 'Удалить?') {
-      if (window.confirmDialog) return window.confirmDialog.open({ title, message, confirmLabel: 'Удалить', danger: true });
+    async askDelete(message, title = 'Удалить?', confirmLabel = 'Удалить') {
+      if (window.confirmDialog) return window.confirmDialog.open({ title, message, confirmLabel, danger: confirmLabel === 'Удалить' });
       return confirm(message);
     }
 
@@ -2162,11 +2177,12 @@
         <p class="me-field-note">Роли мира (сервера) и общие роли платформы. Владелец и доверенный админ видят всё.</p>
 
         <div class="me-props-head">Фоны карты</div>
-        <p class="me-field-note">Все фоны одной карты должны быть одного размера${this.size ? ` — ${this.size.w}×${this.size.h}` : ''}. Большие файлы загружаются частями, затем сервер нарезает их на тайлы — это может занять несколько минут.</p>
+        <p class="me-field-note">Все фоны одной карты должны быть одного размера${this.size ? ` — ${this.size.w}×${this.size.h}` : ''}. Большие файлы загружаются частями, затем сервер нарезает их на тайлы без сжатия — это может занять несколько минут. Кнопка <i class="fas fa-file-import"></i> у фона заменяет картинку новой того же разрешения: зоны и метки остаются на местах, а старый фон работает, пока новый не готов.</p>
         <div class="me-basemaps" data-el="basemaps"></div>
         <label class="btn btn-secondary btn-sm me-upload-btn"><i class="fas fa-upload"></i> Загрузить фон
           <input type="file" data-el="bm-file" accept=".jpg,.jpeg,.png,.webp,.tif,.tiff" hidden>
         </label>
+        <input type="file" data-el="bm-replace-file" accept=".jpg,.jpeg,.png,.webp,.tif,.tiff" hidden>
         <div class="me-upload" data-el="upload" hidden></div>
 
         ${this.canDelete ? `<div class="server-danger-zone"><h4>Опасная зона</h4><p>Удаление карты сотрёт её зоны и фоны. Статьи останутся.</p><button type="button" class="btn btn-danger btn-sm" data-el="delete-map"><i class="fas fa-trash"></i> Удалить карту</button></div>` : ''}`;
@@ -2186,6 +2202,13 @@
         e.target.value = '';
         if (file) this.uploadBasemap(file);
       });
+      box.querySelector('[data-el="bm-replace-file"]').addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        const id = this._replaceTargetId;
+        e.target.value = '';
+        this._replaceTargetId = null;
+        if (file && id) this.replaceBasemap(id, file);
+      });
       box.querySelector('[data-el="delete-map"]')?.addEventListener('click', () => this.deleteMap());
     }
 
@@ -2200,6 +2223,19 @@
         if (b.status === 'uploading') return '<span class="me-bm-wait">загрузка не завершена</span>';
         return `<span class="me-bm-err"><i class="fas fa-triangle-exclamation"></i> ${esc(b.error || 'ошибка')}</span>`;
       };
+      // Идущая замена картинки — отдельной строкой под статусом фона.
+      const replaceRow = (b) => {
+        const r = b.replace;
+        if (!r) return '';
+        const cancel = (title) => `<button type="button" class="map-icon-btn" data-bm-act="replace-cancel" title="${title}"><i class="fas fa-xmark"></i></button>`;
+        let text;
+        if (r.status === 'processing') text = '<span class="me-bm-wait"><i class="fas fa-spinner fa-spin"></i> замена нарезается…</span>';
+        else if (r.status === 'queued') text = `<span class="me-bm-wait"><i class="fas fa-clock"></i> замена в очереди${b.replaceQueuePosition ? ` (№${b.replaceQueuePosition})` : ''}</span>${cancel('Отменить замену')}`;
+        else if (r.status === 'uploading') text = `<span class="me-bm-wait"><i class="fas fa-upload"></i> замена загружается${this._replacingId === b.id ? '…' : ' (не завершена)'}</span>${this._replacingId === b.id ? '' : cancel('Отменить замену')}`;
+        else text = `<span class="me-bm-err"><i class="fas fa-triangle-exclamation"></i> замена не удалась: ${esc(r.error || 'ошибка')}. Фон не изменён.</span>${cancel('Скрыть')}`;
+        return `<div class="me-bm-row me-bm-replace">${text}</div>`;
+      };
+      const canReplace = (b) => b.status === 'ready' && (!b.replace || b.replace.status === 'error') && !this._replacingId;
       list.innerHTML = this.basemaps.map((b, i) => `
         <div class="me-bm" data-bm-id="${esc(b.id)}">
           <input type="text" class="form-input" data-bm-field="title" value="${esc(b.title)}" maxlength="80">
@@ -2207,10 +2243,12 @@
             ${statusText(b)}
             <span class="me-bm-btns">
               ${b.status === 'error' ? '<button type="button" class="map-icon-btn" data-bm-act="retile" title="Нарезать заново"><i class="fas fa-rotate"></i></button>' : ''}
+              ${canReplace(b) ? `<button type="button" class="map-icon-btn" data-bm-act="replace" title="Заменить картинку (то же разрешение ${b.width}×${b.height}; зоны и метки останутся)"><i class="fas fa-file-import"></i></button>` : ''}
               <button type="button" class="map-icon-btn" data-bm-act="up" title="Выше" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
               <button type="button" class="map-icon-btn is-danger" data-bm-act="delete" title="Удалить фон"><i class="fas fa-trash"></i></button>
             </span>
           </div>
+          ${replaceRow(b)}
         </div>`).join('');
       list.oninput = (e) => {
         const row = e.target.closest('[data-bm-id]');
@@ -2240,25 +2278,57 @@
           const res = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps/${id}/retile`, 'POST', {});
           if (!res.success) { this.toast(window.MapsUI.apiError(res)); return; }
           this.pollBasemapsSoon();
+        } else if (btn.dataset.bmAct === 'replace') {
+          this._replaceTargetId = id;
+          this.el('bm-replace-file').click();
+        } else if (btn.dataset.bmAct === 'replace-cancel') {
+          const res = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps/${id}/replace`, 'DELETE');
+          if (!res.success) { this.toast(window.MapsUI.apiError(res)); return; }
+          this.pollBasemapsSoon();
         }
       };
     }
 
+    // Замена картинки фона: та же загрузка частями, но в «тень» к фону.
+    // Разрешение проверяем заранее (если браузер умеет прочитать картинку),
+    // окончательно — на сервере перед подменой.
+    async replaceBasemap(id, file) {
+      const bm = this.basemaps.find((b) => b.id === id);
+      if (!bm) return;
+      const dims = await readImageSize(file);
+      if (dims && (dims.w !== bm.width || dims.h !== bm.height)) {
+        this.toast(`Разрешение ${dims.w}×${dims.h} не совпадает с фоном ${bm.width}×${bm.height} — заменить можно только картинкой того же размера`);
+        return;
+      }
+      if (!(await this.askDelete(`Картинка фона «${bm.title}» будет заменена файлом «${file.name}». Зоны и метки останутся на местах; старый фон работает, пока новый не нарезан.`, 'Заменить фон?', 'Заменить'))) return;
+      this._replacingId = id;
+      this.renderBasemapList();
+      try {
+        await this.uploadBasemap(file, { replaceId: id });
+      } finally {
+        this._replacingId = null;
+        this.renderBasemapList();
+      }
+    }
+
     // Загрузка по частям: заявка → части по chunkSize → завершение.
     // Обрыв связи на части — до трёх повторов этой же части.
-    async uploadBasemap(file) {
+    // replaceId — не новый фон, а замена картинки существующего.
+    async uploadBasemap(file, { replaceId = null } = {}) {
       if (file.size > this.maxSourceBytes) { this.toast(`Файл больше ${Math.round(this.maxSourceBytes / 1024 / 1024)} МБ`); return; }
       const box = this.el('upload');
       box.hidden = false;
       const setProgress = (done, text) => {
-        box.innerHTML = `<div class="me-upload-name">${esc(file.name)}</div>
+        box.innerHTML = `<div class="me-upload-name">${replaceId ? 'Замена фона: ' : ''}${esc(file.name)}</div>
           <div class="me-progress"><div class="me-progress-bar" style="width:${Math.round(done * 100)}%"></div></div>
           <div class="me-upload-text">${esc(text)}</div>`;
       };
       setProgress(0, 'Подготовка…');
-      const init = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps`, 'POST', { filename: file.name, size: file.size });
+      const initUrl = replaceId ? `/api/maps/${this.mapId}/basemaps/${replaceId}/replace` : `/api/maps/${this.mapId}/basemaps`;
+      const init = await window.MapsUI.api(initUrl, 'POST', { filename: file.name, size: file.size });
       if (!init.success) { setProgress(0, `Ошибка: ${window.MapsUI.apiError(init)}`); return; }
-      const { basemapId, chunkSize } = init.data;
+      const { chunkSize } = init.data;
+      const base = replaceId ? `/api/maps/${this.mapId}/basemaps/${replaceId}/replace` : `/api/maps/${this.mapId}/basemaps/${init.data.basemapId}`;
       this._uploading = true;
       try {
         let offset = 0;
@@ -2268,7 +2338,7 @@
           let received = null;
           while (received === null) {
             try {
-              const resp = await fetch(`/api/maps/${this.mapId}/basemaps/${basemapId}/chunk?offset=${offset}`, {
+              const resp = await fetch(`${base}/chunk?offset=${offset}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${window.authManager.getToken()}` },
                 body: chunk
@@ -2286,9 +2356,11 @@
           const mb = (n) => (n / 1024 / 1024).toFixed(1);
           setProgress(offset / file.size, `Загружено ${mb(offset)} из ${mb(file.size)} МБ`);
         }
-        const done = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps/${basemapId}/complete`, 'POST', {});
+        const done = await window.MapsUI.api(`${base}/complete`, 'POST', {});
         if (!done.success) throw new Error(window.MapsUI.apiError(done));
-        setProgress(1, 'Загружено. Сервер нарезает фон на тайлы — статус виден в списке выше.');
+        setProgress(1, replaceId
+          ? 'Загружено. Сервер нарезает новую картинку — фон сменится, когда она будет готова (статус в списке выше).'
+          : 'Загружено. Сервер нарезает фон на тайлы — статус виден в списке выше.');
         setTimeout(() => { box.hidden = true; }, 6000);
       } catch (err) {
         setProgress(0, `Ошибка загрузки: ${err.message}`);
@@ -2303,7 +2375,8 @@
     // редактора могут быть несохранённые правки.
     startBasemapPolling() {
       this._pollTimer = setInterval(() => {
-        if (this.basemaps.some((b) => b.status === 'queued' || b.status === 'processing') || this._pollSoon) this.pollBasemaps();
+        const busy = (s) => s === 'queued' || s === 'processing';
+        if (this.basemaps.some((b) => busy(b.status) || (b.replace && busy(b.replace.status))) || this._pollSoon) this.pollBasemaps();
       }, 4000);
     }
     pollBasemapsSoon() { this._pollSoon = true; this.pollBasemaps(); }
@@ -2315,6 +2388,7 @@
       const fresh = res.data;
       const local = new Map(this.basemaps.map((b) => [b.id, b]));
       const order = this.basemaps.map((b) => b.id);
+      const shownUrl = local.has(this.currentBasemapId) ? local.get(this.currentBasemapId).url : null;
       this.basemaps = fresh.basemaps
         .map((b) => (local.has(b.id) ? { ...b, title: local.get(b.id).title, from: local.get(b.id).from, to: local.get(b.id).to } : b))
         .sort((a, b) => (order.indexOf(a.id) + 1 || 999) - (order.indexOf(b.id) + 1 || 999));
@@ -2323,6 +2397,12 @@
         : !this.size || fresh.size.w !== this.size.w || fresh.size.h !== this.size.h;
       if (sizeChanged) this.setSize(fresh.size || null);
       else this.refreshBasemapSelect();
+      // Показанный фон заменили (новые тайлы, новый ?v=) — перезагружаем слой.
+      const cur = this.basemaps.find((b) => b.id === this.currentBasemapId);
+      if (!sizeChanged && cur && shownUrl && cur.url !== shownUrl) {
+        this.setBasemap(cur.id, { auto: true });
+        this.toast(`Фон «${cur.title}» заменён`);
+      }
       this.renderBasemapList();
     }
 

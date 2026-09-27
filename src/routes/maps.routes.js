@@ -35,7 +35,8 @@ function editorPayload(map, world) {
     basemaps: map.basemaps.map((b) => ({
       ...b,
       url: b.status === 'ready' ? store.tilesUrl(map.id, b) : null,
-      queuePosition: tiler.queuePosition(map.id, b.id)
+      queuePosition: tiler.queuePosition(map.id, b.id),
+      replaceQueuePosition: b.replace ? tiler.queuePosition(map.id, b.id, 'replace') : null
     })),
     zoneTypes: world.zoneTypes,
     markerTypes: world.markerTypes,
@@ -340,6 +341,119 @@ router.post('/maps/:id/basemaps/:bid/retile', auth.authenticateToken, auth.check
     }, { touch: false });
     tiler.enqueue(map.id, bm.id);
     res.json({ status: 'queued' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== Замена картинки фона (то же разрешение) =====
+// Та же загрузка по частям, но файл кладётся рядом с действующим фоном;
+// после нарезки подменяет его, если размер совпал. Зоны и метки не
+// трогаются — их координаты в пикселях, и при том же размере они на месте.
+
+async function loadReplaceBasemap(req, res, status) {
+  const map = await loadMapOr404(req, res);
+  if (!map) return null;
+  if (!(await access.canEditMap(req.user, map))) { res.status(403).json({ error: 'Править эту карту вам нельзя' }); return null; }
+  const bm = map.basemaps.find((b) => b.id === req.params.bid);
+  if (!bm) { res.status(404).json({ error: 'Фон не найден' }); return null; }
+  if (status && (!bm.replace || bm.replace.status !== status)) { res.status(409).json({ error: 'Замена этого фона сейчас не загружается' }); return null; }
+  return { map, bm };
+}
+
+// 1) Заявка на замену.
+router.post('/maps/:id/basemaps/:bid/replace', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const ctx = await loadReplaceBasemap(req, res);
+    if (!ctx) return;
+    const { map, bm } = ctx;
+    if (bm.status !== 'ready') return res.status(409).json({ error: 'Заменить можно только готовый фон' });
+    if (bm.replace && (bm.replace.status === 'queued' || bm.replace.status === 'processing')) {
+      return res.status(409).json({ error: 'Замена этого фона уже обрабатывается' });
+    }
+    const ext = path.extname(String(req.body.filename || '')).toLowerCase();
+    const size = Number(req.body.size);
+    if (!SOURCE_EXTENSIONS.has(ext)) return res.status(400).json({ error: 'Фон карты — изображение jpg, png, webp или tiff' });
+    if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'Некорректный размер файла' });
+    if (size > MAX_SOURCE_BYTES) return res.status(400).json({ error: `Файл больше ${Math.round(MAX_SOURCE_BYTES / 1024 / 1024)} МБ` });
+
+    store.removeReplaceFiles(map.id, bm); // остатки прошлой (оборванной/неудачной) попытки
+    fs.mkdirSync(store.sourceDir(map.id), { recursive: true });
+    fs.writeFileSync(store.replacePartPath(map.id, bm.id), Buffer.alloc(0));
+    await store.updateMap(map.id, (m) => {
+      const b = m.basemaps.find((x) => x.id === bm.id);
+      if (b) b.replace = { status: 'uploading', ext, declaredSize: size, filename: String(req.body.filename || '').slice(0, 120) };
+      return m;
+    }, { touch: false });
+    res.status(201).json({ chunkSize: CHUNK_SIZE, width: bm.width, height: bm.height });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 2) Часть файла замены (как у обычной загрузки).
+router.put('/maps/:id/basemaps/:bid/replace/chunk',
+  auth.authenticateToken, auth.checkApproved,
+  express.raw({ type: 'application/octet-stream', limit: CHUNK_SIZE + 1024 }),
+  async (req, res) => {
+    try {
+      const ctx = await loadReplaceBasemap(req, res, 'uploading');
+      if (!ctx) return;
+      const offset = Number(req.query.offset);
+      const chunk = Buffer.isBuffer(req.body) ? req.body : null;
+      if (!chunk || !chunk.length) return res.status(400).json({ error: 'Пустая часть файла' });
+      if (!Number.isInteger(offset) || offset < 0) return res.status(400).json({ error: 'Некорректный offset' });
+
+      const part = store.replacePartPath(ctx.map.id, ctx.bm.id);
+      const current = fs.existsSync(part) ? fs.statSync(part).size : 0;
+      if (offset + chunk.length <= current) return res.json({ received: current });
+      if (offset !== current) return res.status(409).json({ error: 'Части пришли не по порядку', received: current });
+      if (current + chunk.length > ctx.bm.replace.declaredSize) return res.status(400).json({ error: 'Файл больше заявленного размера' });
+
+      fs.appendFileSync(part, chunk);
+      res.json({ received: current + chunk.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+// 3) Файл замены целиком → в очередь нарезки.
+router.post('/maps/:id/basemaps/:bid/replace/complete', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const ctx = await loadReplaceBasemap(req, res, 'uploading');
+    if (!ctx) return;
+    const part = store.replacePartPath(ctx.map.id, ctx.bm.id);
+    const size = fs.existsSync(part) ? fs.statSync(part).size : 0;
+    if (size !== ctx.bm.replace.declaredSize) return res.status(400).json({ error: `Файл загружен не полностью (${size} из ${ctx.bm.replace.declaredSize} байт)` });
+
+    fs.renameSync(part, store.replaceSourcePath(ctx.map.id, ctx.bm));
+    await store.updateMap(ctx.map.id, (m) => {
+      const b = m.basemaps.find((x) => x.id === ctx.bm.id);
+      if (b && b.replace) b.replace.status = 'queued';
+      return m;
+    }, { touch: false });
+    tiler.enqueue(ctx.map.id, ctx.bm.id, 'replace');
+    res.json({ status: 'queued', queuePosition: tiler.queuePosition(ctx.map.id, ctx.bm.id, 'replace') });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Отменить замену (или убрать сообщение о неудачной). Действующий фон не меняется.
+router.delete('/maps/:id/basemaps/:bid/replace', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const ctx = await loadReplaceBasemap(req, res);
+    if (!ctx) return;
+    if (ctx.bm.replace && ctx.bm.replace.status === 'processing') {
+      return res.status(409).json({ error: 'Замена уже нарезается — дождитесь окончания' });
+    }
+    store.removeReplaceFiles(ctx.map.id, ctx.bm);
+    await store.updateMap(ctx.map.id, (m) => {
+      const b = m.basemaps.find((x) => x.id === ctx.bm.id);
+      if (b) b.replace = null;
+      return m;
+    }, { touch: false });
+    res.json({ cancelled: ctx.bm.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
