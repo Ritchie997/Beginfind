@@ -197,7 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
-      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, time: null };
+      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null };
       default: return {};
     }
   }
@@ -1758,7 +1758,7 @@
         <div class="eb-map-row eb-map-extra" hidden>
           <label class="eb-map-field eb-map-field-grow"><span>Подсветить зону</span><select data-map-field="focusZoneId"><option value="">— нет —</option></select></label>
           <label class="eb-map-field" data-map-time-wrap hidden><span>Дата на шкале (пусто — как у карты)</span>
-            <input type="number" step="1" data-map-time-year placeholder="как у карты">
+            <input type="text" inputmode="numeric" data-map-time-year placeholder="дд.мм.гг" title="Дата: дд.мм.гг (можно просто год — будет 1 января)">
           </label>
         </div>
         <div class="eb-map-row eb-map-extra" hidden>
@@ -1808,7 +1808,7 @@
             return;
           }
           const viewer = new window.MapCore.MapViewer(preview, data, {
-            mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId, time: d.time,
+            mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId, time: d.day,
             // в редакторе статьи никуда не уходим (зона или метка — неважно)
             onZoneActivate: () => window.showMessage?.('В редакторе статьи переход по карте отключён', 'info')
           });
@@ -1820,18 +1820,22 @@
             .slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
             .map((z) => `<option value="${esc(z.id)}">${esc(z.title || 'Без названия')}</option>`).join('');
           zoneSelect.value = d.focusZoneId || '';
-          // Момент таймлайна, на котором статья откроет карту (год + эпоха
-          // календаря мира). Только для карт, у которых есть время.
+          // Момент таймлайна, на котором статья откроет карту (дд.мм.гг).
+          // Только для карт, у которых есть время.
           const timeWrap = wrap.querySelector('[data-map-time-wrap]');
           timeWrap.hidden = !viewer.hasTime;
           if (viewer.hasTime) {
             const yearIn = wrap.querySelector('[data-map-time-year]');
-            yearIn.value = d.time !== null && d.time !== undefined ? d.time : '';
+            const MC = window.MapCore;
+            yearIn.value = Number.isFinite(d.day) ? MC.formatTime(null, d.day) : '';
             yearIn.onchange = () => {
-              const y = yearIn.value.trim();
-              d.time = y === '' ? null : Math.round(Number(y));
-              if (!Number.isFinite(d.time)) d.time = null;
-              if (d.time !== null) viewer.setTime(d.time);
+              const s = yearIn.value.trim();
+              const t = s === '' ? null : MC.parseTime(s);
+              if (s !== '' && t === null) { window.showMessage?.('Дата — в виде дд.мм.гг, например 05.03.1245', 'error'); return; }
+              d.day = t;
+              delete d.time; // старое поле (год) — больше не нужно
+              yearIn.value = t === null ? '' : MC.formatTime(null, t);
+              if (t !== null) viewer.setTime(t);
               changed();
             };
           }

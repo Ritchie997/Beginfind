@@ -32,6 +32,19 @@ const BLOCK_TYPES = [
 // который пока никто не просил.
 const CONTAINER_TYPES = new Set(['columns', 'spoiler-section']);
 
+// Дата блока карты — день (0 — 01.01.1970); legacy-поле time — год
+// (переводим в 1 января этого года, как и сами карты в maps-store.js).
+function mapBlockDay(data) {
+  const n = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)));
+  const day = n(data.day);
+  if (day !== null) return Math.max(-1e8 + 1, Math.min(1e8 - 1, day));
+  const year = n(data.time);
+  if (year === null) return null;
+  const dt = new Date(0);
+  dt.setUTCFullYear(Math.max(-270000, Math.min(270000, year)), 0, 1);
+  return Math.round(dt.getTime() / 86400000);
+}
+
 function genId() {
   try {
     return crypto.randomUUID();
@@ -172,8 +185,9 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         view,
         focusZoneId: idOrNull(data.focusZoneId),
         basemapId: idOrNull(data.basemapId),
-        // Момент таймлайна, на котором статья открывает карту (null — как у карты).
-        time: Number.isFinite(Number(data.time)) && data.time !== null && data.time !== '' ? Math.round(Number(data.time)) : null
+        // Момент таймлайна, на котором статья открывает карту (null — как у
+        // карты): день (см. maps-store.js). Старые блоки хранили год в time.
+        day: mapBlockDay(data)
       };
     }
 

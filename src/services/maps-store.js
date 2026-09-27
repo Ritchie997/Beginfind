@@ -22,7 +22,7 @@ const { normalizeLayerRoles } = require('./article-layers');
 const MAX_ZONES = 5000;
 const MAX_SHAPE_VERSIONS = 100;
 const MAX_EVENTS = 2000;
-const TIME_LIMIT = 1e9;
+const TIME_LIMIT = 1e8 - 1; // дней — предел Date (±273 тыс. лет)
 const MAX_MARKERS = 5000;
 const HOVER_EFFECTS = ['outline', 'fill', 'glow', 'pulse'];
 const MAX_POINTS_TOTAL = 400000; // защита от случайно гигантских контуров (лассо без упрощения)
@@ -47,9 +47,11 @@ function validId(v) {
 }
 
 // ===== Время (этап 3) =====
-// Время — одно целое число, «абсолютный год» мира (см. календарь в
-// worlds-store.js). null — без границы: «с начала времён» / «навсегда».
-// Интервал существования — [from, to): в году to объекта уже нет.
+// Время — одно целое число дней (день 0 — 01.01.1970, как в Date; в
+// интерфейсе — «дд.мм.гг»). null — без границы: «с начала времён» /
+// «навсегда». Интервал существования — [from, to): в день to объекта уже нет.
+// Раньше время было годом; такие карты (timeline.unit ≠ 'day') переводятся
+// при чтении: год → 1 января этого года (см. migrateYearsToDays).
 
 function timeOrNull(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -77,7 +79,29 @@ function normalizeTimeline(raw, basemapIds) {
     if (!isPlainObject(p) || !validId(p.basemapId) || (basemapIds && !basemapIds.has(p.basemapId))) return null;
     return { id: validId(p.id) ? p.id : genId('p'), basemapId: p.basemapId, ...normalizeInterval(p) };
   }).filter(Boolean);
-  return { initial: timeOrNull(t.initial), start, end, periods };
+  return { unit: 'day', initial: timeOrNull(t.initial), start, end, periods };
+}
+
+function yearToDay(v) {
+  if (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) return v;
+  const dt = new Date(0);
+  dt.setUTCFullYear(Math.max(-270000, Math.min(270000, Math.round(Number(v)))), 0, 1);
+  return Math.round(dt.getTime() / 86400000);
+}
+
+// Старая карта (время — годы) → дни. Меняет raw на месте.
+function migrateYearsToDays(raw) {
+  const iv = (o) => { if (isPlainObject(o)) { o.from = yearToDay(o.from); o.to = yearToDay(o.to); } };
+  (Array.isArray(raw.zones) ? raw.zones : []).forEach((z) => {
+    iv(z);
+    if (isPlainObject(z) && Array.isArray(z.shapes)) z.shapes.forEach((sh) => { if (isPlainObject(sh)) sh.from = yearToDay(sh.from); });
+  });
+  ['markers', 'events', 'basemaps'].forEach((k) => (Array.isArray(raw[k]) ? raw[k] : []).forEach(iv));
+  if (isPlainObject(raw.timeline)) {
+    const t = raw.timeline;
+    ['initial', 'start', 'end'].forEach((k) => { t[k] = yearToDay(t[k]); });
+    (Array.isArray(t.periods) ? t.periods : []).forEach(iv);
+  }
 }
 
 // ===== Геометрия =====
@@ -348,7 +372,9 @@ function getMap(id) {
   const file = mapFile(id);
   if (!fs.existsSync(file)) return null;
   try {
-    return normalizeMap({ ...JSON.parse(fs.readFileSync(file, 'utf8')), id });
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!isPlainObject(raw.timeline) || raw.timeline.unit !== 'day') migrateYearsToDays(raw);
+    return normalizeMap({ ...raw, id });
   } catch (e) {
     console.error(`[maps] Не удалось прочитать ${file}:`, e.message);
     return null;

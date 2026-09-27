@@ -120,8 +120,8 @@
   }
 
   // ===== Время и календарь (этап 3) =====
-  // Время — целое «абсолютный год» мира; календарь (настройка мира)
-  // превращает его в подпись. Эра с прямым счётом: год = t − start + 1;
+  // Эры календаря мира (настройка мира; в подписях дат сейчас не
+  // используются — см. formatTime). Эра с прямым счётом: год = t − start + 1;
   // с обратным (как «до н. э.»): год = начало следующей эры − t.
 
   const DEFAULT_CALENDAR = {
@@ -166,11 +166,41 @@
     return era.direction === 'backward' ? (next !== null ? next : 0) - y : (era.start !== null ? era.start : 0) + y - 1;
   }
 
-  // Даты в интерфейсе — просто год числом: для вымышленных миров эпохи и
-  // сокращения («Э.О.», «до О.») оказались непонятнее обычного числа.
+  // Время — целое число дней (день 0 — 01.01.1970, как в Date), дата в
+  // интерфейсе — «дд.мм.гг» по обычному григорианскому календарю. Год не
+  // обрезается до двух цифр: 05.03.12, 05.03.1245, 05.03.-40.
+  const DAY_MS = 86400000;
+
+  function dayToDate(t) {
+    const d = new Date(t * DAY_MS);
+    return { d: d.getUTCDate(), m: d.getUTCMonth() + 1, y: d.getUTCFullYear() };
+  }
+
+  function dateToDay(y, m, d) {
+    const dt = new Date(0);
+    dt.setUTCFullYear(y, m - 1, d); // Date.UTC превращает годы 0–99 в 1900-е
+    return Math.round(dt.getTime() / DAY_MS);
+  }
+
   function formatTime(cal, t) {
     if (t === null || t === undefined || !Number.isFinite(t)) return '';
-    return String(t);
+    const { d, m, y } = dayToDate(t);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d)}.${pad(m)}.${y < 0 ? '-' : ''}${pad(Math.abs(y))}`;
+  }
+
+  // «дд.мм.гг» (или просто год — 1 января) → день; null — не разобрали.
+  function parseTime(str) {
+    const s = String(str || '').trim();
+    let d = 1; let m = 1; let y;
+    const full = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](-?\d{1,6})$/);
+    if (full) { d = +full[1]; m = +full[2]; y = +full[3]; }
+    else if (/^-?\d{1,6}$/.test(s)) y = +s;
+    else return null;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const t = dateToDay(y, m, d);
+    const back = dayToDate(t);
+    return back.d === d && back.m === m ? t : null; // 31.02 и т. п.
   }
 
   function formatRange(cal, from, to) {
@@ -215,10 +245,10 @@
     (data.events || []).forEach((e) => { push(e.from); push(e.to); });
     (data.basemaps || []).forEach((b) => { push(b.from); push(b.to); });
     if (data.timeline) push(data.timeline.initial);
-    if (!vals.length) return { min: tl.start != null ? tl.start : 0, max: tl.end != null ? tl.end : (tl.start != null ? tl.start + 100 : 100) };
+    if (!vals.length) return { min: tl.start != null ? tl.start : 0, max: tl.end != null ? tl.end : (tl.start != null ? tl.start + 36500 : 36500) }; // дни: сто лет
     let min = Math.min(...vals);
     let max = Math.max(...vals);
-    const pad = Math.max(1, Math.round((max - min) * 0.05));
+    const pad = Math.max(30, Math.round((max - min) * 0.05));
     return { min: tl.start != null ? tl.start : min - pad, max: tl.end != null ? tl.end : max + pad };
   }
 
@@ -1425,6 +1455,8 @@
     toEraYear,
     fromEraYear,
     formatTime,
+    parseTime,
+    dateToDay,
     formatRange,
     existsAt,
     shapeIndexAt,

@@ -998,9 +998,12 @@
       }
 
       const markers = (this.doc.markers || []).filter((m) => !q || this.markerMatches(m, q)).sort(byTitle);
+      const groups = this.doc.markerGroups || [];
+      const groupIds = new Set(groups.map((g) => g.id));
+      const canDrag = !q && groups.length > 0; // перетаскивание метки в другую группу
       const markerRow = (m) => {
         const t = this.markerType(m);
-        return `<div class="me-tree-item${m.id === this.selectedMarkerId ? ' active' : ''}${this.existsNow(m) ? '' : ' is-absent'}" data-marker-id="${esc(m.id)}">
+        return `<div class="me-tree-item${m.id === this.selectedMarkerId ? ' active' : ''}${this.existsNow(m) ? '' : ' is-absent'}" data-marker-id="${esc(m.id)}"${canDrag ? ` draggable="true" data-in-group="${esc(groupIds.has(m.groupId) ? m.groupId : '')}"` : ''}>
           <i class="fas fa-${esc(t.icon)} map-fs-marker-icon" style="color:${esc(t.color)}"></i>
           <span class="me-tree-name">${esc(m.title || t.name)}</span>
           <span class="me-tree-type">${esc(t.name)}</span>
@@ -1010,8 +1013,8 @@
       };
       // Метки по группам: заголовок группы — «глазик» (видимость на карте
       // редактора), название (правится прямо тут), «скрыта у читателя по
-      // умолчанию», удалить. При поиске — плоский список.
-      const groups = this.doc.markerGroups || [];
+      // умолчанию», удалить. При поиске — плоский список. Метку можно
+      // перетащить на заголовок группы (или на метку в ней) — перенести туда.
       let markerRows;
       if (q || !groups.length) {
         markerRows = markers.map(markerRow);
@@ -1020,7 +1023,7 @@
         groups.forEach((g) => {
           const list = markers.filter((m) => m.groupId === g.id);
           const hidden = this.hiddenGroupsEd.has(g.id);
-          markerRows.push(`<div class="me-group-head${hidden ? ' is-hidden' : ''}" data-group-id="${esc(g.id)}">
+          markerRows.push(`<div class="me-group-head${hidden ? ' is-hidden' : ''}" data-group-id="${esc(g.id)}" data-group-drop="${esc(g.id)}">
             <button type="button" class="me-tree-caret" data-group-eye="${esc(g.id)}" title="${hidden ? 'Показать на карте редактора' : 'Скрыть на карте редактора'}"><i class="fas fa-eye${hidden ? '-slash' : ''}"></i></button>
             <input type="text" class="me-group-name" data-group-name="${esc(g.id)}" value="${esc(g.name)}" maxlength="60" title="Название группы">
             <span class="me-tree-type">${list.length}</span>
@@ -1030,11 +1033,10 @@
           </div>`);
           list.forEach((m) => markerRows.push(markerRow(m)));
         });
-        const loose = markers.filter((m) => !m.groupId || !groups.some((g) => g.id === m.groupId));
-        if (loose.length) {
-          markerRows.push('<div class="me-group-head me-group-loose"><span class="me-tree-caret-space"></span><span class="me-tree-name">Без группы</span><span class="me-tree-type">' + loose.length + '</span></div>');
-          loose.forEach((m) => markerRows.push(markerRow(m)));
-        }
+        // «Без группы» — всегда, даже пустая: на неё перетаскивают, чтобы убрать метку из группы.
+        const loose = markers.filter((m) => !groupIds.has(m.groupId));
+        markerRows.push('<div class="me-group-head me-group-loose" data-group-drop=""><span class="me-tree-caret-space"></span><span class="me-tree-name">Без группы</span><span class="me-tree-type">' + loose.length + '</span></div>');
+        loose.forEach((m) => markerRows.push(markerRow(m)));
       }
       const zoneCount = q ? `${rows.length} из ${zones.length}` : zones.length;
       const markerCount = q ? `${markers.length} из ${(this.doc.markers || []).length}` : markers.length;
@@ -1090,6 +1092,14 @@
         if (item) this.select(item.dataset.zoneId, { fly: true });
       };
       tree.ondragstart = (e) => {
+        const mItem = e.target.closest('[data-marker-id][draggable]');
+        if (mItem) {
+          this._dragMarkerId = mItem.dataset.markerId;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', mItem.dataset.markerId);
+          tree.classList.add('me-tree-dragging-marker');
+          return;
+        }
         const item = e.target.closest('[data-zone-id]');
         if (!item) return;
         this._dragZoneId = item.dataset.zoneId;
@@ -1097,8 +1107,29 @@
         e.dataTransfer.setData('text/plain', item.dataset.zoneId);
         tree.classList.add('me-tree-dragging');
       };
-      tree.ondragend = () => { tree.classList.remove('me-tree-dragging'); tree.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target')); };
+      tree.ondragend = () => {
+        this._dragMarkerId = null;
+        tree.classList.remove('me-tree-dragging', 'me-tree-dragging-marker');
+        tree.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+      };
+      // Группа, в которую упадёт метка: заголовок группы или любая метка в ней.
+      const dropGroupHead = (e) => {
+        const t = e.target.closest('[data-group-drop], [data-in-group]');
+        if (!t) return null;
+        const gid = t.dataset.groupDrop !== undefined ? t.dataset.groupDrop : t.dataset.inGroup;
+        return tree.querySelector(`[data-group-drop="${CSS.escape(gid)}"]`);
+      };
       tree.ondragover = (e) => {
+        if (this._dragMarkerId) {
+          const head = dropGroupHead(e);
+          tree.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+          const m = (this.doc.markers || []).find((x) => x.id === this._dragMarkerId);
+          if (!head || !m || head.dataset.groupDrop === (m.groupId || '')) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          head.classList.add('drop-target');
+          return;
+        }
         const target = e.target.closest('[data-zone-id], [data-root-drop]');
         if (!target || !this._dragZoneId) return;
         const targetId = target.dataset.zoneId;
@@ -1108,6 +1139,15 @@
         target.classList.add('drop-target');
       };
       tree.ondrop = (e) => {
+        if (this._dragMarkerId) {
+          const head = dropGroupHead(e);
+          const id = this._dragMarkerId;
+          this._dragMarkerId = null;
+          if (!head) return;
+          e.preventDefault();
+          this.moveMarkerToGroup(id, head.dataset.groupDrop || null);
+          return;
+        }
         const target = e.target.closest('[data-zone-id], [data-root-drop]');
         const dragId = this._dragZoneId;
         this._dragZoneId = null;
@@ -1115,6 +1155,19 @@
         e.preventDefault();
         this.reparent(dragId, target.dataset.zoneId || null);
       };
+    }
+
+    moveMarkerToGroup(markerId, groupId) {
+      const m = (this.doc.markers || []).find((x) => x.id === markerId);
+      if (!m || (m.groupId || null) === groupId) return;
+      this.pushHistory();
+      m.groupId = groupId;
+      this.markDirty();
+      this.renderMarkerLayers(); // группа могла быть скрыта «глазиком»
+      this.renderTree();
+      if (m.id === this.selectedMarkerId) this.renderProps();
+      const g = groupId && this.doc.markerGroups.find((x) => x.id === groupId);
+      this.toast(g ? `Метка перенесена в «${g.name}»` : 'Метка убрана из группы');
     }
 
     // Кнопки групп меток в списке. true — клик обработан.
@@ -1559,15 +1612,15 @@
     existsNow(o) { return MC().existsAt(o, this.time); }
 
     // Диапазон шкалы редактора: даты карты + запас, и всегда включает
-    // текущий момент (его можно задать любым числом в поле года).
+    // текущий момент (его можно задать любой датой в поле).
     editorRange() {
       const tl = this.doc.timeline || {};
       if (tl.start != null && tl.end != null && tl.end > tl.start) {
         return { min: Math.min(tl.start, this.time), max: Math.max(tl.end, this.time) };
       }
       const r = MC().timeRange({ ...this.doc, basemaps: this.basemaps });
-      const pad = Math.max(10, Math.round((r.max - r.min) * 0.1));
-      return { min: Math.min(r.min - pad, this.time - 5), max: Math.max(r.max + pad, this.time + 5) };
+      const pad = Math.max(365, Math.round((r.max - r.min) * 0.1));
+      return { min: Math.min(r.min - pad, this.time - 30), max: Math.max(r.max + pad, this.time + 30) };
     }
 
     // Фон по периодам и в редакторе: дата попала в период — показываем его фон
@@ -1595,27 +1648,36 @@
       if (this.sidebarTab === 'time') this.renderTimePanel();
     }
 
-    // --- Поле даты: просто год числом (пусто = без границы) ---
+    // --- Поле даты: «дд.мм.гг» (пусто = без границы) ---
 
     timeInputHtml(key, value, { allowEmpty = true, emptyLabel = 'без границы' } = {}) {
-      const v = value === null || value === undefined ? '' : value;
+      const v = value === null || value === undefined ? '' : this.fmt(value);
       return `<span class="me-time" data-time-key="${esc(key)}">
-        <input type="number" class="me-time-year" step="1" value="${v}" placeholder="${esc(emptyLabel)}">
+        <input type="text" class="me-time-year" inputmode="numeric" value="${esc(v)}" placeholder="${esc(allowEmpty ? emptyLabel : 'дд.мм.гг')}" title="Дата: дд.мм.гг (можно просто год — будет 1 января)">
         ${allowEmpty ? '<button type="button" class="map-icon-btn me-time-clear" title="Очистить"><i class="fas fa-xmark"></i></button>' : ''}
       </span>`;
     }
 
+    // undefined — ввели что-то неразборчивое (поле подсвечивается, значение не меняем).
     readTimeInput(el) {
-      const year = el.querySelector('.me-time-year').value.trim();
-      if (year === '') return null;
-      const n = Math.round(Number(year));
-      return Number.isFinite(n) ? n : null;
+      const input = el.querySelector('.me-time-year');
+      const s = input.value.trim();
+      input.classList.remove('is-invalid');
+      if (s === '') return null;
+      const t = MC().parseTime(s);
+      if (t === null) { input.classList.add('is-invalid'); return undefined; }
+      input.value = this.fmt(t);
+      return t;
     }
 
-    // onChange(key, value) — по смене года/эры и по «очистить».
+    // onChange(key, value) — по смене даты и по «очистить».
     bindTimeInputs(root, onChange) {
       root.querySelectorAll('.me-time').forEach((el) => {
-        const fire = () => onChange(el.dataset.timeKey, this.readTimeInput(el), el);
+        const fire = () => {
+          const v = this.readTimeInput(el);
+          if (v === undefined) { this.toast('Дата — в виде дд.мм.гг, например 05.03.1245'); return; }
+          onChange(el.dataset.timeKey, v, el);
+        };
         el.querySelector('.me-time-year').addEventListener('change', fire);
         el.querySelector('.me-time-clear')?.addEventListener('click', () => { el.querySelector('.me-time-year').value = ''; fire(); });
       });
@@ -1916,7 +1978,7 @@
                   ${i > 0 ? `<button type="button" class="map-icon-btn is-danger" data-ver-del="${i}" title="Удалить версию"><i class="fas fa-trash"></i></button>` : ''}
                 </span>
               </div>`).join('')}</div>
-            <button type="button" class="btn btn-secondary btn-sm" data-ver-new><i class="fas fa-code-branch"></i> Новая версия границы с ${esc(this.fmt(this.time))} года</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-ver-new><i class="fas fa-code-branch"></i> Новая версия границы с ${esc(this.fmt(this.time))}</button>
           </div>`;
       }
       const bounded = item.from != null || item.to != null || (isZone && (item.shapes || []).length > 1);
@@ -1924,7 +1986,7 @@
         <details class="me-props-details" data-sec="time" ${this.secOpen('time', bounded) || !this.existsNow(item) ? 'open' : ''}>
         <summary>Время${bounded ? ` <span class="me-sec-badge">${esc(MC().formatRange(this.cal(), item.from, item.to) || 'версии границы')}</span>` : ''}${this.existsNow(item) ? '' : ' <span class="me-absent-badge">сейчас не существует</span>'}</summary>
         <div class="me-field"><span>Существует с</span>${this.timeInputHtml('from', item.from, { emptyLabel: 'начала времён' })}</div>
-        <div class="me-field"><span>по (в этот год уже нет)</span>${this.timeInputHtml('to', item.to, { emptyLabel: 'конца времён' })}</div>
+        <div class="me-field"><span>по (в этот день уже нет)</span>${this.timeInputHtml('to', item.to, { emptyLabel: 'конца времён' })}</div>
         <div class="me-time-quick">
           <button type="button" class="map-icon-btn me-quick" data-time-quick="from">с текущего</button>
           <button type="button" class="map-icon-btn me-quick" data-time-quick="to">до текущего</button>
@@ -2039,7 +2101,7 @@
       const lines = [];
       const skipped = [];
       const changes = [];
-      if (a === null || b === null || a === b) return { html: '<p class="me-field-note">Выберите две разные даты.</p>', changes };
+      if (a == null || b == null || a === b) return { html: '<p class="me-field-note">Выберите две разные даты.</p>', changes };
       let zones = this.doc.zones;
       let markers = this.doc.markers || [];
       if (scope === 'zone' && this.selectedId) {
@@ -2380,6 +2442,7 @@
         localStorage.setItem(this.draftKey(), JSON.stringify({
           baseUpdatedAt: this.baseUpdatedAt,
           savedAt: Date.now(),
+          timeUnit: 'day', // черновики до перехода на даты хранили годы — такие не предлагаем
           title: this.doc.title,
           roles: this.doc.roles,
           zones: this.doc.zones,
@@ -2400,6 +2463,7 @@
       let draft = null;
       try { draft = JSON.parse(localStorage.getItem(this.draftKey()) || 'null'); } catch (e) { draft = null; }
       if (!draft || !Array.isArray(draft.zones)) return;
+      if (draft.timeUnit !== 'day') { this.clearDraft(); return; }
       const when = new Date(draft.savedAt).toLocaleString('ru-RU');
       const stale = draft.baseUpdatedAt !== this.baseUpdatedAt;
       const msg = stale
