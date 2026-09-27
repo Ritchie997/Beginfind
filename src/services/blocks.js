@@ -22,7 +22,7 @@ const crypto = require('crypto');
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'list', 'quote', 'code', 'table', 'divider',
-  'image', 'columns', 'infobox', 'callout', 'spoiler-section'
+  'image', 'columns', 'infobox', 'callout', 'spoiler-section', 'map'
 ];
 
 // Типы, которые могут содержать вложенные блоки (columns — по колонке,
@@ -154,6 +154,25 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
     case 'callout': {
       const variant = ['info', 'tip', 'warning'].includes(data.variant) ? data.variant : 'info';
       return { variant, title: str(data.title), markdown: str(data.markdown) };
+    }
+
+    // Интерактивная карта (см. src/services/maps-store.js) — сама карта
+    // хранится отдельно, блок только ссылается на неё и задаёт, как её
+    // показать в статье: высота, начальный вид (центр в пикселях карты и
+    // зум), подсвеченная зона, стартовая подложка.
+    case 'map': {
+      const view = isPlainObject(data.view)
+        && Number.isFinite(Number(data.view.x)) && Number.isFinite(Number(data.view.y)) && Number.isFinite(Number(data.view.zoom))
+        ? { x: Math.round(Number(data.view.x)), y: Math.round(Number(data.view.y)), zoom: Math.round(Number(data.view.zoom) * 4) / 4 }
+        : null;
+      const idOrNull = (v) => (typeof v === 'string' && /^[a-z0-9_-]{1,40}$/i.test(v) ? v : null);
+      return {
+        mapId: idOrNull(data.mapId),
+        height: Math.min(900, Math.max(200, Math.round(num(data.height, 420)))),
+        view,
+        focusZoneId: idOrNull(data.focusZoneId),
+        basemapId: idOrNull(data.basemapId)
+      };
     }
 
     case 'spoiler-section':

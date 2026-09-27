@@ -19,6 +19,15 @@ const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
 const STICKERS_DIR = path.join(UPLOADS_DIR, 'stickers');
 const BACKUPS_DIR = path.join(ROOT_DIR, 'backups');
 const CONTENT_DIR = path.join(ROOT_DIR, 'content'); // Статьи — JSON-документы из блоков, см. src/services/blocks.js
+// Интерактивные карты (см. src/services/maps-store.js): сами карты и
+// настройки миров (мир = сервер) — JSON рядом со статьями, поэтому попадают
+// в бэкап вместе с content/. Исходники подложек — вне public/ (их не нужно
+// раздавать, а весить они могут сотни МБ); нарезанные тайлы — в
+// public/uploads/maps/<mapId>/<basemapId>/{z}/{y}/{x}.webp.
+const MAPS_DIR = path.join(CONTENT_DIR, 'maps');
+const WORLDS_DIR = path.join(CONTENT_DIR, 'worlds');
+const MAP_SOURCES_DIR = path.join(ROOT_DIR, 'map-sources');
+const MAP_TILES_DIR = path.join(UPLOADS_DIR, 'maps');
 
 // Пути к файлам SQLite-баз данных (мессенджер, сервера, пользователи).
 // Статьи (articles.db) заменены на файлы content/<slug>.json.
@@ -33,5 +42,9 @@ module.exports = {
   STICKERS_DIR,
   BACKUPS_DIR,
   CONTENT_DIR,
+  MAPS_DIR,
+  WORLDS_DIR,
+  MAP_SOURCES_DIR,
+  MAP_TILES_DIR,
   dbPath
 };

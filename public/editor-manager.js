@@ -82,7 +82,8 @@
   const TYPE_LABELS = {
     paragraph: 'Текст', heading: 'Заголовок', quote: 'Цитата', code: 'Код',
     list: 'Список', table: 'Таблица', divider: 'Линия', image: 'Картинка',
-    columns: 'Колонки', infobox: 'Инфобокс', callout: 'Плашка', 'spoiler-section': 'Спойлер-секция'
+    columns: 'Колонки', infobox: 'Инфобокс', callout: 'Плашка', 'spoiler-section': 'Спойлер-секция',
+    map: 'Карта'
   };
 
   function blockTypeTag(block) {
@@ -196,6 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
+      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null };
       default: return {};
     }
   }
@@ -485,6 +487,8 @@
 
     cleanup() {
       this.endBlockDrag(false);
+      this.sweepMapPreviews();
+      window.MapCore?.sweepEmbeds();
       if (this._articleIdObserver) { this._articleIdObserver.disconnect(); this._articleIdObserver = null; }
       clearTimeout(this._previewTimer);
       if (this._localGraphInstance) { this._localGraphInstance.destroy(); this._localGraphInstance = null; }
@@ -1039,6 +1043,7 @@
         case 'infobox': return this.renderInfoboxBody(block, list);
         case 'callout': return this.renderCalloutBody(block, list);
         case 'spoiler-section': return this.renderSpoilerSectionBody(block);
+        case 'map': return this.renderMapBody(block);
         default: return document.createElement('div');
       }
     }
@@ -1732,6 +1737,148 @@
       }
       return wrap;
     }
+
+    // ===== Блок «Интерактивная карта» (см. public/maps/map-core.js) =====
+    // Выбор карты, высота, подсвеченная зона, подложка и начальный вид:
+    // карту в превью блока можно подвинуть и приблизить, затем «Запомнить
+    // этот вид» — так статья о городе открывается сразу на нём.
+
+    renderMapBody(block) {
+      const d = block.data;
+      const wrap = document.createElement('div');
+      wrap.className = 'eb-map';
+      // Кавычки тоже экранируем — названия карт/зон попадают в атрибуты.
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      wrap.innerHTML = `
+        <div class="eb-map-row">
+          <label class="eb-map-field eb-map-field-grow"><span>Карта</span><select data-map-field="mapId"><option value="">Загрузка списка карт…</option></select></label>
+          <label class="eb-map-field"><span>Высота, px</span><input type="number" min="200" max="900" step="20" data-map-field="height" value="${Number(d.height) || 420}"></label>
+        </div>
+        <div class="eb-map-preview" hidden></div>
+        <div class="eb-map-row eb-map-extra" hidden>
+          <label class="eb-map-field eb-map-field-grow"><span>Подсветить зону</span><select data-map-field="focusZoneId"><option value="">— нет —</option></select></label>
+          <label class="eb-map-field" data-map-basemap-wrap hidden><span>Подложка</span><select data-map-field="basemapId"></select></label>
+        </div>
+        <div class="eb-map-row eb-map-extra" hidden>
+          <button type="button" class="eb-map-btn" data-map-act="save-view"><i class="fas fa-crosshairs"></i> Запомнить этот вид</button>
+          <button type="button" class="eb-map-btn" data-map-act="reset-view"><i class="fas fa-expand"></i> Вся карта</button>
+          <span class="eb-map-note" data-map-note>${d.view ? 'Начальный вид задан' : 'Начальный вид: вся карта'}</span>
+        </div>`;
+
+      const mapSelect = wrap.querySelector('[data-map-field="mapId"]');
+      const preview = wrap.querySelector('.eb-map-preview');
+      const note = wrap.querySelector('[data-map-note]');
+      const changed = () => this.scheduleRenderPreview();
+
+      const loadList = async () => {
+        try {
+          const res = await window.apiClient.makeAuthenticatedRequest('/api/maps');
+          const maps = (res.success && Array.isArray(res.data)) ? res.data : [];
+          const groups = new Map();
+          maps.forEach((m) => {
+            const k = m.serverName || 'Без мира';
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(m);
+          });
+          mapSelect.innerHTML = '<option value="">— выберите карту —</option>'
+            + [...groups.entries()].map(([g, list]) => `<optgroup label="${esc(g)}">${list.map((m) => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</optgroup>`).join('');
+          if (d.mapId && !maps.some((m) => m.id === d.mapId)) mapSelect.insertAdjacentHTML('beforeend', `<option value="${esc(d.mapId)}">Недоступная карта</option>`);
+          mapSelect.value = d.mapId || '';
+          if (!maps.length) mapSelect.options[0].textContent = 'Карт пока нет — создайте во вкладке сервера «Карты»';
+        } catch (e) {
+          mapSelect.innerHTML = '<option value="">Не удалось загрузить карты</option>';
+        }
+      };
+
+      const mountPreview = async () => {
+        this.sweepMapPreviews();
+        preview.innerHTML = '';
+        wrap.querySelectorAll('.eb-map-extra').forEach((el) => { el.hidden = !d.mapId; });
+        preview.hidden = !d.mapId;
+        wrap._viewer = null;
+        if (!d.mapId || !window.MapCore || !window.L) return;
+        preview.style.height = `${Math.min(420, Number(d.height) || 420)}px`;
+        try {
+          const data = await window.MapCore.fetchViewerMap(d.mapId);
+          if (!preview.isConnected) return;
+          if (!data.basemaps.length) {
+            preview.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет готовой подложки</div>';
+            return;
+          }
+          const viewer = new window.MapCore.MapViewer(preview, data, {
+            mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId,
+            // в редакторе статьи никуда не уходим (зона или метка — неважно)
+            onZoneActivate: () => window.showMessage?.('В редакторе статьи переход по карте отключён', 'info')
+          });
+          this._mapPreviews = this._mapPreviews || new Set();
+          this._mapPreviews.add(viewer);
+          wrap._viewer = viewer;
+          const zoneSelect = wrap.querySelector('[data-map-field="focusZoneId"]');
+          zoneSelect.innerHTML = '<option value="">— нет —</option>' + data.zones
+            .slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
+            .map((z) => `<option value="${esc(z.id)}">${esc(z.title || 'Без названия')}</option>`).join('');
+          zoneSelect.value = d.focusZoneId || '';
+          const bmWrap = wrap.querySelector('[data-map-basemap-wrap]');
+          bmWrap.hidden = data.basemaps.length < 2;
+          const bmSelect = wrap.querySelector('[data-map-field="basemapId"]');
+          bmSelect.innerHTML = data.basemaps.map((b) => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join('');
+          bmSelect.value = viewer.currentBasemapId || '';
+        } catch (err) {
+          preview.innerHTML = `<div class="blk-map-error"><i class="fas fa-map"></i> ${esc(err.message)}</div>`;
+        }
+      };
+
+      wrap.addEventListener('change', (e) => {
+        const f = e.target.dataset.mapField;
+        if (!f) return;
+        if (f === 'mapId') {
+          d.mapId = e.target.value || null;
+          d.view = null;
+          d.focusZoneId = null;
+          d.basemapId = null;
+          note.textContent = 'Начальный вид: вся карта';
+          mountPreview();
+        } else if (f === 'height') {
+          d.height = Math.min(900, Math.max(200, Number(e.target.value) || 420));
+          e.target.value = d.height;
+        } else if (f === 'focusZoneId') {
+          d.focusZoneId = e.target.value || null;
+          if (d.focusZoneId && wrap._viewer) wrap._viewer.selectZone(d.focusZoneId, { fly: true });
+        } else if (f === 'basemapId') {
+          d.basemapId = e.target.value || null;
+          if (wrap._viewer && d.basemapId) wrap._viewer.setBasemap(d.basemapId);
+        }
+        changed();
+      });
+      wrap.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-map-act]');
+        if (!btn) return;
+        if (btn.dataset.mapAct === 'save-view' && wrap._viewer) {
+          d.view = wrap._viewer.getView();
+          note.textContent = 'Начальный вид задан';
+        } else if (btn.dataset.mapAct === 'reset-view') {
+          d.view = null;
+          note.textContent = 'Начальный вид: вся карта';
+          if (wrap._viewer) wrap._viewer.map.fitBounds(window.MapCore.imageBounds(wrap._viewer.size));
+        }
+        changed();
+      });
+
+      loadList();
+      // Превью монтируем, когда блок уже в документе (Leaflet нужны размеры).
+      requestAnimationFrame(() => mountPreview());
+      return wrap;
+    }
+
+    // Карты превью удалённых/перерисованных блоков — гасим (Leaflet держит
+    // подписки на window).
+    sweepMapPreviews() {
+      if (!this._mapPreviews) return;
+      this._mapPreviews.forEach((v) => {
+        if (!document.body.contains(v.container)) { v.destroy(); this._mapPreviews.delete(v); }
+      });
+    }
+
 
     async pickAndUploadImageForBlock(block) {
       const fileInput = document.createElement('input');
@@ -2444,6 +2591,7 @@
         case 'columns': this.insertBlockAfterActive('columns'); break;
         case 'spoiler-section': this.insertBlockAfterActive('spoiler-section'); break;
         case 'paste-block': this.pasteBlockAfterActive(); break;
+        case 'map': this.insertBlockAfterActive('map'); break;
         case 'image': {
           const block = this.insertBlockAfterActive('image', {});
           this.pickAndUploadImageForBlock(block);

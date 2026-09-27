@@ -504,6 +504,17 @@
           + `<summary>${escapeHtml(d.title)}</summary>`
           + `<div class="blk-spoiler-body">${renderBlocks(d.blocks, marked)}</div>`
           + `</details>`;
+      // Интерактивная карта: здесь только заглушка с настройками блока —
+      // саму карту (Leaflet) монтирует attachInteractions → MapCore.mountEmbeds
+      // уже после вставки HTML в страницу.
+      case 'map': {
+        if (!d.mapId) return '<div class="blk-map blk-map-empty"><i class="fas fa-map"></i> Карта не выбрана</div>';
+        const cfg = JSON.stringify({ view: d.view || null, focusZoneId: d.focusZoneId || null, basemapId: d.basemapId || null });
+        const height = Math.min(900, Math.max(200, Number(d.height) || 420));
+        return `<div class="blk-map" data-map-id="${escapeAttr(d.mapId)}" data-map-config="${escapeAttr(cfg)}" style="height:${height}px">`
+          + '<div class="blk-map-canvas"><div class="blk-map-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка карты…</div></div>'
+          + '</div>';
+      }
       default:
         return ''; // неизвестный тип блока (см. blocks.js normalizeBlockData) — просто пропускаем
     }
@@ -555,7 +566,11 @@
    * интерактивное поведение, которого раньше не было.
    */
   function attachInteractions(container) {
-    if (!container || container.__blocksInteractionsAttached) return;
+    if (!container) return;
+    // Карты монтируются при каждом вызове (содержимое контейнера могло
+    // перерисоваться), слушатель спойлеров — один раз.
+    if (window.MapCore) window.MapCore.mountEmbeds(container);
+    if (container.__blocksInteractionsAttached) return;
     container.__blocksInteractionsAttached = true;
     container.addEventListener('click', (e) => {
       const el = e.target.closest('.spoiler');

@@ -23,3 +23,6 @@ cleanup-settings.json
 # как раньше articles.db. Живёт только на диске сервера; резервные копии —
 # через /api/backups (см. src/services/backup.js).
 /content/
+# Исходники подложек интерактивных карт (сотни МБ) — только на диске сервера,
+# в бэкап попадают через /api/backups (см. src/services/backup.js).
+/map-sources/

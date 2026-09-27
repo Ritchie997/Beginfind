@@ -13,8 +13,13 @@ class SPARouter {
       '/pending-users': this.loadPendingUsers,
       '/users': this.loadUsersList,
       '/settings': this.loadSettings,
-      '/profile': this.loadProfile
+      '/profile': this.loadProfile,
+      // Интерактивные карты (public/maps/*): /map/:id и /map/:id/edit —
+      // см. resolveRouteKey, id кладётся в this.mapRouteId.
+      '/map': function () { return window.MapsUI.loadMapPage(this); },
+      '/map-edit': function () { return window.MapEditor.loadMapEditor(this); }
     };
+    this.mapRouteId = null;
 
     // id из "/profile/123" — единственный маршрут с динамическим сегментом,
     // поэтому отдельного mini-роутера не заводим (см. normalizePathForRouting
@@ -165,6 +170,10 @@ class SPARouter {
       const routeKey = this.resolveRouteKey(normalizedPath);
       const routeHandler = this.routes[routeKey];
 
+      // Уходим со страницы карты — гасим Leaflet/редактор (черновик
+      // несохранённых правок редактор пишет сам, см. MapEditor.destroy).
+      if (routeHandler) window.MapsUI?.cleanupPage();
+
       if (routeHandler) {
         // Update active menu item
         this.updateActiveMenuItem(routeKey);
@@ -222,6 +231,11 @@ class SPARouter {
   // сам URL (для history.pushState) в navigateTo не трогаем, меняем только
   // ключ поиска обработчика.
   resolveRouteKey(normalizedPath) {
+    const mapMatch = normalizedPath.match(/^\/map\/([a-z0-9_-]{1,40})(\/edit)?$/i);
+    if (mapMatch) {
+      this.mapRouteId = mapMatch[1];
+      return mapMatch[2] ? '/map-edit' : '/map';
+    }
     const profileMatch = normalizedPath.match(/^\/profile(?:\/(\d+))?$/);
     if (profileMatch) {
       this.profileUserId = profileMatch[1] || null;
@@ -308,7 +322,9 @@ class SPARouter {
       '/pending-users': 'Заявки - Админ-панель BeginFind',
       '/users': 'Пользователи - Админ-панель BeginFind',
       '/settings': 'Настройки - Админ-панель BeginFind',
-      '/profile': 'Профиль - Админ-панель BeginFind'
+      '/profile': 'Профиль - Админ-панель BeginFind',
+      '/map': 'Карта - Админ-панель BeginFind',
+      '/map-edit': 'Редактор карты - Админ-панель BeginFind'
     };
 
     const titleElement = document.getElementById('page-title');
@@ -3854,6 +3870,7 @@ class SPARouter {
       case 'channels': body.innerHTML = this.renderServerChannelsTab(); break;
       case 'log': this.loadAndRenderAuditLogTab(); break;
       case 'settings': body.innerHTML = this.renderServerSettingsTab(); break;
+      case 'maps': window.MapsUI?.renderServerMapsTab(body, this.currentServerData); break;
       case 'overview':
       default: body.innerHTML = this.renderServerOverviewTab(); break;
     }
@@ -5115,6 +5132,18 @@ function debounce(func, wait) {
 
 // Export methods for global use
 window.spaRouter = {
+  // Для интерактивных карт (public/maps/*): открытая вкладка рабочей
+  // области сервера и переход в статью Ибрипедии из зоны карты.
+  get currentServerWorkspaceTab() {
+    return spaRouter ? spaRouter.currentServerWorkspaceTab : null;
+  },
+
+  openIbripediaArticle: async (slug, opts) => {
+    if (spaRouter) {
+      await spaRouter.openIbripediaArticle(slug, opts);
+    }
+  },
+
   // async + await (не просто "вызвать и забыть") — вызывающий код (graph-view.js,
   // ibripedia.js) переходит на страницу редактора, а затем сразу открывает
   // конкретную статью через editArticle(); без ожидания реальной навигации

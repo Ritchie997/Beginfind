@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
-const { ROOT_DIR, dbPath, BACKUPS_DIR, CONTENT_DIR, UPLOADS_DIR } = require('../config/paths');
+const { ROOT_DIR, dbPath, BACKUPS_DIR, CONTENT_DIR, UPLOADS_DIR, MAP_SOURCES_DIR } = require('../config/paths');
 const articlesStore = require('./articles-store');
 
 // Список файлов баз данных для бэкапа. articles.db больше не хранит тексты
@@ -25,6 +25,15 @@ const SETTINGS_FILES = [
   'system-settings.json',
   'cleanup-settings.json'
 ];
+
+// Исходники подложек интерактивных карт (map-sources/<mapId>/<basemapId>.<ext>).
+// Тайлы (public/uploads/maps/) в архив НЕ кладутся — их тысячи, и они
+// нарезаются заново из исходников после восстановления (map-tiler.rescan).
+// Архив собирается в памяти (adm-zip), поэтому слишком большие исходники
+// пропускаем — иначе бэкап на слабом сервере падал бы по памяти.
+const MAP_SOURCES_ZIP_FOLDER = 'map-sources';
+const MAP_SOURCE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff']);
+const MAX_MAP_SOURCE_BACKUP_BYTES = 250 * 1024 * 1024;
 
 // Папка внутри ZIP-архива, где лежат статьи (content/*.json и корзина .trash/)
 const CONTENT_ZIP_FOLDER = 'content';
@@ -136,11 +145,38 @@ async function createBackup(customName = null) {
     // (public/uploads/**, включая uploads/stickers/<packId>/*)
     let uploadFilesAdded = 0;
     if (fs.existsSync(UPLOADS_DIR)) {
-      zip.addLocalFolder(UPLOADS_DIR, UPLOADS_ZIP_FOLDER);
+      // uploads/maps/ — тайлы карт, см. MAP_SOURCES_ZIP_FOLDER выше.
+      // Фильтр получает путь внутри архива ("uploads/maps/..."), с
+      // системным разделителем — разбираем по сегментам.
+      zip.addLocalFolder(UPLOADS_DIR, UPLOADS_ZIP_FOLDER, (p) => {
+        const parts = String(p).split(/[\\/]+/).filter(Boolean);
+        if (parts[0] === UPLOADS_ZIP_FOLDER) parts.shift();
+        return parts[0] !== 'maps';
+      });
       uploadFilesAdded = countZipFiles(zip, UPLOADS_ZIP_FOLDER);
       console.log(`[Backup] ✓ Добавлено загруженных файлов (картинки, стикеры): ${uploadFilesAdded}`);
     } else {
       console.warn('[Backup] ⚠ Директория public/uploads не найдена, загруженные файлы не добавлены в бэкап');
+    }
+
+    // Исходники подложек карт
+    let mapSourcesAdded = 0;
+    if (fs.existsSync(MAP_SOURCES_DIR)) {
+      for (const mapDir of fs.readdirSync(MAP_SOURCES_DIR, { withFileTypes: true })) {
+        if (!mapDir.isDirectory()) continue;
+        for (const file of fs.readdirSync(path.join(MAP_SOURCES_DIR, mapDir.name), { withFileTypes: true })) {
+          if (!file.isFile() || !MAP_SOURCE_EXTENSIONS.has(path.extname(file.name).toLowerCase())) continue;
+          const filePath = path.join(MAP_SOURCES_DIR, mapDir.name, file.name);
+          const size = fs.statSync(filePath).size;
+          if (size > MAX_MAP_SOURCE_BACKUP_BYTES) {
+            console.warn(`[Backup] ⚠ Исходник подложки ${mapDir.name}/${file.name} (${formatFileSize(size)}) слишком большой для бэкапа — пропущен`);
+            continue;
+          }
+          zip.addLocalFile(filePath, `${MAP_SOURCES_ZIP_FOLDER}/${mapDir.name}`, file.name);
+          mapSourcesAdded++;
+        }
+      }
+      if (mapSourcesAdded) console.log(`[Backup] ✓ Добавлено исходников подложек карт: ${mapSourcesAdded}`);
     }
 
     if (filesAdded.length === 0 && contentFilesAdded === 0 && uploadFilesAdded === 0) {
@@ -160,7 +196,7 @@ async function createBackup(customName = null) {
       filePath: filePath,
       fileName: fileName,
       size: fileSizeInBytes,
-      filesCount: filesAdded.length + settingsAdded.length + contentFilesAdded + uploadFilesAdded,
+      filesCount: filesAdded.length + settingsAdded.length + contentFilesAdded + uploadFilesAdded + mapSourcesAdded,
       files: filesAdded,
       settingsFiles: settingsAdded,
       contentFilesCount: contentFilesAdded,
@@ -248,6 +284,18 @@ async function restoreBackup(backupPath) {
         continue;
       }
 
+      // Исходники подложек карт (map-sources/<mapId>/<файл>)
+      if (entryName.startsWith(MAP_SOURCES_ZIP_FOLDER + '/')) {
+        if (!MAP_SOURCE_EXTENSIONS.has(path.extname(entryName).toLowerCase())) continue;
+        const targetPath = resolveInside(MAP_SOURCES_DIR, entryName.slice(MAP_SOURCES_ZIP_FOLDER.length + 1));
+        if (!targetPath) {
+          errors.push(`Пропущена небезопасная запись в архиве: ${entryName}`);
+          continue;
+        }
+        writeEntry(entry, targetPath, 'uploads');
+        continue;
+      }
+
       // Загруженные файлы: картинки статей и файлы стикеров (uploads/**)
       if (entryName.startsWith(UPLOADS_ZIP_FOLDER + '/')) {
         if (!RESTORABLE_UPLOAD_EXTENSIONS.has(path.extname(entryName).toLowerCase())) continue; // .gitkeep и т.п.
@@ -269,6 +317,13 @@ async function restoreBackup(backupPath) {
     // Восстановленные статьи могли заменить содержимое content/ — сбрасываем
     // кэш списка статей, иначе сервер продолжит отдавать старые данные из памяти.
     articlesStore.invalidateCache();
+
+    // Карты: тайлов в бэкапе нет — нарезаем заново из восстановленных исходников.
+    try {
+      require('./map-tiler').rescan();
+    } catch (e) {
+      console.error('[maps] Не удалось поставить подложки в очередь после восстановления:', e.message);
+    }
 
     return {
       success: true,

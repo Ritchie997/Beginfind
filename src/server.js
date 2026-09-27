@@ -39,6 +39,8 @@ const draftsRoutes = require('./routes/drafts.routes');
 const stickersRoutes = require('./routes/stickers.routes');
 const cleanupRoutes = require('./routes/cleanup.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
+const mapsRoutes = require('./routes/maps.routes');
+const mapTiler = require('./services/map-tiler');
 
 const app = express();
 
@@ -115,6 +117,7 @@ app.use('/api', draftsRoutes);
 app.use('/api', stickersRoutes);
 app.use('/api', cleanupRoutes);
 app.use('/api', notificationsRoutes);
+app.use('/api', mapsRoutes);
 
 // Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между
@@ -256,4 +259,12 @@ app.listen(PORT, HOST, () => {
 
   initializeAutoBackup();
   initializeAutoCleanup();
+
+  // Подложки карт, не дорезанные до перезапуска или оставшиеся без тайлов
+  // после восстановления из бэкапа, — снова в очередь нарезки.
+  try {
+    mapTiler.rescan();
+  } catch (e) {
+    console.error('[maps] Не удалось проверить очередь нарезки:', e.message);
+  }
 });
