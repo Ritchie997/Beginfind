@@ -1936,7 +1936,6 @@
     const searchInput = document.getElementById('graphSearchInput');
     const searchClearBtn = document.getElementById('graphSearchClear');
     const clustersEl = document.getElementById('graphClusters');
-    const collapseEl = document.getElementById('graphCollapse');
     const focusBar = document.getElementById('graphFocusBar');
 
     // Окрестность статьи ("локальный граф"): только выбранная статья и её
@@ -2026,8 +2025,7 @@
         tagColors: fullData.tagColors,
         uniformSize: !!uniformSizeEl?.checked,
         cosmos: !!cosmosEl?.checked,
-        clusters: clustersEl ? clustersEl.checked : true,
-        collapse: collapseEl ? collapseEl.checked : true
+        clusters: clustersEl ? clustersEl.checked : true
       });
       if (searchInput?.value.trim()) instance.setSearchHighlight(searchInput.value);
       if (data.nodes.length) renderGraphLegend(container, data.nodes, fullData.tagColors);
@@ -2061,10 +2059,8 @@
     serverSelect?.addEventListener('change', rerender);
     hideIsolatedEl?.addEventListener('change', rerender);
     clustersEl?.addEventListener('change', () => {
-      if (collapseEl) collapseEl.disabled = !clustersEl.checked;
       rerender();
     });
-    collapseEl?.addEventListener('change', () => instance?.setCollapse(collapseEl.checked));
     uniformSizeEl?.addEventListener('change', () => instance?.setUniformSize(uniformSizeEl.checked));
     cosmosEl?.addEventListener('change', () => {
       try { localStorage.setItem(COSMOS_STORAGE_KEY, cosmosEl.checked ? '1' : '0'); } catch (_) { /* не критично */ }
