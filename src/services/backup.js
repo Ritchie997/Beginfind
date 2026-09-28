@@ -51,6 +51,10 @@ const RESTORABLE_UPLOAD_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '
 // Директория для хранения бэкапов
 const BACKUP_DIR = BACKUPS_DIR;
 
+// Сколько бэкапов хранить: при появлении нового сверх лимита самые старые
+// удаляются (см. pruneOldBackups).
+const MAX_BACKUPS = 6;
+
 /**
  * Проверяет имя файла бэкапа и возвращает безопасный абсолютный путь внутри BACKUP_DIR.
  * Защита от directory traversal (например fileName = "../../.env").
@@ -190,6 +194,8 @@ async function createBackup(customName = null) {
     const fileSizeInBytes = stats.size;
 
     console.log(`[Backup] ✓ Бэкап успешно создан: ${fileName} (${formatFileSize(fileSizeInBytes)})`);
+
+    pruneOldBackups(fileName);
 
     return {
       success: true,
@@ -406,6 +412,42 @@ function deleteBackup(fileName) {
 }
 
 /**
+ * Удаляет самые старые бэкапы, пока их не останется MAX_BACKUPS.
+ * Порядок — по mtime: birthtime есть не на всех файловых системах Linux,
+ * а сами архивы после создания не изменяются.
+ * @param {string} [keepFileName] - только что появившийся бэкап, его не трогаем
+ * @returns {string[]} имена удалённых файлов
+ */
+function pruneOldBackups(keepFileName = null) {
+  const removed = [];
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) return removed;
+
+    const files = fs.readdirSync(BACKUP_DIR)
+      .filter(file => file.endsWith('.zip'))
+      .map(file => ({ file, mtime: fs.statSync(path.join(BACKUP_DIR, file)).mtimeMs }))
+      .sort((a, b) => a.mtime - b.mtime); // старые первыми
+
+    let excess = files.length - MAX_BACKUPS;
+    for (const { file } of files) {
+      if (excess <= 0) break;
+      if (file === keepFileName) continue;
+      try {
+        fs.unlinkSync(path.join(BACKUP_DIR, file));
+        removed.push(file);
+        excess--;
+        console.log(`[Backup] Удалён старый бэкап (лимит ${MAX_BACKUPS}): ${file}`);
+      } catch (err) {
+        console.error(`[Backup] ✗ Не удалось удалить старый бэкап ${file}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error('[Backup] ✗ Ошибка при очистке старых бэкапов:', error.message);
+  }
+  return removed;
+}
+
+/**
  * Скачать файл бэкапа
  * @param {string} fileName - Имя файла бэкапа
  * @returns {string} - Путь к файлу
@@ -452,7 +494,9 @@ module.exports = {
   deleteBackup,
   getBackupFilePath,
   shouldRunAutoBackup,
+  pruneOldBackups,
   BACKUP_DIR,
+  MAX_BACKUPS,
   DATABASE_FILES,
   SETTINGS_FILES
 };

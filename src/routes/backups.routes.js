@@ -77,6 +77,7 @@ router.post('/backups/upload', auth.authenticateToken, auth.checkApproved, auth.
     const safeOriginalName = path.basename(req.file.originalname);
     const destPath = path.join(backup.BACKUP_DIR, safeOriginalName);
     fs.renameSync(req.file.path, destPath);
+    backup.pruneOldBackups(safeOriginalName);
 
     res.json({
       success: true,
