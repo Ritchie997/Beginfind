@@ -358,6 +358,9 @@
   //   view: { x, y, zoom } — начальный вид (иначе вся карта / focusZoneId)
   //   focusZoneId — зона, к которой приблизить и которую подсветить
   //   basemapId — стартовая подложка
+  //   hiddenLayers: { zoneTypes, markerTypes, groups } — слои, убранные
+  //     автором вставки: их нет ни на карте, ни в «Слоях» ('__none' — без типа)
+  //   lockView — нельзя отдалиться и уйти за начальный вид (только участок)
   //   onZoneActivate(zone) — клик (ПК) / кнопка в карточке (телефон)
 
   class MapViewer {
@@ -383,6 +386,14 @@
       // Скрытые читателем типы зон и меток («Слои»); '__none' — без типа.
       this.hiddenZoneTypes = new Set();
       this.hiddenMarkerTypes = new Set();
+      // Убранное автором вставки — не путать со «Слоями» читателя: такие
+      // зоны и метки не показываются вовсе (а не полупрозрачными).
+      const ex = opts.hiddenLayers || {};
+      this.excluded = {
+        zt: new Set(Array.isArray(ex.zoneTypes) ? ex.zoneTypes : []),
+        mt: new Set(Array.isArray(ex.markerTypes) ? ex.markerTypes : []),
+        g: new Set(Array.isArray(ex.groups) ? ex.groups : [])
+      };
       this.opts = opts;
       this.types = typeMap(mapData.zoneTypes);
       this.markerTypes = typeMap(mapData.markerTypes);
@@ -474,7 +485,7 @@
 
       // Плавающая кнопка «Слои» — только в блоке статьи: на странице карты
       // флажки слоёв живут в общей боковой панели вместе со списком (maps-ui).
-      if (!this.opts.externalLayers && (this.data.zones.length || (this.data.markers || []).length)) this.buildLayersControl();
+      if (!this.opts.externalLayers && ['zt', 'mt', 'g'].some((k) => this.layerIds(k).length)) this.buildLayersControl();
 
       if (this.hasTime) {
         this.buildTimeline();
@@ -690,6 +701,7 @@
       if (!zone) return false;
       if (!existsAt(zone, this.time)) return false; // зоны ещё/уже нет в этот момент
       if (zone.id === this.selectedId) return true;
+      if (this.isZoneExcluded(zone)) return false;
       const t = this.types.get(zone.typeId);
       return this.isVisibleAtZoom(t ? t.minZoomRel : 0);
     }
@@ -794,7 +806,8 @@
       const remove = new Map();
       const push = (map, layer, mk) => { if (!map.has(layer)) map.set(layer, []); map.get(layer).push(mk); };
       this.markerLayers.forEach((e, id) => {
-        const vis = existsAt(e.data, this.time) && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerMinZoom(e.data)));
+        const vis = existsAt(e.data, this.time) && !this.isMarkerExcluded(e.data)
+          && (id === this.selectedMarkerId || this.isVisibleAtZoom(this.markerMinZoom(e.data)));
         // Выключено в «Слоях» или не подходит под поиск — полупрозрачная.
         e.marker.setOpacity(id !== this.selectedMarkerId && this.isMarkerFiltered(e.data) ? 0.25 : 1);
         if (vis && !e.shown) { e.shown = true; push(add, e.group, e.marker); }
@@ -982,12 +995,22 @@
       return kind === 'zt' ? this.hiddenZoneTypes : kind === 'mt' ? this.hiddenMarkerTypes : this.hiddenGroups;
     }
 
-    // Все слои раздела, которые реально встречаются на карте.
+    // Все слои раздела, которые реально встречаются на карте (кроме
+    // убранных автором вставки).
     layerIds(kind) {
       const key = (v) => v || '__none';
-      if (kind === 'zt') return [...new Set(this.data.zones.map((z) => key(z.typeId)))];
-      if (kind === 'mt') return [...new Set((this.data.markers || []).map((m) => key(m.typeId)))];
-      return this.markerGroups.map((g) => g.id);
+      let ids;
+      if (kind === 'zt') ids = [...new Set(this.data.zones.map((z) => key(z.typeId)))];
+      else if (kind === 'mt') ids = [...new Set((this.data.markers || []).filter((m) => !(m.groupId && this.excluded.g.has(m.groupId))).map((m) => key(m.typeId)))];
+      else ids = this.markerGroups.map((g) => g.id);
+      return ids.filter((id) => !this.excluded[kind].has(id));
+    }
+
+    isZoneExcluded(z) {
+      return this.excluded.zt.has(z.typeId || '__none');
+    }
+    isMarkerExcluded(m) {
+      return this.excluded.mt.has(m.typeId || '__none') || (!!m.groupId && this.excluded.g.has(m.groupId));
     }
 
     setLayerVisible(kind, id, on) {
@@ -1054,9 +1077,9 @@
       });
       const markerRows = this.layerIds('mt').map((id) => {
         const t = this.markerTypes.get(id) || FALLBACK_MARKER_TYPE;
-        return { id, name: id === '__none' ? 'Без типа' : t.name, count: markers.filter((m) => (m.typeId || '__none') === id).length, icon: `<i class="fas fa-${escapeHtml(t.icon)}" style="color:${escapeHtml(t.color)}"></i>` };
+        return { id, name: id === '__none' ? 'Без типа' : t.name, count: markers.filter((m) => (m.typeId || '__none') === id && !this.isMarkerExcluded(m)).length, icon: `<i class="fas fa-${escapeHtml(t.icon)}" style="color:${escapeHtml(t.color)}"></i>` };
       });
-      const groupRows = this.markerGroups.map((g) => ({ id: g.id, name: g.name, count: markers.filter((m) => m.groupId === g.id).length, icon: '<i class="fas fa-folder"></i>' }));
+      const groupRows = this.layerIds('g').map((id) => this.markerGroups.find((g) => g.id === id)).map((g) => ({ id: g.id, name: g.name, count: markers.filter((m) => m.groupId === g.id && !this.isMarkerExcluded(m)).length, icon: '<i class="fas fa-folder"></i>' }));
       panel.innerHTML = section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
         || '<div class="map-layers-note">На карте пока нечего скрывать</div>';
     }
@@ -1340,6 +1363,16 @@
         this.applyStyle(opts.focusZoneId);
         if (opts.mode !== 'embed') this.renderCard();
       }
+      if (opts.lockView) this.lockToCurrentView();
+    }
+
+    // «Только этот участок»: видимая сейчас область — предел. Приближать
+    // можно, отдаляться дальше начального вида и уводить карту за край — нет.
+    lockToCurrentView() {
+      const bounds = this.map.getBounds();
+      this.map.setMinZoom(this.map.getZoom());
+      this.map.options.maxBoundsViscosity = 1;
+      this.map.setMaxBounds(bounds);
     }
 
     getView() {
@@ -1417,22 +1450,24 @@
         }
         const viewer = new MapViewer(canvas, data, {
           mode: 'embed', view: cfg.view, focusZoneId: cfg.focusZoneId, basemapId: cfg.basemapId, time: cfg.time,
+          hiddenLayers: cfg.hiddenLayers, lockView: !!cfg.locked,
           onZoneActivate: inEditor ? () => window.showMessage?.('В предпросмотре редактора переход по зонам отключён', 'info') : undefined
         });
         embedInstances.add(viewer);
-        addEmbedControls(el, viewer, mapId, { inEditor });
+        addEmbedControls(el, viewer, mapId, { inEditor, locked: !!cfg.locked });
       } catch (err) {
         canvas.innerHTML = `<div class="blk-map-error"><i class="fas fa-map"></i> ${escapeHtml(err.message)}</div>`;
       }
     }
   }
 
-  function addEmbedControls(el, viewer, mapId, { inEditor = false } = {}) {
+  function addEmbedControls(el, viewer, mapId, { inEditor = false, locked = false } = {}) {
     const bar = document.createElement('div');
     bar.className = 'blk-map-controls';
     const basemaps = viewer.data.basemaps;
+    // «Только этот участок» — без перехода к полной карте.
     bar.innerHTML = `
-      ${inEditor ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
+      ${inEditor || locked ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
     bar.querySelector('.blk-map-fullscreen')?.addEventListener('click', () => {
       window.MapsUI?.openMapPage(mapId, { zoneId: viewer.selectedId, view: viewer.getView(), basemapId: viewer.currentBasemapId, time: viewer.time });
     });

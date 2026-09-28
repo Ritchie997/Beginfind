@@ -179,6 +179,8 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         ? { x: Math.round(Number(data.view.x)), y: Math.round(Number(data.view.y)), zoom: Math.round(Number(data.view.zoom) * 4) / 4 }
         : null;
       const idOrNull = (v) => (typeof v === 'string' && /^[a-z0-9_-]{1,40}$/i.test(v) ? v : null);
+      const idList = (v) => (Array.isArray(v) ? [...new Set(v.map(idOrNull).filter(Boolean))].slice(0, 200) : []);
+      const hl = isPlainObject(data.hiddenLayers) ? data.hiddenLayers : {};
       return {
         mapId: idOrNull(data.mapId),
         height: Math.min(900, Math.max(200, Math.round(num(data.height, 420)))),
@@ -187,7 +189,14 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         basemapId: idOrNull(data.basemapId),
         // Момент таймлайна, на котором статья открывает карту (null — как у
         // карты): день (см. maps-store.js). Старые блоки хранили год в time.
-        day: mapBlockDay(data)
+        day: mapBlockDay(data),
+        // Слои, которые автор убрал из этой вставки карты (читатель их не
+        // видит и не может включить): типы зон, типы меток ('__none' — без
+        // типа), группы меток.
+        hiddenLayers: { zoneTypes: idList(hl.zoneTypes), markerTypes: idList(hl.markerTypes), groups: idList(hl.groups) },
+        // Только этот участок: карта не отдаляется и не сдвигается за
+        // начальный вид, кнопки «на весь экран» нет.
+        locked: !!data.locked
       };
     }
 

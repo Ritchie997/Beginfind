@@ -334,6 +334,19 @@ body.map-fs-open { overflow: hidden; }
 }
 .eb-map-btn:hover { border-color: var(--blurple); }
 .eb-map-note { font-size: 12px; color: var(--text-muted); }
+.eb-map-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-normal); cursor: pointer; }
+.eb-map-check input { margin: 0; }
+.eb-map-layers {
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.eb-map-layers[hidden] { display: none; }
+.eb-map-layers summary { cursor: pointer; font-size: 13px; color: var(--text-normal); }
+.eb-map-layers-body { display: flex; flex-wrap: wrap; gap: 12px 24px; padding-top: 8px; }
+.eb-map-layers-section { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+.eb-map-layers-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.eb-map-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
 
 /* ===== Вкладки сервера: «Карты» и «Мир» ===== */
 

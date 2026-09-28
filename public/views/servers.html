@@ -94,7 +94,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="server-description">Описание</label>
-          <textarea id="server-description" class="form-input" placeholder="Коротко — для чего этот сервер (необязательно)" rows="3" maxlength="500"></textarea>
+          <textarea id="server-description" class="form-input" data-autogrow placeholder="Коротко — для чего этот сервер (необязательно)" rows="3" maxlength="500"></textarea>
         </div>
         <p class="modal-hint"><i class="fas fa-circle-info"></i> Вы автоматически станете владельцем и получите системную роль «admin» на этом сервере.</p>
       </div>
@@ -215,7 +215,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="channel-editor-description">Описание</label>
-          <textarea id="channel-editor-description" class="form-input" rows="2" placeholder="Необязательно" maxlength="300"></textarea>
+          <textarea id="channel-editor-description" class="form-input" data-autogrow rows="2" placeholder="Необязательно" maxlength="300"></textarea>
         </div>
         <p class="modal-hint"><i class="fas fa-circle-info"></i> Канал — это пока просто именованный раздел сервера: отправка и чтение сообщений внутри него в этой панели не реализованы.</p>
       </div>
@@ -758,12 +758,17 @@
   position: relative;
 }
 
-/* Настройки сервера: описание растёт по мере ввода (autoGrowTextarea в
-   spa-router.js), на десктопе — ещё и тянется за ручку. */
-.server-settings-textarea {
+/* Описания сервера/канала растут по мере ввода: field-sizing там, где
+   браузер его знает, иначе — autoGrowTextarea в spa-router.js. На десктопе
+   поле ещё и тянется за ручку. "transition: all" у .form-input не должен
+   анимировать высоту — иначе подгонка по scrollHeight отстаёт от текста. */
+textarea[data-autogrow] {
   resize: vertical;
   min-height: 84px;
   max-height: 60vh;
+  field-sizing: content;
+  overflow-y: auto;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
 }
 
 @media (max-width: 640px) {

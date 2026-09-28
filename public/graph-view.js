@@ -1206,9 +1206,9 @@
     // толщина которых растёт с числом ссылок между ними. Статьи вне групп
     // (одиночки) остаются видны как есть. Слой построен всегда, а показывается
     // классом .graph-collapsed на контейнере (syncCollapsed).
-    const COLLAPSE_MIN_NODES = 60; // меньше — граф и так читается, не прячем
+    // Доступно при любом размере графа, если групп хотя бы две.
     const COLLAPSE_ZOOM = 0.5;     // масштаб, ниже которого группы сворачиваются
-    const collapseAvailable = clusters.length >= 2 && nodes.length >= COLLAPSE_MIN_NODES;
+    const collapseAvailable = clusters.length >= 2;
     let collapseEnabled = options.collapse !== false;
     let isCollapsed = false;
 

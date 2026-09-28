@@ -1528,6 +1528,20 @@ class SPARouter {
       if (e.target.id === 'create-server-modal') this.hideCreateServerModal();
     });
     document.getElementById('server-name')?.addEventListener('input', () => this.updateCreateServerAvatarPreview());
+    // Автовысота описаний (настройки сервера, создание сервера, канал) —
+    // один делегированный слушатель на фрагмент страницы: вкладки рабочей
+    // области перерисовываются через innerHTML, а inline oninput на
+    // мобильных срабатывал ненадёжно. focusin — пересчёт при открытии поля
+    // (пока модалка была hidden, scrollHeight был 0).
+    const serversRoot = document.getElementById('server-workspace')?.parentElement;
+    if (serversRoot && !serversRoot.dataset.autogrowBound) {
+      serversRoot.dataset.autogrowBound = '1';
+      const grow = (e) => {
+        if (e.target.matches?.('textarea[data-autogrow]')) this.autoGrowTextarea(e.target);
+      };
+      serversRoot.addEventListener('input', grow);
+      serversRoot.addEventListener('focusin', grow);
+    }
 
     // Поиск/сортировка каталога — работают локально по уже загруженному
     // списку (this.serversCache), без обращений к серверу.
@@ -4452,7 +4466,7 @@ class SPARouter {
       </div>
       <div class="form-group" style="margin-bottom: 18px;">
         <label class="form-label" for="server-settings-description">Описание</label>
-        <textarea id="server-settings-description" class="form-input server-settings-textarea" rows="3" maxlength="500" data-autogrow oninput="spaRouter.autoGrowTextarea(this)" ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
+        <textarea id="server-settings-description" class="form-input server-settings-textarea" rows="3" maxlength="500" data-autogrow ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
       </div>
       ${canEdit ? `<div class="server-settings-actions"><button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button></div>` : ''}
 
@@ -4477,11 +4491,19 @@ class SPARouter {
 
   // Подгоняет высоту textarea под текст — на мобильном у textarea нет
   // ручки resize, и описание сервера (до 500 символов) приходилось листать
-  // внутри трёх строк. Вызывается на input и после рендера вкладки.
+  // внутри трёх строк. Вызывается на input/focus (делегированно, см.
+  // setupServerFormEvents) и после рендера вкладки.
   autoGrowTextarea(el) {
-    if (!el) return;
+    if (!el || !el.isConnected) return;
+    // Где браузер растит поле сам (field-sizing: content, см.
+    // textarea[data-autogrow] в servers.html), JS-подгонка не нужна.
+    if (window.CSS?.supports?.('field-sizing', 'content')) return;
     el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight + 2}px`;
+    const h = el.scrollHeight;
+    // Поле ещё скрыто (модалка/вкладка не показана) — scrollHeight 0:
+    // высоту не фиксируем, пересчитаем при фокусе/вводе.
+    if (!h) { el.style.height = ''; return; }
+    el.style.height = `${h + 2}px`;
   }
 
   async saveServerSettings() {

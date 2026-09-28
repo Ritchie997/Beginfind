@@ -3435,17 +3435,20 @@ body.articles-page .content-body {
     }
 }
 
-/* Защита от больших картинок */
-#articleContent img {
+/* Защита от больших картинок. Превью карты (Leaflet) — исключение: его
+   тайлы и метки — img с точными размерами inline, а max-width/height:auto
+   с !important ломают тайлы и панели карты — превью блока карты в
+   редакторе оставалось пустым. */
+#articleContent img:not(.eb-map-preview *) {
     max-width: 100% !important;
     height: auto !important;
     display: block;
 }
 
 /* Ограничиваем ширину всех элементов внутри редактора */
-#articleContent *,
-#articleContent *:before,
-#articleContent *:after,
+#articleContent *:not(.eb-map-preview *),
+#articleContent *:not(.eb-map-preview *):before,
+#articleContent *:not(.eb-map-preview *):after,
 .editor-content *,
 .editor-content *:before,
 .editor-content *:after {

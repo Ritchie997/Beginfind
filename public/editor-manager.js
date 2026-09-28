@@ -197,7 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
-      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null };
+      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null, hiddenLayers: { zoneTypes: [], markerTypes: [], groups: [] }, locked: false };
       default: return {};
     }
   }
@@ -1765,12 +1765,69 @@
           <button type="button" class="eb-map-btn" data-map-act="save-view"><i class="fas fa-crosshairs"></i> Запомнить этот вид</button>
           <button type="button" class="eb-map-btn" data-map-act="reset-view"><i class="fas fa-expand"></i> Вся карта</button>
           <span class="eb-map-note" data-map-note>${d.view ? 'Начальный вид задан' : 'Начальный вид: вся карта'}</span>
-        </div>`;
+        </div>
+        <div class="eb-map-row eb-map-extra" hidden>
+          <label class="eb-map-check" title="Читатель не сможет отдалить карту или увести её за пределы начального вида (или подсвеченной зоны), кнопки «на весь экран» не будет">
+            <input type="checkbox" data-map-field="locked" ${d.locked ? 'checked' : ''}> Только этот участок — без разворачивания на весь экран
+          </label>
+        </div>
+        <details class="eb-map-layers" data-map-layers hidden>
+          <summary>Что показывать на карте <span class="eb-map-note" data-map-layers-note></span></summary>
+          <div class="eb-map-layers-body" data-map-layers-body></div>
+        </details>`;
 
       const mapSelect = wrap.querySelector('[data-map-field="mapId"]');
       const preview = wrap.querySelector('.eb-map-preview');
       const note = wrap.querySelector('[data-map-note]');
       const changed = () => this.scheduleRenderPreview();
+      const hiddenLayers = () => {
+        const h = d.hiddenLayers && typeof d.hiddenLayers === 'object' ? d.hiddenLayers : {};
+        d.hiddenLayers = {
+          zoneTypes: Array.isArray(h.zoneTypes) ? h.zoneTypes : [],
+          markerTypes: Array.isArray(h.markerTypes) ? h.markerTypes : [],
+          groups: Array.isArray(h.groups) ? h.groups : []
+        };
+        return d.hiddenLayers;
+      };
+      const HL_KEY = { zt: 'zoneTypes', mt: 'markerTypes', g: 'groups' };
+
+      // Флажки «Что показывать»: типы зон и меток, группы меток — только те,
+      // что реально есть на карте. Снятый флажок убирает слой из вставки
+      // совсем (у читателя его нет и в «Слоях»).
+      const renderLayersPicker = (viewer, data) => {
+        const box = wrap.querySelector('[data-map-layers]');
+        const body = wrap.querySelector('[data-map-layers-body]');
+        const h = hiddenLayers();
+        const count = (list, pred) => list.filter(pred).length;
+        const markers = data.markers || [];
+        const key = (v) => v || '__none';
+        const zoneTypeIds = [...new Set(data.zones.map((z) => key(z.typeId)))];
+        const markerTypeIds = [...new Set(markers.map((m) => key(m.typeId)))];
+        const groups = data.markerGroups || [];
+        const MC = window.MapCore;
+        const row = (kind, id, icon, name, n) => `
+          <label class="eb-map-check"><input type="checkbox" data-map-layer="${kind}" value="${esc(id)}" ${h[HL_KEY[kind]].includes(id) ? '' : 'checked'}> ${icon} ${esc(name)} <span class="eb-map-note">${n}</span></label>`;
+        const section = (title, rows) => (rows.length ? `<div class="eb-map-layers-section"><div class="eb-map-layers-title">${title}</div>${rows.join('')}</div>` : '');
+        body.innerHTML = section('Зоны', zoneTypeIds.map((id) => {
+          const t = viewer.types.get(id) || MC.FALLBACK_TYPE;
+          return row('zt', id, `<span class="eb-map-swatch" style="background:${esc(t.color)}"></span>`, id === '__none' ? 'Без типа' : t.name, count(data.zones, (z) => key(z.typeId) === id));
+        })) + section('Метки', markerTypeIds.map((id) => {
+          const t = viewer.markerTypes.get(id) || MC.FALLBACK_MARKER_TYPE;
+          return row('mt', id, `<i class="fas fa-${esc(t.icon)}" style="color:${esc(t.color)}"></i>`, id === '__none' ? 'Без типа' : t.name, count(markers, (m) => key(m.typeId) === id));
+        })) + section('Группы меток', groups.map((g) => row('g', g.id, '<i class="fas fa-folder"></i>', g.name, count(markers, (m) => m.groupId === g.id))));
+        box.hidden = !body.innerHTML;
+        // Ссылки на слои, которых на карте больше нет, — выбрасываем.
+        h.zoneTypes = h.zoneTypes.filter((id) => zoneTypeIds.includes(id));
+        h.markerTypes = h.markerTypes.filter((id) => markerTypeIds.includes(id));
+        h.groups = h.groups.filter((id) => groups.some((g) => g.id === id));
+        updateLayersNote();
+      };
+      const updateLayersNote = () => {
+        const h = hiddenLayers();
+        const n = h.zoneTypes.length + h.markerTypes.length + h.groups.length;
+        const el = wrap.querySelector('[data-map-layers-note]');
+        if (el) el.textContent = n ? `· скрыто слоёв: ${n}` : '· всё';
+      };
 
       const loadList = async () => {
         try {
@@ -1796,6 +1853,7 @@
         this.sweepMapPreviews();
         preview.innerHTML = '';
         wrap.querySelectorAll('.eb-map-extra').forEach((el) => { el.hidden = !d.mapId; });
+        wrap.querySelector('[data-map-layers]').hidden = true; // покажет renderLayersPicker
         preview.hidden = !d.mapId;
         wrap._viewer = null;
         if (!d.mapId || !window.MapCore || !window.L) return;
@@ -1807,8 +1865,10 @@
             preview.innerHTML = '<div class="blk-map-error"><i class="fas fa-image"></i> У карты ещё нет фона</div>';
             return;
           }
+          // Превью без lockView: автору нужно двигать карту, чтобы выбрать вид.
           const viewer = new window.MapCore.MapViewer(preview, data, {
             mode: 'embed', view: d.view, focusZoneId: d.focusZoneId, basemapId: d.basemapId, time: d.day,
+            hiddenLayers: hiddenLayers(),
             // в редакторе статьи никуда не уходим (зона или метка — неважно)
             onZoneActivate: () => window.showMessage?.('В редакторе статьи переход по карте отключён', 'info')
           });
@@ -1820,6 +1880,7 @@
             .slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
             .map((z) => `<option value="${esc(z.id)}">${esc(z.title || 'Без названия')}</option>`).join('');
           zoneSelect.value = d.focusZoneId || '';
+          renderLayersPicker(viewer, data);
           // Момент таймлайна, на котором статья откроет карту (дд.мм.гг).
           // Только для карт, у которых есть время.
           const timeWrap = wrap.querySelector('[data-map-time-wrap]');
@@ -1845,6 +1906,22 @@
       };
 
       wrap.addEventListener('change', (e) => {
+        const layerKind = e.target.dataset.mapLayer;
+        if (layerKind) {
+          const list = hiddenLayers()[HL_KEY[layerKind]];
+          const id = e.target.value;
+          const i = list.indexOf(id);
+          if (e.target.checked && i >= 0) list.splice(i, 1);
+          else if (!e.target.checked && i < 0) list.push(id);
+          const v = wrap._viewer;
+          if (v) {
+            v.excluded[layerKind][e.target.checked ? 'delete' : 'add'](id);
+            v.afterLayersChange();
+          }
+          updateLayersNote();
+          changed();
+          return;
+        }
         const f = e.target.dataset.mapField;
         if (!f) return;
         if (f === 'mapId') {
@@ -1852,8 +1929,11 @@
           d.view = null;
           d.focusZoneId = null;
           d.basemapId = null;
+          d.hiddenLayers = { zoneTypes: [], markerTypes: [], groups: [] };
           note.textContent = 'Начальный вид: вся карта';
           mountPreview();
+        } else if (f === 'locked') {
+          d.locked = e.target.checked;
         } else if (f === 'height') {
           d.height = Math.min(900, Math.max(200, Number(e.target.value) || 420));
           e.target.value = d.height;
