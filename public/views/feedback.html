@@ -28,7 +28,7 @@
         <div class="empty-state" id="feedbackMineEmpty" hidden>
             <i class="fas fa-bug"></i>
             <h3>Вы ещё не отправляли обращений</h3>
-            <p>Нашли баг или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь.</p>
+            <p>Нашли баг или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь. Пожаловаться на статью можно кнопкой с флажком под самой статьёй в Ибрипедии.</p>
         </div>
         <div class="feedback-list" id="feedbackMineList"></div>
     </div>
@@ -225,6 +225,9 @@
 .feedback-chip { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
 .feedback-chip.bug { background: rgba(237, 66, 69, 0.18); color: var(--red); }
 .feedback-chip.idea { background: rgba(88, 101, 242, 0.2); color: var(--blurple); }
+.feedback-chip.article { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
+.feedback-article-link { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: none; background: none; color: var(--text-link, var(--blurple)); font-size: 13px; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+.feedback-article-link:hover { text-decoration: underline; }
 .feedback-chip.pending { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
 .feedback-chip.ok { background: rgba(59, 165, 93, 0.18); color: var(--green); }
 .feedback-chip.bad { background: rgba(237, 66, 69, 0.18); color: var(--red); }

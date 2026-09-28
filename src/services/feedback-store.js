@@ -3,7 +3,9 @@
 //
 // Жизненный цикл:
 //   1. Любой одобренный пользователь отправляет обращение по шаблону
-//      (createReport) — оно получает ID и статус 'new'.
+//      (createReport) — оно получает ID и статус 'new'. Жалоба на статью
+//      Ибрипедии (type 'article') — такое же обращение, отправляется со
+//      страницы статьи (createArticleReport).
 //   2. Первая линия (право feedback_triage) очищает поток: 'accepted' —
 //      обращение адекватное, идёт дальше; 'rejected' — спам/нерелевант, с
 //      причиной, которую видит автор. Отклонённые не удаляются — вторая
@@ -28,8 +30,20 @@
 // отвязать обратно; всё пишется в журнал feedback_events.
 
 const { feedbackDb } = require('../db/connections');
+const articlesStore = require('./articles-store');
+const articleLayers = require('./article-layers');
 
-const TYPES = ['bug', 'idea'];
+// 'article' — жалоба на статью Ибрипедии: проходит те же три линии, что и
+// баги/предложения, но в кейс объединяются только жалобы на одну статью.
+const TYPES = ['bug', 'idea', 'article'];
+const ARTICLE_REASONS = {
+  inaccurate: 'Недостоверная информация',
+  outdated: 'Устарело',
+  offensive: 'Оскорбления / нарушение правил',
+  plagiarism: 'Плагиат',
+  spam: 'Спам / реклама',
+  other: 'Другое'
+};
 const FREQUENCIES = ['always', 'often', 'sometimes', 'once'];
 const FACT_KINDS = ['info', 'contradiction'];
 const DECISIONS = ['accepted', 'declined'];
@@ -165,6 +179,9 @@ function mapReport(row) {
     frequency: row.frequency,
     comment: row.comment,
     attachments: parseJsonArray(row.attachments),
+    articleSlug: row.article_slug || null,
+    articleTitle: row.article_title || null,
+    articleReason: row.article_reason || null,
     authorId: row.author_id,
     authorName: row.author_name,
     status: row.status,
@@ -207,14 +224,59 @@ function mapCase(row, stats) {
 
 // ---------- Обращения: пользователь ----------
 
-async function createReport(user, input) {
-  const type = TYPES.includes(input.type) ? input.type : null;
-  if (!type) throw httpError(400, 'Укажите тип обращения: баг или предложение');
+// Статья, на которую жалуются, — только та, которую пользователь сам может
+// прочитать: иначе через жалобу можно было бы узнать название закрытой.
+async function resolveReportedArticle(user, slug) {
+  const article = slug ? articlesStore.getArticle(String(slug)) : null;
+  if (!article || !(await articleLayers.hasArticleAccess(article, user))) {
+    throw httpError(404, 'Статья не найдена');
+  }
+  return article;
+}
 
+async function assertNoPending(user) {
   const pending = await get("SELECT COUNT(*) as cnt FROM feedback_reports WHERE author_id = ? AND status = 'new'", [user.id]);
   if (pending && pending.cnt >= MAX_PENDING_PER_USER) {
     throw httpError(429, `У вас уже ${pending.cnt} обращений ждут проверки — дождитесь, пока модераторы их разберут`);
   }
+}
+
+async function createArticleReport(user, input) {
+  const article = await resolveReportedArticle(user, input.articleSlug);
+  const reason = Object.prototype.hasOwnProperty.call(ARTICLE_REASONS, input.articleReason) ? input.articleReason : null;
+  if (!reason) throw httpError(400, 'Выберите причину жалобы');
+
+  // Повторная жалоба на ту же статью, пока первая не разобрана, ничего не
+  // добавляет — только нагружает первую линию.
+  const duplicate = await get(
+    "SELECT id FROM feedback_reports WHERE author_id = ? AND type = 'article' AND article_slug = ? AND status = 'new'",
+    [user.id, article.slug]
+  );
+  if (duplicate) throw httpError(409, `Ваша жалоба на эту статью (#${duplicate.id}) уже ждёт проверки`);
+  await assertNoPending(user);
+
+  const articleTitle = String(article.title || article.slug).slice(0, LIMITS.title);
+  const title = `${ARTICLE_REASONS[reason]}: ${articleTitle}`.slice(0, LIMITS.title);
+  const description = requireText(input.description, LIMITS.description, 'Что не так со статьёй');
+  const comment = cleanText(input.comment, LIMITS.comment);
+  const attachments = cleanAttachments(input.attachments);
+
+  const result = await run(
+    `INSERT INTO feedback_reports
+      (type, title, description, comment, attachments, article_slug, article_title, article_reason, author_id, author_name)
+     VALUES ('article', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [title, description, comment, JSON.stringify(attachments), article.slug, articleTitle, reason, user.id, actorName(user)]
+  );
+  await logEvent(user, 'report_created', { reportId: result.lastID });
+  return getReport(result.lastID);
+}
+
+async function createReport(user, input) {
+  const type = TYPES.includes(input.type) ? input.type : null;
+  if (!type) throw httpError(400, 'Укажите тип обращения: баг, предложение или жалоба на статью');
+  if (type === 'article') return createArticleReport(user, input);
+
+  await assertNoPending(user);
 
   const isBug = type === 'bug';
   const report = {
@@ -401,8 +463,9 @@ async function assertCaseEditable(caseId) {
 }
 
 // Обращение можно добавить в кейс, только если оно прошло первую линию, ещё
-// не лежит в другом кейсе и того же типа.
-async function loadAttachableReports(reportIds, type) {
+// не лежит в другом кейсе и того же типа; жалобы на статьи — ещё и только
+// на одну и ту же статью (articleSlug — статья кейса, если он уже есть).
+async function loadAttachableReports(reportIds, type, articleSlug) {
   const ids = [...new Set((reportIds || []).map(toId).filter(Boolean))];
   if (!ids.length) throw httpError(400, 'Выберите хотя бы одно обращение');
   const rows = await all(`SELECT * FROM feedback_reports WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
@@ -410,11 +473,21 @@ async function loadAttachableReports(reportIds, type) {
   rows.forEach((r) => {
     if (r.status !== 'accepted') throw httpError(409, `Обращение #${r.id} ещё не прошло первую линию`);
     if (r.case_id) throw httpError(409, `Обращение #${r.id} уже входит в кейс #${r.case_id}`);
-    if (type && r.type !== type) throw httpError(409, `Обращение #${r.id} другого типа — в одном кейсе только баги или только предложения`);
+    if (type && r.type !== type) throw httpError(409, `Обращение #${r.id} другого типа — в одном кейсе обращения только одного типа`);
+    if (articleSlug && r.article_slug !== articleSlug) throw httpError(409, `Жалоба #${r.id} на другую статью — в одном кейсе жалобы только на одну статью`);
   });
   const types = new Set(rows.map((r) => r.type));
-  if (types.size > 1) throw httpError(409, 'Нельзя объединить баги и предложения в один кейс');
+  if (types.size > 1) throw httpError(409, 'Нельзя объединить в один кейс обращения разных типов');
+  if (rows[0].type === 'article' && new Set(rows.map((r) => r.article_slug)).size > 1) {
+    throw httpError(409, 'Нельзя объединить в один кейс жалобы на разные статьи');
+  }
   return rows;
+}
+
+// Статья кейса жалоб — берётся из любого его обращения (все они на одну статью).
+async function caseArticleSlug(caseId) {
+  const row = await get('SELECT article_slug FROM feedback_reports WHERE case_id = ? AND article_slug IS NOT NULL LIMIT 1', [caseId]);
+  return row ? row.article_slug : null;
 }
 
 async function escalateIfCritical(actor, caseId, severity) {
@@ -463,7 +536,8 @@ async function updateCase(actor, caseId, input) {
 
 async function attachReports(actor, caseId, reportIds) {
   const row = await assertCaseEditable(caseId);
-  const rows = await loadAttachableReports(reportIds, row.type);
+  const articleSlug = row.type === 'article' ? await caseArticleSlug(caseId) : null;
+  const rows = await loadAttachableReports(reportIds, row.type, articleSlug);
   const ids = rows.map((r) => r.id);
   await run(`UPDATE feedback_reports SET case_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [caseId, ...ids]);
   await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [caseId]);

@@ -22,7 +22,16 @@
     return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  const TYPE_LABELS = { bug: 'Баг', idea: 'Предложение' };
+  const TYPE_LABELS = { bug: 'Баг', idea: 'Предложение', article: 'Статья' };
+  // Совпадает с ARTICLE_REASONS в feedback-store.js.
+  const ARTICLE_REASON_LABELS = {
+    inaccurate: 'Недостоверная информация',
+    outdated: 'Устарело',
+    offensive: 'Оскорбления / нарушение правил',
+    plagiarism: 'Плагиат',
+    spam: 'Спам / реклама',
+    other: 'Другое'
+  };
   const FREQUENCY_LABELS = { always: 'Всегда', often: 'Часто', sometimes: 'Иногда', once: 'Один раз' };
   const SEVERITY_LABELS = { 1: '1 — косметика', 2: '2 — мешает', 3: '3 — ломает функцию', 4: '4 — потеря данных / безопасность' };
   const CASE_STATUS_LABELS = { open: 'В обработке', escalated: 'На решении', resolved: 'Решён', archived: 'Архив' };
@@ -45,7 +54,8 @@
   };
 
   function typeChip(type) {
-    return `<span class="feedback-chip ${type === 'bug' ? 'bug' : 'idea'}">${TYPE_LABELS[type] || type}</span>`;
+    const cls = type === 'bug' ? 'bug' : type === 'article' ? 'article' : 'idea';
+    return `<span class="feedback-chip ${cls}">${TYPE_LABELS[type] || type}</span>`;
   }
 
   // Статус обращения глазами его автора: обращение само по себе проходит
@@ -57,7 +67,8 @@
     if (report.caseStatus === 'open') return { chip: 'pending', text: 'В работе' };
     if (report.caseStatus === 'escalated') return { chip: 'pending', text: 'Передано на решение' };
     if (report.caseDecision === 'accepted') {
-      return { chip: 'ok', text: report.type === 'bug' ? 'Подтверждено — будет исправлено' : 'Принято' };
+      const text = { bug: 'Подтверждено — будет исправлено', article: 'Жалоба подтверждена' }[report.type] || 'Принято';
+      return { chip: 'ok', text };
     }
     if (report.caseDecision === 'declined') return { chip: 'bad', text: 'Отклонено' };
     return { chip: '', text: CASE_STATUS_LABELS[report.caseStatus] || '—' };
@@ -80,12 +91,25 @@
 
   // Полное содержимое обращения — в разворачиваемом блоке, чтобы список
   // оставался компактным.
+  // Ссылка на статью жалобы — кнопка, а не <a>: переход внутри SPA (см.
+  // обработчик [data-open-article] в bindEvents).
+  function articleLink(report) {
+    if (!report.articleSlug) return '';
+    return `<button type="button" class="feedback-article-link" data-open-article="${escapeHtml(report.articleSlug)}"><i class="fas fa-book-open"></i> ${escapeHtml(report.articleTitle || report.articleSlug)}</button>`;
+  }
+
   function renderReportFields(report) {
     const env = [report.version && `версия ${report.version}`, report.platform, report.frequency && FREQUENCY_LABELS[report.frequency]]
       .filter(Boolean).join(' · ');
+    const descriptionLabel = { bug: 'Описание проблемы', article: 'Что не так со статьёй' }[report.type] || 'Описание идеи';
+    const article = report.type === 'article'
+      ? `<div><div class="feedback-field-label">Статья</div><div>${articleLink(report)}</div></div>
+         ${field('Причина', ARTICLE_REASON_LABELS[report.articleReason] || report.articleReason)}`
+      : '';
     return `
       <div class="feedback-fields">
-        ${field(report.type === 'bug' ? 'Описание проблемы' : 'Описание идеи', report.description)}
+        ${article}
+        ${field(descriptionLabel, report.description)}
         ${field('Шаги воспроизведения', report.steps)}
         ${field('Ожидаемое поведение', report.expected)}
         ${field('Фактическое поведение', report.actual)}
@@ -213,6 +237,15 @@
       });
 
       root.querySelector('#feedbackTextModalConfirm').addEventListener('click', () => this.resolveTextModal(true));
+
+      // Ссылки на статьи в жалобах — во всех списках и в карточке кейса.
+      root.addEventListener('click', (e) => {
+        const link = e.target.closest('[data-open-article]');
+        if (!link) return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.spaRouter?.openIbripediaArticle(link.dataset.openArticle);
+      });
     }
 
     switchTab(tab) {
@@ -648,6 +681,7 @@
           <div class="feedback-stat"><div class="feedback-stat-value">${c.reportsCount}</div><div class="feedback-stat-label">обращений</div></div>
           <div class="feedback-stat"><div class="feedback-stat-value">${c.duplicatesCount}</div><div class="feedback-stat-label">дублей</div></div>
         </div>
+        ${c.type === 'article' && c.reports.length ? `<div><div class="feedback-field-label">Статья</div>${articleLink(c.reports[0])}</div>` : ''}
         ${header}
         ${decisionBlock}
         ${actions.length ? `<div class="feedback-card-actions btns-compact">${actions.join('')}</div>` : ''}

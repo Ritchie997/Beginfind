@@ -1297,6 +1297,71 @@
       });
 
       this.commentsListEl?.addEventListener('click', (e) => this.handleCommentsListClick(e));
+
+      this.initReportModal();
+    }
+
+    // ========================================
+    // Жалоба на статью — отправляется как обращение типа 'article' в
+    // /api/feedback/reports и дальше идёт по трём линиям модерации
+    // "Обращений" (см. src/services/feedback-store.js).
+    // ========================================
+
+    initReportModal() {
+      this.reportModalEl = document.getElementById('ibripediaReportModal');
+      if (!this.reportModalEl) return;
+      document.getElementById('ibripediaReportBtn')?.addEventListener('click', () => this.openReportModal());
+      this.reportModalEl.querySelectorAll('[data-close-report-modal]').forEach((btn) => {
+        btn.addEventListener('click', () => this.closeReportModal());
+      });
+      // Клик мимо окна не закрывает его — чтобы случайно не потерять
+      // уже набранный текст жалобы.
+      document.getElementById('ibripediaReportSubmitBtn')?.addEventListener('click', (e) => {
+        runExclusive(e.currentTarget, () => this.submitReport());
+      });
+    }
+
+    openReportModal() {
+      if (!this.currentSlug || !this.reportModalEl) return;
+      this._reportSlug = this.currentSlug;
+      document.getElementById('ibripediaReportArticleTitle').textContent =
+        document.getElementById('ibripediaViewTitle')?.textContent || this.currentSlug;
+      document.getElementById('ibripediaReportReason').value = '';
+      document.getElementById('ibripediaReportDescription').value = '';
+      document.getElementById('ibripediaReportComment').value = '';
+      this.reportModalEl.hidden = false;
+      document.getElementById('ibripediaReportReason').focus();
+    }
+
+    closeReportModal() {
+      if (this.reportModalEl) this.reportModalEl.hidden = true;
+    }
+
+    async submitReport() {
+      const articleReason = document.getElementById('ibripediaReportReason').value;
+      const description = document.getElementById('ibripediaReportDescription').value.trim();
+      if (!articleReason) {
+        showMessage('Выберите причину жалобы', 'error');
+        return;
+      }
+      if (!description) {
+        showMessage('Опишите, что не так со статьёй', 'error');
+        return;
+      }
+      const result = await window.apiClient.makeAuthenticatedRequest('/api/feedback/reports', 'POST', {
+        type: 'article',
+        articleSlug: this._reportSlug,
+        articleReason,
+        description,
+        comment: document.getElementById('ibripediaReportComment').value
+      });
+      if (!result.success) {
+        showMessage(result.data?.error || result.error || 'Не удалось отправить жалобу', 'error');
+        return;
+      }
+      this.closeReportModal();
+      showMessage(`Жалоба #${result.data.id} отправлена — статус смотрите в «Обращениях»`, 'success');
+      window.refreshNotificationBadges?.();
     }
 
     resetEngagementUI() {

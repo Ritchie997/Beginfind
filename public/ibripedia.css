@@ -778,6 +778,15 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-color: var(--red);
 }
 
+/* Жалоба — в стороне от лайка/реакций, чтобы не нажать её случайно. */
+.ibripedia-report-btn {
+  margin-left: auto;
+}
+
+.ibripedia-report-btn:hover {
+  color: var(--red);
+}
+
 .ibripedia-comments {
   max-width: 1090px;
   margin: 20px auto 0;

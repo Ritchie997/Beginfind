@@ -181,6 +181,11 @@
           <button type="button" id="ibripediaCommentsBtn" class="ibripedia-engagement-btn" title="К комментариям">
             <i class="far fa-comment"></i> <span id="ibripediaCommentsCount">0</span>
           </button>
+          <!-- Жалоба на статью — уходит в "Обращения" (тип 'article', см.
+               src/services/feedback-store.js), модалка ниже. -->
+          <button type="button" id="ibripediaReportBtn" class="ibripedia-engagement-btn ibripedia-report-btn" title="Пожаловаться на статью">
+            <i class="far fa-flag"></i>
+          </button>
         </div>
       </article>
 
@@ -265,5 +270,42 @@
       </div>
     </div>
   </section>
+
+  <!-- ===== Жалоба на статью (см. openReportModal()/submitReport() в ibripedia.js) ===== -->
+  <div class="modal-overlay" id="ibripediaReportModal" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Пожаловаться на статью</h3>
+        <button type="button" class="modal-close" data-close-report-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> <span>Жалоба на «<b id="ibripediaReportArticleTitle"></b>» попадёт в раздел «Обращения» — модераторы проверят её, статус будет виден там же.</span></p>
+        <div class="form-group">
+          <label class="form-label" for="ibripediaReportReason">Причина *</label>
+          <select id="ibripediaReportReason" class="form-select">
+            <option value="">— выберите —</option>
+            <option value="inaccurate">Недостоверная информация</option>
+            <option value="outdated">Устарело</option>
+            <option value="offensive">Оскорбления / нарушение правил</option>
+            <option value="plagiarism">Плагиат</option>
+            <option value="spam">Спам / реклама</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ibripediaReportDescription">Что не так со статьёй *</label>
+          <textarea id="ibripediaReportDescription" class="form-textarea" maxlength="5000" placeholder="Какой фрагмент, что в нём неверно, как должно быть"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ibripediaReportComment">Источники / комментарий</label>
+          <textarea id="ibripediaReportComment" class="form-textarea" maxlength="2000" placeholder="Ссылки, подтверждающие вашу правоту, и всё, что поможет модератору"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-report-modal>Отмена</button>
+        <button type="button" class="btn btn-primary" id="ibripediaReportSubmitBtn">Отправить</button>
+      </div>
+    </div>
+  </div>
 
 </div>

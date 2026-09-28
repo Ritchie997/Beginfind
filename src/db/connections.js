@@ -438,7 +438,7 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
       // Обращение — ровно то, что прислал пользователь по шаблону; после
       // отправки его текст не редактируется (кейс только ссылается на него,
       // см. "как не потерять информацию" в feedback-store.js).
-      // type: 'bug' | 'idea'. status: 'new' (первая линия) | 'rejected'
+      // type: 'bug' | 'idea' | 'article'. status: 'new' (первая линия) | 'rejected'
       // (отсеяно, с reject_reason) | 'accepted' (прошло очистку). case_id —
       // кейс второй линии, в который обращение объединено (NULL — ещё не
       // разобрано). attachments — JSON-массив ссылок (/uploads/... или http(s)).
@@ -467,6 +467,22 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
       feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_status ON feedback_reports (status, case_id)');
       feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_author ON feedback_reports (author_id)');
       feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_case ON feedback_reports (case_id)');
+
+      // Жалоба на статью Ибрипедии (type = 'article'): article_slug — на
+      // какую статью, article_title — её название на момент жалобы (статью
+      // могут переименовать или удалить, а модератору надо понимать, о чём
+      // речь), article_reason — категория жалобы (ARTICLE_REASONS в
+      // feedback-store.js). Проверка через PRAGMA — как у drafts.folder_id.
+      feedbackDb.all('PRAGMA table_info(feedback_reports)', [], (err, columns) => {
+        if (err) {
+          console.error('Error reading feedback_reports schema', err);
+          return;
+        }
+        const names = new Set((columns || []).map((c) => c.name));
+        ['article_slug', 'article_title', 'article_reason'].forEach((name) => {
+          if (!names.has(name)) feedbackDb.run(`ALTER TABLE feedback_reports ADD COLUMN ${name} TEXT`);
+        });
+      });
 
       // Кейс второй линии. status: 'open' (в обработке) | 'escalated'
       // (передан на третью линию) | 'resolved' (есть решение) | 'archived'.
