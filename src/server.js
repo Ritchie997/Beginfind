@@ -40,6 +40,7 @@ const stickersRoutes = require('./routes/stickers.routes');
 const cleanupRoutes = require('./routes/cleanup.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
 const mapsRoutes = require('./routes/maps.routes');
+const feedbackRoutes = require('./routes/feedback.routes');
 const mapTiler = require('./services/map-tiler');
 
 const app = express();
@@ -118,6 +119,7 @@ app.use('/api', stickersRoutes);
 app.use('/api', cleanupRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', mapsRoutes);
+app.use('/api', feedbackRoutes);
 
 // Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между

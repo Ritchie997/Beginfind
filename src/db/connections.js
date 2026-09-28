@@ -388,4 +388,109 @@ const stickersDb = new sqlite3.Database(dbPath('stickers.db'), (err) => {
   }
 });
 
-module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb };
+// Обращения пользователей (багрепорты/предложения) и трёхлинейная модерация
+// над ними — см. жизненный цикл в src/services/feedback-store.js. Отдельный
+// файл БД по той же причине, что и у стикеров: самостоятельная сущность со
+// своими таблицами, users.db не трогаем. author_name/actor_name
+// денормализованы (JOIN с users.db невозможен — другой файл).
+const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
+  if (err) {
+    console.error('Error opening feedback database', err);
+  } else {
+    console.log('Connected to feedback SQLite database');
+    feedbackDb.run("PRAGMA encoding = 'UTF-8'");
+    feedbackDb.serialize(() => {
+      // Обращение — ровно то, что прислал пользователь по шаблону; после
+      // отправки его текст не редактируется (кейс только ссылается на него,
+      // см. "как не потерять информацию" в feedback-store.js).
+      // type: 'bug' | 'idea'. status: 'new' (первая линия) | 'rejected'
+      // (отсеяно, с reject_reason) | 'accepted' (прошло очистку). case_id —
+      // кейс второй линии, в который обращение объединено (NULL — ещё не
+      // разобрано). attachments — JSON-массив ссылок (/uploads/... или http(s)).
+      feedbackDb.run(`CREATE TABLE IF NOT EXISTS feedback_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        steps TEXT,
+        expected TEXT,
+        actual TEXT,
+        version TEXT,
+        platform TEXT,
+        frequency TEXT,
+        comment TEXT,
+        attachments TEXT NOT NULL DEFAULT '[]',
+        author_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new',
+        reject_reason TEXT,
+        triaged_by TEXT,
+        triaged_at DATETIME,
+        case_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_status ON feedback_reports (status, case_id)');
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_author ON feedback_reports (author_id)');
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_reports_case ON feedback_reports (case_id)');
+
+      // Кейс второй линии. status: 'open' (в обработке) | 'escalated'
+      // (передан на третью линию) | 'resolved' (есть решение) | 'archived'.
+      // severity — критичность 1..4 (см. SEVERITY_WEIGHTS), приоритет из неё
+      // и числа пользователей считается на лету, не хранится.
+      // decision: 'accepted' | 'declined' — вердикт третьей линии,
+      // decision_text — его пояснение.
+      feedbackDb.run(`CREATE TABLE IF NOT EXISTS feedback_cases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        summary TEXT,
+        severity INTEGER NOT NULL DEFAULT 2,
+        status TEXT NOT NULL DEFAULT 'open',
+        decision TEXT,
+        decision_text TEXT,
+        decided_by TEXT,
+        decided_at DATETIME,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        escalated_at DATETIME,
+        archived_at DATETIME
+      )`);
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_cases_status ON feedback_cases (status)');
+
+      // Факт кейса — одна единица информации с явными источниками
+      // (source_report_ids, JSON-массив id обращений этого кейса). kind:
+      // 'info' — сведения о проблеме; к "большинству" или "некоторым" факт
+      // относится не по ручной пометке, а по доле источников среди обращений
+      // кейса (MAJORITY_SHARE в feedback-store.js); 'contradiction' —
+      // противоречия и уточнения.
+      feedbackDb.run(`CREATE TABLE IF NOT EXISTS feedback_case_facts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER NOT NULL REFERENCES feedback_cases(id),
+        kind TEXT NOT NULL DEFAULT 'info',
+        text TEXT NOT NULL,
+        source_report_ids TEXT NOT NULL DEFAULT '[]',
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_facts_case ON feedback_case_facts (case_id)');
+
+      // Журнал всех действий над обращениями и кейсами — и история для
+      // модераторов, и источник будущих метрик (время до решения, число
+      // дублей и т.п.).
+      feedbackDb.run(`CREATE TABLE IF NOT EXISTS feedback_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER,
+        report_id INTEGER,
+        actor_id INTEGER,
+        actor_name TEXT,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_events_case ON feedback_events (case_id)');
+    });
+  }
+});
+
+module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb };

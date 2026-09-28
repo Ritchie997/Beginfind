@@ -894,7 +894,12 @@ const NOTIF_BADGE_TARGETS = {
   // Предложения коллабораций на СВОИ наборы — приходят всем авторам, а не
   // только модераторам; бейдж у пункта "Стикеры" общий с модерацией (см.
   // суммирование по elementId в refreshNotificationBadges).
-  incomingStickerCollabs: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_sticker_collabs', toastText: (n) => `Новое предложение коллаборации для вашего набора стикеров (всего ${n})` }
+  incomingStickerCollabs: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_sticker_collabs', toastText: (n) => `Новое предложение коллаборации для вашего набора стикеров (всего ${n})` },
+  // Очереди трёх линий модерации обращений — у каждой линии своя, общий
+  // бейдж на пункте "Обращения" (см. src/routes/notifications.routes.js).
+  feedbackTriage: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_triage', toastText: (n) => `Новое обращение ждёт проверки (всего ${n})` },
+  feedbackUnassigned: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_cases', toastText: (n) => `Принятое обращение ждёт объединения в кейс (всего ${n})` },
+  feedbackEscalated: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_decide', toastText: (n) => `Кейс ждёт решения третьей линии (всего ${n})` }
 };
 
 function renderNavBadge(elementId, count) {

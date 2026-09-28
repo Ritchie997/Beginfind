@@ -53,7 +53,11 @@ const PERMISSION_KEYS = [
   'block_users',         // блокировать/разблокировать аккаунты
   'rename_users',        // переименовывать других пользователей
   'mute_users',          // временно мутить пользователей ниже по рангу
-  'moderate_stickers'    // подтверждать/отклонять наборы стикеров перед тем, как их можно использовать (см. src/services/stickers-store.js)
+  'moderate_stickers',   // подтверждать/отклонять наборы стикеров перед тем, как их можно использовать (см. src/services/stickers-store.js)
+  // Три линии модерации обращений (баги/предложения) — см. src/services/feedback-store.js:
+  'feedback_triage',     // 1-я линия: отсеивать спам/нерелевант среди новых обращений
+  'feedback_cases',      // 2-я линия: объединять обращения в кейсы, вести факты, передавать на решение
+  'feedback_decide'      // 3-я линия: принимать финальное решение по кейсу
 ];
 
 const DEFAULT_ROLES = [
@@ -67,7 +71,10 @@ const DEFAULT_ROLES = [
       block_users: true,
       rename_users: true,
       mute_users: true,
-      moderate_stickers: true
+      moderate_stickers: true,
+      feedback_triage: true,
+      feedback_cases: true,
+      feedback_decide: false
     }
   },
   {
@@ -80,7 +87,10 @@ const DEFAULT_ROLES = [
       block_users: false,
       rename_users: false,
       mute_users: true,
-      moderate_stickers: false
+      moderate_stickers: false,
+      feedback_triage: false,
+      feedback_cases: false,
+      feedback_decide: false
     }
   },
   {
@@ -93,7 +103,10 @@ const DEFAULT_ROLES = [
       block_users: false,
       rename_users: false,
       mute_users: false,
-      moderate_stickers: false
+      moderate_stickers: false,
+      feedback_triage: false,
+      feedback_cases: false,
+      feedback_decide: false
     }
   }
 ];

@@ -1,0 +1,282 @@
+<div class="feedback-page">
+    <div class="feedback-toolbar btns-compact">
+        <h2 class="feedback-heading"><i class="fas fa-bug"></i> Обращения</h2>
+        <button class="btn btn-primary" id="feedbackCreateBtn"><i class="fas fa-plus"></i> Новое обращение</button>
+    </div>
+
+    <!-- Вкладки линий модерации видны только с соответствующим правом
+         (feedback_triage / feedback_cases / feedback_decide), см. feedback-manager.js -->
+    <div class="editor-mode-tabs feedback-tabs" id="feedbackTabs">
+        <button type="button" class="editor-mode-tab active" data-feedback-tab="mine"><i class="fas fa-user"></i> Мои обращения</button>
+        <button type="button" class="editor-mode-tab" data-feedback-tab="triage" hidden>
+            <i class="fas fa-filter"></i> 1 · Очистка
+            <span class="feedback-badge" data-feedback-badge="triage" hidden>0</span>
+        </button>
+        <button type="button" class="editor-mode-tab" data-feedback-tab="cases" hidden>
+            <i class="fas fa-layer-group"></i> 2 · Кейсы
+            <span class="feedback-badge" data-feedback-badge="cases" hidden>0</span>
+        </button>
+        <button type="button" class="editor-mode-tab" data-feedback-tab="decide" hidden>
+            <i class="fas fa-gavel"></i> 3 · Решение
+            <span class="feedback-badge" data-feedback-badge="decide" hidden>0</span>
+        </button>
+    </div>
+
+    <!-- ============ Мои обращения ============ -->
+    <div class="feedback-panel" id="feedbackPanelMine">
+        <div class="loading-pulse" id="feedbackMineLoading">Загрузка...</div>
+        <div class="empty-state" id="feedbackMineEmpty" hidden>
+            <i class="fas fa-bug"></i>
+            <h3>Вы ещё не отправляли обращений</h3>
+            <p>Нашли баг или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь.</p>
+        </div>
+        <div class="feedback-list" id="feedbackMineList"></div>
+    </div>
+
+    <!-- ============ 1 линия: очистка ============ -->
+    <div class="feedback-panel" id="feedbackPanelTriage" hidden>
+        <div class="feedback-subtabs btns-compact">
+            <button type="button" class="btn btn-secondary btn-sm active" data-triage-view="new">Новые</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-triage-view="rejected">Отклонённые</button>
+        </div>
+        <p class="feedback-explain" id="feedbackTriageExplain">Уберите спам, бред и нерелевантное. Всё адекватное — «Принять», дальше им займётся вторая линия.</p>
+        <div class="loading-pulse" id="feedbackTriageLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackTriageEmpty" hidden>Очередь пуста.</div>
+        <div class="feedback-list" id="feedbackTriageList"></div>
+    </div>
+
+    <!-- ============ 2 линия: кейсы ============ -->
+    <div class="feedback-panel" id="feedbackPanelCases" hidden>
+        <h3 class="feedback-section-title">Принятые обращения без кейса</h3>
+        <p class="feedback-explain">Отметьте одинаковые обращения и создайте из них кейс или добавьте их в уже существующий открытый кейс.</p>
+        <div class="feedback-queue-actions btns-compact" id="feedbackQueueActions" hidden>
+            <span id="feedbackQueueSelected">Выбрано: 0</span>
+            <button type="button" class="btn btn-primary btn-sm" id="feedbackQueueCreateBtn"><i class="fas fa-plus"></i> Создать кейс</button>
+            <select class="form-select" id="feedbackQueueCaseSelect"></select>
+            <button type="button" class="btn btn-secondary btn-sm" id="feedbackQueueAttachBtn"><i class="fas fa-link"></i> Добавить в кейс</button>
+        </div>
+        <div class="loading-pulse" id="feedbackQueueLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackQueueEmpty" hidden>Все принятые обращения уже разобраны по кейсам.</div>
+        <div class="feedback-list" id="feedbackQueueList"></div>
+
+        <div class="feedback-section-head">
+            <h3 class="feedback-section-title">Кейсы</h3>
+            <select class="form-select" id="feedbackCasesFilter">
+                <option value="open">В обработке</option>
+                <option value="escalated">Переданы на решение</option>
+                <option value="resolved">Решены</option>
+                <option value="archived">Архив</option>
+            </select>
+        </div>
+        <div class="loading-pulse" id="feedbackCasesLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackCasesEmpty" hidden>Кейсов с таким статусом нет.</div>
+        <div class="feedback-list" id="feedbackCasesList"></div>
+    </div>
+
+    <!-- ============ 3 линия: решение ============ -->
+    <div class="feedback-panel" id="feedbackPanelDecide" hidden>
+        <p class="feedback-explain">Кейсы, собранные второй линией, по убыванию приоритета. Откройте кейс, чтобы принять решение или вернуть его на доработку.</p>
+        <div class="loading-pulse" id="feedbackDecideLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackDecideEmpty" hidden>Нет кейсов, ожидающих решения.</div>
+        <div class="feedback-list" id="feedbackDecideList"></div>
+    </div>
+
+    <!-- ============ Модалка: новое обращение ============ -->
+    <div class="modal-overlay" id="feedbackCreateModal" hidden>
+        <div class="modal-box modal-box-wide">
+            <div class="modal-header">
+                <h3>Новое обращение</h3>
+                <button class="modal-close" data-close-modal="feedbackCreateModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-type-switch" id="feedbackTypeSwitch">
+                    <button type="button" class="btn btn-secondary active" data-report-type="bug"><i class="fas fa-bug"></i> Баг</button>
+                    <button type="button" class="btn btn-secondary" data-report-type="idea"><i class="fas fa-lightbulb"></i> Предложение</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Краткое название *</label>
+                    <input type="text" id="feedbackTitle" class="form-input" maxlength="150" placeholder="Например: не сохраняется черновик статьи">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" id="feedbackDescriptionLabel">Описание проблемы *</label>
+                    <textarea id="feedbackDescription" class="form-textarea" maxlength="5000"></textarea>
+                </div>
+                <div data-bug-only>
+                    <div class="form-group">
+                        <label class="form-label">Шаги воспроизведения *</label>
+                        <textarea id="feedbackSteps" class="form-textarea" maxlength="5000" placeholder="1. Открыть ...&#10;2. Нажать ...&#10;3. ..."></textarea>
+                    </div>
+                    <div class="feedback-form-row">
+                        <div class="form-group">
+                            <label class="form-label">Ожидаемое поведение</label>
+                            <textarea id="feedbackExpected" class="form-textarea" maxlength="2000"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Фактическое поведение</label>
+                            <textarea id="feedbackActual" class="form-textarea" maxlength="2000"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="feedback-form-row">
+                    <div class="form-group">
+                        <label class="form-label">Версия</label>
+                        <input type="text" id="feedbackVersion" class="form-input" maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Платформа</label>
+                        <input type="text" id="feedbackPlatform" class="form-input" maxlength="100" placeholder="Windows, Chrome / Android ...">
+                    </div>
+                    <div class="form-group" data-bug-only>
+                        <label class="form-label">Как часто</label>
+                        <select id="feedbackFrequency" class="form-select">
+                            <option value="">—</option>
+                            <option value="always">Всегда</option>
+                            <option value="often">Часто</option>
+                            <option value="sometimes">Иногда</option>
+                            <option value="once">Один раз</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Доказательства: скриншоты, ссылки на видео и логи</label>
+                    <div class="feedback-attachments" id="feedbackAttachments"></div>
+                    <div class="feedback-attach-row btns-compact">
+                        <input type="file" id="feedbackFileInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackPickFileBtn"><i class="fas fa-image"></i> Скриншот</button>
+                        <input type="text" id="feedbackLinkInput" class="form-input" placeholder="https://... ссылка на видео или лог">
+                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackAddLinkBtn">Добавить</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Дополнительные комментарии</label>
+                    <textarea id="feedbackComment" class="form-textarea" maxlength="2000"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close-modal="feedbackCreateModal">Отмена</button>
+                <button class="btn btn-primary" id="feedbackSubmitBtn">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Модалка: карточка кейса ============ -->
+    <div class="modal-overlay" id="feedbackCaseModal" hidden>
+        <div class="modal-box feedback-case-box">
+            <div class="modal-header">
+                <h3 id="feedbackCaseModalTitle">Кейс</h3>
+                <button class="modal-close" data-close-modal="feedbackCaseModal">&times;</button>
+            </div>
+            <div class="modal-body" id="feedbackCaseBody"></div>
+        </div>
+    </div>
+
+    <!-- ============ Модалка: текст (причина отклонения / решение / доработка) ============ -->
+    <div class="modal-overlay" id="feedbackTextModal" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="feedbackTextModalTitle"></h3>
+                <button class="modal-close" data-close-modal="feedbackTextModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" id="feedbackTextModalLabel"></label>
+                    <textarea id="feedbackTextModalInput" class="form-textarea" maxlength="5000"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close-modal="feedbackTextModal">Отмена</button>
+                <button class="btn btn-primary" id="feedbackTextModalConfirm">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.feedback-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.feedback-heading { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.feedback-tabs { flex-wrap: wrap; margin-bottom: 12px; }
+.feedback-tabs .editor-mode-tab { flex: none; }
+.feedback-tabs .editor-mode-tab[hidden] { display: none; }
+.feedback-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 9px; background: var(--red); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.feedback-badge[hidden] { display: none; }
+
+.feedback-page .empty-state { padding: 28px 12px; }
+.feedback-page .empty-state i { font-size: 40px; margin-bottom: 12px; }
+.feedback-page .empty-state h3 { font-size: 17px; margin-bottom: 8px; }
+.feedback-page .empty-state p { font-size: 13px; }
+.feedback-empty { color: var(--text-muted); font-size: 13px; font-style: italic; padding: 8px 0 16px; }
+.feedback-explain { color: var(--text-muted); font-size: 13px; line-height: 1.45; margin: 0 0 12px; }
+.feedback-section-title { font-size: 15px; color: var(--text-normal); margin: 0 0 6px; }
+.feedback-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 20px 0 10px; }
+.feedback-section-head .form-select { width: auto; }
+.feedback-subtabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.feedback-subtabs .btn.active { background: var(--blurple); color: #fff; }
+
+.feedback-list { display: flex; flex-direction: column; gap: 8px; }
+.feedback-card { background: var(--background-secondary); border: 1px solid var(--background-accent); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.feedback-card.is-clickable { cursor: pointer; transition: border-color 0.15s; }
+.feedback-card.is-clickable:hover { border-color: var(--blurple); }
+.feedback-card-head { display: flex; align-items: flex-start; gap: 8px; }
+.feedback-card-head input[type=checkbox] { margin-top: 3px; flex-shrink: 0; }
+.feedback-card-title { font-weight: 600; color: var(--text-normal); font-size: 14px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.feedback-card-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--text-muted); }
+.feedback-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.feedback-chip { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
+.feedback-chip.bug { background: rgba(237, 66, 69, 0.18); color: var(--red); }
+.feedback-chip.idea { background: rgba(88, 101, 242, 0.2); color: var(--blurple); }
+.feedback-chip.pending { background: rgba(250, 168, 26, 0.18); color: var(--yellow); }
+.feedback-chip.ok { background: rgba(59, 165, 93, 0.18); color: var(--green); }
+.feedback-chip.bad { background: rgba(237, 66, 69, 0.18); color: var(--red); }
+.feedback-chip.sev-4 { background: var(--red); color: #fff; }
+
+.feedback-details summary { cursor: pointer; font-size: 12px; color: var(--text-link, var(--blurple)); user-select: none; }
+.feedback-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.feedback-field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); font-weight: 700; }
+.feedback-field-value { font-size: 13px; color: var(--text-normal); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.feedback-note { border-radius: 6px; padding: 8px 10px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feedback-note.bad { background: rgba(237, 66, 69, 0.1); border: 1px solid rgba(237, 66, 69, 0.35); }
+.feedback-note.ok { background: rgba(59, 165, 93, 0.1); border: 1px solid rgba(59, 165, 93, 0.35); }
+.feedback-note.info { background: rgba(88, 101, 242, 0.1); border: 1px solid rgba(88, 101, 242, 0.35); }
+
+.feedback-attachments { display: flex; flex-wrap: wrap; gap: 6px; }
+.feedback-attachment { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.feedback-attachment img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--background-accent); display: block; }
+.feedback-attachment a.feedback-link { font-size: 12px; overflow-wrap: anywhere; }
+.feedback-attachment-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 20px; cursor: pointer; padding: 0; }
+.feedback-attachment.is-link { background: var(--background-tertiary); border-radius: 6px; padding: 4px 26px 4px 8px; }
+.feedback-attachment.is-link .feedback-attachment-remove { top: 50%; right: 4px; transform: translateY(-50%); }
+.feedback-attach-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.feedback-attach-row .form-input { flex: 1; min-width: 160px; }
+.feedback-type-switch { display: flex; gap: 6px; }
+.feedback-type-switch .btn.active { background: var(--blurple); color: #fff; }
+.feedback-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.feedback-form-row > .form-group { flex: 1; min-width: 150px; }
+[data-bug-only][hidden] { display: none; }
+.feedback-queue-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; color: var(--text-muted); }
+.feedback-queue-actions[hidden] { display: none; }
+.feedback-queue-actions .form-select { width: auto; max-width: 260px; }
+
+/* Карточка кейса */
+.feedback-case-box { width: 760px; }
+.feedback-case-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.feedback-stat { background: var(--background-tertiary); border-radius: 8px; padding: 8px 10px; }
+.feedback-stat-value { font-size: 18px; font-weight: 700; color: var(--text-normal); }
+.feedback-stat-label { font-size: 11px; color: var(--text-muted); }
+.feedback-case-section { border-top: 1px solid var(--background-accent); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.feedback-case-section h4 { margin: 0; font-size: 14px; color: var(--text-normal); }
+.feedback-fact { background: var(--background-tertiary); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.feedback-fact-text { font-size: 13px; color: var(--text-normal); white-space: pre-wrap; overflow-wrap: anywhere; }
+.feedback-fact-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.feedback-fact-meta .btn { padding: 2px 8px; font-size: 11px; }
+.feedback-fact-form { display: flex; flex-direction: column; gap: 8px; background: var(--background-tertiary); border-radius: 8px; padding: 10px; }
+.feedback-source-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-normal); }
+.feedback-source-list label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.feedback-events { font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.feedback-events b { color: var(--text-normal); font-weight: 600; }
+
+@media (max-width: 600px) {
+    .feedback-attach-row .form-input { order: -1; flex: 1 1 100%; min-width: 0; }
+    .feedback-section-head { flex-wrap: wrap; }
+}
+</style>

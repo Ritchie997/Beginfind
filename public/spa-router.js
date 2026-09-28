@@ -9,6 +9,7 @@ class SPARouter {
       '/articles': this.loadArticles,
       '/tags': this.loadTags,
       '/stickers': this.loadStickers,
+      '/feedback': this.loadFeedback,
       '/servers': this.loadServers,
       '/pending-users': this.loadPendingUsers,
       '/users': this.loadUsersList,
@@ -417,6 +418,31 @@ class SPARouter {
     } catch (error) {
       console.error('Error loading stickers:', error);
       showMessage('Ошибка при загрузке стикеров', 'error');
+    } finally {
+      this.hideLoader();
+    }
+  }
+
+  // Обращения: багрепорты/предложения и три линии их модерации (feedback-manager.js)
+  async loadFeedback() {
+    this.showLoader();
+
+    try {
+      const response = await fetch('/views/feedback.html');
+      const html = await response.text();
+
+      const appContent = document.getElementById('app-content');
+      if (appContent) {
+        appContent.innerHTML = html;
+
+        const titleElement = document.getElementById('page-title');
+        if (titleElement) titleElement.textContent = 'Обращения';
+      }
+
+      await window.feedbackManager?.init();
+    } catch (error) {
+      console.error('Error loading feedback:', error);
+      showMessage('Ошибка при загрузке обращений', 'error');
     } finally {
       this.hideLoader();
     }
@@ -5439,7 +5465,10 @@ const PERMISSION_LABELS = {
   block_users: 'Блокировать пользователей',
   rename_users: 'Переименовывать пользователей',
   mute_users: 'Временно мутить пользователей',
-  moderate_stickers: 'Подтверждать/отклонять наборы стикеров'
+  moderate_stickers: 'Подтверждать/отклонять наборы стикеров',
+  feedback_triage: 'Обращения, 1 линия: отсеивать спам и нерелевант',
+  feedback_cases: 'Обращения, 2 линия: собирать кейсы и передавать на решение',
+  feedback_decide: 'Обращения, 3 линия: принимать финальное решение по кейсу'
 };
 
 SPARouter.prototype.loadUsersList = async function() {

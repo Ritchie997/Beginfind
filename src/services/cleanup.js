@@ -11,7 +11,7 @@
 //   uploads  — файлы в public/uploads/ (плоская папка, БЕЗ uploads/stickers/),
 //              на которые не ссылается ни одна статья (обложка/тело/
 //              attachments), ни одно сообщение мессенджера, ни один
-//              комментарий — и не моложе minOrphanAgeHours (грейс-период,
+//              комментарий, ни одно обращение (feedback) — и не моложе minOrphanAgeHours (грейс-период,
 //              чтобы не снести картинку, которую только что загрузили в
 //              редакторе, но статью с ней ещё не сохранили).
 //   stickers — файлы внутри public/uploads/stickers/<packId>/, на которые
@@ -32,6 +32,7 @@ const path = require('path');
 const { UPLOADS_DIR, STICKERS_DIR } = require('../config/paths');
 const { messengerDb, socialDb, stickersDb } = require('../db/connections');
 const articlesStore = require('./articles-store');
+const feedbackStore = require('./feedback-store');
 
 function dbAll(db, sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -150,6 +151,9 @@ async function collectUsedUploadNames() {
 
   const comments = await dbAll(socialDb, 'SELECT content FROM article_comments', []);
   comments.forEach((r) => extractFlatUploadNamesFromText(r.content).forEach((n) => used.add(n)));
+
+  // Скриншоты-доказательства, приложенные к обращениям (багрепорты/предложения).
+  (await feedbackStore.listAttachmentUrls()).forEach(add);
 
   return used;
 }

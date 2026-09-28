@@ -10,6 +10,7 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const stickersStore = require('../services/stickers-store');
+const feedbackStore = require('../services/feedback-store');
 
 const router = express.Router();
 
@@ -27,6 +28,18 @@ router.get('/notifications/summary', auth.authenticateToken, auth.checkApproved,
       const pending = await stickersStore.listPending();
       summary.pendingStickerPacks = pending.length;
     }
+    // Очереди трёх линий модерации обращений — каждая только тем, у кого
+    // есть право соответствующей линии (см. src/services/feedback-store.js).
+    const canTriage = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_triage);
+    const canCases = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_cases);
+    const canDecide = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_decide);
+    if (canTriage || canCases || canDecide) {
+      const queues = await feedbackStore.countQueues();
+      if (canTriage) summary.feedbackTriage = queues.triage;
+      if (canCases) summary.feedbackUnassigned = queues.unassigned;
+      if (canDecide) summary.feedbackEscalated = queues.escalated;
+    }
+
     // Предложения коллабораций на МОИ наборы стикеров — видны любому автору
     // (не зависят от прав), поэтому поле приходит всем.
     summary.incomingStickerCollabs = await stickersStore.countIncomingCollabs(req.user.id);
