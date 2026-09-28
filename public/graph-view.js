@@ -825,11 +825,8 @@
    *   панель редактора). Только для полной карты на дашборде.
    *   clusters — искать группы связанных статей (detectCommunities): статьи
    *   группы собираются "островом" с полупрозрачной подложкой и названием.
-   *   collapse — (при clusters) при сильном отдалении большого графа
-   *   сворачивать группы в кружки; по умолчанию включено, переключается
-   *   через setCollapse.
    *   onNodeFocus — ПКМ по статье: (slug) => void (окрестность статьи).
-   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, setUniformSize: (flag: boolean) => void, setCosmos: (flag: boolean) => void, setCollapse: (flag: boolean) => void, firstSearchMatch: () => string|null}>}
+   * @returns {Promise<{destroy: () => void, setSearchHighlight: (query: string) => void, setUniformSize: (flag: boolean) => void, setCosmos: (flag: boolean) => void, firstSearchMatch: () => string|null}>}
    */
   async function renderGraph(container, data, options = {}) {
     const d3 = await loadD3();
@@ -846,7 +843,7 @@
       empty.className = 'graph-empty';
       empty.textContent = 'Пока нет статей для отображения графа.';
       container.appendChild(empty);
-      return { destroy() {}, setSearchHighlight() {}, setUniformSize() {}, setCosmos() {}, setCollapse() {}, firstSearchMatch() { return null; } };
+      return { destroy() {}, setSearchHighlight() {}, setUniformSize() {}, setCosmos() {}, firstSearchMatch() { return null; } };
     }
 
     // Цвет узла — цвет ПЕРВОГО тега статьи (порядок тегов задаёт сервер: сперва
@@ -993,7 +990,7 @@
     const root = svg.append('g');
 
     // Масштаб. Нижний предел маленький: при сотнях статей весь граф должен
-    // помещаться на экран (тогда группы сворачиваются — см. syncCollapsed).
+    // помещаться на экран.
     // userZoomed — пользователь сам крутил/двигал граф: после этого
     // автоподгонка вида (fitToContent) его вид не перебивает.
     const MIN_ZOOM = 0.05;
@@ -1008,7 +1005,6 @@
         starfield?.setTransform(event.transform);
         zoomK = event.transform.k;
         applyZoomStyles();
-        syncCollapsed();
       });
     svg.call(zoomBehavior);
 
@@ -1108,7 +1104,7 @@
         .selectAll('circle')
         .data(nodes)
         .join('circle')
-        .attr('class', (n) => 'graph-node-glow' + (clusterOf.has(n.slug) ? ' graph-in-cluster' : ''))
+        .attr('class', (n) => 'graph-node-glow')
         .attr('r', glowRadiusFor)
         .attr('fill', glowFillFor)
         .attr('fill-opacity', glowOpacityFor)
@@ -1129,7 +1125,7 @@
       .selectAll('g')
       .data(nodes)
       .join('g')
-      .attr('class', (n) => 'graph-node' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : '') + (clusterOf.has(n.slug) ? ' graph-in-cluster' : ''))
+      .attr('class', (n) => 'graph-node' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : ''))
       .call(d3.drag()
         .on('start', (event, n) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -1177,7 +1173,7 @@
       .selectAll('g')
       .data([...nodes].sort((a, b) => a.degree - b.degree))
       .join('g')
-      .attr('class', (n) => 'graph-label' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : '') + (clusterOf.has(n.slug) ? ' graph-in-cluster' : ''));
+      .attr('class', (n) => 'graph-label' + (n.slug === centerSlug ? ' graph-node-center' : '') + (n.locked ? ' graph-node-locked' : ''));
 
     const labelText = label.append('text')
       .attr('class', 'graph-node-label')
@@ -1200,73 +1196,6 @@
       .attr('text-anchor', 'middle')
       .style('fill', (c) => c.color)
       .text((c) => c.name);
-
-    // Свёрнутые группы (обзор при сильном отдалении): каждая группа — один
-    // кружок "Название · N" в центре группы, связи между группами — линии,
-    // толщина которых растёт с числом ссылок между ними. Статьи вне групп
-    // (одиночки) остаются видны как есть. Слой построен всегда, а показывается
-    // классом .graph-collapsed на контейнере (syncCollapsed).
-    // Доступно при любом размере графа, если групп хотя бы две.
-    const COLLAPSE_ZOOM = 0.5;     // масштаб, ниже которого группы сворачиваются
-    const collapseAvailable = clusters.length >= 2;
-    let collapseEnabled = options.collapse !== false;
-    let isCollapsed = false;
-
-    // Узел мета-графа для статьи: её группа или (для одиночки) она сама.
-    // У группы и у статьи одинаковые поля x/y — линия мета-графа рисуется
-    // между ними без различия.
-    const metaOf = (slug) => clusterOf.get(slug) || nodeBySlug.get(slug);
-    const metaKey = (g) => (g.members ? `c:${g.id}` : `s:${g.slug}`);
-    const metaLinks = [];
-    if (collapseAvailable) {
-      const byPair = new Map();
-      links.forEach((l) => {
-        const a = metaOf(l.source);
-        const b = metaOf(l.target);
-        if (a === b) return;
-        const ka = metaKey(a);
-        const kb = metaKey(b);
-        const key = ka < kb ? `${ka}\u0000${kb}` : `${kb}\u0000${ka}`;
-        const existing = byPair.get(key);
-        if (existing) existing.count += 1;
-        else {
-          const ml = { a, b, count: 1 };
-          byPair.set(key, ml);
-          metaLinks.push(ml);
-        }
-      });
-    }
-    const metaLayer = root.append('g').attr('class', 'graph-meta');
-    const metaLink = metaLayer.append('g')
-      .selectAll('line')
-      .data(metaLinks)
-      .join('line')
-      .attr('class', 'graph-meta-link')
-      // толщина — в пикселях экрана (vector-effect в CSS), от масштаба не зависит
-      .style('stroke-width', (ml) => `${1 + 1.6 * Math.log2(ml.count)}px`);
-    const superNode = metaLayer.append('g')
-      .selectAll('g')
-      .data(collapseAvailable ? clusters : [])
-      .join('g')
-      .attr('class', 'graph-supernode')
-      .on('click', (event, c) => expandCluster(c));
-    // Непрозрачная подкладка цвета фона: линии между группами не
-    // просвечивают сквозь полупрозрачный кружок.
-    const superBacking = superNode.append('circle')
-      .attr('class', 'graph-supernode-backing');
-    const superCircle = superNode.append('circle')
-      .attr('class', 'graph-supernode-circle')
-      .style('fill', (c) => c.color)
-      .style('stroke', (c) => c.color);
-    const superText = superNode.append('text')
-      .attr('class', 'graph-supernode-label')
-      .attr('text-anchor', 'middle')
-      .text((c) => `${c.name} · ${c.members.length}`);
-    superNode.append('title').text((c) => {
-      const names = c.members.slice(0, 12).map(nodeDisplayTitle).join('\n');
-      const more = c.members.length > 12 ? `\n… ещё ${c.members.length - 12}` : '';
-      return `${c.name}: ${c.members.length} статей (клик — раскрыть)\n\n${names}${more}`;
-    });
 
     // Центр, радиус и верх каждой группы по текущим координатам её статей.
     // Статьи без координат (хвосты до их расстановки) не учитываются.
@@ -1311,16 +1240,10 @@
       clusterLabel
         .attr('x', (c) => c.x)
         .attr('y', (c) => c.minY - c.pad - 6);
-      if (collapseAvailable) {
-        metaLink
-          .attr('x1', (ml) => ml.a.x).attr('y1', (ml) => ml.a.y)
-          .attr('x2', (ml) => ml.b.x).attr('y2', (ml) => ml.b.y);
-        superNode.attr('transform', (c) => `translate(${c.x},${c.y})`);
-      }
     }
 
     // Всё, что должно выглядеть одинаково на экране при любом масштабе:
-    // названия групп и кружки свёрнутых групп (размер делится на масштаб).
+    // названия групп (размер делится на масштаб).
     function applyZoomStyles() {
       const k = zoomK;
       if (clusters.length) {
@@ -1329,46 +1252,12 @@
           .style('stroke-width', `${Math.min(4 / k, 32)}px`)
           .style('opacity', k <= 0.7 ? 1 : Math.max(0.2, 1 - (k - 0.7) / 0.8));
       }
-      if (collapseAvailable) {
-        const superR = (c) => (14 + 5 * Math.sqrt(c.members.length)) / k;
-        superBacking.attr('r', superR);
-        superCircle.attr('r', superR);
-        superText
-          .style('font-size', `${12 / k}px`)
-          .style('stroke-width', `${3 / k}px`)
-          .attr('dy', (c) => -((14 + 5 * Math.sqrt(c.members.length)) / k + 6 / k));
-      }
-    }
-
-    // Свёрнуто: включено, граф достаточно большой, масштаб мелкий и не идёт
-    // поиск (найденная статья должна быть видна, а не спрятана в группе).
-    function syncCollapsed() {
-      const on = collapseAvailable && collapseEnabled && zoomK < COLLAPSE_ZOOM && !activeSearchQuery;
-      if (on === isCollapsed) return;
-      isCollapsed = on;
-      container.classList.toggle('graph-collapsed', on);
-    }
-
-    // Клик по свёрнутой группе — приблизиться к ней настолько, чтобы она
-    // раскрылась (и поместилась в экран, если это возможно).
-    function expandCluster(c) {
-      const placed = c.members.filter((m) => m.x != null);
-      if (!placed.length) return;
-      const xs = placed.map((m) => m.x);
-      const ys = placed.map((m) => m.y);
-      userZoomed = true;
-      animateZoomTo(transformForBounds(
-        Math.min(...xs) - c.pad, Math.min(...ys) - c.pad,
-        Math.max(...xs) + c.pad, Math.max(...ys) + c.pad,
-        COLLAPSE_ZOOM * 1.2, 1
-      ));
     }
 
     // Первичная подгонка вида: когда раскладка почти улеглась, а граф не
-    // помещается в карточку, — плавно отдаляемся, чтобы был виден целиком
-    // (большой граф при этом сразу открывается обзором групп). Маленький
-    // граф, уже помещающийся на экран, не трогаем; если пользователь успел
-    // сам покрутить масштаб — тоже.
+    // помещается в карточку, — плавно отдаляемся, чтобы был виден целиком.
+    // Маленький граф, уже помещающийся на экран, не трогаем; если пользователь
+    // успел сам покрутить масштаб — тоже.
     let didFit = false;
     function fitToContent() {
       didFit = true;
@@ -1695,7 +1584,7 @@
         simulation.stop();
         stopZoomAnimation();
         starfield?.destroy();
-        container.classList.remove('graph-cosmos', 'graph-collapsed');
+        container.classList.remove('graph-cosmos');
         container.innerHTML = '';
       },
       // query='' снимает подсветку/приглушение целиком (обычный вид графа).
@@ -1709,7 +1598,6 @@
         circle.style('fill', fillFor);
         glow.attr('fill', glowFillFor);
         applyHighlight(searchMatches());
-        syncCollapsed();
       },
       // Лучшая найденная статья — для перехода к её окрестности по Enter в
       // поиске: точное совпадение названия, затем название, начинающееся с
@@ -1726,11 +1614,6 @@
         };
         candidates.sort((a, b) => rank(a) - rank(b) || b.degree - a.degree);
         return candidates[0]?.slug ?? null;
-      },
-      // Сворачивание групп при отдалении вкл/выкл на лету.
-      setCollapse(flag) {
-        collapseEnabled = !!flag;
-        syncCollapsed();
       },
       // Переключение "растущие / одинаковые" точки на лету, без пересоздания
       // графа: пересчитываем радиусы, подписи и физику (force-аксессоры
@@ -1795,8 +1678,7 @@
     const originals = svgEl.querySelectorAll('*');
     const clones = clone.querySelectorAll('*');
     const STYLE_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linejoin', 'stroke-linecap', 'paint-order', 'opacity', 'font-size', 'font-weight', 'font-family', 'text-anchor'];
-    // Скрытое в живом графе (свечение без "космоса", свёрнутые/развёрнутые
-    // слои групп) в картинку не берём: display в клон не переносится, а
+    // Скрытое в живом графе (свечение без "космоса") в картинку не берём: display в клон не переносится, а
     // нулевая прозрачность лишь раздувала бы файл.
     const hiddenClones = [];
     originals.forEach((origEl, i) => {
@@ -1892,7 +1774,7 @@
 
     legend.innerHTML = `
       ${swatches}${more}${noTag}
-      <span>Цвет узла — цвет его первого тега (меняется во вкладке «Теги»), при поиске — цвет найденного тега · Размер — число связей · Подложки — группы статей, связанных ссылками · Наведите/ищите (# — только по тегам) — подсветка связей · Клик — открыть · ПКМ или Enter в поиске — окрестность статьи · Колесо — масштаб (при сильном отдалении группы сворачиваются) · Перетаскивание — сдвинуть</span>
+      <span>Цвет узла — цвет его первого тега (меняется во вкладке «Теги»), при поиске — цвет найденного тега · Размер — число связей · Подложки — группы статей, связанных ссылками · Наведите/ищите (# — только по тегам) — подсветка связей · Клик — открыть · ПКМ или Enter в поиске — окрестность статьи · Колесо — масштаб · Перетаскивание — сдвинуть</span>
     `;
     container.appendChild(legend);
   }

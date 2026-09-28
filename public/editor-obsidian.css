@@ -963,48 +963,6 @@
   user-select: none;
 }
 
-/* Свёрнутые группы при сильном отдалении (.graph-collapsed на контейнере):
-   статьи групп, их связи, подложки и названия плавно гаснут, вместо них
-   проявляется мета-граф — кружок на группу и линии между группами.
-   Статьи вне групп остаются видны. */
-.graph-node,
-.graph-links,
-.graph-hulls,
-.graph-cluster-labels { transition: opacity 0.35s; }
-.graph-meta {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s;
-}
-.graph-collapsed .graph-meta { opacity: 1; pointer-events: auto; }
-.graph-collapsed .graph-links,
-.graph-collapsed .graph-hulls,
-.graph-collapsed .graph-cluster-labels { opacity: 0; }
-.graph-container.graph-collapsed .graph-in-cluster { opacity: 0; pointer-events: none; }
-.graph-meta-link {
-  stroke: var(--background-accent);
-  opacity: 0.7;
-  vector-effect: non-scaling-stroke;
-}
-.graph-supernode { cursor: pointer; }
-.graph-supernode-backing { fill: var(--graph-bg, var(--background-tertiary)); }
-.graph-supernode-circle {
-  fill-opacity: 0.35;
-  stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
-  transition: fill-opacity 0.15s;
-}
-.graph-supernode:hover .graph-supernode-circle { fill-opacity: 0.6; }
-.graph-supernode-label {
-  fill: var(--text-normal);
-  font-weight: 600;
-  stroke: var(--graph-bg, var(--background-tertiary));
-  stroke-linejoin: round;
-  paint-order: stroke;
-  pointer-events: none;
-  user-select: none;
-}
-
 .graph-node-circle {
   fill: var(--blurple);
   stroke: var(--background-primary, var(--background-tertiary));
@@ -1036,6 +994,7 @@
   stroke: var(--yellow);
   stroke-width: 3px;
 }
+.graph-node { transition: opacity 0.35s; }
 .graph-node-dim { opacity: 0.15; }
 
 /* Хвосты графа появляются после раскладки ядра (см. attachTails в
