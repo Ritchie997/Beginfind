@@ -2087,8 +2087,8 @@ class SPARouter {
     return `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  async draftsFetch(method, path, body) {
-    const response = await fetch(`/api/drafts${path}`, {
+  async draftsFetch(method, path, body, base = '/api/drafts') {
+    const response = await fetch(`${base}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -2685,13 +2685,20 @@ class SPARouter {
   // сервера не достучались, показаны только копии этого устройства.
   async fetchDraftList() {
     let serverItems = [];
+    let folders = [];
     let offline = false;
     try {
-      const res = await this.draftsFetch('GET', '');
+      const [res, foldersRes] = await Promise.all([
+        this.draftsFetch('GET', ''),
+        this.draftsFetch('GET', '', null, '/api/draft-folders').catch(() => null)
+      ]);
       if (res.ok && Array.isArray(res.json)) serverItems = res.json;
       else offline = true;
+      if (foldersRes && foldersRes.ok && Array.isArray(foldersRes.json)) folders = foldersRes.json;
+      else if (Array.isArray(this._draftsFolders)) folders = this._draftsFolders; // оставляем прежний список
     } catch (error) {
       offline = true;
+      if (Array.isArray(this._draftsFolders)) folders = this._draftsFolders;
     }
 
     const byId = new Map(serverItems.map((d) => [d.id, { ...d, onServer: true, pending: false }]));
@@ -2700,6 +2707,7 @@ class SPARouter {
       const server = byId.get(p.id);
       byId.set(p.id, {
         id: p.id,
+        folderId: server ? server.folderId || null : null,
         title: data.title || '',
         text: this.draftContentToText(data.content),
         image: data.image || '',
@@ -2713,7 +2721,7 @@ class SPARouter {
     });
 
     const items = [...byId.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    return { items, offline };
+    return { items, folders, offline };
   }
 
   // Содержимое редактора — не HTML, а JSON документа блоков (см.
@@ -2776,12 +2784,17 @@ class SPARouter {
             <option value="created">Недавно созданные</option>
             <option value="title">По названию</option>
           </select>
-          <button type="button" class="drafts-modal-select-btn" data-action="toggle-select" title="Выбрать несколько черновиков для удаления">
+          <button type="button" class="drafts-modal-select-btn" data-action="new-folder" title="Создать папку (внутри открытой сейчас папки)">
+            <i class="fas fa-folder-plus"></i> <span>Папка</span>
+          </button>
+          <button type="button" class="drafts-modal-select-btn" data-action="toggle-select" title="Выбрать несколько черновиков — удалить или перенести в папку">
             <i class="far fa-check-square"></i> <span>Выбрать</span>
           </button>
         </div>
         <div class="drafts-modal-status" id="draftsModalStatus" hidden></div>
+        <div class="drafts-modal-crumbs" id="draftsModalCrumbs" hidden></div>
         <div class="drafts-modal-body">
+          <div class="drafts-modal-folders" id="draftsModalFolders" hidden></div>
           <div class="drafts-modal-grid" id="draftsModalGrid"></div>
           <div class="drafts-modal-empty" id="draftsModalEmpty" hidden></div>
         </div>
@@ -2789,10 +2802,12 @@ class SPARouter {
           <span class="drafts-modal-count" id="draftsModalCount"></span>
           <div class="drafts-modal-select-actions" hidden>
             <button type="button" class="btn btn-secondary" data-action="select-all"><i class="fas fa-check-double"></i> Все</button>
+            <button type="button" class="btn btn-secondary" data-action="move-selected"><i class="fas fa-folder"></i> В папку</button>
             <button type="button" class="btn btn-danger" data-action="delete-selected"><i class="fas fa-trash"></i> Удалить</button>
           </div>
           <button type="button" class="btn btn-secondary" data-action="close">Закрыть</button>
         </div>
+        <div class="drafts-move-menu" id="draftsMoveMenu" role="menu" hidden></div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -2803,11 +2818,15 @@ class SPARouter {
       sort: overlay.querySelector('#draftsModalSort'),
       status: overlay.querySelector('#draftsModalStatus'),
       grid: overlay.querySelector('#draftsModalGrid'),
+      folders: overlay.querySelector('#draftsModalFolders'),
+      crumbs: overlay.querySelector('#draftsModalCrumbs'),
+      moveMenu: overlay.querySelector('#draftsMoveMenu'),
       empty: overlay.querySelector('#draftsModalEmpty'),
       count: overlay.querySelector('#draftsModalCount'),
       selectBtn: overlay.querySelector('[data-action="toggle-select"]'),
       selectActions: overlay.querySelector('.drafts-modal-select-actions'),
-      deleteSelectedBtn: overlay.querySelector('[data-action="delete-selected"]')
+      deleteSelectedBtn: overlay.querySelector('[data-action="delete-selected"]'),
+      moveSelectedBtn: overlay.querySelector('[data-action="move-selected"]')
     };
     this._draftsModalEls = els;
 
@@ -2817,13 +2836,47 @@ class SPARouter {
     } catch (e) { /* не критично */ }
 
     overlay.addEventListener('click', (e) => {
+      // Меню "Перенести в папку": выбор пункта или клик мимо — закрывает его.
+      const moveItem = e.target.closest('[data-action="move-to"]');
+      if (moveItem) {
+        const ids = this._draftsMoveIds || [];
+        const movingFolder = this._draftsMoveFolderId;
+        this.closeDraftsMoveMenu();
+        if (movingFolder) this.moveDraftFolder(movingFolder, moveItem.dataset.folderId || null);
+        else this.moveDraftsToFolder(ids, moveItem.dataset.folderId || null);
+        return;
+      }
+      if (e.target.closest('[data-action="move-to-new"]')) {
+        const ids = this._draftsMoveIds || [];
+        this.closeDraftsMoveMenu();
+        this.createDraftFolder(ids);
+        return;
+      }
+      if (!els.moveMenu.hidden && !e.target.closest('#draftsMoveMenu')) {
+        this.closeDraftsMoveMenu();
+        return;
+      }
       if (e.target === overlay || e.target.closest('[data-action="close"]')) {
         this.closeDraftsModal();
         return;
       }
+      if (e.target.closest('[data-action="new-folder"]')) { this.createDraftFolder(); return; }
+      const crumb = e.target.closest('[data-action="folder-open"]');
+      if (crumb) { this.openDraftsFolder(crumb.dataset.folderId || null); return; }
+      const moveFolderBtn = e.target.closest('[data-action="move-folder"]');
+      if (moveFolderBtn) { this.openDraftsMoveMenu([], moveFolderBtn, this._draftsFolderId); return; }
+      if (e.target.closest('[data-action="rename-folder"]')) { this.renameDraftFolder(this._draftsFolderId); return; }
+      if (e.target.closest('[data-action="delete-folder"]')) { this.deleteDraftFolder(this._draftsFolderId); return; }
       if (e.target.closest('[data-action="toggle-select"]')) { this.setDraftsSelectMode(!this._draftsSelectMode); return; }
       if (e.target.closest('[data-action="select-all"]')) { this.selectAllVisibleDrafts(); return; }
       if (e.target.closest('[data-action="delete-selected"]')) { this.deleteSelectedDrafts(); return; }
+      const moveSelected = e.target.closest('[data-action="move-selected"]');
+      if (moveSelected) {
+        if (this._draftsSelected && this._draftsSelected.size) this.openDraftsMoveMenu(Array.from(this._draftsSelected), moveSelected);
+        return;
+      }
+      const folderTile = e.target.closest('.drafts-folder');
+      if (folderTile) { this.openDraftsFolder(folderTile.dataset.folderId); return; }
       // Режим выбора: клик по карточке только отмечает её.
       if (this._draftsSelectMode) {
         const selCard = e.target.closest('.drafts-card');
@@ -2834,6 +2887,12 @@ class SPARouter {
       if (deleteBtn) {
         e.stopPropagation();
         this.deleteDraft(deleteBtn.dataset.id);
+        return;
+      }
+      const moveBtn = e.target.closest('[data-action="move-draft"]');
+      if (moveBtn) {
+        e.stopPropagation();
+        this.openDraftsMoveMenu([moveBtn.dataset.id], moveBtn);
         return;
       }
       const tagPill = e.target.closest('[data-action="filter-tag"]');
@@ -2849,8 +2908,12 @@ class SPARouter {
     overlay.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (this._draftsSelectMode) this.setDraftsSelectMode(false);
+        if (!els.moveMenu.hidden) this.closeDraftsMoveMenu();
+        else if (this._draftsSelectMode) this.setDraftsSelectMode(false);
         else this.closeDraftsModal();
+      } else if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('drafts-folder')) {
+        e.preventDefault();
+        this.openDraftsFolder(e.target.dataset.folderId);
       } else if (this._draftsSelectMode && (e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('drafts-card')) {
         e.preventDefault();
         this.toggleDraftSelected(e.target.dataset.id);
@@ -2864,6 +2927,54 @@ class SPARouter {
       }
     });
     els.search.addEventListener('input', () => this.renderDraftsModal());
+
+    // Перетаскивание карточки черновика или плитки папки на папку (или на
+    // папку в строке пути, "Все черновики" — верхний уровень) — то же, что
+    // кнопки "В папку"/"Переместить папку". На тач-экранах drag&drop нет —
+    // там только кнопки.
+    overlay.addEventListener('dragstart', (e) => {
+      const card = e.target.closest?.('.drafts-card, .drafts-folder');
+      if (!card || this._draftsSelectMode) return;
+      const isFolder = card.classList.contains('drafts-folder');
+      this._draftsDrag = isFolder ? { folderId: card.dataset.folderId } : { draftId: card.dataset.id };
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', isFolder ? card.dataset.folderId : card.dataset.id); } catch (err) { /* не критично */ }
+      card.classList.add('is-dragging');
+    });
+    overlay.addEventListener('dragend', () => {
+      overlay.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) => el.classList.remove('is-dragging', 'is-drop-target'));
+      this._draftsDrag = null;
+    });
+    const dropTarget = (e) => {
+      const drag = this._draftsDrag;
+      if (!drag) return null;
+      const target = e.target.closest?.('.drafts-folder, [data-action="folder-open"]');
+      // Папку нельзя бросить на саму себя.
+      if (!target || (drag.folderId && target.dataset.folderId === drag.folderId)) return null;
+      return target;
+    };
+    overlay.addEventListener('dragover', (e) => {
+      const target = dropTarget(e);
+      if (!target) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      target.classList.add('is-drop-target');
+    });
+    overlay.addEventListener('dragleave', (e) => {
+      const target = dropTarget(e);
+      if (target && !target.contains(e.relatedTarget)) target.classList.remove('is-drop-target');
+    });
+    overlay.addEventListener('drop', (e) => {
+      const target = dropTarget(e);
+      if (!target) return;
+      e.preventDefault();
+      target.classList.remove('is-drop-target');
+      const drag = this._draftsDrag;
+      this._draftsDrag = null;
+      const folderId = target.dataset.folderId || null;
+      if (drag.folderId) this.moveDraftFolder(drag.folderId, folderId);
+      else if (drag.draftId) this.moveDraftsToFolder([drag.draftId], folderId);
+    });
     els.sort.addEventListener('change', () => {
       try { localStorage.setItem('draftsModalSort', els.sort.value); } catch (e) { /* не критично */ }
       this.renderDraftsModal();
@@ -2890,14 +3001,16 @@ class SPARouter {
   }
 
   closeDraftsModal() {
+    this.closeDraftsMoveMenu();
     if (this._draftsModalEls) this._draftsModalEls.overlay.hidden = true;
   }
 
   async refreshDraftsModalIfOpen() {
     const els = this._draftsModalEls;
     if (!els || els.overlay.hidden) return;
-    const { items, offline } = await this.fetchDraftList();
+    const { items, folders, offline } = await this.fetchDraftList();
     this._draftsModalItems = items;
+    this._draftsFolders = folders;
     this._draftsModalOffline = offline;
     this.renderDraftsModal();
   }
@@ -2924,35 +3037,110 @@ class SPARouter {
       els.status.hidden = true;
     }
 
+    // Папки (вложенные): на каждом уровне — плитки дочерних папок и
+    // черновики, лежащие прямо в текущей папке. Поиск идёт по текущей
+    // папке вместе со всеми вложенными (из корня — по всем черновикам), у
+    // карточки тогда подписан путь к её папке. Черновик/папка со ссылкой на
+    // несуществующую папку (удалили с другого устройства) — в корне.
+    const folders = this._draftsFolders || [];
+    const tree = this.buildDraftFolderIndex(folders);
+    if (this._draftsFolderId && !tree.byId.has(this._draftsFolderId)) this._draftsFolderId = null;
+    const currentFolderId = this._draftsFolderId || null;
+    const folderOf = (d) => (d.folderId && tree.byId.has(d.folderId) ? d.folderId : null);
+    const subtree = currentFolderId ? tree.descendants(currentFolderId) : null; // папка + вложенные
+
     const query = this.normalizeDraftSearch(els.search.value.trim().replace(/^#/, ''));
     const terms = query.split(/\s+/).filter(Boolean);
+    const scope = terms.length
+      ? (subtree ? all.filter((d) => subtree.has(folderOf(d))) : all)
+      : all.filter((d) => folderOf(d) === currentFolderId);
     let items = terms.length
-      ? all.filter((d) => {
+      ? scope.filter((d) => {
         const haystack = this.normalizeDraftSearch(`${d.title} ${d.text} ${(d.tags || []).join(' ')}`);
         return terms.every((t) => haystack.includes(t));
       })
-      : all.slice();
+      : scope.slice();
+
+    const esc = (v) => this.escapeDraftHtml(v);
+    if (currentFolderId) {
+      const path = tree.path(currentFolderId);
+      const parents = path.slice(0, -1).map((f) => `
+        <span class="drafts-crumb-sep">/</span>
+        <button type="button" class="drafts-crumb-link" data-action="folder-open" data-folder-id="${esc(f.id)}" title="Открыть папку (сюда можно перетащить черновик или папку)">${esc(f.name)}</button>`).join('');
+      els.crumbs.hidden = false;
+      els.crumbs.innerHTML = `
+        <button type="button" class="drafts-crumb-root" data-action="folder-open" data-folder-id="" title="Все черновики (сюда можно перетащить черновик или папку, чтобы вынести на верхний уровень)"><i class="fas fa-home"></i> Все черновики</button>
+        ${parents}
+        <span class="drafts-crumb-sep">/</span>
+        <span class="drafts-crumb-current"><i class="fas fa-folder-open"></i> ${esc(path[path.length - 1].name)}</span>
+        <button type="button" class="drafts-crumb-btn" data-action="rename-folder" title="Переименовать папку"><i class="fas fa-pen"></i></button>
+        <button type="button" class="drafts-crumb-btn" data-action="move-folder" title="Переместить папку в другую папку"><i class="fas fa-share"></i></button>
+        <button type="button" class="drafts-crumb-btn is-danger" data-action="delete-folder" title="Удалить папку (содержимое останется)"><i class="fas fa-trash"></i></button>
+      `;
+    } else {
+      els.crumbs.hidden = true;
+      els.crumbs.innerHTML = '';
+    }
+
+    const childFolders = terms.length ? [] : tree.children(currentFolderId);
+    els.folders.hidden = !childFolders.length;
+    if (childFolders.length) {
+      // Счётчик — все черновики внутри, включая вложенные папки.
+      els.folders.innerHTML = childFolders.map((f) => {
+        const inside = tree.descendants(f.id);
+        const count = all.filter((d) => inside.has(folderOf(d))).length;
+        const subCount = inside.size - 1;
+        return `
+        <div class="drafts-folder" data-folder-id="${esc(f.id)}" tabindex="0" draggable="true" title="Открыть папку${subCount ? ` · вложенных папок: ${subCount}` : ''}">
+          <i class="fas fa-folder"></i>
+          <span class="drafts-folder-name">${esc(f.name)}</span>
+          ${subCount ? '<i class="fas fa-layer-group drafts-folder-nested" aria-hidden="true"></i>' : ''}
+          <span class="drafts-folder-count">${count}</span>
+        </div>`;
+      }).join('');
+    } else {
+      els.folders.innerHTML = '';
+    }
 
     const sort = els.sort.value;
     if (sort === 'created') items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     else if (sort === 'title') items.sort((a, b) => (a.title || 'Без названия').localeCompare(b.title || 'Без названия', 'ru'));
     else items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-    els.count.textContent = all.length
-      ? (terms.length ? `Найдено ${items.length} из ${all.length}` : `Всего черновиков: ${all.length}`)
-      : '';
+    if (terms.length) els.count.textContent = `Найдено ${items.length} из ${scope.length}`;
+    else if (currentFolderId) els.count.textContent = `В папке: ${all.filter((d) => subtree.has(folderOf(d))).length} · всего черновиков: ${all.length}`;
+    else els.count.textContent = all.length ? `Всего черновиков: ${all.length}` : '';
 
     if (!items.length) {
       els.grid.innerHTML = '';
-      els.empty.hidden = false;
-      els.empty.innerHTML = all.length
-        ? `<i class="fas fa-search"></i><div>Ничего не найдено по запросу «${this.escapeDraftHtml(els.search.value.trim())}»</div>`
-        : '<i class="fas fa-file-alt"></i><div>Черновиков пока нет</div><div class="drafts-modal-empty-hint">Нажмите «💾 Черновик» в редакторе, чтобы сохранить статью и вернуться к ней позже — с этого или другого устройства.</div>';
+      if (terms.length) {
+        els.empty.hidden = false;
+        els.empty.innerHTML = `<i class="fas fa-search"></i><div>Ничего не найдено по запросу «${this.escapeDraftHtml(els.search.value.trim())}»</div>`;
+      } else if (currentFolderId && !childFolders.length) {
+        els.empty.hidden = false;
+        els.empty.innerHTML = '<i class="fas fa-folder-open"></i><div>Папка пуста</div><div class="drafts-modal-empty-hint">Перенесите сюда черновик кнопкой <i class="fas fa-folder"></i> на его карточке или перетащите карточку на папку.</div>';
+      } else if (!all.length && !folders.length) {
+        els.empty.hidden = false;
+        els.empty.innerHTML = '<i class="fas fa-file-alt"></i><div>Черновиков пока нет</div><div class="drafts-modal-empty-hint">Нажмите «💾 Черновик» в редакторе, чтобы сохранить статью и вернуться к ней позже — с этого или другого устройства.</div>';
+      } else {
+        // На этом уровне только папки — плиток достаточно.
+        els.empty.hidden = true;
+      }
+      this.updateDraftsSelectUI();
       return;
     }
 
     els.empty.hidden = true;
-    els.grid.innerHTML = items.map((d) => this.buildDraftCardHtml(d, terms)).join('');
+    // Подпись папки на карточке — только когда в списке смешаны папки
+    // (поиск): путь от текущей папки до папки черновика.
+    const folderLabel = (d) => {
+      const f = folderOf(d);
+      if (!terms.length || f === currentFolderId) return null;
+      const path = tree.path(f);
+      const from = currentFolderId ? path.findIndex((x) => x.id === currentFolderId) + 1 : 0;
+      return path.slice(from).map((x) => x.name).join(' / ');
+    };
+    els.grid.innerHTML = items.map((d) => this.buildDraftCardHtml(d, terms, folderLabel(d))).join('');
     this.updateDraftsSelectUI();
   }
 
@@ -3002,6 +3190,7 @@ class SPARouter {
       els.deleteSelectedBtn.disabled = !selected.size;
       els.deleteSelectedBtn.innerHTML = `<i class="fas fa-trash"></i> Удалить${selected.size ? ` (${selected.size})` : ''}`;
     }
+    if (els.moveSelectedBtn) els.moveSelectedBtn.disabled = !selected.size;
     if (on) els.count.textContent = selected.size ? `Выбрано: ${selected.size}` : 'Нажмите на черновики для выбора';
   }
 
@@ -3033,6 +3222,311 @@ class SPARouter {
     this._draftsSelected = new Set();
     await this.refreshDraftsModalIfOpen();
     this.updateDraftsSelectUI();
+  }
+
+  // ===== Папки черновиков (см. drafts-store.js — listFolders/moveDrafts) =====
+  //
+  // Папки вложенные: у папки есть parentId (null — верхний уровень).
+  // Папка со ссылкой на несуществующего родителя (удалили с другого
+  // устройства) считается папкой верхнего уровня.
+
+  buildDraftFolderIndex(folders) {
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const parentOf = (id) => {
+      const f = byId.get(id);
+      return f && f.parentId && byId.has(f.parentId) ? f.parentId : null;
+    };
+    const kids = new Map();
+    folders.forEach((f) => {
+      const p = parentOf(f.id);
+      if (!kids.has(p)) kids.set(p, []);
+      kids.get(p).push(f);
+    });
+    const byName = (a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' });
+    kids.forEach((list) => list.sort(byName));
+    const children = (id) => kids.get(id || null) || [];
+    // Путь от верхнего уровня до папки (сама папка — последней). guard —
+    // защита от цикла в битых данных.
+    const path = (id) => {
+      const out = [];
+      for (let cur = id, guard = 0; cur && byId.has(cur) && guard < 50; cur = parentOf(cur), guard++) out.unshift(byId.get(cur));
+      return out;
+    };
+    // Папка и все вложенные в неё (Set id).
+    const descendants = (id) => {
+      const out = new Set();
+      const walk = (cur) => {
+        if (out.has(cur)) return;
+        out.add(cur);
+        children(cur).forEach((c) => walk(c.id));
+      };
+      walk(id);
+      return out;
+    };
+    // Все папки в порядке дерева с глубиной — для меню переноса.
+    const flat = () => {
+      const out = [];
+      const walk = (id, depth) => children(id).forEach((f) => {
+        out.push({ folder: f, depth });
+        walk(f.id, depth + 1);
+      });
+      walk(null, 0);
+      return out;
+    };
+    return { byId, children, path, descendants, flat };
+  }
+
+  openDraftsFolder(folderId) {
+    const els = this._draftsModalEls;
+    this._draftsFolderId = folderId || null;
+    if (els) els.search.value = '';
+    this.renderDraftsModal();
+    if (els) els.overlay.querySelector('.drafts-modal-body').scrollTop = 0;
+  }
+
+  // Меню "Перенести в папку" у кнопки anchor: для черновиков ids или —
+  // если передан folderId — для самой папки (её и вложенные в неё папки
+  // в списке не показываем: туда её переместить нельзя).
+  openDraftsMoveMenu(ids, anchor, folderId = null) {
+    const els = this._draftsModalEls;
+    if (!els || (!ids.length && !folderId)) return;
+    this._draftsMoveIds = ids;
+    this._draftsMoveFolderId = folderId || null;
+    const esc = (v) => this.escapeDraftHtml(v);
+    const items = this._draftsModalItems || [];
+    const tree = this.buildDraftFolderIndex(this._draftsFolders || []);
+
+    let same;
+    let excluded = new Set();
+    if (folderId) {
+      const f = tree.byId.get(folderId);
+      same = (f && f.parentId && tree.byId.has(f.parentId)) ? f.parentId : '';
+      excluded = tree.descendants(folderId);
+    } else {
+      // Если все переносимые уже в одной папке — её пункт помечаем.
+      const current = new Set(ids.map((id) => {
+        const fid = (items.find((d) => d.id === id) || {}).folderId;
+        return fid && tree.byId.has(fid) ? fid : '';
+      }));
+      same = current.size === 1 ? [...current][0] : undefined;
+    }
+
+    const itemHtml = (fid, icon, label, depth = 0) => `
+      <button type="button" class="drafts-move-item${same === fid ? ' is-current' : ''}" role="menuitem" data-action="move-to" data-folder-id="${esc(fid)}" style="padding-left: ${10 + depth * 16}px">
+        <i class="${icon}"></i> <span>${esc(label)}</span>${same === fid ? ' <i class="fas fa-check drafts-move-check"></i>' : ''}
+      </button>`;
+    els.moveMenu.innerHTML = `
+      <div class="drafts-move-title">${folderId ? 'Переместить папку в' : 'Перенести в папку'}</div>
+      ${itemHtml('', 'fas fa-home', folderId ? 'Верхний уровень' : 'Без папки')}
+      ${tree.flat().filter(({ folder }) => !excluded.has(folder.id)).map(({ folder, depth }) => itemHtml(folder.id, 'fas fa-folder', folder.name, depth + 1)).join('')}
+      ${folderId ? '' : '<button type="button" class="drafts-move-item is-new" role="menuitem" data-action="move-to-new"><i class="fas fa-folder-plus"></i> <span>Новая папка…</span></button>'}
+    `;
+    els.moveMenu.hidden = false;
+
+    // Позиционируем под кнопкой внутри окна (если снизу не влезает — над ней).
+    const box = els.overlay.querySelector('.drafts-modal-box');
+    const boxRect = box.getBoundingClientRect();
+    const a = anchor.getBoundingClientRect();
+    const menuW = els.moveMenu.offsetWidth;
+    const menuH = els.moveMenu.offsetHeight;
+    let top = a.bottom - boxRect.top + 4;
+    if (top + menuH > boxRect.height - 8) top = Math.max(8, a.top - boxRect.top - menuH - 4);
+    const left = Math.min(Math.max(8, a.right - boxRect.left - menuW), boxRect.width - menuW - 8);
+    els.moveMenu.style.top = `${top}px`;
+    els.moveMenu.style.left = `${Math.max(8, left)}px`;
+    els.moveMenu.querySelector('.drafts-move-item')?.focus();
+  }
+
+  closeDraftsMoveMenu() {
+    const els = this._draftsModalEls;
+    if (els) els.moveMenu.hidden = true;
+    this._draftsMoveIds = null;
+    this._draftsMoveFolderId = null;
+  }
+
+  // Текст ошибки API папок. 404 без JSON — это не "папка не найдена", а
+  // сервер, запущенный до появления папок (маршрута ещё нет).
+  draftFolderApiError(res, action) {
+    if (res.json && res.json.error) return res.json.error;
+    if (res.status === 404) return `Не удалось ${action}: сервер не знает о папках — его нужно перезапустить после обновления`;
+    return `Не удалось ${action}: ошибка ${res.status}`;
+  }
+
+  async moveDraftsToFolder(ids, folderId) {
+    const items = this._draftsModalItems || [];
+    const target = folderId || null;
+    const toMove = ids.filter((id) => {
+      const d = items.find((x) => x.id === id);
+      return d && (d.folderId || null) !== target;
+    });
+    if (!toMove.length) return;
+    // Черновики, которых ещё нет на сервере, перенести нельзя — папка
+    // хранится только там.
+    const localOnly = toMove.filter((id) => !(items.find((x) => x.id === id) || {}).onServer);
+    const onServer = toMove.filter((id) => !localOnly.includes(id));
+    if (!onServer.length) {
+      showMessage('Черновик ещё не загружен на сервер — перенести его в папку можно будет, когда появится связь', 'warning');
+      return;
+    }
+
+    let res;
+    try {
+      res = await this.draftsFetch('POST', '/move', { ids: onServer, folderId: target });
+    } catch (error) {
+      showMessage('Нет связи с сервером — не удалось перенести черновик', 'error');
+      return;
+    }
+    if (!res.ok) {
+      showMessage(this.draftFolderApiError(res, 'перенести'), 'error');
+      await this.refreshDraftsModalIfOpen();
+      return;
+    }
+
+    onServer.forEach((id) => {
+      const d = items.find((x) => x.id === id);
+      if (d) d.folderId = target;
+    });
+    const folderName = target ? ((this._draftsFolders || []).find((f) => f.id === target) || {}).name : null;
+    const where = folderName ? `в папку «${folderName}»` : 'из папки';
+    const moved = res.json && Number.isFinite(res.json.moved) ? res.json.moved : onServer.length;
+    if (localOnly.length) {
+      showMessage(`Перенесено ${where}: ${moved}. Ещё не загруженные на сервер черновики (${localOnly.length}) остались на месте`, 'warning');
+    } else {
+      showMessage(moved === 1 ? `Черновик перенесён ${where}` : `Перенесено ${where}: ${moved}`, 'success');
+    }
+    if (this._draftsSelectMode) {
+      this._draftsSelectMode = false;
+      this._draftsSelected = new Set();
+    }
+    this.renderDraftsModal();
+  }
+
+  // Переместить папку (со всем содержимым) в другую папку; parentId =
+  // null — на верхний уровень.
+  async moveDraftFolder(folderId, parentId) {
+    const tree = this.buildDraftFolderIndex(this._draftsFolders || []);
+    const folder = tree.byId.get(folderId);
+    if (!folder) return;
+    const target = parentId || null;
+    const currentParent = folder.parentId && tree.byId.has(folder.parentId) ? folder.parentId : null;
+    if (target === currentParent) return;
+    if (target && tree.descendants(folderId).has(target)) {
+      showMessage('Нельзя переместить папку в неё саму или во вложенную в неё папку', 'warning');
+      return;
+    }
+    let res;
+    try {
+      res = await this.draftsFetch('PATCH', `/${encodeURIComponent(folderId)}`, { parentId: target }, '/api/draft-folders');
+    } catch (error) {
+      showMessage('Нет связи с сервером — папку переместить не удалось', 'error');
+      return;
+    }
+    if (!res.ok) {
+      showMessage(this.draftFolderApiError(res, 'переместить папку'), 'error');
+      await this.refreshDraftsModalIfOpen();
+      return;
+    }
+    folder.parentId = target;
+    const where = target ? `в папку «${tree.byId.get(target).name}»` : 'на верхний уровень';
+    showMessage(`Папка «${folder.name}» перемещена ${where}`, 'success');
+    this.renderDraftsModal();
+  }
+
+  // Создать папку внутри открытой сейчас папки; moveIds — сразу перенести
+  // в неё эти черновики (пункт "Новая папка…" в меню переноса).
+  async createDraftFolder(moveIds = null) {
+    const parentId = this._draftsFolderId || null;
+    const parent = parentId ? (this._draftsFolders || []).find((f) => f.id === parentId) : null;
+    const name = prompt(parent ? `Название новой папки внутри «${parent.name}»:` : 'Название новой папки:');
+    if (name == null) return;
+    if (!name.trim()) {
+      showMessage('Название папки не может быть пустым', 'warning');
+      return;
+    }
+    let res;
+    try {
+      res = await this.draftsFetch('POST', '', { name, parentId }, '/api/draft-folders');
+    } catch (error) {
+      showMessage('Нет связи с сервером — папку создать не удалось', 'error');
+      return;
+    }
+    if (!res.ok || !res.json) {
+      showMessage(this.draftFolderApiError(res, 'создать папку'), 'error');
+      return;
+    }
+    this._draftsFolders = (this._draftsFolders || []).concat(res.json);
+    if (moveIds && moveIds.length) {
+      await this.moveDraftsToFolder(moveIds, res.json.id);
+    } else {
+      showMessage(`Папка «${res.json.name}» создана`, 'success');
+      this.renderDraftsModal();
+    }
+  }
+
+  async renameDraftFolder(folderId) {
+    const folder = (this._draftsFolders || []).find((f) => f.id === folderId);
+    if (!folder) return;
+    const name = prompt('Новое название папки:', folder.name);
+    if (name == null || name.trim() === folder.name) return;
+    if (!name.trim()) {
+      showMessage('Название папки не может быть пустым', 'warning');
+      return;
+    }
+    let res;
+    try {
+      res = await this.draftsFetch('PATCH', `/${encodeURIComponent(folderId)}`, { name }, '/api/draft-folders');
+    } catch (error) {
+      showMessage('Нет связи с сервером — папку переименовать не удалось', 'error');
+      return;
+    }
+    if (!res.ok || !res.json) {
+      showMessage(this.draftFolderApiError(res, 'переименовать папку'), 'error');
+      await this.refreshDraftsModalIfOpen();
+      return;
+    }
+    folder.name = res.json.name;
+    this.renderDraftsModal();
+  }
+
+  // Удаление папки ничего не теряет: черновики и вложенные папки
+  // поднимаются в родительскую папку (как и на сервере).
+  async deleteDraftFolder(folderId) {
+    const tree = this.buildDraftFolderIndex(this._draftsFolders || []);
+    const folder = tree.byId.get(folderId);
+    if (!folder) return;
+    const parentId = folder.parentId && tree.byId.has(folder.parentId) ? folder.parentId : null;
+    const whereTo = parentId ? `в папку «${tree.byId.get(parentId).name}»` : 'в «Все черновики»';
+    const drafts = (this._draftsModalItems || []).filter((d) => d.folderId === folderId).length;
+    const subfolders = tree.children(folderId).length;
+    const parts = [];
+    if (drafts) parts.push(`черновики (${drafts})`);
+    if (subfolders) parts.push(`вложенные папки (${subfolders})`);
+    const ok = window.confirmDialog
+      ? await window.confirmDialog.open({
+        title: 'Удалить папку?',
+        message: parts.length
+          ? `Папка «${folder.name}» будет удалена. Её содержимое — ${parts.join(' и ')} — не удалится, а переместится ${whereTo}.`
+          : `Удалить пустую папку «${folder.name}»?`
+      })
+      : confirm(`Удалить папку «${folder.name}»? Её содержимое останется.`);
+    if (!ok) return;
+    let res;
+    try {
+      res = await this.draftsFetch('DELETE', `/${encodeURIComponent(folderId)}`, null, '/api/draft-folders');
+    } catch (error) {
+      showMessage('Нет связи с сервером — папку удалить не удалось', 'error');
+      return;
+    }
+    if (!res.ok) {
+      showMessage(this.draftFolderApiError(res, 'удалить папку'), 'error');
+      return;
+    }
+    this._draftsFolders = (this._draftsFolders || []).filter((f) => f.id !== folderId);
+    this._draftsFolders.forEach((f) => { if (f.parentId === folderId) f.parentId = parentId; });
+    (this._draftsModalItems || []).forEach((d) => { if (d.folderId === folderId) d.folderId = parentId; });
+    if (this._draftsFolderId === folderId) this._draftsFolderId = parentId;
+    showMessage(`Папка «${folder.name}» удалена`, 'success');
+    this.renderDraftsModal();
   }
 
   escapeDraftHtml(str) {
@@ -3081,7 +3575,7 @@ class SPARouter {
     return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })}, ${time}`;
   }
 
-  buildDraftCardHtml(d, terms) {
+  buildDraftCardHtml(d, terms, folderName = null) {
     const esc = (v) => this.escapeDraftHtml(v);
     const isCurrent = d.id === this.currentDraftId;
     const tags = d.tags || [];
@@ -3097,7 +3591,7 @@ class SPARouter {
     }
 
     return `
-      <article class="ibripedia-card drafts-card${isCurrent ? ' is-current' : ''}" data-id="${esc(d.id)}" tabindex="0" title="Открыть черновик">
+      <article class="ibripedia-card drafts-card${isCurrent ? ' is-current' : ''}" data-id="${esc(d.id)}" tabindex="0" draggable="true" title="Открыть черновик">
         ${d.image
           ? `<div class="ibripedia-card-cover"><img src="${esc(d.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.parentElement.innerHTML='<i class=&quot;fas fa-file-alt&quot;></i>'"></div>`
           : '<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>'}
@@ -3107,6 +3601,9 @@ class SPARouter {
           ${d.locked ? '<span class="drafts-card-badge is-locked" title="Закрытая статья"><i class="fas fa-lock"></i></span>' : ''}
           ${syncBadge}
         </div>
+        <button type="button" class="drafts-card-move" data-action="move-draft" data-id="${esc(d.id)}" title="Перенести в папку" aria-label="Перенести в папку">
+          <i class="fas fa-folder"></i>
+        </button>
         <button type="button" class="drafts-card-delete" data-action="delete-draft" data-id="${esc(d.id)}" title="Удалить черновик" aria-label="Удалить черновик">
           <i class="fas fa-trash"></i>
         </button>
@@ -3118,6 +3615,7 @@ class SPARouter {
           ).join('')}${tags.length > shownTags.length ? `<span class="ibripedia-tag-pill drafts-card-more-tags">+${tags.length - shownTags.length}</span>` : ''}</div>` : ''}
           <div class="ibripedia-card-meta">
             <span title="Изменён ${esc(fullDate(d.updatedAt))}${d.createdAt ? ` · создан ${esc(fullDate(d.createdAt))}` : ''}"><i class="fas fa-clock"></i> ${esc(this.formatDraftTime(d.updatedAt))}</span>
+            ${folderName ? `<span class="drafts-card-folder" title="Папка"><i class="fas fa-folder"></i> ${esc(folderName)}</span>` : ''}
           </div>
         </div>
       </article>

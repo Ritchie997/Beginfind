@@ -135,7 +135,42 @@ const draftsDb = new sqlite3.Database(dbPath('drafts.db'), (err) => {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, id)
-    )`);
+    )`, (tableErr) => {
+      if (tableErr) return;
+      // folder_id — папка черновика (draft_folders.id), NULL — "без папки".
+      // Отдельной колонкой, а не внутри data: перенос в папку не должен
+      // менять rev и конфликтовать с правкой текста на другом устройстве.
+      // Проверка через PRAGMA — тот же приём, что и у article_comments.parent_id.
+      draftsDb.all('PRAGMA table_info(drafts)', [], (err, columns) => {
+        if (err) {
+          console.error('Error reading drafts schema', err);
+          return;
+        }
+        const hasFolder = (columns || []).some((c) => c.name === 'folder_id');
+        if (!hasFolder) draftsDb.run('ALTER TABLE drafts ADD COLUMN folder_id TEXT');
+      });
+    });
+    // Папки черновиков — только для группировки в окне "Мои черновики",
+    // личные для автора, как и сами черновики. parent_id — родительская
+    // папка (NULL — верхний уровень), папки могут быть вложенными.
+    draftsDb.run(`CREATE TABLE IF NOT EXISTS draft_folders (
+      id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      parent_id TEXT,
+      PRIMARY KEY (user_id, id)
+    )`, (tableErr) => {
+      if (tableErr) return;
+      draftsDb.all('PRAGMA table_info(draft_folders)', [], (err, columns) => {
+        if (err) {
+          console.error('Error reading draft_folders schema', err);
+          return;
+        }
+        const hasParent = (columns || []).some((c) => c.name === 'parent_id');
+        if (!hasParent) draftsDb.run('ALTER TABLE draft_folders ADD COLUMN parent_id TEXT');
+      });
+    });
   }
 });
 

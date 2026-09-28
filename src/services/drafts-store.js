@@ -16,6 +16,7 @@
 // (например, keepalive-запрос при закрытии вкладки уже довёз эту же копию,
 // а ответ клиент не успел прочитать): это не конфликт, а повтор.
 
+const crypto = require('crypto');
 const { draftsDb } = require('../db/connections');
 const { normalizeDocument, documentSearchText } = require('./blocks');
 
@@ -24,6 +25,9 @@ const TITLE_MAX_LEN = 300;
 const SEARCH_TEXT_MAX_LEN = 5000;
 const DATA_MAX_BYTES = 5 * 1024 * 1024;
 const MAX_DRAFTS_PER_USER = 300;
+const FOLDER_NAME_MAX_LEN = 100;
+const MAX_FOLDERS_PER_USER = 100;
+const FOLDER_MAX_DEPTH = 10;
 
 function isValidId(id) {
   return ID_RE.test(String(id || ''));
@@ -63,6 +67,7 @@ function rowToSummary(row) {
   } catch (e) { /* битый data — отдаём хотя бы заголовок и даты */ }
   return {
     id: row.id,
+    folderId: row.folder_id || null,
     title: row.title || '',
     text: row.search_text || '',
     rev: row.rev,
@@ -183,10 +188,172 @@ function deleteDraft(userId, id) {
   });
 }
 
+// ===== Папки черновиков =====
+//
+// Папка — только способ сгруппировать черновики в списке: у черновика
+// есть folder_id (NULL — "без папки"), у папки — parent_id (папки
+// вложенные, до FOLDER_MAX_DEPTH уровней). Удаление папки черновики не
+// удаляет — они поднимаются в родительскую папку.
+
+function run(sql, params) {
+  return new Promise((resolve, reject) => {
+    draftsDb.run(sql, params, function (err) {
+      if (err) reject(err); else resolve(this.changes);
+    });
+  });
+}
+
+function normalizeFolderName(name) {
+  const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, FOLDER_NAME_MAX_LEN);
+  if (!clean) throw new Error('Введите название папки');
+  return clean;
+}
+
+function listFolders(userId) {
+  return new Promise((resolve, reject) => {
+    draftsDb.all('SELECT id, name, parent_id, created_at FROM draft_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE', [userId], (err, rows) => {
+      if (err) { reject(err); return; }
+      resolve((rows || []).map((r) => ({ id: r.id, name: r.name, parentId: r.parent_id || null, createdAt: r.created_at })));
+    });
+  });
+}
+
+function getFolder(userId, folderId) {
+  return new Promise((resolve, reject) => {
+    draftsDb.get('SELECT id, parent_id FROM draft_folders WHERE user_id = ? AND id = ?', [userId, folderId], (err, row) => {
+      if (err) reject(err); else resolve(row || null);
+    });
+  });
+}
+
+async function folderExists(userId, folderId) {
+  return !!(await getFolder(userId, folderId));
+}
+
+// parentId из запроса: null/'' — верхний уровень, иначе — существующая
+// своя папка.
+async function resolveParent(userId, parentId) {
+  if (parentId == null || parentId === '') return null;
+  const id = String(parentId);
+  if (!isValidId(id) || !(await folderExists(userId, id))) throw new Error('Папка не найдена');
+  return id;
+}
+
+// Глубина папки (1 — верхний уровень). Цепочка родителей ограничена
+// FOLDER_MAX_DEPTH + 1 шагом — на случай битых данных с циклом.
+async function folderDepth(userId, folderId) {
+  let depth = 0;
+  let id = folderId;
+  while (id && depth <= FOLDER_MAX_DEPTH) {
+    const row = await getFolder(userId, id);
+    if (!row) break;
+    depth++;
+    id = row.parent_id;
+  }
+  return depth;
+}
+
+// Высота поддерева папки (1 — папка без вложенных).
+async function subtreeHeight(userId, folderId) {
+  const folders = await listFolders(userId);
+  const height = (id, guard) => {
+    if (guard > FOLDER_MAX_DEPTH) return guard;
+    const children = folders.filter((f) => f.parentId === id);
+    return 1 + (children.length ? Math.max(...children.map((c) => height(c.id, guard + 1))) : 0);
+  };
+  return height(folderId, 0);
+}
+
+async function createFolder(userId, name, parentId = null) {
+  const clean = normalizeFolderName(name);
+  const parent = await resolveParent(userId, parentId);
+  const count = await new Promise((resolve, reject) => {
+    draftsDb.get('SELECT COUNT(*) AS n FROM draft_folders WHERE user_id = ?', [userId], (err, row) => {
+      if (err) reject(err); else resolve(row ? row.n : 0);
+    });
+  });
+  if (count >= MAX_FOLDERS_PER_USER) throw new Error(`Слишком много папок (максимум ${MAX_FOLDERS_PER_USER})`);
+  if (parent && (await folderDepth(userId, parent)) >= FOLDER_MAX_DEPTH) {
+    throw new Error(`Слишком глубокая вложенность (максимум ${FOLDER_MAX_DEPTH} уровней)`);
+  }
+  const id = `folder_${crypto.randomBytes(8).toString('hex')}`;
+  const now = Date.now();
+  await run('INSERT INTO draft_folders (id, user_id, name, parent_id, created_at) VALUES (?, ?, ?, ?, ?)', [id, userId, clean, parent, now]);
+  return { id, name: clean, parentId: parent, createdAt: now };
+}
+
+async function renameFolder(userId, folderId, name) {
+  const clean = normalizeFolderName(name);
+  const changes = await run('UPDATE draft_folders SET name = ? WHERE user_id = ? AND id = ?', [clean, userId, folderId]);
+  return changes > 0 ? { id: folderId, name: clean } : null;
+}
+
+/**
+ * Переместить папку внутрь другой (parentId = null — на верхний уровень).
+ * Нельзя положить папку в саму себя или в свою же вложенную папку.
+ */
+async function moveFolder(userId, folderId, parentId) {
+  const folder = await getFolder(userId, folderId);
+  if (!folder) return null;
+  const parent = await resolveParent(userId, parentId);
+  if (parent) {
+    // Поднимаемся от новой родительской папки вверх: если встретили
+    // переносимую — получился бы цикл.
+    let id = parent;
+    for (let i = 0; id && i <= FOLDER_MAX_DEPTH + 1; i++) {
+      if (id === folderId) throw new Error('Нельзя переместить папку в неё саму или во вложенную в неё папку');
+      const row = await getFolder(userId, id);
+      id = row ? row.parent_id : null;
+    }
+    if ((await folderDepth(userId, parent)) + (await subtreeHeight(userId, folderId)) > FOLDER_MAX_DEPTH) {
+      throw new Error(`Слишком глубокая вложенность (максимум ${FOLDER_MAX_DEPTH} уровней)`);
+    }
+  }
+  await run('UPDATE draft_folders SET parent_id = ? WHERE user_id = ? AND id = ?', [parent, userId, folderId]);
+  return { id: folderId, parentId: parent };
+}
+
+// Удаление папки ничего не теряет: её черновики и вложенные папки
+// поднимаются на уровень выше (в родительскую папку).
+async function deleteFolder(userId, folderId) {
+  const folder = await getFolder(userId, folderId);
+  if (!folder) return false;
+  const parent = folder.parent_id || null;
+  await run('UPDATE drafts SET folder_id = ? WHERE user_id = ? AND folder_id = ?', [parent, userId, folderId]);
+  await run('UPDATE draft_folders SET parent_id = ? WHERE user_id = ? AND parent_id = ?', [parent, userId, folderId]);
+  return (await run('DELETE FROM draft_folders WHERE user_id = ? AND id = ?', [userId, folderId])) > 0;
+}
+
+/**
+ * Перенести черновики в папку (folderId = null — "без папки"). rev и
+ * updated_at не трогаем: перенос — не правка содержимого.
+ * @returns {Promise<number>} сколько черновиков перенесено (черновики,
+ *   которых ещё нет на сервере, не считаются).
+ */
+async function moveDrafts(userId, ids, folderId) {
+  const list = (Array.isArray(ids) ? ids : []).filter(isValidId).slice(0, MAX_DRAFTS_PER_USER);
+  if (!list.length) throw new Error('Не выбраны черновики');
+  const target = folderId == null || folderId === '' ? null : String(folderId);
+  if (target !== null && (!isValidId(target) || !(await folderExists(userId, target)))) {
+    throw new Error('Папка не найдена');
+  }
+  const placeholders = list.map(() => '?').join(', ');
+  return run(
+    `UPDATE drafts SET folder_id = ? WHERE user_id = ? AND id IN (${placeholders})`,
+    [target, userId, ...list]
+  );
+}
+
 module.exports = {
   isValidId,
   listForUser,
   getDraft,
   saveDraft,
-  deleteDraft
+  deleteDraft,
+  listFolders,
+  createFolder,
+  renameFolder,
+  moveFolder,
+  deleteFolder,
+  moveDrafts
 };

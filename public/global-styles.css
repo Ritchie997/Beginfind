@@ -2125,6 +2125,7 @@ html {
     height: min(760px, 88vh);
     max-height: 88vh;
     overflow: hidden;
+    position: relative; /* опора для .drafts-move-menu */
 }
 
 .drafts-modal-box .modal-header h3 {
@@ -2267,7 +2268,7 @@ html {
     position: absolute;
     top: 8px;
     left: 8px;
-    right: 44px;
+    right: 80px;
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
@@ -2311,6 +2312,188 @@ html {
 .drafts-card:hover .drafts-card-delete,
 .drafts-card:focus-within .drafts-card-delete { opacity: 1; }
 .drafts-card-delete:hover { background: var(--red); }
+
+/* --- Папки черновиков (openDraftsFolder/openDraftsMoveMenu в spa-router.js) --- */
+.drafts-card-move {
+    position: absolute;
+    top: 8px;
+    right: 44px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+.drafts-card:hover .drafts-card-move,
+.drafts-card:focus-within .drafts-card-move { opacity: 1; }
+.drafts-card-move:hover { background: var(--blurple); }
+.drafts-modal-grid.is-selecting .drafts-card-move { display: none; }
+.drafts-card.is-dragging { opacity: 0.45; }
+.drafts-card-folder { margin-left: 10px; }
+
+.drafts-modal-folders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.drafts-modal-folders[hidden] { display: none; }
+.drafts-folder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 10px;
+    color: var(--text-normal);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+}
+.drafts-folder > i { color: var(--yellow); font-size: 18px; }
+.drafts-folder:hover,
+.drafts-folder:focus-visible { border-color: var(--blurple); }
+.drafts-folder.is-drop-target {
+    border-color: var(--blurple);
+    background: var(--background-modifier-hover, var(--background-tertiary));
+    box-shadow: 0 0 0 2px var(--blurple);
+}
+.drafts-folder-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.drafts-folder-count {
+    flex: 0 0 auto;
+    min-width: 24px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--background-tertiary);
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.drafts-modal-crumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin: 12px 18px 0;
+    min-width: 0;
+}
+.drafts-modal-crumbs[hidden] { display: none; }
+.drafts-crumb-root {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px dashed transparent;
+    border-radius: 8px;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+}
+.drafts-crumb-root:hover { color: var(--blurple); }
+.drafts-crumb-link {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 180px;
+    padding: 6px 8px;
+    border: 1px dashed transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-normal);
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.drafts-crumb-link:hover { color: var(--blurple); background: var(--background-tertiary); }
+.drafts-crumb-root.is-drop-target,
+.drafts-crumb-link.is-drop-target { border-color: var(--blurple); color: var(--blurple); }
+.drafts-folder.is-dragging { opacity: 0.45; }
+.drafts-folder-nested { color: var(--text-muted); font-size: 12px; }
+.drafts-crumb-sep { color: var(--text-muted); }
+.drafts-crumb-current {
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.drafts-crumb-current i { color: var(--yellow); margin-right: 4px; }
+.drafts-crumb-btn {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.drafts-crumb-btn:hover { background: var(--background-tertiary); color: var(--text-normal); }
+.drafts-crumb-btn.is-danger:hover { color: var(--red); }
+
+.drafts-move-menu {
+    position: absolute;
+    z-index: 5;
+    min-width: 220px;
+    max-width: 300px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--background-floating, var(--background-secondary));
+    border: 1px solid var(--background-accent);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.drafts-move-menu[hidden] { display: none; }
+.drafts-move-title {
+    padding: 6px 10px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.drafts-move-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-normal);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+.drafts-move-item span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drafts-move-item > i:first-child { width: 16px; color: var(--yellow); }
+.drafts-move-item.is-new > i:first-child { color: var(--blurple); }
+.drafts-move-item:hover,
+.drafts-move-item:focus-visible { background: var(--background-tertiary); outline: none; }
+.drafts-move-item.is-current { color: var(--blurple); }
+.drafts-move-check { color: var(--blurple); }
 
 /* --- Выбор нескольких черновиков (setDraftsSelectMode в spa-router.js) --- */
 .drafts-modal-select-btn {
@@ -2363,7 +2546,8 @@ html {
 
 /* Тач-экраны: наведения нет — кнопка удаления видна всегда. */
 @media (hover: none) {
-    .drafts-card-delete { opacity: 1; }
+    .drafts-card-delete,
+    .drafts-card-move { opacity: 1; }
 }
 
 @media (max-width: 600px) {
@@ -2378,6 +2562,7 @@ html {
     .drafts-modal-toolbar { padding: 10px 12px; }
     .drafts-modal-sort { flex: 1 1 100%; }
     .drafts-modal-status { margin: 10px 12px 0; }
+    .drafts-modal-crumbs { margin: 10px 12px 0; }
     .drafts-modal-body { padding: 12px; }
     .drafts-modal-grid { grid-template-columns: 1fr; gap: 10px; }
     /* На телефоне — строкой: обложка слева, текст справа, как список

@@ -19,6 +19,75 @@ router.get('/drafts', auth.authenticateToken, auth.checkApproved, async (req, re
   }
 });
 
+// POST /api/drafts/move — перенести черновики в папку. Тело: { ids,
+// folderId } (folderId: null — "без папки"). В ответе — сколько
+// перенесено: черновики, ещё не доехавшие до сервера, не переносятся.
+router.post('/drafts/move', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { ids, folderId } = req.body || {};
+    const moved = await store.moveDrafts(req.user.id, ids, folderId ?? null);
+    res.json({ success: true, moved });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ===== Папки черновиков — группировка в окне "Мои черновики" =====
+
+router.get('/draft-folders', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await store.listFolders(req.user.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/draft-folders — создать папку. Тело: { name, parentId }
+// (parentId: null — верхний уровень).
+router.post('/draft-folders', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const { name, parentId } = req.body || {};
+    res.json(await store.createFolder(req.user.id, name, parentId ?? null));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PATCH /api/draft-folders/:id — переименовать ({ name }) и/или
+// переместить в другую папку ({ parentId }, null — на верхний уровень).
+router.patch('/draft-folders/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    if (!store.isValidId(req.params.id)) return res.status(400).json({ error: 'Некорректный id папки' });
+    const body = req.body || {};
+    let folder = { id: req.params.id };
+    if ('parentId' in body) {
+      const moved = await store.moveFolder(req.user.id, req.params.id, body.parentId);
+      if (!moved) return res.status(404).json({ error: 'Папка не найдена' });
+      folder = { ...folder, ...moved };
+    }
+    if ('name' in body) {
+      const renamed = await store.renameFolder(req.user.id, req.params.id, body.name);
+      if (!renamed) return res.status(404).json({ error: 'Папка не найдена' });
+      folder = { ...folder, ...renamed };
+    }
+    res.json(folder);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE /api/draft-folders/:id — удалить папку; её черновики и вложенные
+// папки остаются и поднимаются в родительскую папку.
+router.delete('/draft-folders/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    if (!store.isValidId(req.params.id)) return res.status(400).json({ error: 'Некорректный id папки' });
+    const removed = await store.deleteFolder(req.user.id, req.params.id);
+    res.json({ success: true, removed });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/drafts/:id — черновик целиком (снимок формы редактора).
 router.get('/drafts/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
