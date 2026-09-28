@@ -179,7 +179,7 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         ? { x: Math.round(Number(data.view.x)), y: Math.round(Number(data.view.y)), zoom: Math.round(Number(data.view.zoom) * 4) / 4 }
         : null;
       const idOrNull = (v) => (typeof v === 'string' && /^[a-z0-9_-]{1,40}$/i.test(v) ? v : null);
-      const idList = (v) => (Array.isArray(v) ? [...new Set(v.map(idOrNull).filter(Boolean))].slice(0, 200) : []);
+      const idList = (v, max = 200) => (Array.isArray(v) ? [...new Set(v.map(idOrNull).filter(Boolean))].slice(0, max) : []);
       const hl = isPlainObject(data.hiddenLayers) ? data.hiddenLayers : {};
       return {
         mapId: idOrNull(data.mapId),
@@ -193,10 +193,18 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         // Слои, которые автор убрал из этой вставки карты (читатель их не
         // видит и не может включить): типы зон, типы меток ('__none' — без
         // типа), группы меток.
-        hiddenLayers: { zoneTypes: idList(hl.zoneTypes), markerTypes: idList(hl.markerTypes), groups: idList(hl.groups) },
+        // Поштучно: markers — скрытые метки, keepMarkers — показанные, даже
+        // если их тип или группа скрыты («все города, кроме этих двух»).
+        hiddenLayers: {
+          zoneTypes: idList(hl.zoneTypes), markerTypes: idList(hl.markerTypes), groups: idList(hl.groups),
+          markers: idList(hl.markers, 5000), keepMarkers: idList(hl.keepMarkers, 5000)
+        },
         // Только этот участок: карта не отдаляется и не сдвигается за
         // начальный вид, кнопки «на весь экран» нет.
-        locked: !!data.locked
+        locked: !!data.locked,
+        // Запас вокруг участка, в пределах которого читатель двигает карту:
+        // 0 — ровно начальный вид, 0.5 — участок вдвое шире, 1 — втрое.
+        lockMargin: [0, 0.5, 1].includes(Number(data.lockMargin)) ? Number(data.lockMargin) : 0.5
       };
     }
 

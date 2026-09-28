@@ -197,7 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
-      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null, hiddenLayers: { zoneTypes: [], markerTypes: [], groups: [] }, locked: false };
+      case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null, hiddenLayers: { zoneTypes: [], markerTypes: [], groups: [], markers: [], keepMarkers: [] }, locked: false, lockMargin: 0.5 };
       default: return {};
     }
   }
@@ -1767,8 +1767,13 @@
           <span class="eb-map-note" data-map-note>${d.view ? 'Начальный вид задан' : 'Начальный вид: вся карта'}</span>
         </div>
         <div class="eb-map-row eb-map-extra" hidden>
-          <label class="eb-map-check" title="Читатель не сможет отдалить карту или увести её за пределы начального вида (или подсвеченной зоны), кнопки «на весь экран» не будет">
+          <label class="eb-map-check" title="Читатель двигает карту только в пределах участка вокруг начального вида (или подсвеченной зоны), кнопки «на весь экран» не будет">
             <input type="checkbox" data-map-field="locked" ${d.locked ? 'checked' : ''}> Только этот участок — без разворачивания на весь экран
+          </label>
+          <label class="eb-map-field" data-map-margin-wrap ${d.locked ? '' : 'hidden'}><span>Двигаться вокруг вида</span>
+            <select data-map-field="lockMargin">
+              ${[[0, 'нельзя — ровно этот вид'], [0.5, 'немного — участок вдвое шире'], [1, 'свободно — участок втрое шире']].map(([v, l]) => `<option value="${v}"${(Number.isFinite(d.lockMargin) ? d.lockMargin : 0.5) === v ? ' selected' : ''}>${l}</option>`).join('')}
+            </select>
           </label>
         </div>
         <details class="eb-map-layers" data-map-layers hidden>
@@ -1782,10 +1787,13 @@
       const changed = () => this.scheduleRenderPreview();
       const hiddenLayers = () => {
         const h = d.hiddenLayers && typeof d.hiddenLayers === 'object' ? d.hiddenLayers : {};
+        const arr = (v) => (Array.isArray(v) ? v : []);
         d.hiddenLayers = {
-          zoneTypes: Array.isArray(h.zoneTypes) ? h.zoneTypes : [],
-          markerTypes: Array.isArray(h.markerTypes) ? h.markerTypes : [],
-          groups: Array.isArray(h.groups) ? h.groups : []
+          zoneTypes: arr(h.zoneTypes),
+          markerTypes: arr(h.markerTypes),
+          groups: arr(h.groups),
+          markers: arr(h.markers), // скрытые поштучно
+          keepMarkers: arr(h.keepMarkers) // показанные поштучно, хоть тип или группа скрыты
         };
         return d.hiddenLayers;
       };
@@ -1807,26 +1815,74 @@
         const MC = window.MapCore;
         const row = (kind, id, icon, name, n) => `
           <label class="eb-map-check"><input type="checkbox" data-map-layer="${kind}" value="${esc(id)}" ${h[HL_KEY[kind]].includes(id) ? '' : 'checked'}> ${icon} ${esc(name)} <span class="eb-map-note">${n}</span></label>`;
+        // Метки типа поштучно: флажок — видна ли метка во вставке (с учётом
+        // типа и группы); можно скрыть весь тип и оставить две-три метки.
+        const markerList = (typeId) => {
+          const list = markers.filter((m) => key(m.typeId) === typeId)
+            .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
+          const shown = list.filter(markerVisible).length;
+          const open = openMarkerLists.has(typeId);
+          return `
+          <details class="eb-map-markers" data-marker-list="${esc(typeId)}" ${open ? 'open' : ''}>
+            <summary>поштучно: видно ${shown} из ${list.length}</summary>
+            ${list.length > 8 ? `<input type="search" class="eb-map-markers-filter" placeholder="Найти метку…" value="${esc(markerFilters.get(typeId) || '')}">` : ''}
+            <div class="eb-map-markers-list">${list.map((m) => `
+              <label class="eb-map-check" data-marker-title="${esc((m.title || '').toLowerCase())}"><input type="checkbox" data-map-marker="${esc(m.id)}" ${markerVisible(m) ? 'checked' : ''}> ${esc(m.title || 'Без названия')}</label>`).join('')}
+            </div>
+          </details>`;
+        };
         const section = (title, rows) => (rows.length ? `<div class="eb-map-layers-section"><div class="eb-map-layers-title">${title}</div>${rows.join('')}</div>` : '');
         body.innerHTML = section('Зоны', zoneTypeIds.map((id) => {
           const t = viewer.types.get(id) || MC.FALLBACK_TYPE;
           return row('zt', id, `<span class="eb-map-swatch" style="background:${esc(t.color)}"></span>`, id === '__none' ? 'Без типа' : t.name, count(data.zones, (z) => key(z.typeId) === id));
         })) + section('Метки', markerTypeIds.map((id) => {
           const t = viewer.markerTypes.get(id) || MC.FALLBACK_MARKER_TYPE;
-          return row('mt', id, `<i class="fas fa-${esc(t.icon)}" style="color:${esc(t.color)}"></i>`, id === '__none' ? 'Без типа' : t.name, count(markers, (m) => key(m.typeId) === id));
+          return row('mt', id, `<i class="fas fa-${esc(t.icon)}" style="color:${esc(t.color)}"></i>`, id === '__none' ? 'Без типа' : t.name, count(markers, (m) => key(m.typeId) === id)) + markerList(id);
         })) + section('Группы меток', groups.map((g) => row('g', g.id, '<i class="fas fa-folder"></i>', g.name, count(markers, (m) => m.groupId === g.id))));
         box.hidden = !body.innerHTML;
         // Ссылки на слои, которых на карте больше нет, — выбрасываем.
         h.zoneTypes = h.zoneTypes.filter((id) => zoneTypeIds.includes(id));
         h.markerTypes = h.markerTypes.filter((id) => markerTypeIds.includes(id));
         h.groups = h.groups.filter((id) => groups.some((g) => g.id === id));
+        const markerIds = new Set(markers.map((m) => m.id));
+        h.markers = h.markers.filter((id) => markerIds.has(id));
+        h.keepMarkers = h.keepMarkers.filter((id) => markerIds.has(id));
+        // Фильтр списка меток — применяем к только что нарисованному.
+        body.querySelectorAll('.eb-map-markers-filter').forEach((inp) => applyMarkerFilter(inp));
         updateLayersNote();
+      };
+      const openMarkerLists = new Set(); // раскрытые списки меток (переживают перерисовку)
+      const markerFilters = new Map(); // typeId → строка поиска
+      const markerVisible = (m) => {
+        const h = hiddenLayers();
+        if (h.keepMarkers.includes(m.id)) return true;
+        if (h.markers.includes(m.id)) return false;
+        return !h.markerTypes.includes(m.typeId || '__none') && !(m.groupId && h.groups.includes(m.groupId));
+      };
+      const applyMarkerFilter = (inp) => {
+        const q = inp.value.trim().toLowerCase();
+        const det = inp.closest('[data-marker-list]');
+        markerFilters.set(det.dataset.markerList, inp.value);
+        det.querySelectorAll('[data-marker-title]').forEach((el) => { el.hidden = !!q && !el.dataset.markerTitle.includes(q); });
+      };
+      // Перенести поштучные настройки во вставку, открытую в превью.
+      const syncViewerMarkers = () => {
+        const v = wrap._viewer;
+        if (!v) return;
+        const h = hiddenLayers();
+        v.excluded.m = new Set(h.markers);
+        v.excluded.km = new Set(h.keepMarkers);
+        v.afterLayersChange();
       };
       const updateLayersNote = () => {
         const h = hiddenLayers();
         const n = h.zoneTypes.length + h.markerTypes.length + h.groups.length;
+        const parts = [];
+        if (n) parts.push(`скрыто слоёв: ${n}`);
+        if (h.markers.length) parts.push(`скрыто меток поштучно: ${h.markers.length}`);
+        if (h.keepMarkers.length) parts.push(`оставлено меток: ${h.keepMarkers.length}`);
         const el = wrap.querySelector('[data-map-layers-note]');
-        if (el) el.textContent = n ? `· скрыто слоёв: ${n}` : '· всё';
+        if (el) el.textContent = parts.length ? `· ${parts.join(', ')}` : '· всё';
       };
 
       const loadList = async () => {
@@ -1908,7 +1964,27 @@
         }
       };
 
+      wrap.addEventListener('toggle', (e) => {
+        const det = e.target.closest && e.target.closest('[data-marker-list]');
+        if (det && det === e.target) { if (det.open) openMarkerLists.add(det.dataset.markerList); else openMarkerLists.delete(det.dataset.markerList); }
+      }, true);
+      wrap.addEventListener('input', (e) => {
+        if (e.target.classList.contains('eb-map-markers-filter')) applyMarkerFilter(e.target);
+      });
       wrap.addEventListener('change', (e) => {
+        const markerId = e.target.dataset.mapMarker;
+        if (markerId) {
+          const h = hiddenLayers();
+          const m = wrap._viewer && (wrap._viewer.data.markers || []).find((x) => x.id === markerId);
+          h.markers = h.markers.filter((id) => id !== markerId);
+          h.keepMarkers = h.keepMarkers.filter((id) => id !== markerId);
+          // Поштучная отметка — только если без неё вышло бы не то, что выбрано.
+          if (m && markerVisible(m) !== e.target.checked) (e.target.checked ? h.keepMarkers : h.markers).push(markerId);
+          syncViewerMarkers();
+          if (wrap._viewer) renderLayersPicker(wrap._viewer, wrap._viewer.data);
+          changed();
+          return;
+        }
         const layerKind = e.target.dataset.mapLayer;
         if (layerKind) {
           const list = hiddenLayers()[HL_KEY[layerKind]];
@@ -1920,6 +1996,7 @@
           if (v) {
             v.excluded[layerKind][e.target.checked ? 'delete' : 'add'](id);
             v.afterLayersChange();
+            renderLayersPicker(v, v.data); // счётчики «видно N из M» у меток
           }
           updateLayersNote();
           changed();
@@ -1932,11 +2009,14 @@
           d.view = null;
           d.focusZoneId = null;
           d.basemapId = null;
-          d.hiddenLayers = { zoneTypes: [], markerTypes: [], groups: [] };
+          d.hiddenLayers = { zoneTypes: [], markerTypes: [], groups: [], markers: [], keepMarkers: [] };
           note.textContent = 'Начальный вид: вся карта';
           mountPreview();
         } else if (f === 'locked') {
           d.locked = e.target.checked;
+          wrap.querySelector('[data-map-margin-wrap]').hidden = !d.locked;
+        } else if (f === 'lockMargin') {
+          d.lockMargin = Number(e.target.value);
         } else if (f === 'height') {
           d.height = Math.min(900, Math.max(200, Number(e.target.value) || 420));
           e.target.value = d.height;

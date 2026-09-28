@@ -366,10 +366,13 @@
       // Убранное автором вставки — не путать со «Слоями» читателя: такие
       // зоны и метки не показываются вовсе (а не полупрозрачными).
       const ex = opts.hiddenLayers || {};
+      const idSet = (v) => new Set(Array.isArray(v) ? v : []);
       this.excluded = {
-        zt: new Set(Array.isArray(ex.zoneTypes) ? ex.zoneTypes : []),
-        mt: new Set(Array.isArray(ex.markerTypes) ? ex.markerTypes : []),
-        g: new Set(Array.isArray(ex.groups) ? ex.groups : [])
+        zt: idSet(ex.zoneTypes),
+        mt: idSet(ex.markerTypes),
+        g: idSet(ex.groups),
+        m: idSet(ex.markers), // скрытые поштучно
+        km: idSet(ex.keepMarkers) // показанные поштучно, хоть тип или группа скрыты
       };
       this.opts = opts;
       this.types = typeMap(mapData.zoneTypes);
@@ -978,7 +981,9 @@
       const key = (v) => v || '__none';
       let ids;
       if (kind === 'zt') ids = [...new Set(this.data.zones.map((z) => key(z.typeId)))];
-      else if (kind === 'mt') ids = [...new Set((this.data.markers || []).filter((m) => !(m.groupId && this.excluded.g.has(m.groupId))).map((m) => key(m.typeId)))];
+      // Типы меток — по меткам, оставшимся во вставке (в том числе
+      // показанным поштучно из скрытого типа).
+      else if (kind === 'mt') return [...new Set((this.data.markers || []).filter((m) => !this.isMarkerExcluded(m)).map((m) => key(m.typeId)))];
       else ids = this.markerGroups.map((g) => g.id);
       return ids.filter((id) => !this.excluded[kind].has(id));
     }
@@ -987,6 +992,8 @@
       return this.excluded.zt.has(z.typeId || '__none');
     }
     isMarkerExcluded(m) {
+      if (this.excluded.km.has(m.id)) return false;
+      if (this.excluded.m.has(m.id)) return true;
       return this.excluded.mt.has(m.typeId || '__none') || (!!m.groupId && this.excluded.g.has(m.groupId));
     }
 
@@ -1343,14 +1350,25 @@
         this.applyStyle(opts.focusZoneId);
         if (opts.mode !== 'embed') this.renderCard();
       }
-      if (opts.lockView) this.lockToCurrentView();
+      if (opts.lockView) this.lockToCurrentView(opts.lockMargin);
     }
 
-    // «Только этот участок»: видимая сейчас область — предел. Приближать
-    // можно, отдаляться дальше начального вида и уводить карту за край — нет.
-    lockToCurrentView() {
-      const bounds = this.map.getBounds();
-      this.map.setMinZoom(this.map.getZoom());
+    // «Только этот участок»: начальный вид с запасом вокруг (margin — доля
+    // размера вида с каждой стороны: 0.5 — участок вдвое шире вида) — предел.
+    // Внутри него карту можно свободно двигать, приближать и отдалять, пока
+    // участок не поместится целиком; уйти за него — нельзя.
+    lockToCurrentView(margin = 0.5) {
+      const view = this.map.getBounds();
+      const pad = view.pad(Number.isFinite(Number(margin)) ? Math.max(0, Number(margin)) : 0.5);
+      // Запас не заходит за край картинки (там пусто), но начальный вид
+      // остаётся внутри целиком.
+      const img = imageBounds(this.size);
+      const bounds = L.latLngBounds(
+        [Math.max(pad.getSouth(), Math.min(img.getSouth(), view.getSouth())), Math.max(pad.getWest(), Math.min(img.getWest(), view.getWest()))],
+        [Math.min(pad.getNorth(), Math.max(img.getNorth(), view.getNorth())), Math.min(pad.getEast(), Math.max(img.getEast(), view.getEast()))]
+      );
+      const zoom = this.map.getZoom();
+      this.map.setMinZoom(Math.min(zoom, this.map.getBoundsZoom(bounds)));
       this.map.options.maxBoundsViscosity = 1;
       this.map.setMaxBounds(bounds);
     }
@@ -1430,7 +1448,7 @@
         }
         const viewer = new MapViewer(canvas, data, {
           mode: 'embed', view: cfg.view, focusZoneId: cfg.focusZoneId, basemapId: cfg.basemapId, time: cfg.time,
-          hiddenLayers: cfg.hiddenLayers, lockView: !!cfg.locked,
+          hiddenLayers: cfg.hiddenLayers, lockView: !!cfg.locked, lockMargin: cfg.lockMargin,
           onZoneActivate: inEditor ? () => window.showMessage?.('В предпросмотре редактора переход по зонам отключён', 'info') : undefined
         });
         embedInstances.add(viewer);

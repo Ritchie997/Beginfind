@@ -159,7 +159,9 @@ body.map-fs-open { overflow: hidden; }
 
 /* ===== Viewer (Leaflet) ===== */
 
-.map-viewer { position: relative; }
+/* isolation — свой слой наложения: панели Leaflet (z-index 400–1000) не
+   вылезают поверх липкой панели инструментов редактора и шапки страницы. */
+.map-viewer { position: relative; isolation: isolate; }
 .map-viewer-page { height: 100%; }
 .map-viewer-canvas { position: absolute; inset: 0; background: var(--background-tertiary); }
 .map-viewer .leaflet-container { background: var(--background-tertiary); font: inherit; }
@@ -256,6 +258,7 @@ body.map-fs-open { overflow: hidden; }
 
 .blk-map {
   position: relative;
+  isolation: isolate;
   margin: 16px 0;
   border: 1px solid var(--background-accent);
   border-radius: 10px;
@@ -317,6 +320,7 @@ body.map-fs-open { overflow: hidden; }
 .eb-map-field input[type="number"] { width: 100px; }
 .eb-map-preview {
   position: relative;
+  isolation: isolate;
   border: 1px solid var(--background-accent);
   border-radius: 8px;
   overflow: hidden;
@@ -1332,3 +1336,11 @@ details.world-type:not([open]) .world-row-btns { opacity: .6; }
 .me-calendar .maps-cal-month .maps-cal-days { flex: 0 0 64px; }
 .me-calendar .maps-cal-num { width: 16px; }
 .me-calendar .world-row-btns .map-icon-btn { width: 24px; height: 24px; }
+
+/* Метки поштучно в «Что показывать на карте» (блок карты в редакторе статьи) */
+.eb-map-markers { margin: 0 0 6px 22px; font-size: 12px; }
+.eb-map-markers > summary { cursor: pointer; color: var(--text-muted); }
+.eb-map-markers-filter { width: 100%; margin: 6px 0 4px; padding: 4px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--background-accent); background: var(--background-tertiary); color: var(--text-normal); }
+.eb-map-markers-list { display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow-y: auto; padding: 4px 0; }
+.eb-map-markers-list .eb-map-check { font-size: 12px; }
+.eb-map-markers-list .eb-map-check[hidden] { display: none; }

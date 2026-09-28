@@ -509,7 +509,7 @@
       // уже после вставки HTML в страницу.
       case 'map': {
         if (!d.mapId) return '<div class="blk-map blk-map-empty"><i class="fas fa-map"></i> Карта не выбрана</div>';
-        const cfg = JSON.stringify({ view: d.view || null, focusZoneId: d.focusZoneId || null, basemapId: d.basemapId || null, time: Number.isFinite(d.day) ? d.day : null, hiddenLayers: d.hiddenLayers || null, locked: !!d.locked });
+        const cfg = JSON.stringify({ view: d.view || null, focusZoneId: d.focusZoneId || null, basemapId: d.basemapId || null, time: Number.isFinite(d.day) ? d.day : null, hiddenLayers: d.hiddenLayers || null, locked: !!d.locked, lockMargin: Number.isFinite(d.lockMargin) ? d.lockMargin : 0.5 });
         const height = Math.min(900, Math.max(200, Number(d.height) || 420));
         return `<div class="blk-map" data-map-id="${escapeAttr(d.mapId)}" data-map-config="${escapeAttr(cfg)}" style="height:${height}px">`
           + '<div class="blk-map-canvas"><div class="blk-map-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка карты…</div></div>'
