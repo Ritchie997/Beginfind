@@ -5321,23 +5321,24 @@ SPARouter.prototype.renderPendingUsers = async function() {
       if (countEl) countEl.textContent = users.length;
       if (tableEl) tableEl.style.display = 'block';
 
-      // Строка и ячейки больше не несут своих инлайн-стилей — .table-container
-      // уже стилизует table/th/td/tr, включая hover (см. "ENHANCED TABLE
-      // STYLES" в global-styles.css), а кнопки — канонические .btn-success/
-      // .btn-danger вместо зашитых #28a745/#dc3545.
+      // Карточка на строку — общий компонент .table-cards (см. "TABLE CARDS"
+      // в global-styles.css): .cell-primary — заголовок карточки,
+      // .cell-actions — ряд компактных кнопок внизу, data-label — подписи.
       tbodyEl.innerHTML = '';
       users.forEach(user => {
         const tr = document.createElement('tr');
 
         const date = user.created_at ? new Date(user.created_at).toLocaleString('ru-RU') : '—';
+        const name = this.escapeHtml(user.display_name || user.username);
+        const username = this.escapeHtml(user.username);
 
         tr.innerHTML = `
-          <td>${user.display_name || user.username}</td>
-          <td style="font-family: monospace; color: var(--text-muted);">${user.username}</td>
-          <td style="font-size: 13px; color: var(--text-muted);">${date}</td>
-          <td class="text-right">
-            <button class="btn btn-success btn-sm btn-approve" data-id="${user.id}" data-name="${user.display_name || user.username}"><i class="fas fa-check"></i> Подтвердить</button>
-            <button class="btn btn-danger btn-sm btn-reject" data-id="${user.id}" data-name="${user.display_name || user.username}"><i class="fas fa-xmark"></i> Отклонить</button>
+          <td class="cell-primary" data-label="Имя">${name}</td>
+          <td data-label="Логин" style="font-family: monospace; color: var(--text-muted);">${username}</td>
+          <td data-label="Дата заявки" style="color: var(--text-muted);">${date}</td>
+          <td class="cell-actions">
+            <button class="btn btn-success btn-sm btn-approve" data-id="${user.id}" data-name="${name}"><i class="fas fa-check"></i> Подтвердить</button>
+            <button class="btn btn-danger btn-sm btn-reject" data-id="${user.id}" data-name="${name}"><i class="fas fa-xmark"></i> Отклонить</button>
           </td>
         `;
         tbodyEl.appendChild(tr);

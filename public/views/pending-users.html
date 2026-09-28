@@ -27,11 +27,12 @@
             <h3>Нет ожидающих заявок</h3>
             <p>Все заявки обработаны</p>
         </div>
-        <!-- .table-container уже стилизует table/th/td/tr (см. "ENHANCED TABLE
-             STYLES" в global-styles.css) — тот же класс, что и у таблицы
-             пользователей (users-list.html), инлайновых стилей на ячейках
-             больше не нужно. -->
-        <div id="pending-table" class="table-container" style="display: none;">
+        <!-- .table-cards — раскладка "карточка на строку" с компактными
+             кнопками (см. "TABLE CARDS" в global-styles.css), та же, что у
+             вкладок "Пользователи" и "Серверы": широкая таблица с крупными
+             кнопками не влезала в экран телефона. Подписи — data-label на
+             <td> (renderPendingUsers в spa-router.js). -->
+        <div id="pending-table" class="table-container table-cards" style="display: none;">
             <table>
                 <thead>
                     <tr>
