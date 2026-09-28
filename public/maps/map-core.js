@@ -178,42 +178,17 @@
     return era.direction === 'backward' ? (next !== null ? next : 0) - y : (era.start !== null ? era.start : 0) + y - 1;
   }
 
-  // Время — целое число дней (день 0 — 01.01.1970, как в Date), дата в
-  // интерфейсе — «дд.мм.гг» по обычному григорианскому календарю. Год не
-  // обрезается до двух цифр: 05.03.12, 05.03.1245, 05.03.-40.
-  const DAY_MS = 86400000;
+  // Время — целое число дней; подпись дня даёт календарь мира (обычный
+  // григорианский или свои месяцы) — см. map-calendar.js.
+  const CAL = window.MapCalendar;
 
-  function dayToDate(t) {
-    const d = new Date(t * DAY_MS);
-    return { d: d.getUTCDate(), m: d.getUTCMonth() + 1, y: d.getUTCFullYear() };
-  }
-
-  function dateToDay(y, m, d) {
-    const dt = new Date(0);
-    dt.setUTCFullYear(y, m - 1, d); // Date.UTC превращает годы 0–99 в 1900-е
-    return Math.round(dt.getTime() / DAY_MS);
-  }
-
-  function formatTime(cal, t) {
-    if (t === null || t === undefined || !Number.isFinite(t)) return '';
-    const { d, m, y } = dayToDate(t);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${pad(d)}.${pad(m)}.${y < 0 ? '-' : ''}${pad(Math.abs(y))}`;
-  }
-
-  // «дд.мм.гг» (или просто год — 1 января) → день; null — не разобрали.
-  function parseTime(str) {
-    const s = String(str || '').trim();
-    let d = 1; let m = 1; let y;
-    const full = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](-?\d{1,6})$/);
-    if (full) { d = +full[1]; m = +full[2]; y = +full[3]; }
-    else if (/^-?\d{1,6}$/.test(s)) y = +s;
-    else return null;
-    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-    const t = dateToDay(y, m, d);
-    const back = dayToDate(t);
-    return back.d === d && back.m === m ? t : null; // 31.02 и т. п.
-  }
+  // Подпись для чтения (свой календарь — с названием месяца).
+  function formatTime(cal, t) { return CAL.format(cal, t); }
+  // Для полей ввода — числами «дд.мм.гг».
+  function formatTimeInput(cal, t) { return CAL.formatInput(cal, t); }
+  // Ввод → день; null — не разобрали.
+  function parseTime(str, cal) { return CAL.parse(cal, str); }
+  function dateToDay(y, m, d, cal) { return CAL.dateToDay(cal, y, m, d); }
 
   function formatRange(cal, from, to) {
     if (from === null || from === undefined) return to === null || to === undefined ? '' : `до ${formatTime(cal, to)}`;
@@ -372,7 +347,9 @@
       this.hasTime = mapHasTime(this.data);
       this.range = timeRange(this.data);
       const initial = [opts.time, this.data.timeline && this.data.timeline.initial].find((v) => v !== null && v !== undefined && Number.isFinite(v));
-      this.time = this.hasTime ? (initial !== undefined ? initial : this.range.min) : null;
+      // Дата открытия (карты или блока статьи) может лежать вне шкалы с
+      // заданными начальной и конечной датой — прижимаем к краю, как setTime.
+      this.time = this.hasTime ? Math.max(this.range.min, Math.min(this.range.max, initial !== undefined ? initial : this.range.min)) : null;
       this.data.zones.forEach((z) => {
         if (!z.shapes && z.polygon) z.shapes = [{ from: null, polygon: z.polygon }];
         z._shapeIndex = shapeIndexAt(z, this.time);
@@ -1212,10 +1189,13 @@
       this.container.classList.add('has-timeline');
       const { min, max } = this.range;
       const span = Math.max(1, max - min);
-      const pct = (t) => ((t - min) / span) * 100;
+      const pct = (t) => Math.max(0, Math.min(100, ((t - min) / span) * 100));
 
-      // Длительные события — по дорожкам, чтобы полосы не налезали.
-      const events = (this.data.events || []).slice().sort((a, b) => a.from - b.from);
+      // Длительные события — по дорожкам, чтобы полосы не налезали. События
+      // целиком вне шкалы (задана начальная и конечная дата) не показываем.
+      const events = (this.data.events || [])
+        .filter((e) => e.from <= max && (e.to === null || e.to === undefined ? e.from >= min : e.to > min))
+        .sort((a, b) => a.from - b.from);
       const laneEnds = [];
       const items = events.map((e) => {
         if (e.to === null || e.to === undefined) return `<button type="button" class="map-tl-event map-tl-point" data-event-id="${escapeHtml(e.id)}" style="left:${pct(e.from).toFixed(3)}%" title="${escapeHtml(`${formatTime(this.data.calendar, e.from)} — ${e.title}`)}"></button>`;
@@ -1508,6 +1488,7 @@
     toEraYear,
     fromEraYear,
     formatTime,
+    formatTimeInput,
     parseTime,
     dateToDay,
     formatRange,

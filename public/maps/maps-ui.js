@@ -274,7 +274,12 @@
         <button class="btn btn-secondary btn-sm" data-act="cancel-create">Отмена</button>
       </div>
       ${maps.length ? `<div class="maps-grid">${maps.map(renderMapCard).join('')}</div>`
-        : '<div class="maps-empty"><i class="fas fa-map"></i><div>В этом мире пока нет карт</div></div>'}`;
+        : '<div class="maps-empty"><i class="fas fa-map"></i><div>В этом мире пока нет карт</div></div>'}
+      <details class="maps-calendar" data-el="calendar" open>
+        <summary><i class="fas fa-calendar-days"></i> Календарь мира</summary>
+        <div class="maps-calendar-body"></div>
+      </details>`;
+    mountCalendarEditor(root.querySelector('[data-el="calendar"] .maps-calendar-body'), ctx.server.id);
 
     const form = root.querySelector('.maps-create-form');
     const input = form.querySelector('input');
@@ -362,7 +367,6 @@
     const state = {
       zone: result.data.zoneTypes.map((t) => ({ ...t, parents: [...(t.parents || [])] })),
       marker: (result.data.markerTypes || []).map((t) => ({ ...t })),
-      calendar: result.data.calendar || null, // не редактируется, но сохраняется как есть
       canEdit: !!result.data.can_edit,
       isDefault: !!result.data.isDefault,
       dirty: false,
@@ -475,7 +479,7 @@
       // Сохранение мира — вызывается обычным «Сохранить» редактора.
       async save() {
         if (!state.dirty || !state.canEdit) return true;
-        const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker, calendar: state.calendar });
+        const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world`, 'PUT', { zoneTypes: state.zone, markerTypes: state.marker }); // календарь — отдельно (mountCalendarEditor)
         if (!res.success) { window.showMessage?.(`Не удалось сохранить типы мира: ${apiError(res)}`, 'error'); return false; }
         state.zone = res.data.zoneTypes.map((t) => ({ ...t, parents: [...(t.parents || [])] }));
         state.marker = (res.data.markerTypes || []).map((t) => ({ ...t }));
@@ -496,6 +500,110 @@
         return row;
       }
     };
+  }
+
+  // ===== Календарь мира =====
+  // Обычный (григорианский) или свои месяцы с названиями и длиной. Смена
+  // календаря пересчитывает даты всех карт мира на сервере (число, месяц и
+  // год остаются прежними), поэтому сохраняется отдельно и с подтверждением.
+
+  const GREGORIAN_MONTHS = [['Январь', 31], ['Февраль', 28], ['Март', 31], ['Апрель', 30], ['Май', 31], ['Июнь', 30],
+    ['Июль', 31], ['Август', 31], ['Сентябрь', 30], ['Октябрь', 31], ['Ноябрь', 30], ['Декабрь', 31]];
+
+  // opts.beforeSave() → false — не сохранять (редактор карты сначала
+  // сохраняет свои правки); opts.onSaved(world) — после смены календаря.
+  async function mountCalendarEditor(container, serverId, opts = {}) {
+    const CAL = window.MapCalendar;
+    container.classList.add('cal-editor');
+    container.innerHTML = '<p class="maps-tab-loading">Загрузка календаря…</p>';
+    const result = await api(`/api/servers/${encodeURIComponent(serverId)}/world`);
+    if (!container.isConnected) return;
+    if (!result.success) {
+      container.innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(apiError(result))}</div>`;
+      return;
+    }
+    const canEdit = !!result.data.can_edit;
+    let saved = CAL.customMonths(result.data.calendar);
+    const state = { custom: !!saved, months: (saved || GREGORIAN_MONTHS.map(([name, days]) => ({ name, days }))).map((m) => ({ ...m })) };
+    const dis = canEdit ? '' : 'disabled';
+
+    const current = () => (state.custom ? { months: state.months } : { months: null });
+    const isDirty = () => CAL.signature(current()) !== CAL.signature({ months: saved });
+
+    const render = () => {
+      const len = state.months.reduce((sum, m) => sum + (Number(m.days) || 0), 0);
+      const cal = current();
+      const sample = CAL.format(cal, CAL.dateToDay(cal, 313, Math.min(3, CAL.monthCount(cal)), 5));
+      container.innerHTML = `
+        ${canEdit ? '' : '<div class="server-permission-note"><i class="fas fa-circle-info"></i> Менять календарь мира может только администратор сервера.</div>'}
+        <p class="world-hint">Календарь, которым подписаны даты на всех картах мира: на шкале, в событиях, в полях дат.</p>
+        <label class="checkbox-field"><input type="radio" name="cal-kind" value="greg" ${state.custom ? '' : 'checked'} ${dis}> Обычный (григорианский)</label>
+        <label class="checkbox-field"><input type="radio" name="cal-kind" value="custom" ${state.custom ? 'checked' : ''} ${dis}> Свой календарь: названия месяцев, дней в месяце, длина года</label>
+        ${state.custom ? '' : '<p class="world-hint">Выберите «Свой календарь», чтобы задать месяцы.</p>'}
+        ${state.custom ? `
+          <div class="maps-cal-head"><span></span><span>Месяц</span><span>Дней</span></div>
+          <div class="maps-cal-months">${state.months.map((m, i) => `
+            <div class="maps-cal-month" data-month-index="${i}">
+              <span class="maps-cal-num">${i + 1}</span>
+              <input type="text" class="form-input" data-mfield="name" value="${escapeHtml(m.name)}" maxlength="40" placeholder="Название" ${dis}>
+              <input type="number" class="form-input maps-cal-days" data-mfield="days" value="${escapeHtml(m.days)}" min="1" max="${CAL.MAX_MONTH_DAYS}" title="Дней в месяце" ${dis}>
+              ${canEdit ? `<span class="world-row-btns">
+                <button type="button" class="map-icon-btn" data-cal-act="up" title="Выше"><i class="fas fa-arrow-up"></i></button>
+                <button type="button" class="map-icon-btn" data-cal-act="down" title="Ниже"><i class="fas fa-arrow-down"></i></button>
+                <button type="button" class="map-icon-btn is-danger" data-cal-act="remove" title="Удалить месяц" ${state.months.length < 2 ? 'disabled' : ''}><i class="fas fa-trash"></i></button>
+              </span>` : ''}
+            </div>`).join('')}</div>
+          ${canEdit && state.months.length < CAL.MAX_MONTHS ? '<button type="button" class="btn btn-secondary btn-sm" data-cal-act="add"><i class="fas fa-plus"></i> Месяц</button>' : ''}
+          <p class="maps-cal-year">Год: <b>${state.months.length} мес., ${len} дн.</b> — сумма месяцев, високосных лет нет.</p>` : ''}
+        <p class="world-hint">Пример даты: <b>${escapeHtml(sample)}</b></p>
+        ${canEdit ? `<div class="maps-cal-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-cal-act="save" ${isDirty() ? '' : 'disabled'}><i class="fas fa-floppy-disk"></i> Сохранить календарь</button>
+          ${isDirty() ? '<span class="world-hint">Есть несохранённые изменения</span>' : ''}
+        </div>` : ''}`;
+    };
+
+    container.onchange = (e) => {
+      if (e.target.name === 'cal-kind') { state.custom = e.target.value === 'custom'; render(); return; }
+      const row = e.target.closest('[data-month-index]');
+      const f = e.target.dataset.mfield;
+      if (!row || !f) return;
+      const m = state.months[Number(row.dataset.monthIndex)];
+      if (f === 'days') m.days = Math.min(CAL.MAX_MONTH_DAYS, Math.max(1, Math.round(Number(e.target.value) || 1)));
+      else m.name = e.target.value.trim() || m.name;
+      render();
+    };
+
+    container.onclick = async (e) => {
+      const btn = e.target.closest('[data-cal-act]');
+      if (!btn) return;
+      const act = btn.dataset.calAct;
+      const row = btn.closest('[data-month-index]');
+      const i = row ? Number(row.dataset.monthIndex) : -1;
+      const list = state.months;
+      if (act === 'add') list.push({ name: `Месяц ${list.length + 1}`, days: 30 });
+      else if (act === 'remove' && list.length > 1) list.splice(i, 1);
+      else if (act === 'up' && i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]];
+      else if (act === 'down' && i >= 0 && i < list.length - 1) [list[i + 1], list[i]] = [list[i], list[i + 1]];
+      else if (act === 'save') {
+        const msg = 'Даты на всех картах этого мира и в блоках карт в статьях будут пересчитаны: число, месяц и год останутся прежними '
+          + '(если в новом месяце меньше дней — последний день месяца, если месяца нет — последний месяц). Открытые сейчас редакторы карт этого мира нужно будет перезагрузить.';
+        const ok = window.confirmDialog ? await window.confirmDialog.open({ title: 'Сменить календарь мира?', message: msg, confirmLabel: 'Сменить' }) : confirm(msg);
+        if (!ok) return;
+        if (opts.beforeSave && !(await opts.beforeSave())) return;
+        btn.disabled = true;
+        const res = await api(`/api/servers/${encodeURIComponent(serverId)}/world/calendar`, 'PUT', { calendar: current() });
+        if (!res.success) { btn.disabled = false; window.showMessage?.(`Не удалось сохранить календарь: ${apiError(res)}`, 'error'); return; }
+        saved = CAL.customMonths(res.data.calendar);
+        state.custom = !!saved;
+        if (saved) state.months = saved.map((m) => ({ ...m }));
+        const c = res.data.converted || { maps: 0, articles: 0 };
+        window.showMessage?.(`Календарь сохранён. Пересчитаны даты карт: ${c.maps}, статей с блоками карт: ${c.articles}`, 'success');
+        if (opts.onSaved) { opts.onSaved(res.data); return; }
+      } else return;
+      render();
+    };
+
+    render();
   }
 
   function typeRowButtons(state) {
@@ -568,6 +676,7 @@
     loadMapPage,
     renderServerMapsTab,
     mountWorldEditor,
+    mountCalendarEditor,
     setCurrent(instance) { current = instance; }
   };
 })();

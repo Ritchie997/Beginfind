@@ -9,6 +9,8 @@ const store = require('../services/maps-store');
 const worlds = require('../services/worlds-store');
 const tiler = require('../services/map-tiler');
 const access = require('../services/map-access');
+const articles = require('../services/articles-store');
+const MapCalendar = require('../../public/maps/map-calendar');
 
 const router = express.Router();
 
@@ -68,6 +70,37 @@ router.put('/servers/:id/world', auth.authenticateToken, auth.checkApproved, asy
       return res.status(403).json({ error: 'Настройки мира может менять только администратор сервера' });
     }
     res.json({ ...worlds.saveWorld(serverId, req.body), can_edit: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Смена календаря мира. Даты хранятся днями, календарь их только
+// подписывает, поэтому при смене все даты карт мира (и блоков `map` в
+// статьях, показывающих эти карты) пересчитываются так, чтобы число, месяц и
+// год остались теми же (см. MapCalendar.convert).
+router.put('/servers/:id/world/calendar', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = toInt(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Некорректный id сервера' });
+    if (!(access.bypasses(req.user) || await access.isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Календарь мира может менять только администратор сервера' });
+    }
+    const { world, before } = worlds.setCalendar(serverId, req.body && req.body.calendar);
+    let mapCount = 0;
+    let articleCount = 0;
+    if (MapCalendar.signature(before) !== MapCalendar.signature(world.calendar)) {
+      const convert = (t) => MapCalendar.convert(t, before, world.calendar);
+      const maps = store.listMaps().filter((m) => m.serverId === serverId);
+      for (const m of maps) {
+        // touch: у открытых редакторов этих карт сохранение получит 409 —
+        // иначе они записали бы даты в старом календаре.
+        await store.updateMap(m.id, (map) => MapCalendar.mapTimes(map, convert));
+      }
+      mapCount = maps.length;
+      articleCount = articles.rewriteMapBlockDays(new Set(maps.map((m) => m.id)), convert).length;
+    }
+    res.json({ ...world, can_edit: true, converted: { maps: mapCount, articles: articleCount } });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

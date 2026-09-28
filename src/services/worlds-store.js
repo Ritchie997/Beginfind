@@ -2,8 +2,8 @@
 // (у статей уже есть привязка к серверу, роли доступа — роли сервера), поэтому
 // отдельной сущности нет: файл content/worlds/<serverId>.json.
 //
-// Сейчас (этап 1) здесь только справочник типов зон; календарь появится на
-// этапе 3 (поле calendar зарезервировано и просто сохраняется как есть).
+// Здесь справочники типов зон и меток и календарь мира (calendar.months —
+// свои месяцы, см. public/maps/map-calendar.js).
 //
 // Тип зоны задаёт правила вложенности (какие типы могут быть родителем,
 // можно ли быть на верхнем уровне), стиль по умолчанию и то, обрезается ли
@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WORLDS_DIR } = require('../config/paths');
+const MapCalendar = require('../../public/maps/map-calendar');
 
 const MAX_TYPES = 50;
 const HOVER_EFFECTS = ['outline', 'fill', 'glow', 'pulse'];
@@ -110,10 +111,10 @@ function normalizeZoneType(raw) {
 }
 
 // ===== Календарь мира =====
-// Время карт — целое число «абсолютный год». Календарь превращает его в
-// подпись: эпохи (с какого абсолютного года начинается, направление счёта)
-// и шаблон подписи. Эра с прямым счётом: год = t − start + 1; с обратным
-// (как «до н. э.»): год = начало следующей эры − t.
+// Время карт — целое число дней. months — свои месяцы мира [{ name, days }]
+// (null — обычный григорианский календарь), см. public/maps/map-calendar.js.
+// eras/format — эпохи из первой версии этапа 3: в интерфейсе не
+// используются, но хранятся как были.
 
 function defaultCalendar() {
   return {
@@ -125,7 +126,23 @@ function defaultCalendar() {
   };
 }
 
+function normalizeMonths(raw) {
+  if (!Array.isArray(raw)) return null;
+  const months = raw.slice(0, MapCalendar.MAX_MONTHS).map((m) => {
+    if (!isPlainObject(m)) return null;
+    const name = str(m.name, 40);
+    const days = Math.round(Number(m.days));
+    if (!name || !Number.isFinite(days)) return null;
+    return { name, days: Math.min(MapCalendar.MAX_MONTH_DAYS, Math.max(1, days)) };
+  }).filter(Boolean);
+  return months.length ? months : null;
+}
+
 function normalizeCalendar(raw) {
+  return { ...normalizeEras(raw), months: normalizeMonths(isPlainObject(raw) ? raw.months : null) };
+}
+
+function normalizeEras(raw) {
   if (!isPlainObject(raw) || !Array.isArray(raw.eras)) return defaultCalendar();
   const seen = new Set();
   let eras = raw.eras.slice(0, 50).map((e) => {
@@ -192,16 +209,31 @@ function getWorld(serverId) {
   }
 }
 
+// Типы зон и меток. Календарь здесь не меняется (даже если пришёл): его
+// смена пересчитывает даты всех карт мира — только через setCalendar.
 function saveWorld(serverId, raw) {
   const file = worldFile(serverId);
-  const world = normalizeWorld(raw);
+  const world = normalizeWorld({ ...(isPlainObject(raw) ? raw : {}), calendar: getWorld(serverId).calendar });
   fs.mkdirSync(WORLDS_DIR, { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ ...world, updated_at: new Date().toISOString() }, null, 2), 'utf8');
   return { ...world, isDefault: false };
+}
+
+// Новый календарь мира; возвращает { world, before } — календарь до смены
+// (для пересчёта дат карт).
+function setCalendar(serverId, rawCalendar) {
+  const current = getWorld(serverId);
+  const before = current.calendar;
+  const file = worldFile(serverId);
+  const { isDefault, ...data } = current;
+  const world = normalizeWorld({ ...data, calendar: { ...before, months: isPlainObject(rawCalendar) ? rawCalendar.months : null } });
+  fs.mkdirSync(WORLDS_DIR, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ ...world, updated_at: new Date().toISOString() }, null, 2), 'utf8');
+  return { world: { ...world, isDefault: false }, before };
 }
 
 function deleteWorld(serverId) {
   try { fs.unlinkSync(worldFile(serverId)); } catch (e) { /* нет файла — нечего удалять */ }
 }
 
-module.exports = { getWorld, saveWorld, deleteWorld, defaultZoneTypes, defaultMarkerTypes, defaultCalendar, HOVER_EFFECTS, MARKER_ICONS };
+module.exports = { getWorld, saveWorld, setCalendar, deleteWorld, defaultZoneTypes, defaultMarkerTypes, defaultCalendar, HOVER_EFFECTS, MARKER_ICONS };

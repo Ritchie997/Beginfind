@@ -125,6 +125,7 @@
       this.sidebarTab = 'zones';
 
       this.buildLayout();
+      this.bindCalendarSection();
       this.bindGlobal();
       this.initMap();
       this.renderAll();
@@ -180,6 +181,10 @@
                 <div data-el="map-settings"></div>
               </div>
               <div class="me-side-body" data-side-body="time" hidden>
+                <details class="me-props-details me-calendar" data-el="calendar-details">
+                  <summary><i class="fas fa-calendar-days"></i> Календарь мира: <span data-el="calendar-kind"></span></summary>
+                  <div data-el="calendar-editor"></div>
+                </details>
                 <div data-el="time-panel"></div>
               </div>
             </aside>
@@ -1616,6 +1621,7 @@
 
     cal() { return this.calendar || MC().DEFAULT_CALENDAR; }
     fmt(t) { return MC().formatTime(this.cal(), t); }
+    fmtIn(t) { return MC().formatTimeInput(this.cal(), t); }
 
     shapeIndex(z) { return MC().shapeIndexAt(z, this.time); }
 
@@ -1666,9 +1672,11 @@
     // --- Поле даты: «дд.мм.гг» (пусто = без границы) ---
 
     timeInputHtml(key, value, { allowEmpty = true, emptyLabel = 'без границы' } = {}) {
-      const v = value === null || value === undefined ? '' : this.fmt(value);
+      const v = value === null || value === undefined ? '' : this.fmtIn(value);
+      // Свой календарь позволяет вводить месяц названием — тогда не только цифры.
+      const numeric = window.MapCalendar.customMonths(this.cal()) ? '' : ' inputmode="numeric"';
       return `<span class="me-time" data-time-key="${esc(key)}">
-        <input type="text" class="me-time-year" inputmode="numeric" value="${esc(v)}" placeholder="${esc(allowEmpty ? emptyLabel : 'дд.мм.гг')}" title="Дата: дд.мм.гг (можно просто год — будет 1 января)">
+        <input type="text" class="me-time-year"${numeric} value="${esc(v)}" placeholder="${esc(allowEmpty ? emptyLabel : 'дд.мм.гг')}" title="${esc(window.MapCalendar.inputHint(this.cal()))}">
         ${allowEmpty ? '<button type="button" class="map-icon-btn me-time-clear" title="Очистить"><i class="fas fa-xmark"></i></button>' : ''}
       </span>`;
     }
@@ -1679,9 +1687,9 @@
       const s = input.value.trim();
       input.classList.remove('is-invalid');
       if (s === '') return null;
-      const t = MC().parseTime(s);
+      const t = MC().parseTime(s, this.cal());
       if (t === null) { input.classList.add('is-invalid'); return undefined; }
-      input.value = this.fmt(t);
+      input.value = this.fmtIn(t);
       return t;
     }
 
@@ -1690,7 +1698,7 @@
       root.querySelectorAll('.me-time').forEach((el) => {
         const fire = () => {
           const v = this.readTimeInput(el);
-          if (v === undefined) { this.toast('Дата — в виде дд.мм.гг, например 05.03.1245'); return; }
+          if (v === undefined) { this.toast(window.MapCalendar.inputHint(this.cal())); return; }
           onChange(el.dataset.timeKey, v, el);
         };
         el.querySelector('.me-time-year').addEventListener('change', fire);
@@ -1705,7 +1713,8 @@
       if (!bar) return;
       const { min, max } = this.editorRange();
       const span = Math.max(1, max - min);
-      const pct = (t) => ((t - min) / span) * 100;
+      // Событие вне заданных начальной/конечной даты — прижато к краю шкалы.
+      const pct = (t) => Math.max(0, Math.min(100, ((t - min) / span) * 100));
       const events = (this.doc.events || []).slice().sort((a, b) => a.from - b.from);
       const laneEnds = [];
       const items = events.map((e) => {
@@ -1780,7 +1789,7 @@
           <span class="me-props-head">Фон по периодам</span>
           <button type="button" class="btn btn-secondary btn-sm" data-time-act="add-period" ${this.readyBasemaps().length ? '' : 'disabled title="Сначала загрузите фон во вкладке «Карта»"'}><i class="fas fa-plus"></i> Период</button>
         </div>
-        <p class="me-field-note">В этот период на карте показывается этот фон. Вне периодов — фон, выбранный читателем.</p>
+        <p class="me-field-note">В этот период на карте показывается этот фон. Вне периодов читатель видит первый фон из списка во вкладке «Карта».</p>
         <div class="me-periods">${(tl.periods || []).map((pr, i) => `
           <div class="me-period" data-period-index="${i}">
             ${this.timeInputHtml(`p-from:${i}`, pr.from, { emptyLabel: 'с начала' })}
@@ -1851,6 +1860,31 @@
         if (item) this.selectEvent(item.dataset.eventId);
       };
       this.renderEventForm();
+    }
+
+    // --- Календарь мира (общий для всех карт мира) ---
+    // Смена календаря пересчитывает даты всех карт мира на сервере, в том
+    // числе этой: поэтому сначала сохраняем правки, а после смены
+    // перезагружаем редактор с пересчитанными датами.
+
+    bindCalendarSection() {
+      const months = window.MapCalendar.customMonths(this.cal());
+      this.el('calendar-kind').textContent = months ? `свой, ${months.length} мес.` : 'обычный';
+      const details = this.el('calendar-details');
+      const mount = () => {
+        if (!details.open || details._mounted || !this.serverId) return;
+        details._mounted = true;
+        window.MapsUI.mountCalendarEditor(details.querySelector('[data-el="calendar-editor"]'), this.serverId, {
+          beforeSave: async () => {
+            if (!this.dirty) return true;
+            await this.save();
+            if (this.dirty) { window.showMessage?.('Сначала сохраните карту — календарь не изменён', 'error'); return false; }
+            return true;
+          },
+          onSaved: () => { this.dirty = false; window.MapEditor.loadMapEditor(window.spaRouter); }
+        });
+      };
+      details.addEventListener('toggle', mount);
     }
 
     // --- События ---
@@ -2523,6 +2557,9 @@
           baseUpdatedAt: this.baseUpdatedAt,
           savedAt: Date.now(),
           timeUnit: 'day', // черновики до перехода на даты хранили годы — такие не предлагаем
+          // Календарь мира на момент черновика: сменят — даты черновика
+          // пересчитаются так же, как сервер пересчитал карту.
+          calendarMonths: window.MapCalendar.customMonths(this.cal()),
           title: this.doc.title,
           roles: this.doc.roles,
           zones: this.doc.zones,
@@ -2552,6 +2589,12 @@
       if (!confirm(msg)) { this.clearDraft(); return; }
       this.pushHistory();
       this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline, markerGroups: draft.markerGroups || this.doc.markerGroups || [] };
+      const CAL = window.MapCalendar;
+      const draftCal = { months: draft.calendarMonths || null };
+      if (CAL.signature(draftCal) !== CAL.signature(this.cal())) {
+        CAL.mapTimes(this.doc, (t) => CAL.convert(t, draftCal, this.cal()));
+        this.toast('Календарь мира сменился после черновика — даты черновика пересчитаны');
+      }
       this.root.querySelector('.me-title-input').value = this.doc.title;
       const titles = new Map((draft.basemaps || []).map((b) => [b.id, b.title]));
       this.basemaps.forEach((b) => { if (titles.has(b.id)) b.title = titles.get(b.id); });

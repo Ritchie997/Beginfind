@@ -1299,3 +1299,36 @@ details.world-type:not([open]) .world-row-btns { opacity: .6; }
 
 /* Кружок группы с «Свои кружки» — с фиолетовой окантовкой, чтобы отличать от общих */
 .map-marker-cluster.is-group span { border-color: #eb459e; }
+
+/* ===== Календарь мира (вкладка «Карты» сервера) ===== */
+.maps-calendar {
+  margin-top: 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+.maps-calendar > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.maps-calendar[open] > summary { margin-bottom: 12px; }
+.maps-calendar .checkbox-field { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.maps-cal-months { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-width: 520px; }
+.maps-cal-month { display: flex; align-items: center; gap: 6px; }
+.maps-cal-month .form-input { flex: 1; min-width: 0; }
+.maps-cal-month .maps-cal-days { flex: 0 0 80px; }
+.maps-cal-num { width: 22px; text-align: right; color: var(--text-muted); font-size: 12px; }
+.maps-cal-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.maps-cal-actions .world-hint { margin: 0; }
+
+.maps-cal-head { display: grid; grid-template-columns: 22px 1fr 80px 90px; gap: 6px; max-width: 520px; margin-top: 10px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.maps-cal-head + .maps-cal-months { margin-top: 4px; }
+.maps-cal-year { margin: 8px 0 12px; font-size: 13px; }
+/* Календарь в редакторе карты (узкая боковая панель) */
+.me-calendar { margin-bottom: 12px; }
+.cal-editor .checkbox-field { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; }
+.cal-editor .checkbox-field input { margin-top: 3px; flex-shrink: 0; }
+.me-calendar .maps-cal-head { grid-template-columns: 16px 1fr 64px 84px; }
+.me-calendar .maps-cal-month { gap: 4px; }
+.me-calendar .maps-cal-month .form-input { padding: 6px 8px; }
+.me-calendar .maps-cal-month .maps-cal-days { flex: 0 0 64px; }
+.me-calendar .maps-cal-num { width: 16px; }
+.me-calendar .world-row-btns .map-icon-btn { width: 24px; height: 24px; }

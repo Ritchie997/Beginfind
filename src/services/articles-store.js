@@ -370,6 +370,43 @@ function rewriteMentions(rewrite) {
 }
 
 /**
+ * Пересчёт дат в блоках `map` (смена календаря мира, см. maps.routes.js):
+ * у блоков, показывающих карту из mapIds, day → convertDay(day). Как и
+ * rewriteMentions — служебная правка: дата изменения статьи не трогается.
+ * @returns {string[]} slug'и изменённых статей
+ */
+function rewriteMapBlockDays(mapIds, convertDay) {
+  const updated = [];
+  const fixDoc = (doc) => {
+    const copy = JSON.parse(JSON.stringify(doc));
+    let changed = false;
+    blocks.visitBlocks(copy, (b) => {
+      if (b.type !== 'map' || !b.data || !mapIds.has(b.data.mapId) || !Number.isFinite(b.data.day)) return;
+      const day = convertDay(b.data.day);
+      if (day !== b.data.day) { b.data.day = day; changed = true; }
+    });
+    return { doc: copy, changed };
+  };
+  for (const article of listArticles()) {
+    const patch = {};
+    const main = fixDoc(article.content);
+    if (main.changed) patch.content = main.doc;
+    let layersChanged = false;
+    const layers = (article.layers || []).map((l) => {
+      const r = fixDoc(l.content);
+      if (r.changed) layersChanged = true;
+      return r.changed ? { ...l, content: r.doc } : l;
+    });
+    if (layersChanged) patch.layers = layers;
+    if (!main.changed && !layersChanged) continue;
+    writeArticleFile(article.slug, { ...article, ...patch });
+    updated.push(article.slug);
+  }
+  if (updated.length) invalidateCache();
+  return updated;
+}
+
+/**
  * Текст цели для ((ссылки)) на статью: сам заголовок, если он однозначно
  * превращается обратно в тот же slug (читаемо в редакторе), иначе slug.
  * Заголовок с ()# ссылкой не записать — ими ссылка разбирается.
@@ -754,6 +791,7 @@ module.exports = {
   extractWikiLinks,
   extractHashtags,
   getBacklinks,
+  rewriteMapBlockDays,
   generateUniqueSlug,
   invalidateCache,
   isSafeSlug,

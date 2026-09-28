@@ -1888,14 +1888,17 @@
           if (viewer.hasTime) {
             const yearIn = wrap.querySelector('[data-map-time-year]');
             const MC = window.MapCore;
-            yearIn.value = Number.isFinite(d.day) ? MC.formatTime(null, d.day) : '';
+            const cal = data.calendar || null; // календарь мира карты
+            yearIn.title = window.MapCalendar.inputHint(cal);
+            if (window.MapCalendar.customMonths(cal)) yearIn.removeAttribute('inputmode'); // месяц можно ввести названием
+            yearIn.value = Number.isFinite(d.day) ? MC.formatTimeInput(cal, d.day) : '';
             yearIn.onchange = () => {
               const s = yearIn.value.trim();
-              const t = s === '' ? null : MC.parseTime(s);
-              if (s !== '' && t === null) { window.showMessage?.('Дата — в виде дд.мм.гг, например 05.03.1245', 'error'); return; }
+              const t = s === '' ? null : MC.parseTime(s, cal);
+              if (s !== '' && t === null) { window.showMessage?.(window.MapCalendar.inputHint(cal), 'error'); return; }
               d.day = t;
               delete d.time; // старое поле (год) — больше не нужно
-              yearIn.value = t === null ? '' : MC.formatTime(null, t);
+              yearIn.value = t === null ? '' : MC.formatTimeInput(cal, t);
               if (t !== null) viewer.setTime(t);
               changed();
             };
