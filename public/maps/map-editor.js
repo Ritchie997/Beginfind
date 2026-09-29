@@ -670,7 +670,6 @@
       this.markDirty();
       const titleInput = this.root.querySelector('[data-mprop="title"]');
       if (titleInput) { titleInput.focus(); titleInput.select(); }
-      return true;
     }
 
     selectMarker(id, { fly = false } = {}) {
@@ -961,6 +960,7 @@
       this.afterZonesChanged({ keepLayers: false });
       const titleInput = this.root.querySelector('[data-prop="title"]');
       if (titleInput) { titleInput.focus(); titleInput.select(); }
+      return true;
     }
 
     // Родитель — самая глубокая зона, внутри которой лежит большая часть
