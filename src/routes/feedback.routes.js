@@ -89,12 +89,6 @@ router.post('/feedback/cases/:id/reports', ...cases, handle((req) => store.attac
 
 router.delete('/feedback/cases/:id/reports/:reportId', ...cases, handle((req) => store.detachReport(req.user, req.params.id, req.params.reportId)));
 
-router.post('/feedback/cases/:id/facts', ...cases, handle((req) => store.addFact(req.user, req.params.id, req.body || {})));
-
-router.put('/feedback/cases/:id/facts/:factId', ...cases, handle((req) => store.updateFact(req.user, req.params.id, req.params.factId, req.body || {})));
-
-router.delete('/feedback/cases/:id/facts/:factId', ...cases, handle((req) => store.deleteFact(req.user, req.params.id, req.params.factId)));
-
 router.post('/feedback/cases/:id/escalate', ...cases, handle((req) => store.escalateCase(req.user, req.params.id)));
 
 router.post('/feedback/cases/:id/archive', ...cases, handle((req) => store.archiveCase(req.user, req.params.id)));

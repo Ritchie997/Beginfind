@@ -508,6 +508,15 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
         archived_at DATETIME
       )`);
       feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_cases_status ON feedback_cases (status)');
+      // comment — необязательный комментарий второй линии к кейсу (рядом с
+      // сутью проблемы и критичностью).
+      feedbackDb.all('PRAGMA table_info(feedback_cases)', [], (err, columns) => {
+        if (err) {
+          console.error('Error reading feedback_cases schema', err);
+          return;
+        }
+        if (!(columns || []).some((c) => c.name === 'comment')) feedbackDb.run('ALTER TABLE feedback_cases ADD COLUMN comment TEXT');
+      });
 
       // Факт кейса — одна единица информации с явными источниками
       // (source_report_ids, JSON-массив id обращений этого кейса). kind:

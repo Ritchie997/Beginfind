@@ -128,10 +128,10 @@
             </div>
             <div class="modal-body">
                 <p class="feedback-explain" id="feedbackNewCaseInfo"></p>
-                <div class="form-group"><label class="form-label">Название кейса</label><input type="text" class="form-input" id="feedbackNewCaseTitle" maxlength="150"></div>
-                <div class="form-group"><label class="form-label">Суть</label><textarea class="form-textarea" id="feedbackNewCaseSummary" maxlength="5000"></textarea></div>
+                <div class="form-group"><label class="form-label">Суть проблемы *</label><textarea class="form-textarea" id="feedbackNewCaseSummary" maxlength="5000"></textarea></div>
+                <div class="form-group"><label class="form-label">Комментарий (по желанию)</label><textarea class="form-textarea" id="feedbackNewCaseComment" maxlength="2000"></textarea></div>
                 <div class="form-group"><label class="form-label">Критичность</label><select class="form-select" id="feedbackNewCaseSeverity"></select></div>
-                <p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс сразу уйдёт на третью линию. Дополнять его (новые дубли, факты) можно и дальше, пока нет решения.</p>
+                <p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс сразу уйдёт на третью линию. Добавлять в него новые дубли и править его можно и дальше, пока нет решения.</p>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-close-modal="feedbackNewCaseModal">Отмена</button>
@@ -249,13 +249,6 @@
 .feedback-stat-label { font-size: 11px; color: var(--text-muted); }
 .feedback-case-section { border-top: 1px solid var(--background-accent); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .feedback-case-section h4 { margin: 0; font-size: 14px; color: var(--text-normal); }
-.feedback-fact { background: var(--background-tertiary); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
-.feedback-fact-text { font-size: 13px; color: var(--text-normal); white-space: pre-wrap; overflow-wrap: anywhere; }
-.feedback-fact-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
-.feedback-fact-meta .btn { padding: 2px 8px; font-size: 11px; }
-.feedback-fact-form { display: flex; flex-direction: column; gap: 8px; background: var(--background-tertiary); border-radius: 8px; padding: 10px; }
-.feedback-source-list { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-normal); }
-.feedback-source-list label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .feedback-events { font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
 .feedback-events b { color: var(--text-normal); font-weight: 600; }
 

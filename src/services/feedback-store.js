@@ -13,9 +13,9 @@
 //   3. Вторая линия (feedback_cases) объединяет принятые обращения в кейсы:
 //      одно обращение — не более одного кейса, тип кейса совпадает с типом
 //      обращений. Собранный кейс сразу уходит на третью линию ('escalated') —
-//      отдельного шага «передать» нет. Пока решения нет, вторая линия может
-//      дополнять кейс: добавлять новые дубли, вести факты
-//      (feedback_case_facts, у каждого — обращения-источники). Приоритет
+//      отдельного шага «передать» нет. Кейс — это суть проблемы, по желанию
+//      комментарий второй линии и критичность. Пока решения нет, вторая линия
+//      может дополнять кейс новыми дублями и править его. Приоритет
 //      считается из критичности и числа РАЗНЫХ пользователей (computePriority).
 //   4. Третья линия (feedback_decide) принимает решение ('resolved' +
 //      decision accepted/declined) или возвращает кейс на доработку ('open');
@@ -29,10 +29,9 @@
 //
 // Как не потерять информацию при объединении: текст обращений при
 // объединении не копируется — кейс только ссылается на обращения (case_id).
-// Факты не делятся вручную на "от большинства" и "от некоторых": это
-// вычисляется по доле источников среди обращений кейса (MAJORITY_SHARE),
-// поэтому при добавлении/отвязке обращений классификация пересчитывается
-// сама. Любое обращение можно отвязать обратно; всё пишется в журнал.
+// Любое обращение можно отвязать обратно; всё пишется в журнал.
+// (Раньше в кейсах вели «факты» — таблица feedback_case_facts осталась в БД
+// со старыми записями, но больше не используется.)
 
 const { feedbackDb } = require('../db/connections');
 const articlesStore = require('./articles-store');
@@ -49,7 +48,6 @@ const ARTICLE_REASONS = {
   spam: 'Спам / реклама',
   other: 'Другое'
 };
-const FACT_KINDS = ['info', 'contradiction'];
 const DECISIONS = ['accepted', 'declined'];
 
 // Вес критичности: 1 — косметика, 2 — мешает, 3 — ломает функцию,
@@ -58,9 +56,6 @@ const DECISIONS = ['accepted', 'declined'];
 // перевешивают двух на потерю данных.
 const SEVERITY_WEIGHTS = { 1: 1, 2: 2, 3: 4, 4: 8 };
 const CRITICAL_SEVERITY = 4;
-// Факт считается "от большинства", если его подтверждает не меньше этой
-// доли обращений кейса.
-const MAJORITY_SHARE = 0.6;
 // Сколько необработанных (status = 'new') обращений может одновременно
 // висеть у одного пользователя — простая защита первой линии от флуда.
 const MAX_PENDING_PER_USER = 5;
@@ -81,7 +76,6 @@ const LIMITS = {
   comment: 2000,
   reason: 500,
   summary: 5000,
-  fact: 2000,
   decision: 5000
 };
 
@@ -215,6 +209,7 @@ function mapCase(row, stats) {
     type: row.type,
     title: row.title,
     summary: row.summary,
+    comment: row.comment || null,
     severity: row.severity,
     status: row.status,
     decision: row.decision,
@@ -478,36 +473,16 @@ async function getCaseRow(caseId) {
   return row;
 }
 
-// Полная карточка кейса: обращения, факты с долей подтверждения, журнал.
+// Полная карточка кейса: обращения и журнал.
 async function getCaseDetails(caseId) {
   const row = await getCaseRow(caseId);
   const reports = (await all('SELECT * FROM feedback_reports WHERE case_id = ? ORDER BY created_at ASC, id ASC', [caseId])).map(mapReport);
   const stats = { reports_count: reports.length, users_count: new Set(reports.map((r) => r.authorId)).size };
-  const reportIds = new Set(reports.map((r) => r.id));
-
-  const facts = (await all('SELECT * FROM feedback_case_facts WHERE case_id = ? ORDER BY id ASC', [caseId])).map((f) => {
-    const sources = parseJsonArray(f.source_report_ids).filter((id) => reportIds.has(id));
-    const share = reports.length ? sources.length / reports.length : 0;
-    return {
-      id: f.id,
-      kind: f.kind,
-      text: f.text,
-      sourceReportIds: sources,
-      share,
-      // 'majority' | 'some' — только для kind = 'info'
-      group: f.kind === 'info' ? (share >= MAJORITY_SHARE ? 'majority' : 'some') : null,
-      createdBy: f.created_by,
-      createdAt: f.created_at
-    };
-  });
-
   const events = await all('SELECT * FROM feedback_events WHERE case_id = ? ORDER BY id DESC LIMIT 200', [caseId]);
 
   return {
     ...mapCase(row, stats),
     reports,
-    facts,
-    majorityShare: MAJORITY_SHARE,
     events: events.map((e) => ({
       id: e.id,
       action: e.action,
@@ -583,12 +558,13 @@ async function createCase(actor, input) {
   const type = rows[0].type;
   const title = cleanText(input.title, LIMITS.title) || rows[0].title;
   const severity = cleanSeverity(input.severity) || 2;
-  const summary = cleanText(input.summary, LIMITS.summary);
+  const summary = requireText(input.summary, LIMITS.summary, 'Суть проблемы');
+  const comment = cleanText(input.comment, LIMITS.comment);
 
   const result = await run(
-    `INSERT INTO feedback_cases (type, title, summary, severity, status, escalated_at, created_by)
-     VALUES (?, ?, ?, ?, 'escalated', CURRENT_TIMESTAMP, ?)`,
-    [type, title, summary, severity, actorName(actor)]
+    `INSERT INTO feedback_cases (type, title, summary, comment, severity, status, escalated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, 'escalated', CURRENT_TIMESTAMP, ?)`,
+    [type, title, summary, comment, severity, actorName(actor)]
   );
   const caseId = result.lastID;
   const ids = rows.map((r) => r.id);
@@ -605,16 +581,18 @@ async function createCase(actor, input) {
 async function updateCase(actor, caseId, input) {
   const row = await assertCaseEditable(caseId);
   const title = input.title !== undefined ? requireText(input.title, LIMITS.title, 'Название кейса') : row.title;
-  const summary = input.summary !== undefined ? cleanText(input.summary, LIMITS.summary) : row.summary;
+  const summary = input.summary !== undefined ? requireText(input.summary, LIMITS.summary, 'Суть проблемы') : row.summary;
+  const comment = input.comment !== undefined ? cleanText(input.comment, LIMITS.comment) : row.comment;
   const severity = input.severity !== undefined ? (cleanSeverity(input.severity) || row.severity) : row.severity;
 
   await run(
-    'UPDATE feedback_cases SET title = ?, summary = ?, severity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [title, summary, severity, caseId]
+    'UPDATE feedback_cases SET title = ?, summary = ?, comment = ?, severity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [title, summary, comment, severity, caseId]
   );
   const changes = [];
   if (title !== row.title) changes.push('название');
   if ((summary || '') !== (row.summary || '')) changes.push('суть');
+  if ((comment || '') !== (row.comment || '')) changes.push('комментарий');
   if (severity !== row.severity) changes.push(`критичность ${row.severity} → ${severity}`);
   if (changes.length) await logEvent(actor, 'case_updated', { caseId, details: changes.join(', ') });
   if (severity !== row.severity) await escalateIfCritical(actor, caseId, severity);
@@ -636,7 +614,7 @@ async function attachReports(actor, caseId, reportIds) {
 }
 
 // Отвязать ошибочно объединённое обращение — оно возвращается в очередь
-// второй линии, а из источников фактов кейса вычищается.
+// второй линии.
 async function detachReport(actor, caseId, reportId) {
   await assertCaseEditable(caseId);
   const report = await getReport(reportId);
@@ -645,66 +623,8 @@ async function detachReport(actor, caseId, reportId) {
   if (count.cnt <= 1) throw httpError(409, 'Это последнее обращение кейса — кейс без обращений не имеет смысла');
 
   await run('UPDATE feedback_reports SET case_id = NULL WHERE id = ?', [reportId]);
-  const facts = await all('SELECT id, source_report_ids FROM feedback_case_facts WHERE case_id = ?', [caseId]);
-  for (const fact of facts) {
-    const sources = parseJsonArray(fact.source_report_ids);
-    if (sources.includes(report.id)) {
-      await run('UPDATE feedback_case_facts SET source_report_ids = ? WHERE id = ?', [JSON.stringify(sources.filter((id) => id !== report.id)), fact.id]);
-    }
-  }
   await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [caseId]);
   await logEvent(actor, 'report_detached', { caseId, reportId: report.id });
-  return getCaseDetails(caseId);
-}
-
-async function cleanFactSources(caseId, sourceReportIds) {
-  const ids = [...new Set((sourceReportIds || []).map(toId).filter(Boolean))];
-  if (!ids.length) throw httpError(400, 'Отметьте, из каких обращений взят факт');
-  const rows = await all(`SELECT id FROM feedback_reports WHERE case_id = ? AND id IN (${ids.map(() => '?').join(',')})`, [caseId, ...ids]);
-  if (rows.length !== ids.length) throw httpError(400, 'Источниками факта могут быть только обращения этого кейса');
-  return ids.sort((a, b) => a - b);
-}
-
-async function addFact(actor, caseId, input) {
-  await assertCaseEditable(caseId);
-  const kind = FACT_KINDS.includes(input.kind) ? input.kind : 'info';
-  const text = requireText(input.text, LIMITS.fact, 'Факт');
-  const sources = await cleanFactSources(caseId, input.sourceReportIds);
-  const result = await run(
-    'INSERT INTO feedback_case_facts (case_id, kind, text, source_report_ids, created_by) VALUES (?, ?, ?, ?, ?)',
-    [caseId, kind, text, JSON.stringify(sources), actorName(actor)]
-  );
-  await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [caseId]);
-  await logEvent(actor, 'fact_added', { caseId, details: `#${result.lastID}: ${text.slice(0, 200)}` });
-  return getCaseDetails(caseId);
-}
-
-async function getFactRow(caseId, factId) {
-  const fact = await get('SELECT * FROM feedback_case_facts WHERE id = ? AND case_id = ?', [factId, caseId]);
-  if (!fact) throw httpError(404, 'Факт не найден');
-  return fact;
-}
-
-async function updateFact(actor, caseId, factId, input) {
-  await assertCaseEditable(caseId);
-  const fact = await getFactRow(caseId, factId);
-  const kind = FACT_KINDS.includes(input.kind) ? input.kind : fact.kind;
-  const text = input.text !== undefined ? requireText(input.text, LIMITS.fact, 'Факт') : fact.text;
-  const sources = input.sourceReportIds !== undefined
-    ? await cleanFactSources(caseId, input.sourceReportIds)
-    : parseJsonArray(fact.source_report_ids);
-  await run('UPDATE feedback_case_facts SET kind = ?, text = ?, source_report_ids = ? WHERE id = ?', [kind, text, JSON.stringify(sources), fact.id]);
-  await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [caseId]);
-  // Старый текст — в журнал, чтобы правка факта не стирала информацию.
-  await logEvent(actor, 'fact_updated', { caseId, details: `#${fact.id}, было: ${fact.text.slice(0, 200)}` });
-  return getCaseDetails(caseId);
-}
-
-async function deleteFact(actor, caseId, factId) {
-  await assertCaseEditable(caseId);
-  const fact = await getFactRow(caseId, factId);
-  await run('DELETE FROM feedback_case_facts WHERE id = ?', [fact.id]);
-  await logEvent(actor, 'fact_deleted', { caseId, details: `#${fact.id}: ${fact.text.slice(0, 200)}` });
   return getCaseDetails(caseId);
 }
 
@@ -778,7 +698,6 @@ async function listAttachmentUrls() {
 
 module.exports = {
   SEVERITY_WEIGHTS,
-  MAJORITY_SHARE,
   createReport,
   getReport,
   updateOwnReport,
@@ -794,9 +713,6 @@ module.exports = {
   updateCase,
   attachReports,
   detachReport,
-  addFact,
-  updateFact,
-  deleteFact,
   escalateCase,
   archiveCase,
   decideCase,

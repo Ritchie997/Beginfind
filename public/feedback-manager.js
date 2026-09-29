@@ -132,7 +132,6 @@
       this.queueSelected = new Set();
       this.openCases = [];
       this.currentCase = null;
-      this.editingFactId = null;
       this._textModalResolve = null;
       this.editingReport = null; // своё обращение в форме правки (null — новое)
       this.myReports = new Map();
@@ -542,12 +541,12 @@
       const first = this.queueReports.get(ids[0]);
       const modal = this.root.querySelector('#feedbackNewCaseModal');
       modal.querySelector('#feedbackNewCaseInfo').textContent = `Обращения: ${ids.map((id) => '#' + id).join(', ')}`;
-      modal.querySelector('#feedbackNewCaseTitle').value = first ? first.title : '';
-      modal.querySelector('#feedbackNewCaseSummary').value = '';
+      modal.querySelector('#feedbackNewCaseSummary').value = first ? first.description : '';
+      modal.querySelector('#feedbackNewCaseComment').value = '';
       modal.querySelector('#feedbackNewCaseSeverity').innerHTML = [1, 2, 3, 4]
         .map((sev) => `<option value="${sev}" ${sev === 2 ? 'selected' : ''}>${SEVERITY_LABELS[sev]}</option>`).join('');
       modal.hidden = false;
-      modal.querySelector('#feedbackNewCaseTitle').focus();
+      modal.querySelector('#feedbackNewCaseSummary').focus();
     }
 
     async createCaseFromQueue() {
@@ -555,8 +554,8 @@
       try {
         const created = await this.api('/api/feedback/cases', 'POST', {
           reportIds: Array.from(this.queueSelected),
-          title: modal.querySelector('#feedbackNewCaseTitle').value,
           summary: modal.querySelector('#feedbackNewCaseSummary').value,
+          comment: modal.querySelector('#feedbackNewCaseComment').value,
           severity: modal.querySelector('#feedbackNewCaseSeverity').value
         });
         modal.hidden = true;
@@ -635,63 +634,15 @@
 
     showCase(data) {
       this.currentCase = data;
-      this.editingFactId = null;
       this.renderCase();
       this.root.querySelector('#feedbackCaseModal').hidden = false;
-    }
-
-    renderFact(fact, c, editable) {
-      const total = c.reports.length;
-      const sources = fact.sourceReportIds.map((id) => `#${id}`).join(', ') || 'нет источников';
-      const actions = editable
-        ? `<button class="btn btn-secondary btn-sm" data-case-action="edit-fact" data-fact-id="${fact.id}">Изменить</button>
-           <button class="btn btn-danger btn-sm" data-case-action="delete-fact" data-fact-id="${fact.id}">Удалить</button>` : '';
-      return `
-        <div class="feedback-fact">
-          <div class="feedback-fact-text">${escapeHtml(fact.text)}</div>
-          <div class="feedback-fact-meta"><span>${fact.sourceReportIds.length}/${total} · ${escapeHtml(sources)}</span>${actions}</div>
-        </div>`;
-    }
-
-    renderFactForm(c) {
-      const fact = this.editingFactId ? c.facts.find((f) => f.id === this.editingFactId) : null;
-      const sources = new Set(fact ? fact.sourceReportIds : []);
-      return `
-        <div class="feedback-fact-form">
-          <div class="feedback-form-row">
-            <select class="form-select" id="feedbackFactKind">
-              <option value="info" ${!fact || fact.kind === 'info' ? 'selected' : ''}>Сведения о проблеме</option>
-              <option value="contradiction" ${fact && fact.kind === 'contradiction' ? 'selected' : ''}>Противоречие / уточнение</option>
-            </select>
-          </div>
-          <textarea class="form-textarea" id="feedbackFactText" maxlength="2000" placeholder="Один факт — одна мысль. Например: «воспроизводится только в Firefox»">${escapeHtml(fact ? fact.text : '')}</textarea>
-          <div class="feedback-field-label">Из каких обращений взят факт</div>
-          <div class="feedback-source-list">
-            ${c.reports.map((r) => `<label><input type="checkbox" data-fact-source="${r.id}" ${sources.has(r.id) ? 'checked' : ''}> #${r.id} ${escapeHtml(r.authorName)}</label>`).join('')}
-          </div>
-          <div class="feedback-card-actions btns-compact">
-            <button class="btn btn-primary btn-sm" data-case-action="save-fact">${fact ? 'Сохранить факт' : 'Добавить факт'}</button>
-            ${fact ? '<button class="btn btn-secondary btn-sm" data-case-action="cancel-fact">Отмена</button>' : ''}
-          </div>
-        </div>`;
     }
 
     renderCase() {
       const c = this.currentCase;
       // Вторая линия дополняет кейс, пока по нему нет решения.
       const editable = this.perms.cases && (c.status === 'open' || c.status === 'escalated');
-      const majorityPct = Math.round(c.majorityShare * 100);
       this.root.querySelector('#feedbackCaseModalTitle').textContent = `Кейс #${c.id}`;
-
-      const majority = c.facts.filter((f) => f.group === 'majority');
-      const some = c.facts.filter((f) => f.group === 'some');
-      const contradictions = c.facts.filter((f) => f.kind === 'contradiction');
-      const factsBlock = (title, list, hint) => `
-        <div class="feedback-case-section">
-          <h4>${title}</h4>
-          ${hint ? `<p class="feedback-explain" style="margin:0">${hint}</p>` : ''}
-          ${list.length ? list.map((f) => this.renderFact(f, c, editable)).join('') : '<div class="feedback-empty" style="padding:0">—</div>'}
-        </div>`;
 
       let decisionBlock = '';
       if (c.decision) {
@@ -713,8 +664,9 @@
 
       const header = editable
         ? `
-          <div class="form-group"><label class="form-label">Название кейса</label><input type="text" class="form-input" id="feedbackCaseTitle" maxlength="150" value="${escapeHtml(c.title)}"></div>
-          <div class="form-group"><label class="form-label">Суть проблемы</label><textarea class="form-textarea" id="feedbackCaseSummary" maxlength="5000">${escapeHtml(c.summary || '')}</textarea></div>
+          <div class="feedback-card-title">${escapeHtml(c.title)}</div>
+          <div class="form-group"><label class="form-label">Суть проблемы *</label><textarea class="form-textarea" id="feedbackCaseSummary" maxlength="5000">${escapeHtml(c.summary || '')}</textarea></div>
+          <div class="form-group"><label class="form-label">Комментарий (по желанию)</label><textarea class="form-textarea" id="feedbackCaseComment" maxlength="2000">${escapeHtml(c.comment || '')}</textarea></div>
           <div class="form-group"><label class="form-label">Критичность</label>
             <select class="form-select" id="feedbackCaseSeverity">${[1, 2, 3, 4].map((s) => `<option value="${s}" ${s === c.severity ? 'selected' : ''}>${SEVERITY_LABELS[s]}</option>`).join('')}</select>
           </div>
@@ -723,6 +675,7 @@
         : `
           <div class="feedback-card-title">${escapeHtml(c.title)}</div>
           ${field('Суть проблемы', c.summary)}
+          ${field('Комментарий', c.comment)}
           <div class="feedback-card-meta"><span>Критичность: ${escapeHtml(SEVERITY_LABELS[c.severity] || c.severity)}</span></div>`;
 
       this.root.querySelector('#feedbackCaseBody').innerHTML = `
@@ -737,10 +690,6 @@
         ${header}
         ${decisionBlock}
         ${actions.length ? `<div class="feedback-card-actions btns-compact">${actions.join('')}</div>` : ''}
-        ${factsBlock('Информация от большинства', majority, `Факты, которые подтверждают не меньше ${majorityPct}% обращений кейса.`)}
-        ${factsBlock('Дополнительно от некоторых', some, '')}
-        ${factsBlock('Противоречия и уточнения', contradictions, '')}
-        ${editable ? `<div class="feedback-case-section"><h4>${this.editingFactId ? 'Изменить факт' : 'Новый факт'}</h4>${this.renderFactForm(c)}</div>` : ''}
         <div class="feedback-case-section">
           <h4>Обращения (${c.reports.length})</h4>
           ${c.reports.map((r) => `
@@ -768,42 +717,16 @@
       try {
         if (action === 'save-case') {
           updated = await this.api(base, 'PUT', {
-            title: body.querySelector('#feedbackCaseTitle').value,
             summary: body.querySelector('#feedbackCaseSummary').value,
+            comment: body.querySelector('#feedbackCaseComment').value,
             severity: body.querySelector('#feedbackCaseSeverity').value
           });
           showMessage(updated.status === 'escalated' ? 'Сохранено — критичный кейс передан на третью линию' : 'Сохранено', 'success');
-        } else if (action === 'edit-fact') {
-          this.editingFactId = Number(dataset.factId);
-          this.renderCase();
-          body.querySelector('#feedbackFactText')?.focus();
-          return;
-        } else if (action === 'cancel-fact') {
-          this.editingFactId = null;
-          this.renderCase();
-          return;
-        } else if (action === 'save-fact') {
-          const payload = {
-            kind: body.querySelector('#feedbackFactKind').value,
-            text: body.querySelector('#feedbackFactText').value,
-            sourceReportIds: Array.from(body.querySelectorAll('[data-fact-source]:checked')).map((el) => Number(el.dataset.factSource))
-          };
-          updated = this.editingFactId
-            ? await this.api(`${base}/facts/${this.editingFactId}`, 'PUT', payload)
-            : await this.api(`${base}/facts`, 'POST', payload);
-        } else if (action === 'delete-fact') {
-          const ok = await window.confirmDialog.open({ message: 'Удалить факт? Его текст останется в журнале кейса.' });
-          if (!ok) return;
-          updated = await this.api(`${base}/facts/${dataset.factId}`, 'DELETE');
         } else if (action === 'detach') {
           const ok = await window.confirmDialog.open({ message: `Отвязать обращение #${dataset.reportId}? Оно вернётся в очередь второй линии.`, confirmLabel: 'Отвязать' });
           if (!ok) return;
           updated = await this.api(`${base}/reports/${dataset.reportId}`, 'DELETE');
         } else if (action === 'escalate') {
-          if (!c.facts.length) {
-            const ok = await window.confirmDialog.open({ message: 'В кейсе нет ни одного факта. Всё равно передать на третью линию?', confirmLabel: 'Передать', danger: false });
-            if (!ok) return;
-          }
           updated = await this.api(`${base}/escalate`, 'POST');
           showMessage('Кейс передан на третью линию', 'success');
         } else if (action === 'decide') {
