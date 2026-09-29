@@ -90,6 +90,22 @@ router.post('/login', auth.rateLimitLimiter('login'), async (req, res) => {
   }
 });
 
+// POST /api/refresh-token — продление сессии, пока пользователь в сети.
+// Вкладка с сайтом периодически меняет ещё действующий токен на свежий
+// (см. AuthManager.keepSessionAlive в public/auth-system.js), поэтому
+// активного пользователя не выкидывает посреди работы по истечении
+// sessionDurationHours. Истёкший токен не продлевается — только новый вход.
+// checkApproved не даёт продлить сессию заблокированному.
+router.post('/refresh-token', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const user = await auth.getUserById(req.user.id);
+    const token = await auth.generateToken({ ...user, is_observer: req.user.is_observer || false });
+    res.json({ token, user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/profile — Профиль текущего пользователя
 router.get('/profile', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {

@@ -247,7 +247,22 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
       }
       return m;
     });
-    res.json({ updated_at: saved.updated_at });
+    // Проверка записи: перечитываем карту с диска и отдаём, сколько чего
+    // реально лежит в файле. Редактор сверяет это с тем, что отправлял, и не
+    // считает правки сохранёнными, если чего-то не хватает.
+    const onDisk = store.getMap(map.id);
+    if (!onDisk || onDisk.updated_at !== saved.updated_at) {
+      return res.status(500).json({ error: 'Сервер не смог подтвердить запись карты на диск — попробуйте сохранить ещё раз' });
+    }
+    res.json({
+      updated_at: onDisk.updated_at,
+      saved: {
+        zones: onDisk.zones.length,
+        markers: onDisk.markers.length,
+        events: onDisk.events.length,
+        markerGroups: onDisk.markerGroups.length
+      }
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

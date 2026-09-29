@@ -14,9 +14,65 @@ class AuthManager {
     this.loadUser();
     setInterval(() => { this.validateToken(); }, 5 * 60 * 1000);
 
+    // Пока вкладка открыта, сессия продлевается (keepSessionAlive):
+    // пользователя в сети не выкидывает посреди работы. После сна компьютера
+    // или возврата сети — продлеваем сразу, не дожидаясь интервала.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.keepSessionAlive();
+    });
+    window.addEventListener('online', () => this.keepSessionAlive());
+    // Токен продлили в другой вкладке — берём его и здесь, иначе эта вкладка
+    // досидела бы на старом токене до истечения и разлогинила бы все вкладки.
+    window.addEventListener('storage', (e) => {
+      if (e.key === this.tokenKey && e.newValue && this.tokenExp(e.newValue) > this.tokenExp(this.token)) {
+        this.token = e.newValue;
+      }
+    });
+
     if (this.isAuthenticated()) {
+      this.keepSessionAlive();
       this.refreshProfile();
     }
+  }
+
+  // exp токена (секунды) или 0, если токена нет/он нечитаем.
+  tokenExp(token) {
+    try { return (token && this.decodeTokenPayload(token).exp) || 0; } catch (e) { return 0; }
+  }
+
+  // Меняет ещё действующий токен на свежий, когда прожита половина его
+  // срока (POST /api/refresh-token). Истёкший не продлевается — только вход.
+  async keepSessionAlive() {
+    if (this._refreshing) return this._refreshing;
+    const token = this.getToken();
+    if (!token || !this.isAuthenticated()) return false;
+    let payload;
+    try { payload = this.decodeTokenPayload(token); } catch (e) { return false; }
+    if (!payload.exp || !payload.iat) return true;
+    const now = Math.floor(Date.now() / 1000);
+    if (now < payload.iat + (payload.exp - payload.iat) / 2) return true;
+
+    this._refreshing = (async () => {
+      try {
+        const response = await (window.originalFetch || window.fetch)('/api/refresh-token', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) return false; // решение о выходе — за validateToken/401
+        const data = await response.json();
+        if (!data.token) return false;
+        // Без setToken: это не смена пользователя, событие authChanged не нужно.
+        this.token = data.token;
+        try { localStorage.setItem(this.tokenKey, data.token); } catch (e) { /* нет доступа — токен останется в памяти */ }
+        if (data.user) this.setUser(data.user);
+        return true;
+      } catch (e) {
+        return false; // нет сети — попробуем в следующий раз, пока токен жив
+      } finally {
+        this._refreshing = null;
+      }
+    })();
+    return this._refreshing;
   }
 
   async refreshProfile() {
@@ -83,11 +139,14 @@ class AuthManager {
   setAuthHeader(token) {
     if (!window.originalFetch) {
       window.originalFetch = window.fetch;
+      // Токен берём в момент запроса, а не замыкаем при установке обёртки:
+      // после продления сессии (keepSessionAlive) должен уходить уже новый.
       window.fetch = (url, options = {}) => {
+        const current = this.getToken();
         const hasAuth = options.headers && (options.headers.Authorization || options.headers.authorization);
-        if (!hasAuth && token) {
+        if (!hasAuth && current) {
           if (!options.headers) options.headers = {};
-          options.headers.Authorization = `Bearer ${token}`;
+          options.headers.Authorization = `Bearer ${current}`;
         }
         return window.originalFetch(url, options);
       };
@@ -119,6 +178,7 @@ class AuthManager {
 
   async validateToken() {
     if (!this.isAuthenticated()) { this.logout(); return false; }
+    await this.keepSessionAlive();
     try {
       const response = await fetch('/api/profile', {
         headers: { 'Authorization': `Bearer ${this.getToken()}` }

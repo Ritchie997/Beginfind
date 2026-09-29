@@ -2537,6 +2537,9 @@
 
     markDirty() {
       this.dirty = true;
+      // Счётчик правок: save() по нему понимает, что пока шёл запрос, карту
+      // успели поменять, и не объявляет эти правки сохранёнными.
+      this._editSeq = (this._editSeq || 0) + 1;
       this.setStatus('Есть несохранённые изменения', 'dirty');
       clearTimeout(this._draftTimer);
       this._draftTimer = setTimeout(() => this.writeDraft(), 800);
@@ -2602,15 +2605,36 @@
       this.afterZonesChanged();
     }
 
-    async save({ force = false } = {}) {
-      if (this._saving) return;
+    // Сохранение, пока идёт прошлое, не теряется: оно ставится в очередь и
+    // выполнится сразу после (правки, сделанные во время запроса, тоже уйдут).
+    async save(opts = {}) {
+      if (this._saving) { this._saveQueued = true; return this._savePromise; }
       this._saving = true;
+      this._savePromise = (async () => {
+        try {
+          await this.saveOnce(opts);
+        } catch (e) {
+          this.setStatus('Не сохранено', 'error');
+          window.showMessage?.(`Не удалось сохранить карту: ${e.message}`, 'error');
+        } finally {
+          this._saving = false;
+        }
+        if (this._saveQueued) {
+          this._saveQueued = false;
+          if (this.dirty) await this.save();
+        }
+      })();
+      return this._savePromise;
+    }
+
+    async saveOnce({ force = false } = {}) {
       this.setStatus('Сохранение…', 'saving');
       // Правки типов мира — тем же «Сохранить».
       if (this._worldCtl && this._worldCtl.isDirty()) {
         const ok = await this._worldCtl.save();
-        if (!ok) { this._saving = false; this.setStatus('Не сохранено', 'error'); return; }
+        if (!ok) { this.setStatus('Не сохранено', 'error'); return; }
       }
+      const seq = this._editSeq || 0;
       const body = {
         title: this.doc.title,
         roles: this.doc.roles,
@@ -2624,23 +2648,50 @@
         force: force || !!this._forceNextSave
       };
       const res = await window.MapsUI.api(`/api/maps/${this.mapId}`, 'PUT', body);
-      this._saving = false;
-      if (res.status === 409 || (res.data && res.data.updated_at && !res.success && res.status === 409)) {
+      if (res.status === 409) {
         this.setStatus('Конфликт версий', 'error');
-        if (confirm('Эту карту уже сохранил кто-то другой после того, как вы открыли редактор. Перезаписать его изменения вашими?')) return this.save({ force: true });
+        if (confirm('Эту карту уже сохранил кто-то другой после того, как вы открыли редактор. Перезаписать его изменения вашими?')) return this.saveOnce({ force: true });
         return;
       }
-      if (!res.success) {
+      if (!res.success || !res.data || !res.data.updated_at) {
         this.setStatus('Не сохранено', 'error');
         window.showMessage?.(`Не удалось сохранить карту: ${window.MapsUI.apiError(res)}`, 'error');
         return;
       }
       this.baseUpdatedAt = res.data.updated_at;
       this._forceNextSave = false;
+
+      // Сверка с сервером: он перечитал карту с диска и сообщил, что там
+      // лежит. Если чего-то меньше, чем отправили, — правки не считаем
+      // сохранёнными, черновик остаётся.
+      const lost = this.verifySaved(body, res.data.saved);
+      if (lost) {
+        this.writeDraft();
+        this.setStatus('Сохранено не полностью', 'error');
+        window.showMessage?.(`Сервер сохранил карту не полностью: ${lost}. Правки остались в редакторе и в черновике — не закрывайте его и сообщите об ошибке.`, 'error');
+        return;
+      }
+
+      // Пока шёл запрос, карту поменяли — эти правки ещё не на сервере.
+      if ((this._editSeq || 0) !== seq) {
+        this.writeDraft(); // черновик — уже от новой версии сервера
+        this.setStatus('Есть несохранённые изменения', 'dirty');
+        return;
+      }
       this.dirty = false;
       clearTimeout(this._draftTimer);
       this.clearDraft();
       this.setStatus(`Сохранено в ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`, 'saved');
+    }
+
+    // Что из отправленного сервер не записал (текстом) или null — всё на месте.
+    verifySaved(body, saved) {
+      if (!saved) return 'сервер не подтвердил запись';
+      const parts = [
+        ['zones', 'зон'], ['markers', 'меток'], ['events', 'событий'], ['markerGroups', 'групп меток']
+      ].filter(([key]) => (saved[key] ?? 0) < (body[key] || []).length)
+        .map(([key, label]) => `${label} ${saved[key] ?? 0} из ${body[key].length}`);
+      return parts.length ? parts.join(', ') : null;
     }
 
     async preview() {
