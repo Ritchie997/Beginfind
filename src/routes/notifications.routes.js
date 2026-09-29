@@ -36,7 +36,8 @@ router.get('/notifications/summary', auth.authenticateToken, auth.checkApproved,
     if (canTriage || canCases || canDecide) {
       const queues = await feedbackStore.countQueues();
       if (canTriage) summary.feedbackTriage = queues.triage;
-      if (canCases) summary.feedbackUnassigned = queues.unassigned;
+      // Второй линии — и новые обращения без кейса, и кейсы, возвращённые на доработку.
+      if (canCases) summary.feedbackUnassigned = queues.unassigned + queues.returned;
       if (canDecide) summary.feedbackEscalated = queues.escalated;
     }
 

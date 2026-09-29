@@ -22,7 +22,8 @@
     return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  const TYPE_LABELS = { bug: 'Баг', idea: 'Предложение', article: 'Статья' };
+  const TYPE_LABELS = { bug: 'Проблема', idea: 'Идея', article: 'Статья' };
+  const MAX_SCREENSHOTS = 5; // как MAX_SCREENSHOTS в feedback-store.js
   // Совпадает с ARTICLE_REASONS в feedback-store.js.
   const ARTICLE_REASON_LABELS = {
     inaccurate: 'Недостоверная информация',
@@ -34,12 +35,14 @@
   };
   const FREQUENCY_LABELS = { always: 'Всегда', often: 'Часто', sometimes: 'Иногда', once: 'Один раз' };
   const SEVERITY_LABELS = { 1: '1 — косметика', 2: '2 — мешает', 3: '3 — ломает функцию', 4: '4 — потеря данных / безопасность' };
-  const CASE_STATUS_LABELS = { open: 'В обработке', escalated: 'На решении', resolved: 'Решён', archived: 'Архив' };
+  const CASE_STATUS_LABELS = { open: 'На доработке', escalated: 'На третьей линии', resolved: 'Решён', archived: 'Архив' };
   const EVENT_LABELS = {
     report_created: 'обращение создано',
     report_accepted: 'обращение принято',
     report_rejected: 'обращение отклонено',
     report_restored: 'обращение возвращено в очередь',
+    report_edited: 'автор изменил обращение',
+    report_resubmitted: 'автор исправил и отправил заново',
     case_created: 'кейс создан',
     case_updated: 'кейс изменён',
     report_attached: 'обращение добавлено',
@@ -101,7 +104,7 @@
   function renderReportFields(report) {
     const env = [report.version && `версия ${report.version}`, report.platform, report.frequency && FREQUENCY_LABELS[report.frequency]]
       .filter(Boolean).join(' · ');
-    const descriptionLabel = { bug: 'Описание проблемы', article: 'Что не так со статьёй' }[report.type] || 'Описание идеи';
+    const descriptionLabel = { bug: 'Описание проблемы', article: 'Что не так со статьёй' }[report.type] || 'Предложение';
     const article = report.type === 'article'
       ? `<div><div class="feedback-field-label">Статья</div><div>${articleLink(report)}</div></div>
          ${field('Причина', ARTICLE_REASON_LABELS[report.articleReason] || report.articleReason)}`
@@ -114,7 +117,7 @@
         ${field('Ожидаемое поведение', report.expected)}
         ${field('Фактическое поведение', report.actual)}
         ${field('Версия · платформа · частота', env)}
-        ${report.attachments && report.attachments.length ? `<div><div class="feedback-field-label">Доказательства</div><div class="feedback-attachments">${renderAttachments(report.attachments, false)}</div></div>` : ''}
+        ${report.attachments && report.attachments.length ? `<div><div class="feedback-field-label">Скриншоты</div><div class="feedback-attachments">${renderAttachments(report.attachments, false)}</div></div>` : ''}
         ${field('Комментарий', report.comment)}
       </div>`;
   }
@@ -131,6 +134,10 @@
       this.currentCase = null;
       this.editingFactId = null;
       this._textModalResolve = null;
+      this.editingReport = null; // своё обращение в форме правки (null — новое)
+      this.myReports = new Map();
+      this.queueReports = new Map();
+      this.uploading = 0;
     }
 
     async api(endpoint, method = 'GET', data = null) {
@@ -177,7 +184,9 @@
       root.querySelectorAll('[data-close-modal]').forEach((btn) => {
         btn.addEventListener('click', () => this.closeModal(btn.dataset.closeModal));
       });
-      root.querySelectorAll('.modal-overlay').forEach((overlay) => {
+      // Формы с набранным текстом (обращение, сборка кейса) по клику мимо
+      // окна не закрываются — иначе случайный клик стирал бы написанное.
+      root.querySelectorAll('.modal-overlay:not(#feedbackCreateModal):not(#feedbackNewCaseModal)').forEach((overlay) => {
         overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeModal(overlay.id); });
       });
 
@@ -189,8 +198,6 @@
       });
       root.querySelector('#feedbackPickFileBtn').addEventListener('click', () => root.querySelector('#feedbackFileInput').click());
       root.querySelector('#feedbackFileInput').addEventListener('change', (e) => this.uploadFiles(e.target));
-      root.querySelector('#feedbackAddLinkBtn').addEventListener('click', () => this.addLink());
-      root.querySelector('#feedbackLinkInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.addLink(); });
       root.querySelector('#feedbackAttachments').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-remove-attachment]');
         if (!btn) return;
@@ -198,6 +205,10 @@
         this.renderFormAttachments();
       });
       root.querySelector('#feedbackSubmitBtn').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.submitReport()));
+      root.querySelector('#feedbackMineList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-edit-report]');
+        if (btn) this.openCreateModal(this.myReports.get(Number(btn.dataset.editReport)));
+      });
 
       // --- Первая линия ---
       root.querySelectorAll('[data-triage-view]').forEach((btn) => {
@@ -219,7 +230,8 @@
         else this.queueSelected.delete(Number(box.dataset.queueSelect));
         this.updateQueueActions();
       });
-      root.querySelector('#feedbackQueueCreateBtn').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.createCaseFromQueue()));
+      root.querySelector('#feedbackQueueCreateBtn').addEventListener('click', () => this.openNewCaseModal());
+      root.querySelector('#feedbackNewCaseConfirm').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.createCaseFromQueue()));
       root.querySelector('#feedbackQueueAttachBtn').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.attachQueueToCase()));
       root.querySelector('#feedbackCasesFilter').addEventListener('change', () => this.loadCasesList());
 
@@ -311,9 +323,15 @@
     async loadMine() {
       await this.loadList(
         { loading: '#feedbackMineLoading', empty: '#feedbackMineEmpty', list: '#feedbackMineList' },
-        () => this.api('/api/feedback/reports/mine'),
+        async () => {
+          const list = await this.api('/api/feedback/reports/mine');
+          this.myReports = new Map(list.map((r) => [r.id, r]));
+          return list;
+        },
         (r) => {
           const st = authorStatus(r);
+          const edit = r.canEdit
+            ? `<div class="feedback-card-actions btns-compact"><button type="button" class="btn btn-secondary btn-sm" data-edit-report="${r.id}"><i class="fas fa-pen"></i> ${r.status === 'rejected' ? 'Исправить и отправить заново' : 'Изменить'}</button></div>` : '';
           let note = '';
           if (r.status === 'rejected' && r.rejectReason) note = `<div class="feedback-note bad">Причина: ${escapeHtml(r.rejectReason)}</div>`;
           else if (r.caseDecisionText && (r.caseStatus === 'resolved' || r.caseStatus === 'archived')) {
@@ -325,6 +343,7 @@
               <div class="feedback-card-meta">${typeChip(r.type)}<span class="feedback-chip ${st.chip}">${escapeHtml(st.text)}</span><span>${formatDate(r.createdAt)}</span></div>
               ${note}
               <details class="feedback-details"><summary>Подробнее</summary>${renderReportFields(r)}</details>
+              ${edit}
             </div>`;
         }
       );
@@ -332,87 +351,94 @@
 
     // ---------- Новое обращение ----------
 
-    openCreateModal() {
-      ['#feedbackTitle', '#feedbackDescription', '#feedbackSteps', '#feedbackExpected', '#feedbackActual',
-        '#feedbackVersion', '#feedbackPlatform', '#feedbackComment', '#feedbackLinkInput'].forEach((sel) => {
-        this.root.querySelector(sel).value = '';
-      });
-      this.root.querySelector('#feedbackFrequency').value = '';
-      this.attachments = [];
+    // report — своё обращение для правки; без него — новое.
+    openCreateModal(report = null) {
+      this.editingReport = report;
+      const isArticle = !!(report && report.type === 'article');
+      this.root.querySelector('#feedbackFormTitle').textContent = report ? `Обращение #${report.id}` : 'Новое обращение';
+      this.root.querySelector('#feedbackSubmitBtn').textContent = !report ? 'Отправить'
+        : report.status === 'rejected' ? 'Отправить заново' : 'Сохранить';
+      // Тип у отправленного не меняется; у жалобы на статью название
+      // собирается само, а доказательства могут быть ссылками — правится
+      // только описание.
+      this.root.querySelector('#feedbackTypeSwitch').hidden = !!report;
+      this.root.querySelector('#feedbackTitleGroup').hidden = isArticle;
+      this.root.querySelector('#feedbackScreenshotGroup').hidden = isArticle;
+      this.root.querySelector('#feedbackTitle').value = report ? report.title : '';
+      this.root.querySelector('#feedbackDescription').value = report ? report.description : '';
+      this.attachments = report && !isArticle ? (report.attachments || []).filter((u) => u.startsWith('/uploads/')) : [];
       this.renderFormAttachments();
-      this.setReportType('bug');
+      this.setReportType(report ? report.type : 'bug');
       this.root.querySelector('#feedbackCreateModal').hidden = false;
-      this.root.querySelector('#feedbackTitle').focus();
+      this.root.querySelector(isArticle ? '#feedbackDescription' : '#feedbackTitle').focus();
     }
 
     setReportType(type) {
       this.reportType = type;
       this.root.querySelectorAll('[data-report-type]').forEach((b) => b.classList.toggle('active', b.dataset.reportType === type));
-      this.root.querySelectorAll('#feedbackCreateModal [data-bug-only]').forEach((el) => { el.hidden = type !== 'bug'; });
       const isBug = type === 'bug';
-      this.root.querySelector('#feedbackDescriptionLabel').textContent = isBug ? 'Описание проблемы *' : 'Описание идеи *';
+      this.root.querySelector('#feedbackTitleLabel').textContent = isBug ? 'Название проблемы *' : 'Название идеи *';
+      this.root.querySelector('#feedbackTitle').placeholder = isBug ? 'Например: не сохраняется черновик статьи' : 'Например: тёмная тема для редактора';
+      this.root.querySelector('#feedbackDescriptionLabel').textContent = type === 'article' ? 'Что не так со статьёй *'
+        : isBug ? 'Описание проблемы *' : 'Предложение *';
       this.root.querySelector('#feedbackDescription').placeholder = isBug
-        ? 'Что пошло не так?'
+        ? 'Что пошло не так и как это получилось?'
         : 'Что предлагаете и какую проблему это решит?';
     }
 
     renderFormAttachments() {
       this.root.querySelector('#feedbackAttachments').innerHTML = renderAttachments(this.attachments, true);
+      this.root.querySelector('#feedbackPickFileBtn').disabled = this.attachments.length >= MAX_SCREENSHOTS;
+    }
+
+    // Пока скриншот грузится, «Отправить» заблокирована — иначе обращение
+    // ушло бы без него.
+    setUploading(delta) {
+      this.uploading += delta;
+      this.root.querySelector('#feedbackSubmitBtn').disabled = this.uploading > 0;
     }
 
     async uploadFiles(input) {
       const files = Array.from(input.files || []);
       input.value = '';
-      for (const file of files) {
-        if (this.attachments.length >= 10) {
-          showMessage('Не больше 10 доказательств в одном обращении', 'error');
-          break;
+      this.setUploading(1);
+      try {
+        for (const file of files) {
+          if (this.attachments.length >= MAX_SCREENSHOTS) {
+            showMessage(`Не больше ${MAX_SCREENSHOTS} скриншотов в одном обращении`, 'error');
+            break;
+          }
+          const result = await window.apiClient.uploadImage(file);
+          if (result.success && result.data && result.data.url) {
+            this.attachments.push(result.data.url);
+            this.renderFormAttachments();
+          } else {
+            showMessage(`Не удалось загрузить ${file.name}: ${result.error || 'ошибка'}`, 'error');
+          }
         }
-        const result = await window.apiClient.uploadImage(file);
-        if (result.success && result.data && result.data.url) {
-          this.attachments.push(result.data.url);
-          this.renderFormAttachments();
-        } else {
-          showMessage(`Не удалось загрузить ${file.name}: ${result.error || 'ошибка'}`, 'error');
-        }
+      } finally {
+        this.setUploading(-1);
       }
-    }
-
-    addLink() {
-      const input = this.root.querySelector('#feedbackLinkInput');
-      const url = input.value.trim();
-      if (!url) return;
-      if (!/^https?:\/\/\S+$/i.test(url)) {
-        showMessage('Ссылка должна начинаться с http:// или https://', 'error');
-        return;
-      }
-      if (this.attachments.length >= 10) {
-        showMessage('Не больше 10 доказательств в одном обращении', 'error');
-        return;
-      }
-      if (!this.attachments.includes(url)) this.attachments.push(url);
-      input.value = '';
-      this.renderFormAttachments();
     }
 
     async submitReport() {
+      if (this.uploading) return;
       const val = (sel) => this.root.querySelector(sel).value;
+      const editing = this.editingReport;
+      const payload = { title: val('#feedbackTitle'), description: val('#feedbackDescription') };
+      if (!editing || editing.type !== 'article') payload.attachments = this.attachments;
       try {
-        const report = await this.api('/api/feedback/reports', 'POST', {
-          type: this.reportType,
-          title: val('#feedbackTitle'),
-          description: val('#feedbackDescription'),
-          steps: val('#feedbackSteps'),
-          expected: val('#feedbackExpected'),
-          actual: val('#feedbackActual'),
-          version: val('#feedbackVersion'),
-          platform: val('#feedbackPlatform'),
-          frequency: val('#feedbackFrequency'),
-          comment: val('#feedbackComment'),
-          attachments: this.attachments
-        });
+        if (editing) {
+          const report = await this.api(`/api/feedback/reports/${editing.id}`, 'PUT', payload);
+          showMessage(editing.status === 'rejected'
+            ? `Обращение #${report.id} исправлено и снова отправлено на проверку`
+            : `Обращение #${report.id} сохранено`, 'success');
+        } else {
+          const report = await this.api('/api/feedback/reports', 'POST', { type: this.reportType, ...payload });
+          showMessage(`Обращение #${report.id} отправлено на проверку`, 'success');
+        }
+        this.editingReport = null;
         this.closeModal('feedbackCreateModal');
-        showMessage(`Обращение #${report.id} отправлено на проверку`, 'success');
         this.switchTab('mine');
         this.refreshBadges();
       } catch (err) {
@@ -481,7 +507,11 @@
       this.queueSelected.clear();
       await this.loadList(
         { loading: '#feedbackQueueLoading', empty: '#feedbackQueueEmpty', list: '#feedbackQueueList' },
-        () => this.api('/api/feedback/queue'),
+        async () => {
+          const list = await this.api('/api/feedback/queue');
+          this.queueReports = new Map(list.map((r) => [r.id, r]));
+          return list;
+        },
         (r) => `
           <div class="feedback-card">
             <label class="feedback-card-head">
@@ -502,14 +532,35 @@
       const select = this.root.querySelector('#feedbackQueueCaseSelect');
       select.innerHTML = this.openCases.length
         ? this.openCases.map((c) => `<option value="${c.id}">#${c.id} · ${escapeHtml(TYPE_LABELS[c.type])} · ${escapeHtml(c.title)}</option>`).join('')
-        : '<option value="">Нет открытых кейсов</option>';
+        : '<option value="">Нет кейсов без решения</option>';
       this.root.querySelector('#feedbackQueueAttachBtn').disabled = !this.openCases.length;
     }
 
+    openNewCaseModal() {
+      const ids = Array.from(this.queueSelected);
+      if (!ids.length) return;
+      const first = this.queueReports.get(ids[0]);
+      const modal = this.root.querySelector('#feedbackNewCaseModal');
+      modal.querySelector('#feedbackNewCaseInfo').textContent = `Обращения: ${ids.map((id) => '#' + id).join(', ')}`;
+      modal.querySelector('#feedbackNewCaseTitle').value = first ? first.title : '';
+      modal.querySelector('#feedbackNewCaseSummary').value = '';
+      modal.querySelector('#feedbackNewCaseSeverity').innerHTML = [1, 2, 3, 4]
+        .map((sev) => `<option value="${sev}" ${sev === 2 ? 'selected' : ''}>${SEVERITY_LABELS[sev]}</option>`).join('');
+      modal.hidden = false;
+      modal.querySelector('#feedbackNewCaseTitle').focus();
+    }
+
     async createCaseFromQueue() {
+      const modal = this.root.querySelector('#feedbackNewCaseModal');
       try {
-        const created = await this.api('/api/feedback/cases', 'POST', { reportIds: Array.from(this.queueSelected) });
-        showMessage(`Кейс #${created.id} создан`, 'success');
+        const created = await this.api('/api/feedback/cases', 'POST', {
+          reportIds: Array.from(this.queueSelected),
+          title: modal.querySelector('#feedbackNewCaseTitle').value,
+          summary: modal.querySelector('#feedbackNewCaseSummary').value,
+          severity: modal.querySelector('#feedbackNewCaseSeverity').value
+        });
+        modal.hidden = true;
+        showMessage(`Кейс #${created.id} собран и передан на третью линию`, 'success');
         await Promise.all([this.loadQueue(), this.loadCasesList()]);
         this.refreshBadges();
         this.showCase(created);
@@ -549,16 +600,16 @@
 
     async loadCasesList() {
       const status = this.root.querySelector('#feedbackCasesFilter').value;
-      // Список открытых кейсов нужен ещё и для "Добавить в кейс" в очереди.
-      const [items] = await Promise.all([
+      // Для "Добавить в кейс" в очереди — все кейсы без решения (и на
+      // третьей линии, и на доработке).
+      await Promise.all([
         this.loadList(
           { loading: '#feedbackCasesLoading', empty: '#feedbackCasesEmpty', list: '#feedbackCasesList' },
           () => this.api(`/api/feedback/cases?status=${status}`),
           (c) => this.renderCaseCard(c)
         ),
-        status === 'open' ? null : this.api('/api/feedback/cases?status=open').then((list) => { this.openCases = list; }).catch(() => {})
+        this.api('/api/feedback/cases?status=open,escalated').then((list) => { this.openCases = list; }).catch(() => {})
       ]);
-      if (status === 'open') this.openCases = items;
       this.updateQueueActions();
     }
 
@@ -627,7 +678,8 @@
 
     renderCase() {
       const c = this.currentCase;
-      const editable = this.perms.cases && c.status === 'open';
+      // Вторая линия дополняет кейс, пока по нему нет решения.
+      const editable = this.perms.cases && (c.status === 'open' || c.status === 'escalated');
       const majorityPct = Math.round(c.majorityShare * 100);
       this.root.querySelector('#feedbackCaseModalTitle').textContent = `Кейс #${c.id}`;
 
@@ -651,7 +703,7 @@
       }
 
       const actions = [];
-      if (editable) actions.push('<button class="btn btn-primary btn-sm" data-case-action="escalate"><i class="fas fa-arrow-up"></i> Передать на третью линию</button>');
+      if (this.perms.cases && c.status === 'open') actions.push('<button class="btn btn-primary btn-sm" data-case-action="escalate"><i class="fas fa-arrow-up"></i> Передать на третью линию</button>');
       if (this.perms.decide && c.status === 'escalated') {
         actions.push('<button class="btn btn-success btn-sm" data-case-action="decide" data-decision="accepted"><i class="fas fa-check"></i> Принять</button>');
         actions.push('<button class="btn btn-danger btn-sm" data-case-action="decide" data-decision="declined"><i class="fas fa-xmark"></i> Отклонить</button>');
@@ -666,7 +718,7 @@
           <div class="form-group"><label class="form-label">Критичность</label>
             <select class="form-select" id="feedbackCaseSeverity">${[1, 2, 3, 4].map((s) => `<option value="${s}" ${s === c.severity ? 'selected' : ''}>${SEVERITY_LABELS[s]}</option>`).join('')}</select>
           </div>
-          <p class="modal-hint"><i class="fas fa-circle-info"></i> Критичность 4 сразу передаёт кейс на третью линию.</p>
+          ${c.status === 'open' ? '<p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс возвращён на доработку. Критичность 4 сразу передаёт его обратно на третью линию.</p>' : ''}
           <div class="btns-compact"><button class="btn btn-secondary btn-sm" data-case-action="save-case">Сохранить</button></div>`
         : `
           <div class="feedback-card-title">${escapeHtml(c.title)}</div>
@@ -744,12 +796,12 @@
           if (!ok) return;
           updated = await this.api(`${base}/facts/${dataset.factId}`, 'DELETE');
         } else if (action === 'detach') {
-          const ok = await window.confirmDialog.open({ message: `Отвязать обращение #${dataset.reportId}? Оно вернётся в очередь второй линии.` });
+          const ok = await window.confirmDialog.open({ message: `Отвязать обращение #${dataset.reportId}? Оно вернётся в очередь второй линии.`, confirmLabel: 'Отвязать' });
           if (!ok) return;
           updated = await this.api(`${base}/reports/${dataset.reportId}`, 'DELETE');
         } else if (action === 'escalate') {
           if (!c.facts.length) {
-            const ok = await window.confirmDialog.open({ message: 'В кейсе нет ни одного факта. Всё равно передать на третью линию?' });
+            const ok = await window.confirmDialog.open({ message: 'В кейсе нет ни одного факта. Всё равно передать на третью линию?', confirmLabel: 'Передать', danger: false });
             if (!ok) return;
           }
           updated = await this.api(`${base}/escalate`, 'POST');

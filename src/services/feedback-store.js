@@ -12,22 +12,27 @@
 //      линия может выборочно проверить их и вернуть в 'new' (restoreReport).
 //   3. Вторая линия (feedback_cases) объединяет принятые обращения в кейсы:
 //      одно обращение — не более одного кейса, тип кейса совпадает с типом
-//      обращений. Внутри кейса ведутся факты (feedback_case_facts), у каждого
-//      — список обращений-источников. Приоритет считается из критичности и
-//      числа РАЗНЫХ пользователей (см. computePriority). Готовый кейс
-//      передаётся на третью линию ('escalated'); критичность 4 передаёт его
-//      туда сразу.
+//      обращений. Собранный кейс сразу уходит на третью линию ('escalated') —
+//      отдельного шага «передать» нет. Пока решения нет, вторая линия может
+//      дополнять кейс: добавлять новые дубли, вести факты
+//      (feedback_case_facts, у каждого — обращения-источники). Приоритет
+//      считается из критичности и числа РАЗНЫХ пользователей (computePriority).
 //   4. Третья линия (feedback_decide) принимает решение ('resolved' +
-//      decision accepted/declined) или возвращает кейс на доработку ('open').
+//      decision accepted/declined) или возвращает кейс на доработку ('open');
+//      доработанный кейс вторая линия передаёт обратно (escalateCase).
 //   5. Решённый кейс архивируется ('archived').
 //
-// Как не потерять информацию при объединении: текст обращений после
-// отправки не редактируется и при объединении не копируется — кейс только
-// ссылается на обращения (case_id). Факты не делятся вручную на "от
-// большинства" и "от некоторых": это вычисляется по доле источников среди
-// обращений кейса (MAJORITY_SHARE), поэтому при добавлении/отвязке
-// обращений классификация пересчитывается сама. Любое обращение можно
-// отвязать обратно; всё пишется в журнал feedback_events.
+// Автор может править своё обращение, пока по нему нет решения
+// (updateOwnReport); прежний текст уходит в журнал feedback_events, так что
+// правка не стирает то, на чём модераторы строили кейс. Отклонённое
+// обращение после правки возвращается в очередь первой линии.
+//
+// Как не потерять информацию при объединении: текст обращений при
+// объединении не копируется — кейс только ссылается на обращения (case_id).
+// Факты не делятся вручную на "от большинства" и "от некоторых": это
+// вычисляется по доле источников среди обращений кейса (MAJORITY_SHARE),
+// поэтому при добавлении/отвязке обращений классификация пересчитывается
+// сама. Любое обращение можно отвязать обратно; всё пишется в журнал.
 
 const { feedbackDb } = require('../db/connections');
 const articlesStore = require('./articles-store');
@@ -44,7 +49,6 @@ const ARTICLE_REASONS = {
   spam: 'Спам / реклама',
   other: 'Другое'
 };
-const FREQUENCIES = ['always', 'often', 'sometimes', 'once'];
 const FACT_KINDS = ['info', 'contradiction'];
 const DECISIONS = ['accepted', 'declined'];
 
@@ -61,6 +65,10 @@ const MAJORITY_SHARE = 0.6;
 // висеть у одного пользователя — простая защита первой линии от флуда.
 const MAX_PENDING_PER_USER = 5;
 const MAX_ATTACHMENTS = 10;
+// Баг/идея: название, описание и по желанию скриншоты — не больше.
+const MAX_SCREENSHOTS = 5;
+// Кейс, по которому ещё нет решения: его обращения автор может править.
+const UNDECIDED_CASE_STATUSES = ['open', 'escalated'];
 
 const LIMITS = {
   title: 150,
@@ -140,6 +148,11 @@ function cleanAttachments(list) {
     }
   });
   return out.slice(0, MAX_ATTACHMENTS);
+}
+
+// Скриншоты бага/идеи — только загруженные картинки.
+function cleanScreenshots(list) {
+  return cleanAttachments(list).filter((url) => url.startsWith('/uploads/')).slice(0, MAX_SCREENSHOTS);
 }
 
 function toId(value) {
@@ -278,30 +291,77 @@ async function createReport(user, input) {
 
   await assertNoPending(user);
 
-  const isBug = type === 'bug';
-  const report = {
-    title: requireText(input.title, LIMITS.title, 'Краткое название'),
-    description: requireText(input.description, LIMITS.description, isBug ? 'Описание проблемы' : 'Описание идеи'),
-    // Шаги воспроизведения и ожидаемое/фактическое — только для багов.
-    steps: isBug ? requireText(input.steps, LIMITS.steps, 'Шаги воспроизведения') : null,
-    expected: isBug ? cleanText(input.expected, LIMITS.expected) : null,
-    actual: isBug ? cleanText(input.actual, LIMITS.actual) : null,
-    version: cleanText(input.version, LIMITS.version),
-    platform: cleanText(input.platform, LIMITS.platform),
-    frequency: isBug && FREQUENCIES.includes(input.frequency) ? input.frequency : null,
-    comment: cleanText(input.comment, LIMITS.comment),
-    attachments: cleanAttachments(input.attachments)
-  };
-
+  const report = cleanReportInput(type, input);
   const result = await run(
-    `INSERT INTO feedback_reports
-      (type, title, description, steps, expected, actual, version, platform, frequency, comment, attachments, author_id, author_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [type, report.title, report.description, report.steps, report.expected, report.actual, report.version,
-      report.platform, report.frequency, report.comment, JSON.stringify(report.attachments), user.id, actorName(user)]
+    'INSERT INTO feedback_reports (type, title, description, attachments, author_id, author_name) VALUES (?, ?, ?, ?, ?, ?)',
+    [type, report.title, report.description, JSON.stringify(report.attachments), user.id, actorName(user)]
   );
   await logEvent(user, 'report_created', { reportId: result.lastID });
   return getReport(result.lastID);
+}
+
+// Баг: название + описание проблемы; идея: название + предложение. Плюс
+// по желанию скриншоты. Старые поля (шаги, версия, платформа…) у прежних
+// обращений остаются в БД и показываются, но новых больше не принимаем.
+function cleanReportInput(type, input) {
+  const isBug = type === 'bug';
+  return {
+    title: requireText(input.title, LIMITS.title, isBug ? 'Название проблемы' : 'Название идеи'),
+    description: requireText(input.description, LIMITS.description, isBug ? 'Описание проблемы' : 'Предложение'),
+    attachments: cleanScreenshots(input.attachments)
+  };
+}
+
+// Правка своего обращения автором — пока по нему нет решения. Прежний
+// текст — в журнал (и в журнал кейса, если обращение уже в кейсе), чтобы
+// модераторы видели, что поменялось. Отклонённое после правки снова идёт
+// на первую линию.
+async function updateOwnReport(user, reportId, input) {
+  const row = await get(
+    `SELECT r.*, c.status as case_status FROM feedback_reports r
+     LEFT JOIN feedback_cases c ON c.id = r.case_id WHERE r.id = ?`,
+    [reportId]
+  );
+  if (!row || row.author_id !== user.id) throw httpError(404, 'Обращение не найдено');
+  if (!canAuthorEdit(row)) throw httpError(409, 'По обращению уже принято решение — править его нельзя');
+
+  let title;
+  let description;
+  let attachments;
+  if (row.type === 'article') {
+    // Название жалобы собирается из причины и статьи — правится только суть.
+    title = row.title;
+    description = requireText(input.description, LIMITS.description, 'Что не так со статьёй');
+    attachments = input.attachments !== undefined ? cleanAttachments(input.attachments) : parseJsonArray(row.attachments);
+  } else {
+    ({ title, description, attachments } = cleanReportInput(row.type, input));
+  }
+
+  const resubmit = row.status === 'rejected';
+  if (resubmit) await assertNoPending(user);
+
+  const changed = title !== row.title || description !== row.description
+    || JSON.stringify(attachments) !== JSON.stringify(parseJsonArray(row.attachments));
+  if (!changed && !resubmit) return getReport(reportId);
+
+  await run(
+    `UPDATE feedback_reports SET title = ?, description = ?, attachments = ?
+       ${resubmit ? ", status = 'new', reject_reason = NULL, triaged_by = NULL, triaged_at = NULL" : ''}
+     WHERE id = ?`,
+    [title, description, JSON.stringify(attachments), reportId]
+  );
+  if (changed) {
+    const was = `было: «${row.title}» — ${String(row.description || '').slice(0, 1000)}`;
+    await logEvent(user, 'report_edited', { caseId: row.case_id, reportId: row.id, details: was });
+  }
+  if (resubmit) await logEvent(user, 'report_resubmitted', { reportId: row.id });
+  if (row.case_id) await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [row.case_id]);
+  return getReport(reportId);
+}
+
+function canAuthorEdit(row) {
+  if (!['new', 'accepted', 'rejected'].includes(row.status)) return false;
+  return !row.case_id || UNDECIDED_CASE_STATUSES.includes(row.case_status);
 }
 
 async function getReport(reportId) {
@@ -321,7 +381,8 @@ async function listMyReports(userId) {
     ...mapReport(row),
     caseStatus: row.case_status || null,
     caseDecision: row.case_decision || null,
-    caseDecisionText: row.case_decision_text || null
+    caseDecisionText: row.case_decision_text || null,
+    canEdit: canAuthorEdit(row)
   }));
 }
 
@@ -348,9 +409,16 @@ async function assertTriagable(actor, reportId) {
   return report;
 }
 
+// "AND status = 'new'" + проверка changes: два модератора жмут одновременно —
+// второй получает 409, а не перезаписывает решение первого.
+async function triageUpdate(sql, params) {
+  const result = await run(`${sql} AND status = 'new'`, params);
+  if (!result.changes) throw httpError(409, 'Обращение уже обработано');
+}
+
 async function acceptReport(actor, reportId) {
   await assertTriagable(actor, reportId);
-  await run(
+  await triageUpdate(
     "UPDATE feedback_reports SET status = 'accepted', reject_reason = NULL, triaged_by = ?, triaged_at = CURRENT_TIMESTAMP WHERE id = ?",
     [actorName(actor), reportId]
   );
@@ -361,7 +429,7 @@ async function acceptReport(actor, reportId) {
 async function rejectReport(actor, reportId, reason) {
   await assertTriagable(actor, reportId);
   const text = requireText(reason, LIMITS.reason, 'Причина');
-  await run(
+  await triageUpdate(
     "UPDATE feedback_reports SET status = 'rejected', reject_reason = ?, triaged_by = ?, triaged_at = CURRENT_TIMESTAMP WHERE id = ?",
     [text, actorName(actor), reportId]
   );
@@ -456,10 +524,23 @@ function cleanSeverity(value) {
   return SEVERITY_WEIGHTS[severity] ? severity : null;
 }
 
+// Вторая линия дополняет кейс, пока по нему нет решения — и на доработке,
+// и уже на третьей линии (новые дубли, факты, уточнения).
 async function assertCaseEditable(caseId) {
   const row = await getCaseRow(caseId);
-  if (row.status !== 'open') throw httpError(409, 'Кейс уже передан дальше — вторая линия может править только открытые кейсы');
+  if (!UNDECIDED_CASE_STATUSES.includes(row.status)) throw httpError(409, 'По кейсу уже принято решение — менять его нельзя');
   return row;
+}
+
+// Привязать обращения к кейсу только если они всё ещё свободны: второй
+// модератор, успевший раньше, не теряет свою привязку.
+async function linkReports(caseId, ids) {
+  const result = await run(
+    `UPDATE feedback_reports SET case_id = ?
+     WHERE id IN (${ids.map(() => '?').join(',')}) AND case_id IS NULL AND status = 'accepted'`,
+    [caseId, ...ids]
+  );
+  return result.changes === ids.length;
 }
 
 // Обращение можно добавить в кейс, только если оно прошло первую линию, ещё
@@ -492,10 +573,11 @@ async function caseArticleSlug(caseId) {
 
 async function escalateIfCritical(actor, caseId, severity) {
   if (severity !== CRITICAL_SEVERITY) return;
-  await run("UPDATE feedback_cases SET status = 'escalated', escalated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'", [caseId]);
-  await logEvent(actor, 'case_escalated', { caseId, details: 'Автоматически: критичность 4' });
+  const result = await run("UPDATE feedback_cases SET status = 'escalated', escalated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'", [caseId]);
+  if (result.changes) await logEvent(actor, 'case_escalated', { caseId, details: 'Автоматически: критичность 4' });
 }
 
+// Собранный кейс сразу уходит на третью линию.
 async function createCase(actor, input) {
   const rows = await loadAttachableReports(input.reportIds);
   const type = rows[0].type;
@@ -504,14 +586,19 @@ async function createCase(actor, input) {
   const summary = cleanText(input.summary, LIMITS.summary);
 
   const result = await run(
-    'INSERT INTO feedback_cases (type, title, summary, severity, created_by) VALUES (?, ?, ?, ?, ?)',
+    `INSERT INTO feedback_cases (type, title, summary, severity, status, escalated_at, created_by)
+     VALUES (?, ?, ?, ?, 'escalated', CURRENT_TIMESTAMP, ?)`,
     [type, title, summary, severity, actorName(actor)]
   );
   const caseId = result.lastID;
   const ids = rows.map((r) => r.id);
-  await run(`UPDATE feedback_reports SET case_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [caseId, ...ids]);
+  if (!(await linkReports(caseId, ids))) {
+    await run('UPDATE feedback_reports SET case_id = NULL WHERE case_id = ?', [caseId]);
+    await run('DELETE FROM feedback_cases WHERE id = ?', [caseId]);
+    throw httpError(409, 'Часть обращений только что забрал в кейс другой модератор — обновите очередь');
+  }
   await logEvent(actor, 'case_created', { caseId, details: `Обращения: ${ids.map((id) => '#' + id).join(', ')}` });
-  await escalateIfCritical(actor, caseId, severity);
+  await logEvent(actor, 'case_escalated', { caseId });
   return getCaseDetails(caseId);
 }
 
@@ -539,9 +626,12 @@ async function attachReports(actor, caseId, reportIds) {
   const articleSlug = row.type === 'article' ? await caseArticleSlug(caseId) : null;
   const rows = await loadAttachableReports(reportIds, row.type, articleSlug);
   const ids = rows.map((r) => r.id);
-  await run(`UPDATE feedback_reports SET case_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [caseId, ...ids]);
+  // Частичную привязку при гонке оставляем: каждое привязанное — в журнал.
+  const complete = await linkReports(caseId, ids);
+  const linked = (await all(`SELECT id FROM feedback_reports WHERE case_id = ? AND id IN (${ids.map(() => '?').join(',')})`, [caseId, ...ids])).map((r) => r.id);
   await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [caseId]);
-  for (const id of ids) await logEvent(actor, 'report_attached', { caseId, reportId: id });
+  for (const id of linked) await logEvent(actor, 'report_attached', { caseId, reportId: id });
+  if (!complete) throw httpError(409, 'Часть обращений только что забрал в кейс другой модератор — обновите очередь');
   return getCaseDetails(caseId);
 }
 
@@ -618,9 +708,12 @@ async function deleteFact(actor, caseId, factId) {
   return getCaseDetails(caseId);
 }
 
+// Доработанный (возвращённый третьей линией) кейс — обратно на решение.
 async function escalateCase(actor, caseId) {
-  await assertCaseEditable(caseId);
-  await run("UPDATE feedback_cases SET status = 'escalated', escalated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [caseId]);
+  const row = await getCaseRow(caseId);
+  if (row.status !== 'open') throw httpError(409, 'Кейс уже на третьей линии или решён');
+  const result = await run("UPDATE feedback_cases SET status = 'escalated', escalated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'", [caseId]);
+  if (!result.changes) throw httpError(409, 'Кейс уже на третьей линии или решён');
   await logEvent(actor, 'case_escalated', { caseId });
   return getCaseDetails(caseId);
 }
@@ -641,11 +734,12 @@ async function decideCase(actor, caseId, input) {
   const decision = DECISIONS.includes(input.decision) ? input.decision : null;
   if (!decision) throw httpError(400, 'Укажите решение: принять или отклонить');
   const text = requireText(input.text, LIMITS.decision, 'Пояснение решения');
-  await run(
+  const result = await run(
     `UPDATE feedback_cases SET status = 'resolved', decision = ?, decision_text = ?, decided_by = ?,
-       decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+       decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'escalated'`,
     [decision, text, actorName(actor), caseId]
   );
+  if (!result.changes) throw httpError(409, 'Кейс уже решён или возвращён на доработку');
   await logEvent(actor, 'case_decided', { caseId, details: `${decision === 'accepted' ? 'Принято' : 'Отклонено'}: ${text.slice(0, 300)}` });
   return getCaseDetails(caseId);
 }
@@ -654,7 +748,8 @@ async function returnCase(actor, caseId, comment) {
   const row = await getCaseRow(caseId);
   if (row.status !== 'escalated') throw httpError(409, 'Вернуть на доработку можно только кейс, переданный на третью линию');
   const text = requireText(comment, LIMITS.reason, 'Что доработать');
-  await run("UPDATE feedback_cases SET status = 'open', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [caseId]);
+  const result = await run("UPDATE feedback_cases SET status = 'open', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'escalated'", [caseId]);
+  if (!result.changes) throw httpError(409, 'Кейс уже решён или возвращён на доработку');
   await logEvent(actor, 'case_returned', { caseId, details: text });
   return getCaseDetails(caseId);
 }
@@ -666,9 +761,10 @@ async function countQueues() {
     `SELECT
        (SELECT COUNT(*) FROM feedback_reports WHERE status = 'new') as triage,
        (SELECT COUNT(*) FROM feedback_reports WHERE status = 'accepted' AND case_id IS NULL) as unassigned,
-       (SELECT COUNT(*) FROM feedback_cases WHERE status = 'escalated') as escalated`
+       (SELECT COUNT(*) FROM feedback_cases WHERE status = 'escalated') as escalated,
+       (SELECT COUNT(*) FROM feedback_cases WHERE status = 'open') as returned`
   );
-  return row || { triage: 0, unassigned: 0, escalated: 0 };
+  return row || { triage: 0, unassigned: 0, escalated: 0, returned: 0 };
 }
 
 // Все ссылки на доказательства — чтобы cleanup.js не счёл загруженные к
@@ -685,6 +781,7 @@ module.exports = {
   MAJORITY_SHARE,
   createReport,
   getReport,
+  updateOwnReport,
   listMyReports,
   listReportsByStatus,
   listUnassignedAccepted,

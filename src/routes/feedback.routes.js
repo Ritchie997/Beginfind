@@ -43,6 +43,9 @@ router.post('/feedback/reports', ...base, handle((req) => store.createReport(req
 
 router.get('/feedback/reports/mine', ...base, handle((req) => store.listMyReports(req.user.id)));
 
+// Правка своего обращения (пока по нему нет решения) — см. updateOwnReport.
+router.put('/feedback/reports/:id', ...base, handle((req) => store.updateOwnReport(req.user, req.params.id, req.body || {})));
+
 // --- Первая линия ---
 
 // ?status=new (очередь) | rejected (отклонённые — для выборочной проверки,

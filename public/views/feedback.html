@@ -28,7 +28,7 @@
         <div class="empty-state" id="feedbackMineEmpty" hidden>
             <i class="fas fa-bug"></i>
             <h3>Вы ещё не отправляли обращений</h3>
-            <p>Нашли баг или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь. Пожаловаться на статью можно кнопкой с флажком под самой статьёй в Ибрипедии.</p>
+            <p>Нашли проблему или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь, а пока решения нет — обращение можно поправить. Пожаловаться на статью можно кнопкой с флажком под самой статьёй в Ибрипедии.</p>
         </div>
         <div class="feedback-list" id="feedbackMineList"></div>
     </div>
@@ -48,10 +48,10 @@
     <!-- ============ 2 линия: кейсы ============ -->
     <div class="feedback-panel" id="feedbackPanelCases" hidden>
         <h3 class="feedback-section-title">Принятые обращения без кейса</h3>
-        <p class="feedback-explain">Отметьте одинаковые обращения и создайте из них кейс или добавьте их в уже существующий открытый кейс.</p>
+        <p class="feedback-explain">Отметьте одинаковые обращения и соберите из них кейс — он сразу уйдёт на третью линию. Новые дубли можно добавить в кейс, пока по нему нет решения.</p>
         <div class="feedback-queue-actions btns-compact" id="feedbackQueueActions" hidden>
             <span id="feedbackQueueSelected">Выбрано: 0</span>
-            <button type="button" class="btn btn-primary btn-sm" id="feedbackQueueCreateBtn"><i class="fas fa-plus"></i> Создать кейс</button>
+            <button type="button" class="btn btn-primary btn-sm" id="feedbackQueueCreateBtn"><i class="fas fa-arrow-up"></i> Собрать кейс</button>
             <select class="form-select" id="feedbackQueueCaseSelect"></select>
             <button type="button" class="btn btn-secondary btn-sm" id="feedbackQueueAttachBtn"><i class="fas fa-link"></i> Добавить в кейс</button>
         </div>
@@ -62,8 +62,8 @@
         <div class="feedback-section-head">
             <h3 class="feedback-section-title">Кейсы</h3>
             <select class="form-select" id="feedbackCasesFilter">
-                <option value="open">В обработке</option>
-                <option value="escalated">Переданы на решение</option>
+                <option value="escalated">На третьей линии</option>
+                <option value="open">Возвращены на доработку</option>
                 <option value="resolved">Решены</option>
                 <option value="archived">Архив</option>
             </select>
@@ -81,80 +81,61 @@
         <div class="feedback-list" id="feedbackDecideList"></div>
     </div>
 
-    <!-- ============ Модалка: новое обращение ============ -->
+    <!-- ============ Модалка: новое обращение / правка своего ============
+         Баг: название + описание; предложение: название + суть идеи; плюс
+         по желанию скриншоты. У жалобы на статью правится только описание. -->
     <div class="modal-overlay" id="feedbackCreateModal" hidden>
         <div class="modal-box modal-box-wide">
             <div class="modal-header">
-                <h3>Новое обращение</h3>
+                <h3 id="feedbackFormTitle">Новое обращение</h3>
                 <button class="modal-close" data-close-modal="feedbackCreateModal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="feedback-type-switch" id="feedbackTypeSwitch">
-                    <button type="button" class="btn btn-secondary active" data-report-type="bug"><i class="fas fa-bug"></i> Баг</button>
-                    <button type="button" class="btn btn-secondary" data-report-type="idea"><i class="fas fa-lightbulb"></i> Предложение</button>
+                    <button type="button" class="btn btn-secondary active" data-report-type="bug"><i class="fas fa-bug"></i> Проблема</button>
+                    <button type="button" class="btn btn-secondary" data-report-type="idea"><i class="fas fa-lightbulb"></i> Идея</button>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Краткое название *</label>
-                    <input type="text" id="feedbackTitle" class="form-input" maxlength="150" placeholder="Например: не сохраняется черновик статьи">
+                <div class="form-group" id="feedbackTitleGroup">
+                    <label class="form-label" id="feedbackTitleLabel">Название проблемы *</label>
+                    <input type="text" id="feedbackTitle" class="form-input" maxlength="150">
                 </div>
                 <div class="form-group">
                     <label class="form-label" id="feedbackDescriptionLabel">Описание проблемы *</label>
                     <textarea id="feedbackDescription" class="form-textarea" maxlength="5000"></textarea>
                 </div>
-                <div data-bug-only>
-                    <div class="form-group">
-                        <label class="form-label">Шаги воспроизведения *</label>
-                        <textarea id="feedbackSteps" class="form-textarea" maxlength="5000" placeholder="1. Открыть ...&#10;2. Нажать ...&#10;3. ..."></textarea>
-                    </div>
-                    <div class="feedback-form-row">
-                        <div class="form-group">
-                            <label class="form-label">Ожидаемое поведение</label>
-                            <textarea id="feedbackExpected" class="form-textarea" maxlength="2000"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Фактическое поведение</label>
-                            <textarea id="feedbackActual" class="form-textarea" maxlength="2000"></textarea>
-                        </div>
-                    </div>
-                </div>
-                <div class="feedback-form-row">
-                    <div class="form-group">
-                        <label class="form-label">Версия</label>
-                        <input type="text" id="feedbackVersion" class="form-input" maxlength="50">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Платформа</label>
-                        <input type="text" id="feedbackPlatform" class="form-input" maxlength="100" placeholder="Windows, Chrome / Android ...">
-                    </div>
-                    <div class="form-group" data-bug-only>
-                        <label class="form-label">Как часто</label>
-                        <select id="feedbackFrequency" class="form-select">
-                            <option value="">—</option>
-                            <option value="always">Всегда</option>
-                            <option value="often">Часто</option>
-                            <option value="sometimes">Иногда</option>
-                            <option value="once">Один раз</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Доказательства: скриншоты, ссылки на видео и логи</label>
+                <div class="form-group" id="feedbackScreenshotGroup">
+                    <label class="form-label">Скриншот (по желанию)</label>
                     <div class="feedback-attachments" id="feedbackAttachments"></div>
                     <div class="feedback-attach-row btns-compact">
                         <input type="file" id="feedbackFileInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackPickFileBtn"><i class="fas fa-image"></i> Скриншот</button>
-                        <input type="text" id="feedbackLinkInput" class="form-input" placeholder="https://... ссылка на видео или лог">
-                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackAddLinkBtn">Добавить</button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackPickFileBtn"><i class="fas fa-image"></i> Прикрепить скриншот</button>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Дополнительные комментарии</label>
-                    <textarea id="feedbackComment" class="form-textarea" maxlength="2000"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-close-modal="feedbackCreateModal">Отмена</button>
                 <button class="btn btn-primary" id="feedbackSubmitBtn">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Модалка: сборка кейса (2 линия) ============ -->
+    <div class="modal-overlay" id="feedbackNewCaseModal" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Собрать кейс</h3>
+                <button class="modal-close" data-close-modal="feedbackNewCaseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="feedback-explain" id="feedbackNewCaseInfo"></p>
+                <div class="form-group"><label class="form-label">Название кейса</label><input type="text" class="form-input" id="feedbackNewCaseTitle" maxlength="150"></div>
+                <div class="form-group"><label class="form-label">Суть</label><textarea class="form-textarea" id="feedbackNewCaseSummary" maxlength="5000"></textarea></div>
+                <div class="form-group"><label class="form-label">Критичность</label><select class="form-select" id="feedbackNewCaseSeverity"></select></div>
+                <p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс сразу уйдёт на третью линию. Дополнять его (новые дубли, факты) можно и дальше, пока нет решения.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close-modal="feedbackNewCaseModal">Отмена</button>
+                <button class="btn btn-primary" id="feedbackNewCaseConfirm"><i class="fas fa-arrow-up"></i> Передать на третью линию</button>
             </div>
         </div>
     </div>
@@ -252,10 +233,10 @@
 .feedback-attach-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
 .feedback-attach-row .form-input { flex: 1; min-width: 160px; }
 .feedback-type-switch { display: flex; gap: 6px; }
+.feedback-type-switch[hidden], #feedbackTitleGroup[hidden], #feedbackScreenshotGroup[hidden] { display: none; }
 .feedback-type-switch .btn.active { background: var(--blurple); color: #fff; }
 .feedback-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .feedback-form-row > .form-group { flex: 1; min-width: 150px; }
-[data-bug-only][hidden] { display: none; }
 .feedback-queue-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; color: var(--text-muted); }
 .feedback-queue-actions[hidden] { display: none; }
 .feedback-queue-actions .form-select { width: auto; max-width: 260px; }
