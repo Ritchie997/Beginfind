@@ -20,6 +20,9 @@
   const esc = (s) => window.MapCore.escapeHtml(s);
   const POLYGON_CLIPPING_SRC = 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js';
   const DRAFT_PREFIX = 'beginfind.mapDraft.';
+  // Недорисованный многоугольник — отдельно от черновика карты: пишется на
+  // каждую точку, переживает перезагрузку страницы и закрытие вкладки.
+  const DRAWING_PREFIX = 'beginfind.mapDrawing.';
   const HISTORY_LIMIT = 80;
   const MAX_HANDLES = 700;
 
@@ -118,6 +121,10 @@
       this.dirty = false;
       this.mods = { shift: false, alt: false, space: false };
       this.draw = null; // состояние рисования (polygon/lasso)
+      // Многоугольник, отложенный сменой инструмента: вернулись к «Многоугольнику» — рисуем дальше.
+      this.pausedPoly = null;
+      // Контур, только что отменённый (Esc) или замкнутый в зону: Ctrl+Z возвращает его в рисование.
+      this._recoverDraw = null;
       this.handles = [];
       this.articles = []; // [{slug,title}] — для поля "Статья"
       this.roleOptions = [];
@@ -132,6 +139,7 @@
       this.loadLookups();
       this.el('world-details').addEventListener('toggle', () => { if (this.el('world-details').open) this.mountWorld(); });
       this.offerDraftRestore();
+      this.restoreDrawing();
       this.startBasemapPolling();
     }
 
@@ -302,6 +310,7 @@
       this.zonesPane.style.zIndex = 450;
       this.renderer = L.svg({ padding: 0.5, pane: 'zonesPane' });
       this.drawLayer = L.layerGroup().addTo(this.map);
+      this.pausedLayer = L.layerGroup().addTo(this.map); // отложенный многоугольник (бледно)
       this.handleLayer = L.layerGroup().addTo(this.map);
       this.markerLayer = L.layerGroup().addTo(this.map); // в редакторе без группировки — править надо каждую
 
@@ -464,7 +473,21 @@
 
     setTool(tool) {
       if (!TOOLS.some((t) => t.id === tool)) return;
-      this.cancelDrawing();
+      // Недорисованный многоугольник при смене инструмента не выбрасываем —
+      // откладываем (виден бледным) до возвращения к «Многоугольнику».
+      const poly = this.draw && this.draw.kind === 'polygon';
+      if (poly && tool !== 'polygon') {
+        if (this.draw.points.length) this.pausedPoly = this.draw;
+        this.draw = null;
+        this.drawLayer.clearLayers();
+      } else if (!poly) {
+        this.cancelDrawing();
+      }
+      if (tool === 'polygon' && this.pausedPoly) {
+        this.draw = this.pausedPoly;
+        this.pausedPoly = null;
+      }
+      this.renderPaused();
       this.tool = tool;
       this.root.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
       const drawing = tool === 'polygon' || tool === 'lasso';
@@ -474,7 +497,9 @@
       if (tool === 'vertex' && !this.selectedId) this.toast('Сначала выберите зону — её точки появятся для правки');
       this.renderHandles();
       this.renderMarkerPalette();
+      if (this.draw && this.draw.kind === 'polygon') this.renderDraft();
       this.updateHint();
+      this.updateUndoButtons();
     }
 
     // Палитра типов для инструмента «Метка»: какой тип получит следующая
@@ -507,7 +532,8 @@
     updateHint() {
       const t = TOOLS.find((x) => x.id === this.tool);
       let text = t ? t.hint : '';
-      if (this.draw && this.draw.kind === 'polygon') text = `Точек: ${this.draw.points.length}. ${text}`;
+      if (this.draw && this.draw.kind === 'polygon') text = `Точек: ${this.draw.points.length}. ${text} Ctrl+Z — убрать последнюю точку.`;
+      else if (this.pausedPoly) text = `Недорисованный контур (${this.pausedPoly.points.length} точек) ждёт — вернитесь к «Многоугольнику» (P), чтобы продолжить. ${text}`;
       this.el('hint').textContent = text;
     }
 
@@ -519,7 +545,7 @@
       if (this.tool === 'polygon' && this.size) {
         if (this.mods.space) return;
         const pt = this.clickPoint(e);
-        if (!this.draw) this.draw = { kind: 'polygon', points: [] };
+        if (!this.draw) this.draw = { kind: 'polygon', points: [], redo: [] };
         const pts = this.draw.points;
         // Клик рядом с первой точкой — замкнуть.
         if (pts.length >= 3) {
@@ -527,8 +553,9 @@
           if (first.distanceTo(e.containerPoint) < 10) { this.finishPolygon(); return; }
         }
         pts.push(pt);
+        this.draw.redo = [];
         this.renderDraft(e.latlng);
-        this.updateHint();
+        this.drawingChanged();
         return;
       }
       if (this.tool === 'marker' && this.size) {
@@ -643,6 +670,7 @@
       this.markDirty();
       const titleInput = this.root.querySelector('[data-mprop="title"]');
       if (titleInput) { titleInput.focus(); titleInput.select(); }
+      return true;
     }
 
     selectMarker(id, { fly = false } = {}) {
@@ -711,7 +739,7 @@
     }
 
     onMapMouseMove(e) {
-      if (this.draw && this.draw.kind === 'polygon') this.renderDraft(e.latlng);
+      if (this.draw && this.draw.kind === 'polygon' && this.draw.points.length) this.renderDraft(e.latlng);
     }
 
     renderDraft(cursorLatLng) {
@@ -742,10 +770,12 @@
         this.renderDraft();
       };
       const onUp = () => {
+        this._lassoUp = null;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
         this.finishLasso();
       };
+      this._lassoUp = onUp; // для finishStuckDrag: отпустили кнопку вне окна
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     }
@@ -756,11 +786,93 @@
       this.updateHint && this.el && this.updateHint();
     }
 
-    finishPolygon() {
-      const pts = this.draw ? this.draw.points : [];
+    // Esc: контур убирается, но Ctrl+Z сразу после этого возвращает его.
+    abandonDrawing() {
+      const poly = this.draw && this.draw.kind === 'polygon' ? this.draw : null;
+      if (poly && poly.points.length) {
+        this._recoverDraw = { kind: 'cancel', points: poly.points.slice() };
+        this.toast(`Контур отменён (точек: ${poly.points.length}) — Ctrl+Z вернёт его`);
+      }
       this.cancelDrawing();
+      this.drawingChanged();
+    }
+
+    // Замкнуть контур в зону. Если не вышло (мало точек, контур за краем,
+    // не совместился с выбранной зоной) — точки остаются, рисование
+    // продолжается. Ctrl+Z после замыкания убирает зону и возвращает контур.
+    finishPolygon() {
+      const pts = this.draw ? this.draw.points.slice() : [];
       if (pts.length < 3) { this.toast('Нужно хотя бы три точки'); return; }
-      this.applyNewShape([[pts]]);
+      if (!this.applyNewShape([[pts]])) return;
+      this.cancelDrawing();
+      this._recoverDraw = { kind: 'finish', points: pts };
+      this.drawingChanged();
+    }
+
+    // Продолжить рисование многоугольника с этими точками.
+    resumeDrawing(points) {
+      this.pausedPoly = null;
+      this.draw = { kind: 'polygon', points: points.slice(), redo: [] };
+      this.setTool('polygon');
+      this.drawingChanged();
+    }
+
+    popDrawPoint() {
+      const p = this.draw.points.pop();
+      if (p) this.draw.redo.push(p);
+      if (!this.draw.points.length) {
+        // Убрали все точки — контура больше нет, но Ctrl+Y вернёт их.
+        this.draw = { kind: 'polygon', points: [], redo: this.draw.redo };
+      }
+      this.renderDraft();
+      this.drawingChanged();
+    }
+
+    // Отрисовка отложенного контура, подсказка, кнопки отмены/повтора и
+    // сохранение контура в localStorage — после любого его изменения.
+    drawingChanged() {
+      this.renderPaused();
+      this.updateHint();
+      this.updateUndoButtons();
+      this.saveDrawing();
+    }
+
+    renderPaused() {
+      if (!this.pausedLayer) return;
+      this.pausedLayer.clearLayers();
+      if (!this.pausedPoly || !this.pausedPoly.points.length) return;
+      const lls = this.pausedPoly.points.map(MC().toLatLng);
+      if (lls.length > 1) L.polyline(lls, { color: '#ffffff', weight: 2, opacity: 0.55, dashArray: '2 6', interactive: false }).addTo(this.pausedLayer);
+      L.circleMarker(lls[0], { radius: 5, color: '#ffffff', weight: 2, fillColor: '#faa81a', fillOpacity: 0.7, opacity: 0.7, interactive: false }).addTo(this.pausedLayer);
+    }
+
+    drawingKey() { return DRAWING_PREFIX + this.mapId; }
+
+    currentPolyDraw() {
+      if (this.draw && this.draw.kind === 'polygon' && this.draw.points.length) return this.draw;
+      if (this.pausedPoly && this.pausedPoly.points.length) return this.pausedPoly;
+      return null;
+    }
+
+    saveDrawing() {
+      const d = this.currentPolyDraw();
+      try {
+        if (d) localStorage.setItem(this.drawingKey(), JSON.stringify({ points: d.points, savedAt: Date.now() }));
+        else localStorage.removeItem(this.drawingKey());
+      } catch (e) { /* localStorage недоступен/переполнен — контур живёт только в памяти */ }
+    }
+
+    // При открытии редактора — вернуть контур, недорисованный в прошлый раз
+    // (перезагрузка страницы, закрытая вкладка, вылет из сессии).
+    restoreDrawing() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(this.drawingKey()) || 'null'); } catch (e) { saved = null; }
+      const pts = saved && Array.isArray(saved.points)
+        ? saved.points.filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        : [];
+      if (!pts.length || !this.size) return; // без подложки рисовать нельзя — контур подождёт
+      this.resumeDrawing(pts);
+      this.toast(`Восстановлен недорисованный контур (точек: ${pts.length}). Продолжайте ставить точки или нажмите Esc, чтобы отменить.`);
     }
 
     // Лассо упрощаем в экранных пикселях (~1.5 px при текущем масштабе):
@@ -799,23 +911,24 @@
       return [Math.min(this.size.w, Math.max(0, p[0])), Math.min(this.size.h, Math.max(0, p[1]))];
     }
 
+    // true — форма применена; false — нет (причина уже показана тостом).
     applyNewShape(multi) {
       multi = this.clipToImage(multi);
-      if (!multi.length) { this.toast('Область целиком за краем карты'); return; }
+      if (!multi.length) { this.toast('Область целиком за краем карты'); return false; }
       const clip = this.clip();
       const selected = this.zoneById(this.selectedId);
       if ((this.mods.shift || this.mods.alt) && selected) {
-        if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return; }
+        if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return false; }
         let result;
         try {
           result = this.mods.shift ? clip.union(this.zonePoly(selected), multi) : clip.difference(this.zonePoly(selected), multi);
-        } catch (err) { this.toast(`Не удалось совместить контуры: ${err.message}`); return; }
+        } catch (err) { this.toast(`Не удалось совместить контуры: ${err.message}`); return false; }
         result = cleanMulti(result);
-        if (!result.length) { this.toast('От зоны ничего не осталось — отменено'); return; }
+        if (!result.length) { this.toast('От зоны ничего не осталось — отменено'); return false; }
         this.pushHistory();
         this.setZonePoly(selected, result);
         this.afterZonesChanged({ keepLayers: false });
-        return;
+        return true;
       }
 
       const parent = this.findParentFor(multi);
@@ -2486,6 +2599,7 @@
     }
 
     pushHistory() {
+      this._recoverDraw = null;
       this.undoStack.push(this.snapshot());
       if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
       this.redoStack = [];
@@ -2503,15 +2617,31 @@
       if (this.sidebarTab === 'map') this.renderMapSettings();
     }
 
+    // Во время рисования многоугольника Ctrl+Z/Ctrl+Y убирают и возвращают
+    // точки, а не весь контур. Сразу после Esc Ctrl+Z возвращает контур;
+    // сразу после замыкания — убирает новую зону и тоже возвращает контур.
     undo() {
+      if (this.draw && this.draw.kind === 'polygon') { this.popDrawPoint(); return; }
+      const rec = this._recoverDraw;
+      this._recoverDraw = null;
+      if (rec && rec.kind === 'cancel') { this.resumeDrawing(rec.points); return; }
       if (!this.undoStack.length) return;
       this.cancelDrawing();
       this.redoStack.push(this.snapshot());
       this.restore(this.undoStack.pop());
+      if (rec && rec.kind === 'finish') this.resumeDrawing(rec.points);
       this.updateUndoButtons();
     }
 
     redo() {
+      if (this.draw && this.draw.kind === 'polygon') {
+        const p = this.draw.redo.pop();
+        if (!p) return;
+        this.draw.points.push(p);
+        this.renderDraft();
+        this.drawingChanged();
+        return;
+      }
       if (!this.redoStack.length) return;
       this.cancelDrawing();
       this.undoStack.push(this.snapshot());
@@ -2520,8 +2650,11 @@
     }
 
     updateUndoButtons() {
-      this.root.querySelector('[data-act="undo"]').disabled = !this.undoStack.length;
-      this.root.querySelector('[data-act="redo"]').disabled = !this.redoStack.length;
+      const drawing = this.draw && this.draw.kind === 'polygon';
+      this.root.querySelector('[data-act="undo"]').disabled = drawing
+        ? !this.draw.points.length
+        : !this.undoStack.length && !this._recoverDraw;
+      this.root.querySelector('[data-act="redo"]').disabled = drawing ? !this.draw.redo.length : !this.redoStack.length;
     }
 
     afterZonesChanged() {
@@ -2709,12 +2842,46 @@
     bindGlobal() {
       this._onKeyDown = (e) => this.onKeyDown(e);
       this._onKeyUp = (e) => this.onKeyUp(e);
-      this._onBlur = () => { this.mods = { shift: false, alt: false, space: false }; this.setTool(this.tool); };
-      this._onBeforeUnload = (e) => { if (this.dirty) { this.writeDraft(); e.preventDefault(); e.returnValue = ''; } };
+      // Ушли в другую вкладку/окно: отпускание клавиш-модификаторов туда не
+      // придёт — сбрасываем их. Рисуемую зону НЕ трогаем (раньше здесь был
+      // setTool → cancelDrawing, и недорисованный многоугольник пропадал от
+      // любого расфокуса, даже от окна confirm()).
+      this._onBlur = () => {
+        this.releaseModifiers();
+        this.finishStuckDrag();
+      };
+      // Кнопку мыши отпустили за пределами страницы — mouseup не пришёл, и
+      // метка/точка зоны «прилипла» бы к курсору. Первое же движение без
+      // зажатой кнопки завершает перетаскивание как обычное отпускание.
+      this._onMouseMoveCapture = (e) => { if (e.buttons === 0) this.finishStuckDrag(); };
+      this._onBeforeUnload = (e) => {
+        this.saveDrawing();
+        if (this.dirty) this.writeDraft();
+        if (this.dirty || this.currentPolyDraw()) { e.preventDefault(); e.returnValue = ''; }
+      };
       document.addEventListener('keydown', this._onKeyDown);
       document.addEventListener('keyup', this._onKeyUp);
+      document.addEventListener('mousemove', this._onMouseMoveCapture, true);
       window.addEventListener('blur', this._onBlur);
       window.addEventListener('beforeunload', this._onBeforeUnload);
+    }
+
+    releaseModifiers() {
+      const hadSpace = this.mods.space;
+      this.mods = { shift: false, alt: false, space: false };
+      if (hadSpace) {
+        this.wrapEl.classList.remove('me-panning');
+        if (this.tool === 'polygon' || this.tool === 'lasso') this.map.dragging.disable();
+      }
+    }
+
+    // Незавершённое перетаскивание Leaflet (метка, точка зоны, сдвиг карты)
+    // завершаем штатно: finishDrag шлёт dragend, и правка сохраняется так же,
+    // как при обычном отпускании кнопки. Лассо — так же, как отпускание.
+    finishStuckDrag() {
+      const drag = L.Draggable && L.Draggable._dragging;
+      if (drag && typeof drag.finishDrag === 'function') drag.finishDrag(true);
+      if (this._lassoUp) this._lassoUp();
     }
 
     isTyping() {
@@ -2738,9 +2905,9 @@
         if (!this.mods.space) { this.mods.space = true; this.map.dragging.enable(); this.wrapEl.classList.add('me-panning'); }
         return;
       }
-      if (e.key === 'Escape') { if (this.draw) this.cancelDrawing(); else this.select(null); return; }
+      if (e.key === 'Escape') { if (this.draw) this.abandonDrawing(); else this.select(null); return; }
       if (e.key === 'Enter' && this.draw && this.draw.kind === 'polygon') { this.finishPolygon(); return; }
-      if (e.key === 'Backspace' && this.draw && this.draw.kind === 'polygon') { e.preventDefault(); this.draw.points.pop(); this.renderDraft(); this.updateHint(); return; }
+      if (e.key === 'Backspace' && this.draw && this.draw.kind === 'polygon') { e.preventDefault(); this.popDrawPoint(); return; }
       // Backspace/Delete — модальное окно удаления выбранного: метки, зоны
       // или (во вкладке «Время») события.
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -2780,11 +2947,13 @@
 
     destroy() {
       if (this.dirty) this.writeDraft();
+      this.saveDrawing();
       clearInterval(this._pollTimer);
       clearTimeout(this._draftTimer);
       document.removeEventListener('keydown', this._onKeyDown);
       document.removeEventListener('keyup', this._onKeyUp);
       window.removeEventListener('blur', this._onBlur);
+      document.removeEventListener('mousemove', this._onMouseMoveCapture, true);
       window.removeEventListener('beforeunload', this._onBeforeUnload);
       if (this._resizeObserver) this._resizeObserver.disconnect();
       if (this.map) this.map.remove();
