@@ -484,8 +484,9 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
         });
       });
 
-      // Кейс второй линии. status: 'open' (в обработке) | 'escalated'
-      // (передан на третью линию) | 'resolved' (есть решение) | 'archived'.
+      // Кейс второй линии. status: 'open' (на доработке) | 'escalated'
+      // (передан на третью линию) | 'accepted' (принят, в работе) |
+      // 'resolved' (завершён или отклонён) | 'archived'.
       // severity — критичность 1..4 (см. SEVERITY_WEIGHTS), приоритет из неё
       // и числа пользователей считается на лету, не хранится.
       // decision: 'accepted' | 'declined' — вердикт третьей линии,
@@ -515,7 +516,12 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
           console.error('Error reading feedback_cases schema', err);
           return;
         }
-        if (!(columns || []).some((c) => c.name === 'comment')) feedbackDb.run('ALTER TABLE feedback_cases ADD COLUMN comment TEXT');
+        // completed_* — завершение принятого кейса (status accepted → resolved).
+        const names = new Set((columns || []).map((c) => c.name));
+        ['comment', 'completion_text', 'completed_by'].forEach((name) => {
+          if (!names.has(name)) feedbackDb.run(`ALTER TABLE feedback_cases ADD COLUMN ${name} TEXT`);
+        });
+        if (!names.has('completed_at')) feedbackDb.run('ALTER TABLE feedback_cases ADD COLUMN completed_at DATETIME');
       });
 
       // Факт кейса — одна единица информации с явными источниками

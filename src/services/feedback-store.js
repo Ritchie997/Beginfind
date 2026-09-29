@@ -17,10 +17,13 @@
 //      комментарий второй линии и критичность. Пока решения нет, вторая линия
 //      может дополнять кейс новыми дублями и править его. Приоритет
 //      считается из критичности и числа РАЗНЫХ пользователей (computePriority).
-//   4. Третья линия (feedback_decide) принимает решение ('resolved' +
-//      decision accepted/declined) или возвращает кейс на доработку ('open');
-//      доработанный кейс вторая линия передаёт обратно (escalateCase).
-//   5. Решённый кейс архивируется ('archived').
+//   4. Третья линия (feedback_decide) принимает кейс в работу ('accepted',
+//      decision = 'accepted'), отклоняет его ('resolved', decision =
+//      'declined') или возвращает на доработку ('open'); доработанный кейс
+//      вторая линия передаёт обратно (escalateCase).
+//   5. Принятый кейс, когда всё сделано, третья линия завершает
+//      (completeCase → 'resolved').
+//   6. Решённый кейс архивируется ('archived').
 //
 // Автор может править своё обращение, пока по нему нет решения
 // (updateOwnReport); прежний текст уходит в журнал feedback_events, так что
@@ -216,6 +219,9 @@ function mapCase(row, stats) {
     decisionText: row.decision_text,
     decidedBy: row.decided_by,
     decidedAt: row.decided_at,
+    completedBy: row.completed_by || null,
+    completedAt: row.completed_at || null,
+    completionText: row.completion_text || null,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -367,7 +373,8 @@ async function getReport(reportId) {
 // автор видит, что происходит с его обращением, и не отправляет его заново.
 async function listMyReports(userId) {
   const rows = await all(
-    `SELECT r.*, c.status as case_status, c.decision as case_decision, c.decision_text as case_decision_text
+    `SELECT r.*, c.status as case_status, c.decision as case_decision, c.decision_text as case_decision_text,
+       c.completion_text as case_completion_text
      FROM feedback_reports r LEFT JOIN feedback_cases c ON c.id = r.case_id
      WHERE r.author_id = ? ORDER BY r.created_at DESC, r.id DESC`,
     [userId]
@@ -377,6 +384,7 @@ async function listMyReports(userId) {
     caseStatus: row.case_status || null,
     caseDecision: row.case_decision || null,
     caseDecisionText: row.case_decision_text || null,
+    caseCompletionText: row.case_completion_text || null,
     canEdit: canAuthorEdit(row)
   }));
 }
@@ -654,13 +662,31 @@ async function decideCase(actor, caseId, input) {
   const decision = DECISIONS.includes(input.decision) ? input.decision : null;
   if (!decision) throw httpError(400, 'Укажите решение: принять или отклонить');
   const text = requireText(input.text, LIMITS.decision, 'Пояснение решения');
+  // Принятый кейс ещё не выполнен — он «в работе», пока его не завершат
+  // (completeCase). Отклонённый решён сразу.
+  const status = decision === 'accepted' ? 'accepted' : 'resolved';
   const result = await run(
-    `UPDATE feedback_cases SET status = 'resolved', decision = ?, decision_text = ?, decided_by = ?,
+    `UPDATE feedback_cases SET status = ?, decision = ?, decision_text = ?, decided_by = ?,
        decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'escalated'`,
-    [decision, text, actorName(actor), caseId]
+    [status, decision, text, actorName(actor), caseId]
   );
   if (!result.changes) throw httpError(409, 'Кейс уже решён или возвращён на доработку');
   await logEvent(actor, 'case_decided', { caseId, details: `${decision === 'accepted' ? 'Принято' : 'Отклонено'}: ${text.slice(0, 300)}` });
+  return getCaseDetails(caseId);
+}
+
+// Принятый кейс сделан — завершить. comment (по желанию) увидят авторы.
+async function completeCase(actor, caseId, comment) {
+  const row = await getCaseRow(caseId);
+  if (row.status !== 'accepted') throw httpError(409, 'Завершить можно только принятый кейс, который ещё в работе');
+  const text = cleanText(comment, LIMITS.decision);
+  const result = await run(
+    `UPDATE feedback_cases SET status = 'resolved', completion_text = ?, completed_by = ?,
+       completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'accepted'`,
+    [text, actorName(actor), caseId]
+  );
+  if (!result.changes) throw httpError(409, 'Кейс уже завершён');
+  await logEvent(actor, 'case_completed', { caseId, details: text ? text.slice(0, 300) : null });
   return getCaseDetails(caseId);
 }
 
@@ -716,6 +742,7 @@ module.exports = {
   escalateCase,
   archiveCase,
   decideCase,
+  completeCase,
   returnCase,
   countQueues,
   listAttachmentUrls

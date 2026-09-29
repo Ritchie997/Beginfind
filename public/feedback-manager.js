@@ -35,7 +35,7 @@
   };
   const FREQUENCY_LABELS = { always: 'Всегда', often: 'Часто', sometimes: 'Иногда', once: 'Один раз' };
   const SEVERITY_LABELS = { 1: '1 — косметика', 2: '2 — мешает', 3: '3 — ломает функцию', 4: '4 — потеря данных / безопасность' };
-  const CASE_STATUS_LABELS = { open: 'На доработке', escalated: 'На третьей линии', resolved: 'Решён', archived: 'Архив' };
+  const CASE_STATUS_LABELS = { open: 'На доработке', escalated: 'На третьей линии', accepted: 'Принят, в работе', resolved: 'Решён', archived: 'Архив' };
   const EVENT_LABELS = {
     report_created: 'обращение создано',
     report_accepted: 'обращение принято',
@@ -53,6 +53,7 @@
     case_escalated: 'передан на третью линию',
     case_returned: 'возвращён на доработку',
     case_decided: 'решение принято',
+    case_completed: 'кейс завершён',
     case_archived: 'отправлен в архив'
   };
 
@@ -69,8 +70,12 @@
     if (!report.caseId) return { chip: 'pending', text: 'Принято, ждёт разбора' };
     if (report.caseStatus === 'open') return { chip: 'pending', text: 'В работе' };
     if (report.caseStatus === 'escalated') return { chip: 'pending', text: 'Передано на решение' };
+    if (report.caseStatus === 'accepted') {
+      const text = { bug: 'Подтверждено — исправляем', article: 'Жалоба подтверждена — исправляем' }[report.type] || 'Принято — в работе';
+      return { chip: 'pending', text };
+    }
     if (report.caseDecision === 'accepted') {
-      const text = { bug: 'Подтверждено — будет исправлено', article: 'Жалоба подтверждена' }[report.type] || 'Принято';
+      const text = { bug: 'Исправлено', article: 'Статья исправлена' }[report.type] || 'Реализовано';
       return { chip: 'ok', text };
     }
     if (report.caseDecision === 'declined') return { chip: 'bad', text: 'Отклонено' };
@@ -234,7 +239,7 @@
       root.querySelector('#feedbackQueueAttachBtn').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.attachQueueToCase()));
       root.querySelector('#feedbackCasesFilter').addEventListener('change', () => this.loadCasesList());
 
-      ['#feedbackCasesList', '#feedbackDecideList'].forEach((sel) => {
+      ['#feedbackCasesList', '#feedbackDecideList', '#feedbackWorkList'].forEach((sel) => {
         root.querySelector(sel).addEventListener('click', (e) => {
           const card = e.target.closest('[data-open-case]');
           if (card) this.openCase(card.dataset.openCase);
@@ -333,8 +338,9 @@
             ? `<div class="feedback-card-actions btns-compact"><button type="button" class="btn btn-secondary btn-sm" data-edit-report="${r.id}"><i class="fas fa-pen"></i> ${r.status === 'rejected' ? 'Исправить и отправить заново' : 'Изменить'}</button></div>` : '';
           let note = '';
           if (r.status === 'rejected' && r.rejectReason) note = `<div class="feedback-note bad">Причина: ${escapeHtml(r.rejectReason)}</div>`;
-          else if (r.caseDecisionText && (r.caseStatus === 'resolved' || r.caseStatus === 'archived')) {
+          else if (r.caseDecisionText && ['accepted', 'resolved', 'archived'].includes(r.caseStatus)) {
             note = `<div class="feedback-note ${r.caseDecision === 'accepted' ? 'ok' : 'bad'}">${escapeHtml(r.caseDecisionText)}</div>`;
+            if (r.caseCompletionText) note += `<div class="feedback-note ok">${escapeHtml(r.caseCompletionText)}</div>`;
           }
           return `
             <div class="feedback-card">
@@ -615,11 +621,18 @@
     // ---------- Третья линия ----------
 
     async loadDecide() {
-      await this.loadList(
-        { loading: '#feedbackDecideLoading', empty: '#feedbackDecideEmpty', list: '#feedbackDecideList' },
-        () => this.api('/api/feedback/cases?status=escalated'),
-        (c) => this.renderCaseCard(c)
-      );
+      await Promise.all([
+        this.loadList(
+          { loading: '#feedbackDecideLoading', empty: '#feedbackDecideEmpty', list: '#feedbackDecideList' },
+          () => this.api('/api/feedback/cases?status=escalated'),
+          (c) => this.renderCaseCard(c)
+        ),
+        this.loadList(
+          { loading: '#feedbackWorkLoading', empty: '#feedbackWorkEmpty', list: '#feedbackWorkList' },
+          () => this.api('/api/feedback/cases?status=accepted'),
+          (c) => this.renderCaseCard(c)
+        )
+      ]);
     }
 
     // ---------- Карточка кейса ----------
@@ -646,10 +659,14 @@
 
       let decisionBlock = '';
       if (c.decision) {
+        const verdict = c.decision === 'declined' ? 'Отклонено' : c.status === 'accepted' ? 'Принято — в работе' : 'Принято';
+        const completion = c.completedAt
+          ? `<div class="feedback-note ok"><b>Завершено</b> · ${escapeHtml(c.completedBy || '')} · ${formatDate(c.completedAt)}${c.completionText ? '\n' + escapeHtml(c.completionText) : ''}</div>` : '';
         decisionBlock = `
           <div class="feedback-case-section">
             <h4>Решение третьей линии</h4>
-            <div class="feedback-note ${c.decision === 'accepted' ? 'ok' : 'bad'}"><b>${c.decision === 'accepted' ? 'Принято' : 'Отклонено'}</b> · ${escapeHtml(c.decidedBy || '')} · ${formatDate(c.decidedAt)}\n${escapeHtml(c.decisionText || '')}</div>
+            <div class="feedback-note ${c.decision === 'accepted' ? 'ok' : 'bad'}"><b>${verdict}</b> · ${escapeHtml(c.decidedBy || '')} · ${formatDate(c.decidedAt)}\n${escapeHtml(c.decisionText || '')}</div>
+            ${completion}
           </div>`;
       }
 
@@ -660,6 +677,7 @@
         actions.push('<button class="btn btn-danger btn-sm" data-case-action="decide" data-decision="declined"><i class="fas fa-xmark"></i> Отклонить</button>');
         actions.push('<button class="btn btn-secondary btn-sm" data-case-action="return"><i class="fas fa-rotate-left"></i> Вернуть на доработку</button>');
       }
+      if (this.perms.decide && c.status === 'accepted') actions.push('<button class="btn btn-success btn-sm" data-case-action="complete"><i class="fas fa-flag-checkered"></i> Завершить</button>');
       if (this.perms.cases && c.status === 'resolved') actions.push('<button class="btn btn-secondary btn-sm" data-case-action="archive"><i class="fas fa-box-archive"></i> В архив</button>');
 
       const header = editable
@@ -732,12 +750,25 @@
         } else if (action === 'decide') {
           const accepted = dataset.decision === 'accepted';
           const text = await this.askText({
-            title: accepted ? `Принять кейс #${c.id}` : `Отклонить кейс #${c.id}`,
-            label: 'Пояснение решения (его увидят авторы обращений)',
+            title: accepted ? `Принять кейс #${c.id} в работу` : `Отклонить кейс #${c.id}`,
+            label: accepted
+              ? 'Что будет сделано (увидят авторы обращений). Когда всё будет готово — завершите кейс.'
+              : 'Почему отклонено (увидят авторы обращений)',
             confirm: accepted ? 'Принять' : 'Отклонить'
           });
           if (text == null) return;
           updated = await this.api(`${base}/decide`, 'POST', { decision: dataset.decision, text });
+          if (accepted) showMessage(`Кейс #${c.id} принят и ждёт завершения во вкладке «Решение»`, 'success');
+        } else if (action === 'complete') {
+          const comment = await this.askText({
+            title: `Завершить кейс #${c.id}`,
+            label: 'Что сделано (по желанию, увидят авторы обращений)',
+            confirm: 'Завершить',
+            optional: true
+          });
+          if (comment == null) return;
+          updated = await this.api(`${base}/complete`, 'POST', { comment });
+          showMessage(`Кейс #${c.id} завершён`, 'success');
         } else if (action === 'return') {
           const comment = await this.askText({ title: `Вернуть кейс #${c.id}`, label: 'Что нужно доработать', confirm: 'Вернуть' });
           if (comment == null) return;
@@ -766,7 +797,8 @@
 
     // Модалка с одним текстовым полем (причина отклонения, решение,
     // комментарий к возврату). Возвращает текст или null при отмене.
-    askText({ title, label, confirm }) {
+    askText({ title, label, confirm, optional = false }) {
+      this._textModalOptional = optional;
       this.resolveTextModal(false);
       const modal = this.root.querySelector('#feedbackTextModal');
       modal.querySelector('#feedbackTextModalTitle').textContent = title;
@@ -784,7 +816,7 @@
       if (!resolve) return;
       const input = this.root.querySelector('#feedbackTextModalInput');
       const text = input ? input.value.trim() : '';
-      if (confirmed && !text) {
+      if (confirmed && !text && !this._textModalOptional) {
         showMessage('Заполните поле', 'error');
         return;
       }

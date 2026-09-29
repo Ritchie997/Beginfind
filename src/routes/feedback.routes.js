@@ -97,6 +97,8 @@ router.post('/feedback/cases/:id/archive', ...cases, handle((req) => store.archi
 
 router.post('/feedback/cases/:id/decide', ...decide, handle((req) => store.decideCase(req.user, req.params.id, req.body || {})));
 
+router.post('/feedback/cases/:id/complete', ...decide, handle((req) => store.completeCase(req.user, req.params.id, (req.body || {}).comment)));
+
 router.post('/feedback/cases/:id/return', ...decide, handle((req) => store.returnCase(req.user, req.params.id, (req.body || {}).comment)));
 
 module.exports = router;

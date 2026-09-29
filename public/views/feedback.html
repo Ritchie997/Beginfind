@@ -64,6 +64,7 @@
             <select class="form-select" id="feedbackCasesFilter">
                 <option value="escalated">На третьей линии</option>
                 <option value="open">Возвращены на доработку</option>
+                <option value="accepted">Приняты, в работе</option>
                 <option value="resolved">Решены</option>
                 <option value="archived">Архив</option>
             </select>
@@ -75,10 +76,17 @@
 
     <!-- ============ 3 линия: решение ============ -->
     <div class="feedback-panel" id="feedbackPanelDecide" hidden>
-        <p class="feedback-explain">Кейсы, собранные второй линией, по убыванию приоритета. Откройте кейс, чтобы принять решение или вернуть его на доработку.</p>
+        <h3 class="feedback-section-title">Ждут решения</h3>
+        <p class="feedback-explain">Кейсы, собранные второй линией, по убыванию приоритета. «Принять» — берёте в работу, «Отклонить» — закрыть без изменений, либо вернуть на доработку.</p>
         <div class="loading-pulse" id="feedbackDecideLoading">Загрузка...</div>
         <div class="feedback-empty" id="feedbackDecideEmpty" hidden>Нет кейсов, ожидающих решения.</div>
         <div class="feedback-list" id="feedbackDecideList"></div>
+
+        <div class="feedback-section-head"><h3 class="feedback-section-title">Приняты — в работе</h3></div>
+        <p class="feedback-explain">Когда всё сделано, откройте кейс и нажмите «Завершить» — авторы увидят, что их обращение выполнено.</p>
+        <div class="loading-pulse" id="feedbackWorkLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackWorkEmpty" hidden>Нет принятых кейсов в работе.</div>
+        <div class="feedback-list" id="feedbackWorkList"></div>
     </div>
 
     <!-- ============ Модалка: новое обращение / правка своего ============
