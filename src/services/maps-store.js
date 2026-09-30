@@ -219,9 +219,8 @@ function normalizeZone(raw, budget) {
     article: str(raw.article, 120) || null,
     roles: normalizeLayerRoles(raw.roles),
     lockedMode: LOCKED_MODES.includes(raw.lockedMode) ? raw.lockedMode : 'lock',
-    // Туман войны: читателю без роли зоны (roles) область закрыта туманом —
-    // вместе с фоном под ней, а не просто не показана (см. buildViewerMap).
-    fog: raw.fog === true,
+    // Роли зоны заодно включают туман войны: читателю без них область закрыта
+    // туманом вместе с фоном под ней (см. buildViewerMap в map-access.js).
     style: normalizeStyle(raw.style),
     from: interval.from,
     to: interval.to,

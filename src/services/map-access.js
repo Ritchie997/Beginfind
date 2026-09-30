@@ -135,14 +135,15 @@ async function buildViewerMap(user, map) {
   };
   map.zones.forEach(visit);
 
-  // Туман войны: зона с fog, чьих ролей у читателя нет, — вместо зоны только
-  // её контур (без названия, типа, статьи), который просмотр закрашивает
-  // непрозрачно поверх фона. Вложенные зоны и метки внутри скрыты.
+  // Туман войны: у любой зоны с ролями («Кому видна зона») читатель без
+  // этих ролей вместо зоны получает только её контур (без названия, типа,
+  // статьи) — просмотр закрашивает его непрозрачно поверх фона. Всё внутри —
+  // вложенные зоны, метки (даже привязанные к другим зонам) — скрыто.
   const fog = [];
   for (const z of ordered) {
     const parentVisible = z.parentId ? visibility.get(z.parentId) !== false : true;
     const roleOk = bypass || rolesMatch(z.roles, user, serverRoleIds);
-    if (z.fog && !roleOk) fog.push({ id: z.id, from: z.from, to: z.to, shapes: z.shapes });
+    if (!roleOk) fog.push({ id: z.id, from: z.from, to: z.to, shapes: z.shapes });
     let visible = parentVisible && roleOk;
     let article = z.article;
     let articleTitle = null;

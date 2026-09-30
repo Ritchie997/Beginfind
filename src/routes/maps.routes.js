@@ -192,6 +192,10 @@ router.get('/maps/:id', auth.authenticateToken, auth.checkApproved, async (req, 
       zones: visible.zones,
       markers: visible.markers,
       fog: visible.fog,
+      // Предпросмотр тумана для тех, кто правит карту (владелец и админы
+      // тумана не видят — у них все роли): контуры всех туманных зон с
+      // ролями, как их видит читатель без этих ролей. Остальным не отдаём.
+      fogPreview: canEdit ? map.zones.filter((z) => z.roles.length).map((z) => ({ id: z.id, from: z.from, to: z.to, shapes: z.shapes })) : [],
       markerGroups: map.markerGroups,
       events: visible.events,
       timeline: map.timeline,

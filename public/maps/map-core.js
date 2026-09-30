@@ -572,12 +572,27 @@
       this.renderLabels();
     }
 
+    // В предпросмотре тумана подписи зон под ним прячем — у читателя без
+    // ролей этих зон просто нет.
+    applyFogLabels() {
+      const hidden = new Set(this.fogPreviewOn ? (this.data.fogPreview || []).map((f) => f.id) : []);
+      (this.labels || new Map()).forEach((l, id) => {
+        const el = l.marker.getElement();
+        if (el) el.classList.toggle('is-fogged', hidden.has(id));
+      });
+    }
+
     // Туман: форма на текущий момент шкалы, непрозрачная заливка.
     renderFog() {
       if (!this.fogRenderer) return;
       this.fogLayers.forEach((l) => l.remove());
       this.fogLayers = [];
-      (this.data.fog || []).forEach((f) => {
+      // Предпросмотр (только у тех, кто правит карту, см. fogPreview на
+      // сервере) — плюс туман, который увидел бы читатель без ролей зон.
+      const seen = new Set((this.data.fog || []).map((f) => f.id));
+      const list = [...(this.data.fog || []), ...(this.fogPreviewOn ? (this.data.fogPreview || []).filter((f) => !seen.has(f.id)) : [])];
+      this.applyFogLabels();
+      list.forEach((f) => {
         if (!existsAt(f, this.time)) return;
         const sh = f.shapes && f.shapes[shapeIndexAt(f, this.time)];
         if (!sh || !sh.polygon || !sh.polygon.length) return;
@@ -620,6 +635,7 @@
         }).addTo(this.map);
         this.labels.set(zone.id, { marker, pt, bbox: polygonBBox(zone.polygon), depth, text, zone });
       });
+      this.applyFogLabels();
       this.updateLabels();
     }
 
@@ -989,6 +1005,7 @@
     bindLayersPanel(panel) {
       panel.addEventListener('change', (e) => {
         if (e.target.closest('[data-solid]')) { this.setSolidZones(e.target.checked); return; }
+        if (e.target.closest('[data-fog-preview]')) { this.fogPreviewOn = e.target.checked; this.renderFog(); return; }
         const cb = e.target.closest('[data-layer]');
         if (!cb) return;
         const [kind, ...rest] = cb.dataset.layer.split(':');
@@ -1120,7 +1137,11 @@
         <div class="map-layers-section">
           <label class="map-layers-solid"><input type="checkbox" data-solid ${this.solidZones ? 'checked' : ''}> <i class="fas fa-fill-drip"></i> Сплошная заливка зон <span class="map-layers-note">(метки скрыты)</span></label>
         </div>` : '';
-      panel.innerHTML = solid + section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
+      const fogPreview = (this.data.fogPreview || []).length ? `
+        <div class="map-layers-section">
+          <label class="map-layers-solid" title="Вы видите карту целиком (у вас все роли). Так область увидит читатель без ролей туманных зон"><input type="checkbox" data-fog-preview ${this.fogPreviewOn ? 'checked' : ''}> <i class="fas fa-cloud"></i> Предпросмотр тумана <span class="map-layers-note">(как у читателя без ролей)</span></label>
+        </div>` : '';
+      panel.innerHTML = solid + fogPreview + section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
         || '<div class="map-layers-note">На карте пока нечего скрывать</div>';
     }
 

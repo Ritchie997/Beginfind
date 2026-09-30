@@ -1487,7 +1487,45 @@ body.map-panel-resizing .leaflet-container { pointer-events: none; }
   .me-align-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 }
 
-/* Предпросмотр тумана войны в редакторе */
-.me-tree-fog { flex: 0 0 auto; font-size: 11px; color: var(--text-muted); }
-.me-fog-preview-btn { margin: -4px 0 10px; }
-.me-fog-preview-btn.active { color: var(--green, #3ba55d); box-shadow: inset 0 0 0 1px var(--green, #3ba55d); }
+/* Пояснение про туман войны в свойствах зоны */
+.me-fog-note { margin: -4px 0 10px; }
+.me-fog-note i { margin-right: 4px; }
+
+/* Ластик: включённый переключатель — красным, чтобы не забыть, что кисть
+   и лассо сейчас режут, а не рисуют. */
+.me-tool.me-tool-eraser.active { color: #ed4245; box-shadow: inset 0 0 0 2px #ed4245; background: transparent; }
+.me-erasing .me-canvas { cursor: crosshair; }
+
+/* Контекстное меню зоны в редакторе (ПКМ в списке или на карте) */
+.me-ctx {
+  position: fixed;
+  z-index: 3500;
+  min-width: 220px;
+  max-width: 340px;
+  padding: 4px;
+  background: var(--background-floating, var(--background-secondary));
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.me-ctx-title { padding: 6px 10px 4px; font-size: 12px; font-weight: 600; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-ctx button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-normal);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.me-ctx button:hover { background: var(--background-accent); }
+.me-ctx button.is-danger { color: #ed4245; }
+.me-ctx button.is-danger:hover { background: rgba(237, 66, 69, .15); }
+.me-ctx button i { width: 14px; text-align: center; }
+
+.map-zone-label-anchor.is-fogged { display: none; }

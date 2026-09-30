@@ -246,6 +246,7 @@
               <span class="me-tools-sep"></span>
               <button type="button" class="me-tool me-tool-toggle" data-act="toggle-neighbors" title=""><i class="fas fa-object-ungroup"></i></button>
               <button type="button" class="me-tool me-tool-toggle" data-act="toggle-fog" title=""><i class="fas fa-cloud"></i></button>
+              <button type="button" class="me-tool me-tool-toggle me-tool-eraser" data-act="toggle-eraser" title=""><i class="fas fa-eraser"></i></button>
             </div>
             <div class="me-canvas-wrap">
               <div class="me-canvas"></div>
@@ -311,6 +312,7 @@
         case 'preview': this.preview(); break;
         case 'toggle-neighbors': this.setNeighborCut(!this.neighborCut); break;
         case 'toggle-fog': this.setFogPreview(!this.fogPreview); break;
+        case 'toggle-eraser': this.setEraser(!this.eraser); break;
       }
     }
 
@@ -561,6 +563,14 @@
           this.select(zone.id);
           this.setTool('vertex');
         });
+        // ПКМ по зоне на карте — то же меню, что в списке.
+        layer.on('contextmenu', (e) => {
+          L.DomEvent.stopPropagation(e);
+          L.DomEvent.preventDefault(e.originalEvent);
+          if (this.draw) return; // идёт рисование — не мешаем
+          this.select(zone.id);
+          this.openZoneMenu(zone.id, e.originalEvent.clientX, e.originalEvent.clientY);
+        });
         layer.bindTooltip(esc(zone.title || 'Без названия') + (this.existsNow(zone) ? '' : ' · сейчас не существует'), { sticky: true, direction: 'top', className: 'map-zone-tooltip', offset: [0, -8] });
         layer.addTo(this.map);
         const el = layer.getElement && layer.getElement();
@@ -587,14 +597,18 @@
         }
       });
       this.renderFogPreview();
+      if (this.fogPreview && this.map && !this.doc.zones.some((z) => (z.roles || []).length)) {
+        this.toast('На карте нет зон с ролями — туман появляется у зоны, когда в «Кому видна зона» заданы роли');
+      }
     }
 
+    // Туман — у каждой зоны с ролями: так её увидит читатель без этих ролей.
     renderFogPreview() {
       if (!this.fogLayer) return;
       this.fogLayer.clearLayers();
       if (!this.fogPreview) return;
       this.doc.zones.forEach((z) => {
-        if (!z.fog || !this.existsNow(z)) return;
+        if (!(z.roles || []).length || !this.existsNow(z)) return;
         const poly = this.zonePoly(z);
         if (!poly.length) return;
         L.polygon(MC().polygonToLatLngs(poly), {
@@ -624,7 +638,7 @@
       layer.setStyle(this.zoneStyle(zone));
       const el = layer.getElement && layer.getElement();
       if (el) el.classList.toggle('me-zone-absent', !this.existsNow(zone));
-      if (zone.fog && this.fogPreview) this.renderFogPreview(); // туман следует за правкой точек
+      if ((zone.roles || []).length && this.fogPreview) this.renderFogPreview(); // туман следует за правкой точек
     }
 
     // ----- Выбор и инструменты -----
@@ -709,6 +723,16 @@
     updateHint() {
       const t = TOOLS.find((x) => x.id === this.tool);
       let text = t ? t.hint : '';
+      // Ластик — своя подсказка вместо обычной (та говорит «добавляется к
+      // зоне», а сейчас всё наоборот).
+      const ERASER_HOW = {
+        brush: 'Зажмите кнопку мыши и ведите — мазок вырезается. [ и ] — размер кисти.',
+        lasso: 'Обведите область — она вырезается.',
+        polygon: 'Клик — точка, Enter / двойной клик — вырезать область.'
+      };
+      if (this.eraser && ERASER_HOW[this.tool]) {
+        text = `ЛАСТИК: вырезает из выбранной зоны, а если зона не выбрана — из всех задетых зон; так делают реки и озёра. ${ERASER_HOW[this.tool]} X — выключить ластик.`;
+      }
       if (this.draw && this.draw.kind === 'polygon') text = `Точек: ${this.draw.points.length}. ${text} Ctrl+Z — убрать последнюю точку.`;
       else if (this.pausedPoly) text = `Недорисованный контур (${this.pausedPoly.points.length} точек) ждёт — вернитесь к «Многоугольнику» (P), чтобы продолжить. ${text}`;
       this.el('hint').textContent = text;
@@ -1011,7 +1035,7 @@
         if (line.length > 1) L.polyline(line, { color: '#ffffff', weight: 2, dashArray: '5 5', interactive: false }).addTo(this.drawLayer);
         lls.forEach((ll, i) => L.circleMarker(ll, { radius: i === 0 ? 6 : 4, color: '#ffffff', weight: 2, fillColor: i === 0 ? '#faa81a' : '#5865f2', fillOpacity: 1, interactive: false }).addTo(this.drawLayer));
       } else if (this.draw.kind === 'lasso' && lls.length > 1) {
-        L.polyline(lls, { color: '#ffffff', weight: 2, interactive: false }).addTo(this.drawLayer);
+        L.polyline(lls, { color: this.eraser ? '#ed4245' : '#ffffff', weight: 2, interactive: false }).addTo(this.drawLayer);
       }
     }
 
@@ -1039,7 +1063,7 @@
 
     showBrushCursor(latlng) {
       if (!this._brushCursor) {
-        this._brushCursor = L.circleMarker(latlng, { radius: this.brushSize() / 2, color: '#ffffff', weight: 1.5, dashArray: '3 3', fill: false, interactive: false });
+        this._brushCursor = L.circleMarker(latlng, { radius: this.brushSize() / 2, color: this.eraser ? '#ed4245' : '#ffffff', weight: 1.5, dashArray: '3 3', fill: false, interactive: false });
       }
       this._brushCursor.setLatLng(latlng);
       if (!this.map.hasLayer(this._brushCursor)) this._brushCursor.addTo(this.map);
@@ -1055,7 +1079,7 @@
       const renderStroke = () => {
         this.drawLayer.clearLayers();
         const lls = this.draw.cps.map((p) => this.map.containerPointToLatLng(p));
-        const style = { color: this.draw.alt ? '#ed4245' : '#3ba55d', opacity: 0.45, weight: this.brushSize(), lineCap: 'round', lineJoin: 'round', interactive: false };
+        const style = { color: this.draw.alt || this.eraser ? '#ed4245' : '#3ba55d', opacity: 0.45, weight: this.brushSize(), lineCap: 'round', lineJoin: 'round', interactive: false };
         if (lls.length > 1) L.polyline(lls, style).addTo(this.drawLayer);
         else L.circleMarker(lls[0], { radius: this.brushSize() / 2, stroke: false, fillColor: style.color, fillOpacity: 0.45, interactive: false }).addTo(this.drawLayer);
       };
@@ -1296,6 +1320,7 @@
     applyNewShape(multi, mode) {
       multi = this.clipToImage(multi);
       if (!multi.length) { this.toast('Область целиком за краем карты'); return false; }
+      if (this.eraser) return this.eraseShape(multi);
       const clip = this.clip();
       const selected = this.zoneById(this.selectedId);
       const op = mode || (this.mods.shift ? 'add' : this.mods.alt ? 'cut' : 'new');
@@ -1351,6 +1376,59 @@
       this.afterZonesChanged({ keepLayers: false });
       const titleInput = this.root.querySelector('[data-prop="title"]');
       if (titleInput) { titleInput.focus(); titleInput.select(); }
+      return true;
+    }
+
+    // ----- Ластик -----
+    //
+    // Пока включён (кнопка с ластиком / X), кисть, лассо и многоугольник не
+    // создают зон, а вырезают нарисованное из зон — реки, озёра, проливы.
+    // Выбрана зона — режется только она; нет — все зоны, которые задел
+    // мазок (текущая версия границы). Зону, от которой не осталось бы
+    // ничего, не трогаем: удалять зону — отдельное явное действие.
+
+    setEraser(on) {
+      this.eraser = !!on;
+      const btn = this.root.querySelector('[data-act="toggle-eraser"]');
+      if (btn) {
+        btn.classList.toggle('active', this.eraser);
+        btn.title = this.eraser
+          ? 'Ластик: ВКЛ — кисть, лассо и многоугольник вырезают дыры в зонах (X)'
+          : 'Ластик: ВЫКЛ (X)';
+      }
+      this.wrapEl.classList.toggle('me-erasing', this.eraser);
+      if (this._brushCursor) this._brushCursor.setStyle({ color: this.eraser ? '#ed4245' : '#ffffff' });
+      this.updateHint();
+    }
+
+    eraseShape(multi) {
+      const clip = this.clip();
+      if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return false; }
+      const bb = MC().polygonBBox(multi);
+      const selected = this.zoneById(this.selectedId);
+      const targets = (selected ? [selected] : this.doc.zones).filter((z) => {
+        if (!this.existsNow(z)) return false;
+        const zb = MC().polygonBBox(this.zonePoly(z));
+        return zb && bb && zb.minX < bb.maxX && zb.maxX > bb.minX && zb.minY < bb.maxY && zb.maxY > bb.minY;
+      });
+      const changes = [];
+      let spared = 0;
+      targets.forEach((z) => {
+        let result;
+        try { result = cleanMulti(clip.difference(this.zonePoly(z), multi)); } catch (e) { return; }
+        if (!result.length) { spared++; return; }
+        if (pointCount(result) === pointCount(this.zonePoly(z)) && JSON.stringify(result) === JSON.stringify(this.zonePoly(z))) return; // не задело
+        changes.push([z, result]);
+      });
+      if (!changes.length) {
+        this.toast(spared ? 'Ластик закрыл бы зону целиком — зону так не удаляют, для этого есть «Удалить»' : 'Ластик не задел ни одной зоны');
+        return false;
+      }
+      this.pushHistory();
+      changes.forEach(([z, poly]) => this.setZonePoly(z, poly));
+      this.afterZonesChanged({ keepLayers: false });
+      const names = changes.map(([z]) => `«${z.title || 'без названия'}»`);
+      window.showMessage?.(`Вырезано из ${changes.length === 1 ? 'зоны' : 'зон'} ${names.slice(0, 4).join(', ')}${names.length > 4 ? ` и ещё ${names.length - 4}` : ''}${spared ? ` · ${spared} зон не тронуто — ластик закрыл бы их целиком` : ''}`, 'info');
       return true;
     }
 
@@ -1506,9 +1584,9 @@
         return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
           ${caret}
           <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
-          <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>${z.fog ? '<i class="fas fa-cloud me-tree-fog" title="Туман войны"></i>' : ''}
+          <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
           <span class="me-tree-type">${esc(t.name)}</span>
-          ${z.roles && z.roles.length ? '<i class="fas fa-lock me-tree-flag" title="Доступ ограничен ролями"></i>' : ''}
+          ${z.roles && z.roles.length ? '<i class="fas fa-cloud me-tree-flag" title="Доступ по ролям — остальным закрыта туманом войны"></i>' : ''}
           ${z.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
         </div>`;
       };
@@ -1618,6 +1696,14 @@
         const item = e.target.closest('[data-zone-id]');
         if (item) this.select(item.dataset.zoneId, { fly: true });
       };
+      // ПКМ по зоне в списке — меню «Объединить с нижней / Удалить».
+      tree.oncontextmenu = (e) => {
+        const item = e.target.closest('[data-zone-id]');
+        if (!item) return;
+        e.preventDefault();
+        this.select(item.dataset.zoneId);
+        this.openZoneMenu(item.dataset.zoneId, e.clientX, e.clientY);
+      };
       tree.ondragstart = (e) => {
         const mItem = e.target.closest('[data-marker-id][draggable]');
         if (mItem) {
@@ -1682,6 +1768,117 @@
         e.preventDefault();
         this.reparent(dragId, target.dataset.zoneId || null);
       };
+    }
+
+    // ----- Контекстное меню зоны (ПКМ в списке или на карте) -----
+
+    // Зона ниже в списке — следующая по порядку дерева среди зон того же
+    // уровня (тот же родитель, та же сортировка по названию). У последней
+    // в ветке её нет.
+    zoneBelow(id) {
+      const z = this.zoneById(id);
+      if (!z) return null;
+      const ids = new Set(this.doc.zones.map((x) => x.id));
+      const parentKey = z.parentId && ids.has(z.parentId) ? z.parentId : '';
+      const siblings = this.doc.zones
+        .filter((x) => (x.parentId && ids.has(x.parentId) ? x.parentId : '') === parentKey)
+        .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
+      const i = siblings.findIndex((x) => x.id === id);
+      return i >= 0 && i < siblings.length - 1 ? siblings[i + 1] : null;
+    }
+
+    openZoneMenu(id, x, y) {
+      this.closeZoneMenu();
+      const z = this.zoneById(id);
+      if (!z) return;
+      const below = this._treeQuery ? null : this.zoneBelow(id);
+      const menu = document.createElement('div');
+      menu.className = 'me-ctx';
+      menu.innerHTML = `
+        <div class="me-ctx-title">${esc(z.title || 'Без названия')}</div>
+        ${below ? `<button type="button" data-ctx="merge"><i class="fas fa-object-group"></i> Объединить с «${esc(below.title || 'Без названия')}» (ниже)</button>` : ''}
+        <button type="button" data-ctx="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>`;
+      document.body.appendChild(menu);
+      // В пределах окна.
+      const r = menu.getBoundingClientRect();
+      menu.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`;
+      menu.style.top = `${Math.min(y, window.innerHeight - r.height - 8)}px`;
+      menu.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-ctx]');
+        if (!b) return;
+        this.closeZoneMenu();
+        if (b.dataset.ctx === 'merge' && below) this.mergeZoneDown(id, below.id);
+        else if (b.dataset.ctx === 'delete') this.deleteZone(id);
+      });
+      menu.addEventListener('contextmenu', (e) => e.preventDefault());
+      this._zoneMenu = menu;
+      this._closeZoneMenuOn = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Escape') return;
+        if (e.type === 'mousedown' && menu.contains(e.target)) return;
+        this.closeZoneMenu();
+      };
+      setTimeout(() => {
+        document.addEventListener('mousedown', this._closeZoneMenuOn, true);
+        document.addEventListener('keydown', this._closeZoneMenuOn, true);
+        window.addEventListener('blur', this._closeZoneMenuOn);
+      }, 0);
+    }
+
+    closeZoneMenu() {
+      if (!this._zoneMenu) return;
+      this._zoneMenu.remove();
+      this._zoneMenu = null;
+      document.removeEventListener('mousedown', this._closeZoneMenuOn, true);
+      document.removeEventListener('keydown', this._closeZoneMenuOn, true);
+      window.removeEventListener('blur', this._closeZoneMenuOn);
+    }
+
+    // «Объединить с нижней» как в Photoshop: результат — нижняя зона (её
+    // название, тип, статья, роли, стиль), в неё вклеивается граница верхней.
+    // Версии границы склеиваются по каждой дате, где менялась хоть одна из
+    // двух; интервал существования — от более раннего начала до более
+    // позднего конца. Вложенные зоны, метки и связи событий верхней
+    // переходят к нижней, сама верхняя удаляется.
+    mergeZoneDown(upperId, lowerId) {
+      const upper = this.zoneById(upperId);
+      const lower = this.zoneById(lowerId);
+      const clip = this.clip();
+      if (!upper || !lower) return;
+      if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return; }
+      const froms = [...new Set([...(upper.shapes || []), ...(lower.shapes || [])].map((s) => (s.from === undefined ? null : s.from)))]
+        .sort((a, b) => (a === null ? -Infinity : a) - (b === null ? -Infinity : b));
+      const polyAt = (z, t) => { const sh = z.shapes && z.shapes[MC().shapeIndexAt(z, t)]; return (sh && sh.polygon) || []; };
+      let shapes;
+      try {
+        shapes = froms.map((f) => {
+          const a = polyAt(upper, f);
+          const b = polyAt(lower, f);
+          const polygon = a.length && b.length ? cleanMulti(clip.union(b, a)) : JSON.parse(JSON.stringify(a.length ? a : b));
+          return { from: f, polygon };
+        }).filter((s) => s.polygon.length);
+      } catch (err) {
+        this.toast(`Не удалось объединить контуры: ${err.message}`);
+        return;
+      }
+      if (!shapes.length) return;
+      shapes[0].from = null;
+      const minFrom = (a, b) => (a === null || a === undefined || b === null || b === undefined ? null : Math.min(a, b));
+      const maxTo = (a, b) => (a === null || a === undefined || b === null || b === undefined ? null : Math.max(a, b));
+
+      this.pushHistory();
+      lower.shapes = shapes;
+      lower.from = minFrom(lower.from, upper.from);
+      lower.to = maxTo(lower.to, upper.to);
+      this.doc.zones.forEach((z) => { if (z.parentId === upper.id) z.parentId = lower.id; });
+      (this.doc.markers || []).forEach((m) => { if (m.zoneId === upper.id) m.zoneId = lower.id; });
+      (this.doc.events || []).forEach((ev) => {
+        if (!Array.isArray(ev.zoneIds) || !ev.zoneIds.includes(upper.id)) return;
+        ev.zoneIds = [...new Set(ev.zoneIds.map((id) => (id === upper.id ? lower.id : id)))];
+      });
+      this.doc.zones = this.doc.zones.filter((z) => z.id !== upper.id);
+      this.selectedId = lower.id;
+      this.afterZonesChanged({ keepLayers: false });
+      window.showMessage?.(`«${upper.title || 'Без названия'}» объединена с «${lower.title || 'Без названия'}»`, 'info');
     }
 
     moveMarkerToGroup(markerId, groupId) {
@@ -1829,14 +2026,11 @@
         </label>
         <div class="me-field"><span>Кому видна зона</span>
           <div class="chip-field" data-el="zone-roles">
-            <div class="chip-field-box"><div class="chip-field-chips"></div><input type="text" class="chip-field-input" placeholder="Пусто — видна всем, кто видит карту"></div>
+            <div class="chip-field-box"><div class="chip-field-chips"></div><input type="text" class="chip-field-input" placeholder="Пусто — видна всем; с ролями — остальным туман"></div>
             <div class="chip-field-dropdown" hidden></div><input type="hidden" class="chip-field-hidden">
           </div>
         </div>
-        <label class="me-check" title="Работает, когда выше заданы роли: остальным читателям область закрыта туманом вместе с фоном, а вложенные зоны и метки в ней скрыты">
-          <input type="checkbox" data-prop="fog"${zone.fog ? ' checked' : ''}> Туман войны: без этих ролей область закрыта туманом
-        </label>
-        <button type="button" class="btn btn-secondary btn-sm me-fog-preview-btn${this.fogPreview ? ' active' : ''}" data-act="toggle-fog" ${zone.fog ? '' : 'hidden'}><i class="fas fa-cloud"></i> Предпросмотр тумана</button>
+        <p class="me-field-note me-fog-note"><i class="fas fa-cloud"></i> С ролями — туман войны: остальным читателям область закрыта туманом вместе с фоном, а всё внутри (вложенные зоны, метки, названия) скрыто. Посмотреть, как это выглядит, — кнопка с облаком слева или F.</p>
         <label class="me-field"><span>Если статья читателю закрыта</span>
           <select class="form-select" data-prop="lockedMode">
             <option value="lock"${zone.lockedMode !== 'hide' ? ' selected' : ''}>Показать зону с замком</option>
@@ -1876,6 +2070,7 @@
             zone.roles = values.map(decodeRoleRef).filter(Boolean);
             this.markDirty();
             this.renderTree();
+            this.renderFogPreview(); // роли зоны = её туман
           }
         });
         this.propsRolesField.setValues((zone.roles || []).map(encodeRoleRef));
@@ -2090,15 +2285,6 @@
       else if (f === 'typeId') { zone.typeId = v || null; this.refreshZoneLayer(zone); this.renderTree(); }
       else if (f === 'parentId') { this.undoStack.pop(); this.reparent(zone.id, v || null); return; }
       else if (f === 'lockedMode') zone.lockedMode = v === 'hide' ? 'hide' : 'lock';
-      else if (f === 'fog') {
-        if (zone.fog === input.checked) { this.undoStack.pop(); this._propHistoryPushed = false; return; } // input+change от одного клика
-        zone.fog = input.checked;
-        const previewBtn = this.root.querySelector('.me-fog-preview-btn');
-        if (previewBtn) previewBtn.hidden = !zone.fog;
-        this.renderFogPreview();
-        this.renderTree();
-        if (zone.fog && !(zone.roles || []).length) this.toast('Туман войны включён, но у зоны нет ролей — задайте в «Кому видна зона», кто уже исследовал эту область');
-      }
       else if (f === 'article') {
         const text = v.trim();
         const byTitle = this.articles.find((a) => a.title.toLowerCase() === text.toLowerCase());
@@ -3501,6 +3687,7 @@
         return;
       }
       if (key === 'f') { this.setFogPreview(!this.fogPreview); return; }
+      if (key === 'x') { this.setEraser(!this.eraser); return; }
       if (key === 'n') { this.setNeighborCut(!this.neighborCut); this.toast(this.neighborCut ? 'Новые зоны не заходят на соседние' : 'Зоны могут накладываться на соседние'); return; }
       const tool = TOOLS.find((t) => t.key === key);
       if (tool) this.setTool(tool.id);
@@ -3537,6 +3724,7 @@
       clearInterval(this._pollTimer);
       clearTimeout(this._draftTimer);
       if (this._alignOpen && this._closeAlign) this._closeAlign();
+      this.closeZoneMenu();
       this.root.removeEventListener('click', this._onRootClick);
       document.removeEventListener('keydown', this._onKeyDown);
       document.removeEventListener('keyup', this._onKeyUp);
