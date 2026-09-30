@@ -216,6 +216,17 @@ function recordView(userId, slug) {
   });
 }
 
+// Просмотры всех статей разом (slug -> число) — для сортировки витрины
+// "по просмотрам" (см. GET /articles/browse). Статей без просмотров в Map нет.
+function getAllViewCounts() {
+  return new Promise((resolve, reject) => {
+    socialDb.all('SELECT article_slug, COUNT(*) as count FROM article_views GROUP BY article_slug', [], (err, rows) => {
+      if (err) { reject(err); return; }
+      resolve(new Map((rows || []).map((r) => [r.article_slug, r.count])));
+    });
+  });
+}
+
 function getViewCount(slug) {
   return new Promise((resolve, reject) => {
     socialDb.get('SELECT COUNT(*) as count FROM article_views WHERE article_slug = ?', [slug], (err, row) => {
@@ -304,6 +315,7 @@ module.exports = {
   getCountsForSlugs,
   recordView,
   getViewCount,
+  getAllViewCounts,
   toggleReaction,
   getReactionsForTargets
 };

@@ -607,6 +607,7 @@ function searchArticles(query, { limit = 50, offset = 0 } = {}) {
 // закрыта по ролям для конкретного пользователя.
 function filterArticles(opts = {}) {
   const {
+    viewCounts = null,
     q = '',
     tags = [],
     server = '',
@@ -677,9 +678,15 @@ function filterArticles(opts = {}) {
     case 'updated':
       sorted.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
       break;
-    case 'views':
-      sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
+    case 'views': {
+      // viewCounts — реальные просмотры из social.db (article_views), их
+      // передаёт вызывающий код. Поле article.views — легаси из файла статьи,
+      // оно не обновляется при просмотрах; на него — только запасной вариант.
+      const views = (a) => (viewCounts ? viewCounts.get(a.slug) || 0 : a.views || 0);
+      sorted.sort((a, b) => views(b) - views(a)
+        || new Date(b.created_at || 0) - new Date(a.created_at || 0));
       break;
+    }
     case 'alpha':
       sorted.sort((a, b) => a.title.localeCompare(b.title, 'ru'));
       break;

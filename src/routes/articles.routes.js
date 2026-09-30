@@ -456,7 +456,8 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const tags = tag ? String(tag).split(',').map((s) => s.trim()).filter(Boolean) : [];
     const lockedFilter = locked === 'true' ? true : locked === 'false' ? false : undefined;
 
-    const filtered = store.filterArticles({ q, tags, server, locked: lockedFilter, dateFrom, dateTo, sort });
+    const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
+    const filtered = store.filterArticles({ q, tags, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический
     // размер страницы врали бы из-за статей, закрытых по ролям для этого
