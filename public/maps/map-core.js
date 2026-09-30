@@ -274,7 +274,9 @@
     return { ...s, fillOpacity: Math.min(1, s.fillOpacity + 0.25), opacity: 1 };
   }
 
-  const FALLBACK_MARKER_TYPE = { id: null, name: 'Метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 };
+  const SOLID_ZONES_KEY = 'beginfind_map_solid_zones';
+
+  const FALLBACK_MARKER_TYPE ={ id: null, name: 'Метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 };
 
   function zoneDepths(zones) {
     const byId = new Map(zones.map((z) => [z.id, z]));
@@ -363,6 +365,10 @@
       // Скрытые читателем типы зон и меток («Слои»); '__none' — без типа.
       this.hiddenZoneTypes = new Set();
       this.hiddenMarkerTypes = new Set();
+      // Режим «Сплошная заливка»: метки скрыты, зоны залиты плотно (см.
+      // .map-viewer-solid в maps.css). Запоминается в браузере читателя.
+      this.solidZones = false;
+      try { this.solidZones = localStorage.getItem(SOLID_ZONES_KEY) === '1'; } catch (e) { /* нет доступа к хранилищу */ }
       // Убранное автором вставки — не путать со «Слоями» читателя: такие
       // зоны и метки не показываются вовсе (а не полупрозрачными).
       const ex = opts.hiddenLayers || {};
@@ -390,6 +396,7 @@
       const { data, opts } = this;
       const embed = opts.mode === 'embed';
       this.container.classList.add('map-viewer', embed ? 'map-viewer-embed' : 'map-viewer-page');
+      this.container.classList.toggle('map-viewer-solid', this.solidZones);
 
       this.mapEl = document.createElement('div');
       this.mapEl.className = 'map-viewer-canvas';
@@ -950,6 +957,7 @@
 
     bindLayersPanel(panel) {
       panel.addEventListener('change', (e) => {
+        if (e.target.closest('[data-solid]')) { this.setSolidZones(e.target.checked); return; }
         const cb = e.target.closest('[data-layer]');
         if (!cb) return;
         const [kind, ...rest] = cb.dataset.layer.split(':');
@@ -1031,6 +1039,19 @@
       return this.hiddenZoneTypes.has(z.typeId || '__none');
     }
 
+    // «Сплошная заливка»: скрыть метки и залить зоны плотно — чтобы границы
+    // зон читались, когда в обычном виде они почти сливаются с подложкой.
+    setSolidZones(on) {
+      this.solidZones = !!on;
+      this.container.classList.toggle('map-viewer-solid', this.solidZones);
+      try { localStorage.setItem(SOLID_ZONES_KEY, this.solidZones ? '1' : '0'); } catch (e) { /* нет доступа к хранилищу */ }
+      if (this.solidZones && this.selectedMarkerId) {
+        this.clearMarkerSelection();
+        this.renderCard();
+      }
+      if (this.opts.onGroupsChange) this.opts.onGroupsChange();
+    }
+
     afterLayersChange() {
       this.updateZoomVisibility();
       this.updateLabels();
@@ -1064,7 +1085,11 @@
         return { id, name: id === '__none' ? 'Без типа' : t.name, count: markers.filter((m) => (m.typeId || '__none') === id && !this.isMarkerExcluded(m)).length, icon: `<i class="fas fa-${escapeHtml(t.icon)}" style="color:${escapeHtml(t.color)}"></i>` };
       });
       const groupRows = this.layerIds('g').map((id) => this.markerGroups.find((g) => g.id === id)).map((g) => ({ id: g.id, name: g.name, count: markers.filter((m) => m.groupId === g.id && !this.isMarkerExcluded(m)).length, icon: '<i class="fas fa-folder"></i>' }));
-      panel.innerHTML = section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
+      const solid = zones.length ? `
+        <div class="map-layers-section">
+          <label class="map-layers-solid"><input type="checkbox" data-solid ${this.solidZones ? 'checked' : ''}> <i class="fas fa-fill-drip"></i> Сплошная заливка зон <span class="map-layers-note">(метки скрыты)</span></label>
+        </div>` : '';
+      panel.innerHTML = solid + section('zt', 'Зоны', zoneRows) + section('mt', 'Метки', markerRows) + section('g', 'Группы меток', groupRows)
         || '<div class="map-layers-note">На карте пока нечего скрывать</div>';
     }
 

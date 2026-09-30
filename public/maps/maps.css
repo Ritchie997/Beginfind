@@ -1344,3 +1344,13 @@ details.world-type:not([open]) .world-row-btns { opacity: .6; }
 .eb-map-markers-list { display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow-y: auto; padding: 4px 0; }
 .eb-map-markers-list .eb-map-check { font-size: 12px; }
 .eb-map-markers-list .eb-map-check[hidden] { display: none; }
+
+/* ===== Режим «Сплошная заливка зон» (см. MapViewer.setSolidZones) =====
+   Метки скрыты целиком, зоны залиты плотно. CSS-свойство fill-opacity
+   перекрывает атрибут, который Leaflet ставит по типу зоны. */
+.map-viewer-solid .leaflet-marker-pane { display: none; }
+.map-viewer-solid .map-zone { fill-opacity: .7; stroke-opacity: 1; }
+.map-viewer-solid .map-zone:hover,
+.map-viewer-solid .map-zone.map-zone-selected { fill-opacity: .88; }
+.map-layers-solid { display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; flex-wrap: wrap; }
+.map-layers-solid .map-layers-note { padding: 0; }
