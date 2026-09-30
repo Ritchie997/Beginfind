@@ -3246,7 +3246,7 @@
       try { localStorage.removeItem(this.draftKey()); } catch (e) { /* нет доступа — ничего страшного */ }
     }
 
-    offerDraftRestore() {
+    async offerDraftRestore() {
       let draft = null;
       try { draft = JSON.parse(localStorage.getItem(this.draftKey()) || 'null'); } catch (e) { draft = null; }
       if (!draft || !Array.isArray(draft.zones)) return;
@@ -3254,9 +3254,16 @@
       const when = new Date(draft.savedAt).toLocaleString('ru-RU');
       const stale = draft.baseUpdatedAt !== this.baseUpdatedAt;
       const msg = stale
-        ? `Есть несохранённый черновик этой карты от ${when}, но с тех пор карту сохранили заново (возможно, кто-то другой). Восстановить черновик? Более новые изменения при сохранении будут перезаписаны.`
-        : `Есть несохранённый черновик этой карты от ${when}. Восстановить его?`;
-      if (!confirm(msg)) { this.clearDraft(); return; }
+        ? `Есть несохранённый черновик этой карты от ${when}, но с тех пор карту сохранили заново (возможно, кто-то другой). Если восстановить, более новые изменения при сохранении будут перезаписаны.`
+        : `Есть несохранённый черновик этой карты от ${when}.`;
+      const choice = await this.choose('Черновик карты', msg, [
+        { label: 'Отбросить', value: 'drop', variant: 'secondary' },
+        { label: 'Восстановить', value: 'restore', variant: 'primary' }
+      ]);
+      if (!this.map) return; // редактор уже закрыли, пока окно было открыто
+      // Отмена (Esc/крестик) — черновик не трогаем: спросим при следующем открытии.
+      if (choice === 'drop') { this.clearDraft(); return; }
+      if (choice !== 'restore') return;
       this.pushHistory();
       this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline, markerGroups: draft.markerGroups || this.doc.markerGroups || [] };
       const CAL = window.MapCalendar;
@@ -3317,7 +3324,10 @@
       const res = await window.MapsUI.api(`/api/maps/${this.mapId}`, 'PUT', body);
       if (res.status === 409) {
         this.setStatus('Конфликт версий', 'error');
-        if (confirm('Эту карту уже сохранил кто-то другой после того, как вы открыли редактор. Перезаписать его изменения вашими?')) return this.saveOnce({ force: true });
+        const choice = await this.choose('Карту уже изменили', 'Эту карту уже сохранил кто-то другой после того, как вы открыли редактор. Перезаписать его изменения вашими?', [
+          { label: 'Перезаписать', value: 'force', variant: 'danger' }
+        ]);
+        if (choice === 'force') return this.saveOnce({ force: true });
         return;
       }
       if (!res.success || !res.data || !res.data.updated_at) {
@@ -3361,13 +3371,40 @@
       return parts.length ? parts.join(', ') : null;
     }
 
+    // Выбор в окне приложения (не браузерный confirm). Без confirm-dialog.js
+    // — запасной системный confirm: true → первый вариант.
+    async choose(title, message, buttons) {
+      if (window.confirmDialog && window.confirmDialog.choose) return window.confirmDialog.choose({ title, message, buttons });
+      return confirm(message) ? buttons[0].value : null;
+    }
+
+    // Несохранённые правки перед уходом из редактора: 'save' — сохранить,
+    // 'discard' — отбросить (черновик тоже, чтобы потом о нём не спрашивали),
+    // null — остаться. Правок нет — сразу 'clean'.
+    async askLeave(actionLabel) {
+      if (!this.dirty) return 'clean';
+      const choice = await this.choose('Несохранённые изменения', 'На карте есть несохранённые изменения. Сохранить их?', [
+        { label: 'Не сохранять', value: 'discard', variant: 'secondary' },
+        { label: `Сохранить и ${actionLabel}`, value: 'save', variant: 'primary' }
+      ]);
+      if (choice === 'save') {
+        await this.save();
+        if (this.dirty) return null; // сохранить не вышло — остаёмся, ошибка уже показана
+      } else if (choice === 'discard') {
+        this.dirty = false;
+        clearTimeout(this._draftTimer);
+        this.clearDraft();
+      }
+      return choice;
+    }
+
     async preview() {
-      if (this.dirty && confirm('Сохранить изменения перед просмотром?')) await this.save();
+      if (!(await this.askLeave('открыть просмотр'))) return;
       window.MapsUI.openMapPage(this.mapId, { zoneId: this.selectedId });
     }
 
-    close() {
-      if (this.dirty && !confirm('Есть несохранённые изменения. Они останутся в черновике и будут предложены при следующем открытии редактора. Закрыть?')) return;
+    async close() {
+      if (!(await this.askLeave('выйти'))) return;
       window.MapsUI.goBack();
     }
 
@@ -3388,10 +3425,12 @@
       // метка/точка зоны «прилипла» бы к курсору. Первое же движение без
       // зажатой кнопки завершает перетаскивание как обычное отпускание.
       this._onMouseMoveCapture = (e) => { if (e.buttons === 0) this.finishStuckDrag(); };
-      this._onBeforeUnload = (e) => {
+      // Закрытие вкладки/перезагрузка: системное окно браузера «Покинуть
+      // сайт?» не показываем — правки и недорисованный контур и так пишутся
+      // в черновик, и при следующем открытии редактор предложит их вернуть.
+      this._onBeforeUnload = () => {
         this.saveDrawing();
         if (this.dirty) this.writeDraft();
-        if (this.dirty || this.currentPolyDraw()) { e.preventDefault(); e.returnValue = ''; }
       };
       document.addEventListener('keydown', this._onKeyDown);
       document.addEventListener('keyup', this._onKeyUp);

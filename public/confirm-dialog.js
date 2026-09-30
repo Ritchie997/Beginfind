@@ -54,19 +54,55 @@
         resolve?.(result);
       };
 
-      overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); });
-      overlay.querySelector('#confirmDialogCloseBtn').addEventListener('click', () => finish(false));
-      overlay.querySelector('#confirmDialogCancelBtn').addEventListener('click', () => finish(false));
+      // Отмена (крестик, фон, Esc) — false у open() и null у choose().
+      const cancel = () => finish(this._mode === 'choose' ? null : false);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) cancel(); });
+      overlay.querySelector('#confirmDialogCloseBtn').addEventListener('click', cancel);
+      overlay.querySelector('#confirmDialogCancelBtn').addEventListener('click', cancel);
       overlay.querySelector('#confirmDialogConfirmBtn').addEventListener('click', () => finish(true));
+      overlay.querySelector('.modal-footer').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-choice]');
+        if (btn) finish(btn.dataset.choice);
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !overlay.hidden) { e.stopPropagation(); cancel(); }
+      }, true);
 
       this._els = {
         overlay,
         title: overlay.querySelector('#confirmDialogTitle'),
         message: overlay.querySelector('#confirmDialogMessage'),
+        footer: overlay.querySelector('.modal-footer'),
+        cancelBtn: overlay.querySelector('#confirmDialogCancelBtn'),
         confirmBtn: overlay.querySelector('#confirmDialogConfirmBtn'),
         finish
       };
       return this._els;
+    }
+
+    // Выбор из нескольких вариантов (например «Сохранить» / «Не сохранять»)
+    // вместо цепочки window.confirm(). buttons — [{ label, value, variant }],
+    // variant: 'primary' | 'danger' | 'secondary'. Кнопка «Отмена» всегда
+    // есть; отмена (и Esc, и клик мимо окна) — null.
+    choose({ title = 'Подтверждение', message = '', buttons = [] } = {}) {
+      const els = this.ensureModal();
+      if (this._resolve) els.finish(this._mode === 'choose' ? null : false);
+      this._mode = 'choose';
+      els.title.textContent = title;
+      els.message.textContent = message;
+      // style, а не hidden: у .btn свой display, он перебивает [hidden].
+      els.confirmBtn.style.display = 'none';
+      els.footer.querySelectorAll('[data-choice]').forEach((b) => b.remove());
+      buttons.forEach((b) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `btn btn-${b.variant || 'secondary'}`;
+        btn.dataset.choice = b.value;
+        btn.textContent = b.label;
+        els.footer.appendChild(btn);
+      });
+      els.overlay.hidden = false;
+      return new Promise((resolve) => { this._resolve = resolve; });
     }
 
     // { title, message, confirmLabel, danger } — danger (по умолчанию true)
@@ -78,7 +114,10 @@
       // Предыдущий open(), если он ещё не закрыт (не должно случаться при
       // нормальном использовании — модалка модальна), разрешаем как false,
       // чтобы не оставить "зависший" Promise.
-      if (this._resolve) els.finish(false);
+      if (this._resolve) els.finish(this._mode === 'choose' ? null : false);
+      this._mode = 'confirm';
+      els.footer.querySelectorAll('[data-choice]').forEach((b) => b.remove());
+      els.confirmBtn.style.display = '';
 
       els.title.textContent = title;
       els.message.textContent = message;

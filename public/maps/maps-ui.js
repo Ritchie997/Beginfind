@@ -45,9 +45,16 @@
     window.spaRouter?.navigateTo(`/map/${mapId}/edit`);
   }
 
+  // «Назад» со страницы карты или редактора — сразу туда, откуда пришли в
+  // карты (вкладка сервера, раздел «Карты», статья…), одним нажатием. Раньше
+  // это был history.back(): после «редактор → просмотр → редактор» приходилось
+  // жать несколько раз, и каждый шаг снова открывал редактор с вопросом о
+  // черновике. Сколько подряд записей истории — страницы карт, spa-router
+  // пишет в history.state.mapDepth.
   function goBack() {
-    if (window.history.length > 1) window.history.back();
-    else window.spaRouter?.navigateTo('/ibripedia');
+    const depth = window.history.state && Number(window.history.state.mapDepth);
+    if (depth > 0 && window.history.length > depth) window.history.go(-depth);
+    else window.spaRouter?.navigateTo('/maps');
   }
 
   // ===== Страница просмотра =====
@@ -115,8 +122,14 @@
   }
 
   function bindPageActions(root, viewer, data) {
-    root.querySelector('[data-act="edit"]')?.addEventListener('click', () => {
-      if (window.MapCore.isTouchUi() && !confirm('Редактор карт сейчас рассчитан на компьютер (мышь и клавиатура). Открыть всё равно?')) return;
+    root.querySelector('[data-act="edit"]')?.addEventListener('click', async () => {
+      if (window.MapCore.isTouchUi()) {
+        const msg = 'Редактор карт сейчас рассчитан на компьютер (мышь и клавиатура). Открыть всё равно?';
+        const ok = window.confirmDialog
+          ? await window.confirmDialog.open({ title: 'Редактор карты', message: msg, confirmLabel: 'Открыть', danger: false })
+          : confirm(msg);
+        if (!ok) return;
+      }
       openMapEditor(data.id);
     });
     root.querySelector('[data-act="zones"]')?.addEventListener('click', () => toggleZonePanel(root, viewer, data));

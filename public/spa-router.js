@@ -185,7 +185,12 @@ class SPARouter {
 
         // Update URL if needed
         if (updateHistory) {
-          history.pushState({}, '', normalizedPath);
+          // mapDepth — сколько записей подряд (включая эту) — страницы карт
+          // (/map/:id и /map/:id/edit): по нему «Назад» карт уходит сразу на
+          // страницу до них (см. MapsUI.goBack).
+          const isMapRoute = routeKey === '/map' || routeKey === '/map-edit';
+          const prevDepth = (history.state && Number(history.state.mapDepth)) || 0;
+          history.pushState(isMapRoute ? { mapDepth: prevDepth + 1 } : {}, '', normalizedPath);
         }
 
         // Update page title
