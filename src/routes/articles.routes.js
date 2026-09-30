@@ -349,18 +349,17 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
   if (resolved) {
     let index = resolved.index;
     const requested = Number(requestedLayerIndex);
-    if (Number.isInteger(requested) && requested >= 0 && requested <= resolved.index) {
+    if (Number.isInteger(requested) && resolved.accessible.includes(requested)) {
       index = requested;
     }
     viewLayer = resolved.layers[index];
     layerIndex = index;
-    layerCount = resolved.layers.length;
-    // Варианты для переключателя слоя на клиенте — только слои от 0 до
-    // максимума, до которого читатель "дотягивается" (каскад вниз, см.
-    // обсуждение) — то, что выше, ему не резолвилось и сюда не попадает.
-    layerOptions = resolved.layers.slice(0, resolved.index + 1).map((l, i) => ({
+    layerCount = resolved.accessible.length;
+    // Варианты для переключателя слоя на клиенте — только слои, доступные
+    // читателю (см. resolveArticleLayer) — остальные сюда не попадают.
+    layerOptions = resolved.accessible.map((i) => ({
       index: i,
-      title: l.title || article.title || article.slug
+      title: resolved.layers[i].title || article.title || article.slug
     }));
   }
 
@@ -538,7 +537,7 @@ router.get('/articles/:id', auth.authenticateToken, auth.checkApproved, async (r
 
 // Полный доступный пользователю "стек" слоёв статьи разом — для панели
 // "Слои" в редакторе (в отличие от GET /articles/:id?layer=N, который отдаёт
-// ОДИН слой за раз для читалки). Слои ВЫШЕ резолвнутого максимума в ответ не
+// ОДИН слой за раз для читалки). Недоступные пользователю слои в ответ не
 // попадают — тот же принцип, что и в formatArticleResponse/layerOptions.
 router.get('/articles/:id/layers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -550,7 +549,7 @@ router.get('/articles/:id/layers', auth.authenticateToken, auth.checkApproved, a
     if (!resolved) {
       return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
-    const reachable = resolved.layers.slice(0, resolved.index + 1).map((l) => ({
+    const reachable = resolved.accessible.map((i) => resolved.layers[i]).map((l) => ({
       ...l,
       content: updateImageUrlsInContent(l.content, req),
       image: formatImageUrl(l.image, req)

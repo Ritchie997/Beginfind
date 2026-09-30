@@ -12,10 +12,10 @@
 // относительно друга не сравнивается — только принадлежность роли (см.
 // обсуждение "многослойные статьи", пункт A: "никаких числовых порогов").
 //
-// Читателю резолвится САМЫЙ ВЕРХНИЙ слой, до чьих ролей он "дотягивается";
-// достигнув его, он может произвольно спуститься к любому слою ниже —
-// доступ выше автоматически даёт доступ и ко всему, что ниже (см. пункт D,
-// "селектор" в клиенте).
+// Читателю доступны ТОЛЬКО слои, в чьих ролях он есть (плюс публичные);
+// по умолчанию показывается самый верхний из них, между доступными можно
+// переключаться (см. пункт D, "селектор" в клиенте). Каскада "доступ выше
+// даёт доступ ко всему ниже" больше нет — см. resolveArticleLayer.
 //
 // Статья БЕЗ layers (обычная, как было до этой фичи) — с точки зрения этого
 // модуля один "виртуальный" слой, синтезированный из старых полей
@@ -178,30 +178,41 @@ function layerRolesMatch(roles, user, userServerRoleIds) {
 }
 
 /**
- * Резолвит для пользователя самый верхний слой статьи, до которого он
- * "дотягивается" своими ролями (общесистемной ИЛИ ролью на сервере статьи).
- * Владелец и доверенный админ (см. bypassesArticleLock) сразу получают самый
- * верхний (закрытый) слой, без проверки списков ролей.
- * @returns {Promise<{index:number, layer:object, layers:object[]}|null>}
- *   null — нет доступа НИ К ОДНОМУ слою (используется для узла-заглушки в
- *   графе и маркера "[не доступно]" у wiki-ссылок).
+ * Резолвит для пользователя доступные ему слои статьи и самый верхний из них
+ * (его читалка показывает по умолчанию). Доступ — ПОСЛОЙНЫЙ: слой виден,
+ * только если роль читателя (общесистемная ИЛИ на сервере статьи) есть в
+ * списке ролей ИМЕННО ЭТОГО слоя, либо слой публичный.
+ *
+ * Раньше был каскад "дотянулся до слоя i — видишь и все слои ниже". Со
+ * свободной перестановкой слоёв в редакторе это стало дырой: публичный слой,
+ * поставленный выше закрытого, открывал закрытый любому читателю; а роль,
+ * чей слой просто оказался выше, видела слои чужих ролей под ним.
+ *
+ * Владелец и доверенный админ (см. bypassesArticleLock) видят все слои.
+ * @returns {Promise<{index:number, layer:object, layers:object[], accessible:number[]}|null>}
+ *   index — самый верхний доступный слой; accessible — индексы всех
+ *   доступных слоёв по возрастанию. null — нет доступа НИ К ОДНОМУ слою
+ *   (используется для узла-заглушки в графе и маркера "[не доступно]" у
+ *   wiki-ссылок).
  */
 async function resolveArticleLayer(article, user) {
   const layers = getEffectiveLayers(article);
   if (!layers.length) return null;
-  const topIndex = layers.length - 1;
 
-  if (bypassesArticleLock(user)) return { index: topIndex, layer: layers[topIndex], layers };
-
-  const serverId = articleServerId(article);
-  const userServerRoleIds = serverId ? await getUserServerRoleIds(user.id, serverId) : [];
-  for (let i = topIndex; i >= 0; i--) {
-    if (layers[i].lockedNoRoles) continue;
-    if (layerRolesMatch(layers[i].roles, user, userServerRoleIds)) {
-      return { index: i, layer: layers[i], layers };
-    }
+  let accessible;
+  if (bypassesArticleLock(user)) {
+    accessible = layers.map((_, i) => i);
+  } else {
+    const serverId = articleServerId(article);
+    const userServerRoleIds = serverId ? await getUserServerRoleIds(user.id, serverId) : [];
+    accessible = [];
+    layers.forEach((l, i) => {
+      if (!l.lockedNoRoles && layerRolesMatch(l.roles, user, userServerRoleIds)) accessible.push(i);
+    });
   }
-  return null;
+  if (!accessible.length) return null;
+  const index = accessible[accessible.length - 1];
+  return { index, layer: layers[index], layers, accessible };
 }
 
 /**
@@ -214,13 +225,12 @@ async function hasArticleAccess(article, user) {
 
 /**
  * Может ли пользователь прочитать/редактировать слой с данным индексом —
- * "максимально себе доступный": да, если этот слой не выше того, что ему и
- * так резолвится (все слои НИЖЕ достигнутого — тоже доступны, см. каскад).
+ * только если сам этот слой ему доступен (см. resolveArticleLayer).
  */
 async function canAccessLayerIndex(article, user, layerIndex) {
   const resolved = await resolveArticleLayer(article, user);
   if (!resolved) return false;
-  return layerIndex <= resolved.index;
+  return resolved.accessible.includes(layerIndex);
 }
 
 /**
@@ -255,13 +265,12 @@ function findAmbiguousPublicLayer(layers) {
 
 // === Слияние слоёв при PUT /articles/:id ===
 //
-// Клиент присылает layers = [слой0 .. слойK] — ровно то, что сам видел (все
-// слои от 0 до своего резолвнутого максимума M "до" правки), возможно
-// отредактированные/удалённые/переставленными местами (см. ручная
-// перестановка слоёв в редакторе), возможно с НОВЫМИ слоями. Всё, что
-// физически лежало ВЫШЕ M в уже сохранённой статье, клиент никогда не
-// получал через GET — оно молча сохраняется как есть следом за тем, что
-// прислал клиент, а не перетирается и не отдаётся ему на просмотр.
+// Клиент присылает layers — ровно то, что сам видел (доступные ему слои "до"
+// правки), возможно отредактированные/удалённые/переставленными местами (см.
+// ручная перестановка слоёв в редакторе), возможно с НОВЫМИ слоями. Слои,
+// которые ему недоступны, клиент никогда не получал через GET — они молча
+// сохраняются как есть на своих прежних позициях, а не перетираются и не
+// отдаются ему на просмотр.
 //
 // Роли КАЖДОГО присланного слоя проверяются через canCreateLayerWithRoles —
 // не только тех, что выше прежнего индекса M (как было раньше). Раньше слой,
@@ -275,7 +284,6 @@ function findAmbiguousPublicLayer(layers) {
 // @returns {Promise<{layers:object[]}|{error:string}>}
 async function mergeLayersUpdate(existingArticle, user, bodyLayers) {
   const before = await resolveArticleLayer(existingArticle, user);
-  const maxIndex = before ? before.index : -1;
 
   for (const layer of bodyLayers) {
     const ok = await canCreateLayerWithRoles(existingArticle, user, layer && layer.roles);
@@ -284,9 +292,16 @@ async function mergeLayersUpdate(existingArticle, user, bodyLayers) {
     }
   }
 
-  const normalizedPart = normalizeLayers(bodyLayers);
-  const preservedTail = getEffectiveLayers(existingArticle).slice(maxIndex + 1);
-  const merged = [...normalizedPart, ...preservedTail];
+  // Слои, недоступные редактору (см. послойный доступ в resolveArticleLayer),
+  // могут лежать где угодно в стеке, а не только выше доступных — клиент их
+  // не видел и не прислал. Возвращаем каждый на прежнюю позицию (или в конец,
+  // если присланных слоёв стало меньше), по возрастанию исходного индекса.
+  const merged = normalizeLayers(bodyLayers);
+  const accessible = new Set(before ? before.accessible : []);
+  getEffectiveLayers(existingArticle).forEach((layer, i) => {
+    if (accessible.has(i)) return;
+    merged.splice(Math.min(i, merged.length), 0, layer);
+  });
 
   const ambiguous = findAmbiguousPublicLayer(merged);
   if (ambiguous) {
