@@ -202,7 +202,11 @@
       this.canvasEl = this.root.querySelector('.me-canvas');
       this.wrapEl = this.root.querySelector('.me-canvas-wrap');
 
-      this.root.addEventListener('click', (e) => this.onRootClick(e));
+      // root — общий #app-content, он переживает редактор: обработчик
+      // снимается в destroy(), иначе после перехода к другой карте кнопки
+      // («Просмотр», «Сохранить»…) срабатывали бы и у прежнего редактора.
+      this._onRootClick = (e) => this.onRootClick(e);
+      this.root.addEventListener('click', this._onRootClick);
       this.root.querySelector('.me-title-input').addEventListener('focus', () => this.pushHistory());
       this.root.querySelector('.me-title-input').addEventListener('input', (e) => { this.doc.title = e.target.value; this.markDirty(); });
       this.el('basemap-select').addEventListener('change', (e) => this.setBasemap(e.target.value));
@@ -2950,6 +2954,7 @@
       this.saveDrawing();
       clearInterval(this._pollTimer);
       clearTimeout(this._draftTimer);
+      this.root.removeEventListener('click', this._onRootClick);
       document.removeEventListener('keydown', this._onKeyDown);
       document.removeEventListener('keyup', this._onKeyUp);
       window.removeEventListener('blur', this._onBlur);
@@ -2971,6 +2976,7 @@
 
   async function loadMapEditor(router) {
     window.MapsUI.cleanupPage();
+    const generation = window.MapsUI.pageGeneration();
     const mapId = router.mapRouteId;
     const appContent = document.getElementById('app-content');
     if (!appContent) return;
@@ -2987,6 +2993,9 @@
     } catch (e) {
       window.showMessage?.('Не удалась загрузка библиотеки контуров — объединение и обрезка зон будут недоступны', 'warning');
     }
+    // Пока грузились данные, пользователь мог уйти на другую страницу или
+    // другую карту — тогда этот (опоздавший) редактор не создаём.
+    if (window.MapsUI.pageGeneration() !== generation) return;
     const pageTitle = document.getElementById('page-title');
     if (pageTitle) pageTitle.textContent = `Редактор: ${res.data.title}`;
     document.title = `${res.data.title} — редактор карты`;

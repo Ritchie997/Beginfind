@@ -22,7 +22,13 @@
   let current = null; // { viewer | editor }
   let pendingOpen = null; // параметры openMapPage для следующей загрузки /map/:id
 
+  // Номер перехода: растёт при каждом уходе со страницы карты/редактора —
+  // загрузчик, дождавшийся ответа сервера, сверяет его, чтобы не создать
+  // редактор поверх уже другой страницы (см. loadMapEditor).
+  let generation = 0;
+
   function cleanupPage() {
+    generation++;
     if (current) {
       try { current.destroy(); } catch (e) { /* уже разрушено */ }
       current = null;
@@ -677,6 +683,7 @@
     renderServerMapsTab,
     mountWorldEditor,
     mountCalendarEditor,
-    setCurrent(instance) { current = instance; }
+    setCurrent(instance) { current = instance; },
+    pageGeneration() { return generation; }
   };
 })();
