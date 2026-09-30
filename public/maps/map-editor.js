@@ -5,6 +5,8 @@
 //   E — правка точек выбранной зоны.
 // Новая форма создаёт зону; с Shift — добавляется к выбранной зоне, с Alt —
 // вырезается из неё (операции над контурами — библиотека polygon-clipping).
+// Новая форма и отпущенная точка прилипают к границам соседних зон — между
+// зонами впритык не остаётся щелей (вырезание не прилипает, см. glueRing).
 // Пробел (зажать) — двигать карту во время рисования. Ctrl+Z / Ctrl+Y —
 // отмена/повтор, Ctrl+S — сохранить, Delete — удалить выбранную зону.
 //
@@ -152,6 +154,80 @@
     if (Math.abs(det) < 1e-12) return null;
     const a = M.d / det; const b = -M.b / det; const c = -M.c / det; const d = M.a / det;
     return { a, b, c, d, e: -(a * M.e + b * M.f), f: -(c * M.e + d * M.f) };
+  }
+
+  // ===== Слипание соседних зон =====
+  //
+  // Нарисованная форма прилипает к границам уже существующих зон: вершина в
+  // пределах допуска ложится на ближайшую чужую вершину или ребро, а в ребро,
+  // у которого хотя бы один конец прилип, вставляются чужие вершины рядом с
+  // ним — ребро идёт ровно по чужой границе. Между зонами, стоящими впритык,
+  // не остаётся щелей; сами зоны не объединяются. Вырезание (Alt, ластик)
+  // не слипается — вырезанные реки и проливы остаются.
+
+  // Ближайшая точка чужой границы в пределах tol: вершина в приоритете.
+  // T — {verts: [[x,y]], segs: [[ax,ay,bx,by]]}.
+  function glueNearest(p, T, tol) {
+    let best = null;
+    let bd = tol;
+    T.verts.forEach((v) => {
+      const d = Math.hypot(p[0] - v[0], p[1] - v[1]);
+      if (d <= bd) { bd = d; best = v; }
+    });
+    if (best) return [best[0], best[1]];
+    bd = tol;
+    T.segs.forEach(([ax, ay, bx, by]) => {
+      if (p[0] < Math.min(ax, bx) - tol || p[0] > Math.max(ax, bx) + tol
+        || p[1] < Math.min(ay, by) - tol || p[1] > Math.max(ay, by) + tol) return;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      if (!len2) return;
+      const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2));
+      const q = [ax + t * dx, ay + t * dy];
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      if (d <= bd) { bd = d; best = [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]; }
+    });
+    return best;
+  }
+
+  // Приклеить кольцо к границам T. focus — Set индексов вершин, которые
+  // можно двигать (и только их рёбра получают вставки); null — всё кольцо.
+  function glueRing(ring, T, tol, focus) {
+    const n = ring.length;
+    const pts = ring.map((p, i) => {
+      if (focus && !focus.has(i)) return { p, g: !!glueNearest(p, T, 0.15) };
+      const q = glueNearest(p, T, tol);
+      return q ? { p: q, g: true } : { p, g: false };
+    });
+    const out = [];
+    const push = (p) => {
+      const last = out[out.length - 1];
+      if (!last || last[0] !== p[0] || last[1] !== p[1]) out.push([p[0], p[1]]);
+    };
+    for (let i = 0; i < n; i++) {
+      const a = pts[i].p;
+      const bp = pts[(i + 1) % n];
+      const b = bp.p;
+      push(a);
+      if (!pts[i].g && !bp.g) continue;
+      if (focus && !focus.has(i) && !focus.has((i + 1) % n)) continue;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      if (!len2) continue;
+      const ins = [];
+      T.verts.forEach((v) => {
+        if (v[0] < Math.min(a[0], b[0]) - tol || v[0] > Math.max(a[0], b[0]) + tol
+          || v[1] < Math.min(a[1], b[1]) - tol || v[1] > Math.max(a[1], b[1]) + tol) return;
+        const t = ((v[0] - a[0]) * dx + (v[1] - a[1]) * dy) / len2;
+        if (t <= 1e-9 || t >= 1 - 1e-9) return;
+        if (Math.hypot(v[0] - (a[0] + t * dx), v[1] - (a[1] + t * dy)) <= tol) ins.push({ t, v });
+      });
+      ins.sort((x, y) => x.t - y.t).forEach((x) => push(x.v));
+    }
+    while (out.length > 1 && out[0][0] === out[out.length - 1][0] && out[0][1] === out[out.length - 1][1]) out.pop();
+    return out;
   }
 
   function pointCount(multi) {
@@ -351,6 +427,81 @@
       } catch (e) {
         return null; // не вышло — оставим как нарисовано
       }
+    }
+
+    // ----- Слипание (см. glueRing) -----
+
+    glueTol() {
+      return this.map ? SNAP_PX / Math.pow(2, this.map.getZoom()) : 0;
+    }
+
+    // Вершины и рёбра границ существующих сейчас зон рядом с bb.
+    glueTargets(bb, tol, excludeId) {
+      const T = { verts: [], segs: [] };
+      if (!bb) return T;
+      const minX = bb.minX - tol; const maxX = bb.maxX + tol;
+      const minY = bb.minY - tol; const maxY = bb.maxY + tol;
+      this.doc.zones.forEach((z) => {
+        if (z.id === excludeId || !this.existsNow(z)) return;
+        const poly = this.zonePoly(z);
+        const zb = MC().polygonBBox(poly);
+        if (!zb || zb.minX > maxX || zb.maxX < minX || zb.minY > maxY || zb.maxY < minY) return;
+        poly.forEach((rings) => rings.forEach((ring) => {
+          const n = ring.length;
+          for (let i = 0; i < n; i++) {
+            const a = ring[i];
+            const b = ring[(i + 1) % n];
+            if (Math.max(a[0], b[0]) < minX || Math.min(a[0], b[0]) > maxX
+              || Math.max(a[1], b[1]) < minY || Math.min(a[1], b[1]) > maxY) continue;
+            T.segs.push([a[0], a[1], b[0], b[1]]);
+            if (a[0] >= minX && a[0] <= maxX && a[1] >= minY && a[1] <= maxY) T.verts.push(a);
+          }
+        }));
+      });
+      return T;
+    }
+
+    // Приклеить новую форму к соседним зонам. Не вышло — форма как есть.
+    glueShape(multi) {
+      const tol = this.glueTol();
+      const bb = MC().polygonBBox(multi);
+      if (!tol || !bb) return multi;
+      const T = this.glueTargets(bb, tol, null);
+      if (!T.segs.length) return multi;
+      const glued = [];
+      multi.forEach((rings) => {
+        const out = [];
+        rings.forEach((ring, i) => {
+          const r = glueRing(ring, T, tol, null);
+          if (r.length >= 3) out.push(r);
+          else if (i === 0) out.length = 0;
+        });
+        if (out.length) glued.push(out);
+      });
+      if (!glued.length) return multi;
+      const clip = this.clip();
+      try {
+        const res = cleanMulti(clip ? clip.union(glued) : glued);
+        return res.length ? res : multi;
+      } catch (e) {
+        return multi;
+      }
+    }
+
+    // Отпущенная точка в «Правке точек»: её рёбра ложатся на чужую границу.
+    glueHandle(zone, h) {
+      const tol = this.glueTol();
+      const ring = this.zonePoly(zone)[h.pi] && this.zonePoly(zone)[h.pi][h.ri];
+      if (!tol || !ring || !ring[h.i]) return;
+      const n = ring.length;
+      const near = [ring[(h.i - 1 + n) % n], ring[h.i], ring[(h.i + 1) % n]];
+      const bb = MC().polygonBBox([[near]]);
+      const T = this.glueTargets(bb, tol, zone.id);
+      if (!T.segs.length) return;
+      const r = glueRing(ring, T, tol, new Set([h.i]));
+      if (r.length < 3) return;
+      ring.splice(0, n, ...r);
+      this.refreshZoneLayer(zone);
     }
 
     setSideTab(tab) {
@@ -1324,6 +1475,8 @@
       const clip = this.clip();
       const selected = this.zoneById(this.selectedId);
       const op = mode || (this.mods.shift ? 'add' : this.mods.alt ? 'cut' : 'new');
+      // Всё, кроме вырезания, прилипает к соседям (вырезанное — не слипается).
+      if (!(op === 'cut' && selected)) multi = this.glueShape(multi);
       if ((op === 'add' || op === 'cut') && selected) {
         if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return false; }
         if (op === 'add') {
@@ -1490,7 +1643,7 @@
         }).addTo(this.handleLayer);
         marker.on('dragstart', () => this.onHandleDragStart(zone, h));
         marker.on('drag', (e) => this.onHandleDrag(zone, h, e.target.getLatLng()));
-        marker.on('dragend', () => { this.snapHandle(marker, zone, h); this.onHandleDragEnd(); });
+        marker.on('dragend', () => { this.snapHandle(marker, zone, h); this.glueHandle(zone, h); this.onHandleDragEnd(); });
         if (!h.mid) marker.on('contextmenu', (e) => { L.DomEvent.preventDefault(e.originalEvent); this.deleteVertex(zone, h); });
       });
     }
