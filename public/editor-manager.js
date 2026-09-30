@@ -228,6 +228,11 @@
   // скролла на всякий случай возвращаем мгновенно.
   function autosizeField(el) {
     if (!el || !el.isConnected) return;
+    // Невидимое поле (редактор ещё скрыт/не разложен) даёт scrollHeight 0 —
+    // записали бы height:0 и текст пропал бы до следующей перерисовки.
+    // Пропускаем: как только поле станет видимым, его пересчитает
+    // setupAutosizeObserver().
+    if (!el.offsetWidth) return;
     const scroller = document.scrollingElement || document.documentElement;
     const prevScroll = scroller.scrollTop;
     const holder = el.parentElement;
@@ -401,6 +406,7 @@
       this.setupZoomGuard();
       this.setupPopupViewportTracking();
       this.renderAll();
+      this.setupAutosizeObserver();
       this.observeArticleIdForBacklinks();
       this.scheduleRenderPreview();
     }
@@ -420,6 +426,35 @@
       };
       new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
       sync();
+    }
+
+    // Высота текстовых полей (.eb-text, overflow:hidden) считается по их
+    // ширине в момент рендера. Если редактор в этот момент был скрыт или
+    // ещё не получил окончательную ширину (страница только открылась,
+    // телефон поменял viewport, догрузился шрифт), высота оставалась
+    // неверной — строки обрезались/пропадали, пока перерисовка по Enter не
+    // пересчитывала их заново. Следим за шириной контейнера и пересчитываем
+    // все поля при её изменении (в т.ч. при переходе из скрытого в видимое).
+    setupAutosizeObserver() {
+      if (this._autosizeObserver) this._autosizeObserver.disconnect();
+      this._autosizeObserver = null;
+      const autosizeAll = () => {
+        if (this.container) this.container.querySelectorAll('textarea').forEach((ta) => autosizeField(ta));
+      };
+      if (typeof ResizeObserver !== 'undefined') {
+        let lastWidth = null;
+        let raf = 0;
+        this._autosizeObserver = new ResizeObserver((entries) => {
+          const width = Math.round(entries[entries.length - 1].contentRect.width);
+          if (width === lastWidth) return; // рост по высоте от самого autosize — не повод
+          lastWidth = width;
+          if (!width) return;
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(autosizeAll);
+        });
+        this._autosizeObserver.observe(this.container);
+      }
+      if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(autosizeAll);
     }
 
     // Клавиатура на телефоне открывается/закрывается и двигает видимую область
@@ -490,6 +525,7 @@
       this.sweepMapPreviews();
       window.MapCore?.sweepEmbeds();
       if (this._articleIdObserver) { this._articleIdObserver.disconnect(); this._articleIdObserver = null; }
+      if (this._autosizeObserver) { this._autosizeObserver.disconnect(); this._autosizeObserver = null; }
       clearTimeout(this._previewTimer);
       if (this._localGraphInstance) { this._localGraphInstance.destroy(); this._localGraphInstance = null; }
       this._lastObservedArticleId = undefined;

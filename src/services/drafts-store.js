@@ -60,7 +60,11 @@ function rowToSummary(row) {
     meta = {
       server: data.server || '',
       image: data.image || '',
-      tags: Array.isArray(data.tags) ? data.tags : [],
+      // У многослойного черновика общих тегов нет — только теги слоёв.
+      tags: [...new Set([
+        ...(Array.isArray(data.tags) ? data.tags : []),
+        ...(Array.isArray(data.layers) ? data.layers.flatMap((l) => (l && Array.isArray(l.tags) ? l.tags : [])) : [])
+      ].map(String))],
       locked: !!data.locked,
       layersEnabled: !!data.layersEnabled
     };

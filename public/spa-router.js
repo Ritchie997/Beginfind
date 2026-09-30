@@ -984,8 +984,16 @@ class SPARouter {
         }];
         this.activeLayerIndex = 0;
       }
+      // Слой показываем в форме сразу, не дожидаясь каталога ролей: пока
+      // шёл запрос, форма показывала чужие поля (общие теги, пустые роли
+      // слоя), и любой snapshotActiveLayer() за это время — например,
+      // снимок формы в loadDraft() сразу после восстановления черновика
+      // или автосохранение — затирал ими активный слой: теги, роли и
+      // "Открыть всем" слоя пропадали из черновика/статьи.
+      this.loadLayerIntoForm(this.activeLayerIndex);
       this.loadRoleCatalogForLayers(document.getElementById('articleServer')?.value).then(() => {
-        this.loadLayerIntoForm(this.activeLayerIndex);
+        // Варианты пришли — перерисовываем чипы ролей с названиями вместо id.
+        this.layerRolesField?.setValues(this.layerRolesField.getValues());
       });
     } else {
       document.getElementById('articleLayerEditingHint').textContent = '';
@@ -1579,7 +1587,7 @@ class SPARouter {
               id: this.currentDraftId || this.newDraftId(),
               baseRev: this.currentDraftRev ?? null,
               updatedAt: Date.now(),
-              data: this.buildDraftSnapshot(),
+              data: this.collectArticleFormData(),
               offline: false
             };
             this.putPendingDraft(entry);
@@ -2845,7 +2853,7 @@ class SPARouter {
         title: data.title || '',
         text: this.draftContentToText(data.content),
         image: data.image || '',
-        tags: Array.isArray(data.tags) ? data.tags : [],
+        tags: this.draftTags(data),
         locked: !!data.locked,
         createdAt: server ? server.createdAt : p.updatedAt,
         updatedAt: p.updatedAt,
@@ -2882,6 +2890,17 @@ class SPARouter {
   isDraftContentEmpty(content) {
     const doc = this.parseDraftContent(content);
     return doc.blocks.every((b) => b && b.type === 'paragraph' && !String((b.data && b.data.markdown) || '').trim());
+  }
+
+  // Теги черновика для списка: у многослойного общих тегов нет (см.
+  // collectArticleFormData) — показываем теги всех его слоёв. Тот же
+  // расчёт на сервере — rowToSummary в src/services/drafts-store.js.
+  draftTags(data) {
+    const own = Array.isArray(data.tags) ? data.tags : [];
+    const layerTags = Array.isArray(data.layers)
+      ? data.layers.flatMap((l) => (l && Array.isArray(l.tags) ? l.tags : []))
+      : [];
+    return [...new Set([...own, ...layerTags].map(String))];
   }
 
   draftContentToText(content) {
