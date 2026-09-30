@@ -46,6 +46,9 @@ router.get('/feedback/reports/mine', ...base, handle((req) => store.listMyReport
 // Правка своего обращения (пока по нему нет решения) — см. updateOwnReport.
 router.put('/feedback/reports/:id', ...base, handle((req) => store.updateOwnReport(req.user, req.params.id, req.body || {})));
 
+// Отзыв своего обращения (пока по нему нет решения) — см. withdrawOwnReport.
+router.post('/feedback/reports/:id/withdraw', ...base, handle((req) => store.withdrawOwnReport(req.user, req.params.id)));
+
 // --- Первая линия ---
 
 // ?status=new (очередь) | rejected (отклонённые — для выборочной проверки,

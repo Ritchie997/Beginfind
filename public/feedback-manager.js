@@ -47,6 +47,7 @@
     report_restored: 'обращение возвращено в очередь',
     report_edited: 'автор изменил обращение',
     report_resubmitted: 'автор исправил и отправил заново',
+    report_withdrawn: 'автор отозвал обращение',
     case_created: 'кейс создан',
     case_updated: 'кейс изменён',
     report_attached: 'обращение добавлено',
@@ -71,6 +72,7 @@
   function authorStatus(report) {
     if (report.status === 'new') return { chip: 'pending', text: 'На проверке' };
     if (report.status === 'rejected') return { chip: 'bad', text: 'Отклонено модератором' };
+    if (report.status === 'withdrawn') return { chip: '', text: 'Отозвано' };
     if (!report.caseId) return { chip: 'pending', text: 'Принято, ждёт разбора' };
     if (report.caseStatus === 'open') return { chip: 'pending', text: 'В работе' };
     if (report.caseStatus === 'escalated') return { chip: 'pending', text: 'Передано на решение' };
@@ -221,6 +223,8 @@
       root.querySelector('#feedbackMineList').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-edit-report]');
         if (btn) this.openCreateModal(this.myReports.get(Number(btn.dataset.editReport)));
+        const withdrawBtn = e.target.closest('[data-withdraw-report]');
+        if (withdrawBtn) runExclusive(withdrawBtn, () => this.withdrawReport(Number(withdrawBtn.dataset.withdrawReport)));
       });
 
       // --- Первая линия ---
@@ -343,8 +347,12 @@
         },
         (r) => {
           const st = authorStatus(r);
-          const edit = r.canEdit
-            ? `<div class="feedback-card-actions btns-compact"><button type="button" class="btn btn-secondary btn-sm" data-edit-report="${r.id}"><i class="fas fa-pen"></i> ${r.status === 'rejected' ? 'Исправить и отправить заново' : 'Изменить'}</button></div>` : '';
+          const resend = r.status === 'rejected' || r.status === 'withdrawn';
+          const buttons = [
+            r.canEdit ? `<button type="button" class="btn btn-secondary btn-sm" data-edit-report="${r.id}"><i class="fas fa-pen"></i> ${resend ? 'Исправить и отправить заново' : 'Изменить'}</button>` : '',
+            r.canWithdraw ? `<button type="button" class="btn btn-secondary btn-sm" data-withdraw-report="${r.id}"><i class="fas fa-rotate-left"></i> Отозвать</button>` : ''
+          ].join('');
+          const edit = buttons ? `<div class="feedback-card-actions btns-compact">${buttons}</div>` : '';
           let note = '';
           if (r.status === 'rejected' && r.rejectReason) note = `<div class="feedback-note bad">Причина: ${escapeHtml(r.rejectReason)}</div>`;
           else if (r.caseDecisionText && ['accepted', 'resolved', 'archived'].includes(r.caseStatus)) {
@@ -363,6 +371,26 @@
       );
     }
 
+    // Отзыв своего обращения — пока по нему нет решения (см.
+    // withdrawOwnReport в feedback-store.js). Отозванное остаётся в списке,
+    // его можно поправить и отправить заново.
+    async withdrawReport(id) {
+      const ok = await window.confirmDialog.open({
+        title: 'Отозвать обращение',
+        message: `Отозвать обращение #${id}? Модераторы перестанут его рассматривать. Позже его можно будет исправить и отправить заново.`,
+        confirmLabel: 'Отозвать'
+      });
+      if (!ok) return;
+      try {
+        await this.api(`/api/feedback/reports/${id}/withdraw`, 'POST');
+        showMessage(`Обращение #${id} отозвано`, 'success');
+        await this.loadMine();
+        this.refreshBadges();
+      } catch (err) {
+        showMessage(err.message, 'error');
+      }
+    }
+
     // ---------- Новое обращение ----------
 
     // report — своё обращение для правки; без него — новое.
@@ -376,7 +404,7 @@
       this.root.querySelector('#feedbackFormTitle').textContent = report ? `Обращение #${report.id}` : 'Новое обращение';
       const submitBtn = this.root.querySelector('#feedbackSubmitBtn');
       submitBtn.textContent = !report ? 'Отправить'
-        : report.status === 'rejected' ? 'Отправить заново' : 'Сохранить';
+        : ['rejected', 'withdrawn'].includes(report.status) ? 'Отправить заново' : 'Сохранить';
       submitBtn.dataset.label = submitBtn.textContent;
       submitBtn.disabled = false;
       // Тип у отправленного не меняется; у жалобы на статью название
@@ -466,7 +494,7 @@
       try {
         if (editing) {
           const report = await this.api(`/api/feedback/reports/${editing.id}`, 'PUT', payload);
-          showMessage(editing.status === 'rejected'
+          showMessage(['rejected', 'withdrawn'].includes(editing.status)
             ? `Обращение #${report.id} исправлено и снова отправлено на проверку`
             : `Обращение #${report.id} сохранено`, 'success');
         } else {

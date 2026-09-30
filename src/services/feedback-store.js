@@ -30,6 +30,10 @@
 // правка не стирает то, на чём модераторы строили кейс. Отклонённое
 // обращение после правки возвращается в очередь первой линии.
 //
+// Пока решения нет, автор может и отозвать обращение (withdrawOwnReport →
+// 'withdrawn'): оно уходит из всех очередей и отвязывается от кейса, но не
+// удаляется — отозванное можно поправить и отправить заново, как отклонённое.
+//
 // Как не потерять информацию при объединении: текст обращений при
 // объединении не копируется — кейс только ссылается на обращения (case_id).
 // Любое обращение можно отвязать обратно; всё пишется в журнал.
@@ -338,7 +342,7 @@ async function updateOwnReport(user, reportId, input) {
     ({ title, description, attachments } = cleanReportInput(row.type, input));
   }
 
-  const resubmit = row.status === 'rejected';
+  const resubmit = row.status === 'rejected' || row.status === 'withdrawn';
   if (resubmit) await assertNoPending(user);
 
   const changed = title !== row.title || description !== row.description
@@ -361,8 +365,49 @@ async function updateOwnReport(user, reportId, input) {
 }
 
 function canAuthorEdit(row) {
-  if (!['new', 'accepted', 'rejected'].includes(row.status)) return false;
+  if (!['new', 'accepted', 'rejected', 'withdrawn'].includes(row.status)) return false;
   return !row.case_id || UNDECIDED_CASE_STATUSES.includes(row.case_status);
+}
+
+function canAuthorWithdraw(row) {
+  return row.status !== 'withdrawn' && canAuthorEdit(row);
+}
+
+// Автор отзывает своё обращение, пока по нему нет решения. Из кейса оно
+// отвязывается (кейс держится только на обращениях — отозванное не должно
+// влиять на приоритет); если оно было в кейсе последним, кейс без обращений
+// смысла не имеет и уходит в архив.
+async function withdrawOwnReport(user, reportId) {
+  const row = await get(
+    `SELECT r.*, c.status as case_status FROM feedback_reports r
+     LEFT JOIN feedback_cases c ON c.id = r.case_id WHERE r.id = ?`,
+    [reportId]
+  );
+  if (!row || row.author_id !== user.id) throw httpError(404, 'Обращение не найдено');
+  if (row.status === 'withdrawn') return getReport(reportId);
+  if (!canAuthorWithdraw(row)) throw httpError(409, 'По обращению уже принято решение — отозвать его нельзя');
+
+  const result = await run(
+    "UPDATE feedback_reports SET status = 'withdrawn', case_id = NULL WHERE id = ? AND status = ?",
+    [reportId, row.status]
+  );
+  if (!result.changes) throw httpError(409, 'Обращение только что изменилось — обновите страницу');
+  await logEvent(user, 'report_withdrawn', { caseId: row.case_id, reportId: row.id });
+
+  if (row.case_id) {
+    const left = await get('SELECT COUNT(*) as cnt FROM feedback_reports WHERE case_id = ?', [row.case_id]);
+    if (!left || !left.cnt) {
+      await run(
+        `UPDATE feedback_cases SET status = 'archived', archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status IN (${UNDECIDED_CASE_STATUSES.map(() => '?').join(',')})`,
+        [row.case_id, ...UNDECIDED_CASE_STATUSES]
+      );
+      await logEvent(user, 'case_archived', { caseId: row.case_id, details: 'все обращения кейса отозваны авторами' });
+    } else {
+      await run('UPDATE feedback_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [row.case_id]);
+    }
+  }
+  return getReport(reportId);
 }
 
 async function getReport(reportId) {
@@ -385,7 +430,8 @@ async function listMyReports(userId) {
     caseDecision: row.case_decision || null,
     caseDecisionText: row.case_decision_text || null,
     caseCompletionText: row.case_completion_text || null,
-    canEdit: canAuthorEdit(row)
+    canEdit: canAuthorEdit(row),
+    canWithdraw: canAuthorWithdraw(row)
   }));
 }
 
@@ -730,6 +776,7 @@ module.exports = {
   createReport,
   getReport,
   updateOwnReport,
+  withdrawOwnReport,
   listMyReports,
   listReportsByStatus,
   listUnassignedAccepted,
