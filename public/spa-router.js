@@ -1,5 +1,40 @@
 // spa-router.js - Updated SPA router with proper partial loading
 
+// Окна поверх страницы и кнопка «Назад» (браузерная и системная на
+// телефоне). Открытое окно добавляет запись в историю (адрес тот же), и
+// «Назад» закрывает его, а не уводит со страницы и не закрывает сайт.
+//   const id = modalHistory.open(() => закрытьБезИстории());
+//   …закрыли кнопкой/крестиком → modalHistory.close(id) (уберёт запись).
+window.modalHistory = {
+  stack: [],
+  ignorePops: 0,
+  open(close) {
+    const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    this.stack.push({ id, close });
+    history.pushState({ ...(history.state || {}), modalId: id }, '', window.location.href);
+    return id;
+  },
+  // Окно закрыли сами (не «Назад») — убираем его запись из истории.
+  close(id) {
+    const i = this.stack.findIndex((m) => m.id === id);
+    if (i < 0) return;
+    this.stack.splice(i, 1);
+    if (history.state && history.state.modalId === id) {
+      this.ignorePops++;
+      history.back();
+    }
+  },
+  // Из popstate: true — «Назад» обработано (закрыто окно или это наш же
+  // history.back() из close()), навигацию делать не нужно.
+  handlePop() {
+    if (this.ignorePops > 0) { this.ignorePops--; return true; }
+    const top = this.stack.pop();
+    if (!top) return false;
+    try { top.close(); } catch (e) { /* окно уже убрано со страницы */ }
+    return true;
+  }
+};
+
 class SPARouter {
   constructor() {
     this.routes = {
@@ -136,8 +171,13 @@ class SPARouter {
 
   // Set up browser history handling
   setupHistoryHandling() {
-    // Handle browser back/forward buttons
+    // Handle browser back/forward buttons (и системная «Назад» на телефоне).
+    // Сначала — открытое окно (см. window.modalHistory): «Назад» закрывает
+    // его, а не уводит со страницы.
     window.addEventListener('popstate', (event) => {
+      if (window.modalHistory && window.modalHistory.handlePop()) return;
+      // Идёт загрузка другой страницы — не теряем нажатие, выполним после.
+      if (this.loading) { this._pendingPopPath = window.location.pathname; return; }
       this.navigateTo(window.location.pathname, false);
     });
   }
@@ -175,6 +215,10 @@ class SPARouter {
       // Уходим со страницы карты — гасим Leaflet/редактор (черновик
       // несохранённых правок редактор пишет сам, см. MapEditor.destroy).
       if (routeHandler) window.MapsUI?.cleanupPage();
+      // Окна прошлой страницы при уходе с неё исчезают вместе с ней — их
+      // записи в modalHistory больше не нужны («Назад» не должна «закрывать»
+      // уже не существующее окно).
+      if (routeHandler && window.modalHistory) window.modalHistory.stack = [];
 
       if (routeHandler) {
         // Update active menu item
@@ -189,8 +233,16 @@ class SPARouter {
           // (/map/:id и /map/:id/edit): по нему «Назад» карт уходит сразу на
           // страницу до них (см. MapsUI.goBack).
           const isMapRoute = routeKey === '/map' || routeKey === '/map-edit';
-          const prevDepth = (history.state && Number(history.state.mapDepth)) || 0;
-          history.pushState(isMapRoute ? { mapDepth: prevDepth + 1 } : {}, '', normalizedPath);
+          // Тот же адрес (первая загрузка страницы, повторный клик по пункту
+          // меню) — не новая запись истории: иначе «Назад» (особенно
+          // системная на телефоне) сначала «возвращала» на ту же страницу, а
+          // со второго раза закрывала сайт.
+          if (window.location.pathname === normalizedPath) {
+            history.replaceState(history.state || (isMapRoute ? { mapDepth: 1 } : {}), '', normalizedPath);
+          } else {
+            const prevDepth = (history.state && Number(history.state.mapDepth)) || 0;
+            history.pushState(isMapRoute ? { mapDepth: prevDepth + 1 } : {}, '', normalizedPath);
+          }
         }
 
         // Update page title
@@ -205,6 +257,11 @@ class SPARouter {
       showMessage('Ошибка при загрузке страницы', 'error');
     } finally {
       this.loading = false;
+      // «Назад», нажатая, пока грузилась страница: адрес уже сменился —
+      // показываем его, иначе адрес и содержимое разъехались бы.
+      const pending = this._pendingPopPath;
+      this._pendingPopPath = null;
+      if (pending && pending === window.location.pathname) this.navigateTo(pending, false);
     }
   }
 
@@ -3008,6 +3065,8 @@ class SPARouter {
   async openDraftsModal() {
     const els = this.ensureDraftsModal();
     els.overlay.hidden = false;
+    // «Назад» (в том числе системная на телефоне) закрывает окно черновиков.
+    if (!this._draftsModalHist) this._draftsModalHist = window.modalHistory.open(() => this.closeDraftsModal({ fromHistory: true }));
     els.search.value = '';
     this.setDraftsSelectMode(false);
     els.grid.innerHTML = '<div class="drafts-modal-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка черновиков...</div>';
@@ -3022,9 +3081,13 @@ class SPARouter {
     await this.refreshDraftsModalIfOpen();
   }
 
-  closeDraftsModal() {
+  // fromHistory — закрыто кнопкой «Назад» (запись истории уже снята).
+  closeDraftsModal({ fromHistory = false } = {}) {
     this.closeDraftsMoveMenu();
     if (this._draftsModalEls) this._draftsModalEls.overlay.hidden = true;
+    const hist = this._draftsModalHist;
+    this._draftsModalHist = null;
+    if (hist && !fromHistory) window.modalHistory.close(hist);
   }
 
   async refreshDraftsModalIfOpen() {
