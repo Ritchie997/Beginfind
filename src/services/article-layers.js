@@ -90,8 +90,24 @@ function normalizeLayer(raw) {
     title: str(raw.title),
     excerpt: str(raw.excerpt),
     image: raw.image || null,
+    // Теги слоя: видны только тем, кому доступен этот слой (см. readerTags).
+    // null — слой сохранён до появления тегов по слоям (см. layerTagsOf).
+    tags: Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : null,
     content: blocks.normalizeDocument(raw.content)
   };
+}
+
+function normalizeTagList(raw) {
+  const seen = new Set();
+  const out = [];
+  for (const t of raw) {
+    const name = String(t == null ? '' : t).trim().replace(/^#+/, '').trim().slice(0, 60);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
 }
 
 /**
@@ -129,6 +145,7 @@ function legacyLayers(article) {
     title: article.title,
     excerpt: article.excerpt,
     image: article.image,
+    tags: Array.isArray(article.tags) ? article.tags : [],
     content: article.content
   }];
 }
@@ -136,11 +153,48 @@ function legacyLayers(article) {
 /**
  * Слои статьи "как есть" для резолва доступа/отображения — реальные
  * article.layers, если статья ими пользуется, иначе синтезированный
- * единственный слой из старых полей (см. legacyLayers).
+ * единственный слой из старых полей (см. legacyLayers). У каждого слоя
+ * заполнено tags (см. layerTagsOf).
  */
 function getEffectiveLayers(article) {
-  if (Array.isArray(article.layers) && article.layers.length > 0) return article.layers;
+  if (Array.isArray(article.layers) && article.layers.length > 0) {
+    // Многослойная статья, сохранённая до тегов по слоям: у слоёв tags нет,
+    // а общие теги статьи раньше видел каждый, кто видит статью, — отдаём
+    // их публичному слою (слой без ролей), а если такого нет — самому
+    // нижнему. Остальным слоям — ничего.
+    const legacy = article.layers.every((l) => !Array.isArray(l.tags));
+    let owner = article.layers.findIndex((l) => !l.roles || l.roles.length === 0);
+    if (owner < 0) owner = 0;
+    return article.layers.map((l, i) => (Array.isArray(l.tags) ? l : {
+      ...l,
+      tags: legacy && i === owner && Array.isArray(article.tags) ? article.tags : []
+    }));
+  }
   return legacyLayers(article);
+}
+
+/**
+ * Теги, которые видит читатель: поле «Теги» и #хэштеги из текста — только
+ * со слоёв, доступных ему (resolved — результат resolveArticleLayer).
+ * Раньше теги были общими на всю статью, и список тегов закрытых слоёв
+ * (как и их #хэштеги) был спойлером для всех.
+ * @returns {{own: string[], hash: string[]}} own — как написал автор,
+ *   hash — в нижнем регистре (как extractHashtagsFromDocument)
+ */
+function readerTags(resolved) {
+  const own = [];
+  const hash = new Set();
+  if (!resolved) return { own, hash: [] };
+  const seen = new Set();
+  resolved.accessible.forEach((i) => {
+    const layer = resolved.layers[i];
+    (layer.tags || []).forEach((t) => {
+      const key = String(t).toLowerCase();
+      if (!seen.has(key)) { seen.add(key); own.push(t); }
+    });
+    blocks.extractHashtagsFromDocument(layer.content).forEach((t) => hash.add(t));
+  });
+  return { own, hash: [...hash] };
 }
 
 // === Резолв доступа ===
@@ -317,6 +371,8 @@ module.exports = {
   normalizeRoleRef,
   roleRefsEqual,
   getEffectiveLayers,
+  readerTags,
+  normalizeTagList,
   resolveArticleLayer,
   hasArticleAccess,
   canAccessLayerIndex,

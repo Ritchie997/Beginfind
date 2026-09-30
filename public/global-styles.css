@@ -1502,6 +1502,13 @@ tr:hover td::before {
     color: var(--header-primary);
 }
 
+/* Пояснение прямо в подписи поля (например, «теги слоя …» у многослойной статьи) */
+.form-label-hint {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
 /* ========================================
    ENHANCED CARD ITEMS (Articles, Servers)
    ======================================== */

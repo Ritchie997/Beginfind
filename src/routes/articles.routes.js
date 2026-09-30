@@ -299,6 +299,13 @@ function updateImageUrlsInContent(content, req = null) {
   return store.blocks.mapImages(content, (src) => formatImageUrl(src, req) || src);
 }
 
+// Ключи тегов (store.tagKey), которые видит читатель у статьи — поле
+// «Теги» и #хэштеги, только с доступных ему слоёв (см. readerTags).
+function readerTagKeys(resolved) {
+  const t = articleLayers.readerTags(resolved);
+  return new Set([...t.own, ...t.hash].map((x) => store.tagKey(x)).filter(Boolean));
+}
+
 // Преобразует статью из хранилища в объект ответа клиенту (резолвит имя
 // сервера по id, абсолютизирует пути картинок, резолвит author_id/
 // co_author_ids в {id, display_name}). usersMap/legacyNameToId — опциональные
@@ -371,6 +378,9 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
   return {
     ...articleSafe,
     title: viewLayer.title || article.title || article.slug,
+    // Теги — того слоя, что показан читателю (у обычной статьи — её теги):
+    // теги закрытых слоёв в ответ не попадают.
+    tags: resolved ? (viewLayer.tags || []) : [],
     excerpt: viewLayer.excerpt ?? article.excerpt,
     content: updateImageUrlsInContent(viewLayer.content, req),
     image: formatImageUrl(viewLayer.image, req),
@@ -411,15 +421,10 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
         (a.co_author_ids || []).some((id) => String(id) === String(author))
       );
     }
-    if (tag) {
-      // Клик по #тегу в редакторе/просмотре — статьи с этим тегом (frontmatter
-      // tags или #тег прямо в тексте, см. store.extractHashtags).
-      const tagLower = String(tag).toLowerCase();
-      articles = articles.filter(a =>
-        (a.tags || []).some(t => String(t).toLowerCase() === tagLower) ||
-        store.extractHashtags(a).includes(tagLower)
-      );
-    }
+    // Клик по #тегу в редакторе/просмотре — статьи с этим тегом (поле «Теги»
+    // или #тег в тексте) — только из слоёв, доступных этому читателю
+    // (см. readerTagKeys), иначе фильтр выдавал бы теги закрытых слоёв.
+    const tagKeys = tag ? [store.tagKey(tag)] : null;
 
     // Один запрос к users.db на весь список вместо одного на статью —
     // см. formatArticleResponse.
@@ -434,7 +439,9 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
     const rankCache = new Map();
     const result = [];
     for (const article of articles) {
-      if (!(await canAccessArticle(req.user, article))) continue;
+      const resolved = await articleLayers.resolveArticleLayer(article, req.user);
+      if (!resolved) continue;
+      if (tagKeys && !tagKeys.some((k) => readerTagKeys(resolved).has(k))) continue;
       result.push(await formatArticleResponse(article, req, usersMap, legacyNameToId, rankCache));
     }
     res.json(result);
@@ -458,14 +465,20 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const lockedFilter = locked === 'true' ? true : locked === 'false' ? false : undefined;
 
     const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
-    const filtered = store.filterArticles({ q, tags, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    // Теги фильтруем здесь, а не в filterArticles: у каждого читателя свои
+    // видимые теги (только с доступных ему слоёв, см. readerTagKeys).
+    const filtered = store.filterArticles({ q, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    const tagKeys = tags.map((t) => store.tagKey(t));
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический
     // размер страницы врали бы из-за статей, закрытых по ролям для этого
     // конкретного пользователя (см. комментарий у store.filterArticles).
     const accessible = [];
     for (const article of filtered) {
-      if (await canAccessArticle(req.user, article)) accessible.push(article);
+      const resolved = await articleLayers.resolveArticleLayer(article, req.user);
+      if (!resolved) continue;
+      if (tagKeys.length && !tagKeys.some((k) => readerTagKeys(resolved).has(k))) continue;
+      accessible.push(article);
     }
 
     const total = accessible.length;
@@ -1109,7 +1122,7 @@ router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async 
       accessible.push({
         slug: article.slug,
         title: resolved.layer.title || article.title || article.slug,
-        tags: article.tags
+        tags: articleLayers.readerTags(resolved).own
       });
     }
     res.json({ accessible, restrictedSlugs });
@@ -1121,10 +1134,25 @@ router.get('/articles-index', auth.authenticateToken, auth.checkApproved, async 
 // Список тегов доступных статей + цвет каждого. Теги, у которых цвета ещё нет
 // (в том числе все уже существовавшие до появления цветов), получают
 // случайный и сохраняют его — см. src/services/tag-colors.js.
-async function collectTagsWithColors(articles) {
-  const list = store.collectTags(articles);
+async function collectTagsWithColors(articles, tagsOf) {
+  const list = store.collectTags(articles, tagsOf);
   const colors = await tagColors.ensureColors(list.map((t) => ({ key: t.key, name: t.tag })));
   return list.map((t) => ({ tag: t.tag, count: t.count, color: (colors.get(t.key) || {}).color || null }));
+}
+
+// Доступные читателю статьи и функция «какие теги у статьи видит этот
+// читатель» (только с его слоёв, см. articleLayers.readerTags) — для списка
+// тегов и смены цвета тега.
+async function readerTagIndex(user) {
+  const articles = [];
+  const bySlug = new Map();
+  for (const article of store.listArticles()) {
+    const resolved = await articleLayers.resolveArticleLayer(article, user);
+    if (!resolved) continue;
+    articles.push(article);
+    bySlug.set(article.slug, articleLayers.readerTags(resolved));
+  }
+  return { articles, tagsOf: (a) => bySlug.get(a.slug) || { own: [], hash: [] } };
 }
 
 // Новому тегу статьи цвет выдаётся сразу при сохранении: тег, впервые
@@ -1147,11 +1175,8 @@ async function assignColorsForArticle(article) {
 // не выдавал теги закрытых от него статей. Используется вкладкой "Теги".
 router.get('/tags', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const accessible = [];
-    for (const article of store.listArticles()) {
-      if (await canAccessArticle(req.user, article)) accessible.push(article);
-    }
-    res.json(await collectTagsWithColors(accessible));
+    const { articles: accessible, tagsOf } = await readerTagIndex(req.user);
+    res.json(await collectTagsWithColors(accessible, tagsOf));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1171,11 +1196,8 @@ router.put('/tags/color', auth.authenticateToken, auth.checkApproved, auth.check
       return res.status(400).json({ error: 'Цвет должен быть в формате #rrggbb' });
     }
 
-    const accessible = [];
-    for (const article of store.listArticles()) {
-      if (await canAccessArticle(req.user, article)) accessible.push(article);
-    }
-    const existing = store.collectTags(accessible).find((t) => t.key === key);
+    const { articles: accessible, tagsOf } = await readerTagIndex(req.user);
+    const existing = store.collectTags(accessible, tagsOf).find((t) => t.key === key);
     if (!existing) return res.status(404).json({ error: 'Такого тега нет' });
 
     const saved = await tagColors.setColor(key, existing.tag, color);
@@ -1210,18 +1232,20 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
 
     // server — для клиентского фильтра графа (выбор сервера), см.
     // public/graph-view.js.
-    // tags — для поиска по #тегу в графе: объединяем теги, заданные в форме
-    // статьи (a.tags), и #хэштеги прямо в тексте по ВСЕМ слоям (Obsidian-
-    // стиль, см. extractHashtags) — так же, как это уже устроено в
-    // filterArticles() для витрины Ibripedia, только тут результат отдаётся
-    // клиенту, а не используется для серверной фильтрации.
+    // tags — для поиска по #тегу в графе: объединяем теги из поля «Теги» и
+    // #хэштеги прямо в тексте (Obsidian-стиль) — только со слоёв, доступных
+    // этому читателю (см. articleLayers.readerTags), иначе теги закрытых
+    // слоёв были бы спойлером.
     // Теги узла нормализованы (store.tagKey) и идут в порядке: сначала из поля
     // "Теги", затем #хэштеги из текста — ПЕРВЫЙ из них определяет цвет узла на
     // клиенте (tagColors ниже, см. renderGraph в public/graph-view.js).
     // title — с резолвнутого ДЛЯ ЭТОГО читателя слоя, а не верхнеуровневый.
+    // Теги узла — только с доступных читателю слоёв (см. readerTags).
+    const tagsBySlug = new Map(accessible.map((a) => [a.slug, articleLayers.readerTags(resolvedBySlug.get(a.slug))]));
     const nodes = accessible.map(a => {
-      const ownTags = (a.tags || []).map(t => store.tagKey(t));
-      const hashtags = store.extractHashtags(a).map(t => store.tagKey(t));
+      const t = tagsBySlug.get(a.slug);
+      const ownTags = t.own.map(x => store.tagKey(x));
+      const hashtags = t.hash.map(x => store.tagKey(x));
       return {
         slug: a.slug,
         title: resolvedBySlug.get(a.slug).layer.title || a.title || a.slug,
@@ -1229,7 +1253,7 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
         tags: [...new Set([...ownTags, ...hashtags])].filter(Boolean)
       };
     });
-    const tagList = store.collectTags(accessible);
+    const tagList = store.collectTags(accessible, (a) => tagsBySlug.get(a.slug));
     const colorMap = await tagColors.ensureColors(tagList.map((t) => ({ key: t.key, name: t.tag })));
     const tagColorsOut = {};
     colorMap.forEach((v, key) => { tagColorsOut[key] = { name: v.name, color: v.color }; });

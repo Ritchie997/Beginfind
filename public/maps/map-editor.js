@@ -84,6 +84,7 @@
   // Прилипание к границам: радиус в экранных пикселях.
   const SNAP_PX = 10;
   const NEIGHBOR_CUT_KEY = 'beginfind.mapNeighborCut';
+  const FOG_PREVIEW_KEY = 'beginfind.mapFogPreview';
   // Кисть: диаметр в экранных пикселях, число сторон круга на концах мазка.
   const BRUSH_KEY = 'beginfind.mapBrushPx';
   const BRUSH_MIN = 4;
@@ -208,6 +209,9 @@
       let cut = true;
       try { cut = localStorage.getItem(NEIGHBOR_CUT_KEY) !== '0'; } catch (e) { /* нет доступа */ }
       this.setNeighborCut(cut);
+      let fogPreview = false;
+      try { fogPreview = localStorage.getItem(FOG_PREVIEW_KEY) === '1'; } catch (e) { /* нет доступа */ }
+      this.setFogPreview(fogPreview);
       this.bindCalendarSection();
       this.bindGlobal();
       this.initMap();
@@ -241,6 +245,7 @@
               ${TOOLS.map((t) => `<button type="button" class="me-tool" data-tool="${t.id}" title="${esc(t.label)} (${t.key.toUpperCase()})"><i class="fas ${t.icon}"></i></button>`).join('')}
               <span class="me-tools-sep"></span>
               <button type="button" class="me-tool me-tool-toggle" data-act="toggle-neighbors" title=""><i class="fas fa-object-ungroup"></i></button>
+              <button type="button" class="me-tool me-tool-toggle" data-act="toggle-fog" title=""><i class="fas fa-cloud"></i></button>
             </div>
             <div class="me-canvas-wrap">
               <div class="me-canvas"></div>
@@ -305,6 +310,7 @@
         case 'save': this.save(); break;
         case 'preview': this.preview(); break;
         case 'toggle-neighbors': this.setNeighborCut(!this.neighborCut); break;
+        case 'toggle-fog': this.setFogPreview(!this.fogPreview); break;
       }
     }
 
@@ -430,6 +436,13 @@
       this.zonesPane = this.map.createPane('zonesPane');
       this.zonesPane.style.zIndex = 450;
       this.renderer = L.svg({ padding: 0.5, pane: 'zonesPane' });
+      // Предпросмотр тумана войны: поверх зон, но под метками и точками
+      // правки (markerPane = 600) — править под туманом всё ещё можно.
+      this.fogPane = this.map.createPane('meFogPane');
+      this.fogPane.style.zIndex = 590;
+      this.fogPane.style.pointerEvents = 'none';
+      this.fogRenderer = L.svg({ padding: 0.5, pane: 'meFogPane' });
+      this.fogLayer = L.layerGroup().addTo(this.map);
       this.drawLayer = L.layerGroup().addTo(this.map);
       this.pausedLayer = L.layerGroup().addTo(this.map); // отложенный многоугольник (бледно)
       this.handleLayer = L.layerGroup().addTo(this.map);
@@ -555,6 +568,46 @@
         this.zoneLayers.set(zone.id, layer);
       });
       this.highlightEventZones && this.highlightEventZones();
+      this.renderFogPreview();
+    }
+
+    // ----- Предпросмотр тумана войны -----
+    // Зоны с туманом — так, как их видит читатель без ролей зоны: сплошная
+    // «облачная» заливка поверх фона (см. renderFog в map-core.js).
+
+    setFogPreview(on) {
+      this.fogPreview = !!on;
+      try { localStorage.setItem(FOG_PREVIEW_KEY, this.fogPreview ? '1' : '0'); } catch (e) { /* нет доступа */ }
+      this.root.querySelectorAll('[data-act="toggle-fog"]').forEach((btn) => {
+        btn.classList.toggle('active', this.fogPreview);
+        if (btn.classList.contains('me-tool')) {
+          btn.title = this.fogPreview
+            ? 'Предпросмотр тумана: ВКЛ — зоны с туманом закрыты, как у читателя без их ролей (F)'
+            : 'Предпросмотр тумана: ВЫКЛ (F)';
+        }
+      });
+      this.renderFogPreview();
+    }
+
+    renderFogPreview() {
+      if (!this.fogLayer) return;
+      this.fogLayer.clearLayers();
+      if (!this.fogPreview) return;
+      this.doc.zones.forEach((z) => {
+        if (!z.fog || !this.existsNow(z)) return;
+        const poly = this.zonePoly(z);
+        if (!poly.length) return;
+        L.polygon(MC().polygonToLatLngs(poly), {
+          renderer: this.fogRenderer,
+          interactive: false,
+          className: 'map-fog',
+          color: '#3a3c42',
+          weight: 1,
+          opacity: 0.9,
+          fillColor: '#1b1c20',
+          fillOpacity: 0.97
+        }).addTo(this.fogLayer);
+      });
     }
 
     zoneStyle(zone) {
@@ -571,6 +624,7 @@
       layer.setStyle(this.zoneStyle(zone));
       const el = layer.getElement && layer.getElement();
       if (el) el.classList.toggle('me-zone-absent', !this.existsNow(zone));
+      if (zone.fog && this.fogPreview) this.renderFogPreview(); // туман следует за правкой точек
     }
 
     // ----- Выбор и инструменты -----
@@ -1452,7 +1506,7 @@
         return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
           ${caret}
           <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
-          <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
+          <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>${z.fog ? '<i class="fas fa-cloud me-tree-fog" title="Туман войны"></i>' : ''}
           <span class="me-tree-type">${esc(t.name)}</span>
           ${z.roles && z.roles.length ? '<i class="fas fa-lock me-tree-flag" title="Доступ ограничен ролями"></i>' : ''}
           ${z.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
@@ -1782,6 +1836,7 @@
         <label class="me-check" title="Работает, когда выше заданы роли: остальным читателям область закрыта туманом вместе с фоном, а вложенные зоны и метки в ней скрыты">
           <input type="checkbox" data-prop="fog"${zone.fog ? ' checked' : ''}> Туман войны: без этих ролей область закрыта туманом
         </label>
+        <button type="button" class="btn btn-secondary btn-sm me-fog-preview-btn${this.fogPreview ? ' active' : ''}" data-act="toggle-fog" ${zone.fog ? '' : 'hidden'}><i class="fas fa-cloud"></i> Предпросмотр тумана</button>
         <label class="me-field"><span>Если статья читателю закрыта</span>
           <select class="form-select" data-prop="lockedMode">
             <option value="lock"${zone.lockedMode !== 'hide' ? ' selected' : ''}>Показать зону с замком</option>
@@ -2038,6 +2093,10 @@
       else if (f === 'fog') {
         if (zone.fog === input.checked) { this.undoStack.pop(); this._propHistoryPushed = false; return; } // input+change от одного клика
         zone.fog = input.checked;
+        const previewBtn = this.root.querySelector('.me-fog-preview-btn');
+        if (previewBtn) previewBtn.hidden = !zone.fog;
+        this.renderFogPreview();
+        this.renderTree();
         if (zone.fog && !(zone.roles || []).length) this.toast('Туман войны включён, но у зоны нет ролей — задайте в «Кому видна зона», кто уже исследовал эту область');
       }
       else if (f === 'article') {
@@ -3402,6 +3461,7 @@
         this.setBrushSize(this.brushSize() * (up ? 1.25 : 0.8));
         return;
       }
+      if (key === 'f') { this.setFogPreview(!this.fogPreview); return; }
       if (key === 'n') { this.setNeighborCut(!this.neighborCut); this.toast(this.neighborCut ? 'Новые зоны не заходят на соседние' : 'Зоны могут накладываться на соседние'); return; }
       const tool = TOOLS.find((t) => t.key === key);
       if (tool) this.setTool(tool.id);

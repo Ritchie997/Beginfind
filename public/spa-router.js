@@ -772,6 +772,8 @@ class SPARouter {
       roles: (this.layerRolesField?.getValues() || []).map((v) => this.decodeRoleRef(v)).filter(Boolean),
       public: !!document.getElementById('articleLayerPublicCheckbox')?.checked,
       title: document.getElementById('articleTitle')?.value || '',
+      // Теги — свои у каждого слоя: их видит только тот, кому доступен слой.
+      tags: this.tagsField ? this.tagsField.getValues() : [],
       content: editorMgr ? editorMgr.doc : { version: 1, blocks: [] }
     };
   }
@@ -785,6 +787,9 @@ class SPARouter {
 
     const titleInput = document.getElementById('articleTitle');
     if (titleInput) titleInput.value = layer.title || '';
+    if (this.tagsField) this.tagsField.setValues(Array.isArray(layer.tags) ? layer.tags : []);
+    const tagsHint = document.getElementById('articleTagsLayerHint');
+    if (tagsHint) tagsHint.textContent = `— теги слоя «${layer.title || 'без названия'}»: их видят только те, кому доступен этот слой`;
 
     const editorMgr = this.editorManager;
     if (editorMgr) {
@@ -843,6 +848,8 @@ class SPARouter {
     document.getElementById('articleLegacyAccessRow').hidden = enabled;
     document.getElementById('articleLegacyRolesRow').hidden = enabled;
     document.getElementById('articleLayerEditingHint').hidden = !enabled;
+    const tagsHint = document.getElementById('articleTagsLayerHint');
+    if (tagsHint) { tagsHint.hidden = !enabled; if (!enabled) tagsHint.textContent = ''; }
 
     if (enabled) {
       if (!this.articleLayers.length) {
@@ -856,6 +863,7 @@ class SPARouter {
           roles: [],
           public: false,
           title: document.getElementById('articleTitle')?.value || '',
+          tags: this.tagsField ? this.tagsField.getValues() : [],
           content: this.editorManager ? this.editorManager.doc : { version: 1, blocks: [] }
         }];
         this.activeLayerIndex = 0;
@@ -1194,9 +1202,14 @@ class SPARouter {
     // все слои статьи до одного. Не зная — просто не трогаем это поле:
     // сервер (PUT /api/articles/:id) не меняет layers, если ключа нет вовсе.
     if (this._layersStateKnown) {
+      if (this.articleLayersEnabled) this.snapshotActiveLayer(); // теги/текст активного слоя — в его запись
       data.layers = this.articleLayersEnabled
-        ? this.articleLayers.map((l) => ({ roles: l.roles, public: !!l.public, title: l.title, content: l.content }))
+        ? this.articleLayers.map((l) => ({ roles: l.roles, public: !!l.public, title: l.title, tags: Array.isArray(l.tags) ? l.tags : [], content: l.content }))
         : [];
+      // У многослойной статьи общих тегов нет — только теги слоёв (поле
+      // «Теги» формы показывает теги активного слоя). Иначе общий список
+      // видели бы все, кому открыт хоть один слой.
+      if (this.articleLayersEnabled) data.tags = [];
       // Сервер эти два поля игнорирует (в PUT/POST /api/articles он читает
       // только известные ему поля) — они здесь только для черновика
       // (см. loadDraft), чтобы при восстановлении вернуть тот же слой
@@ -1363,7 +1376,7 @@ class SPARouter {
     });
     document.getElementById('articleLayersAddBtn')?.addEventListener('click', () => {
       this.snapshotActiveLayer();
-      this.articleLayers.push({ roles: [], public: false, title: '', content: { version: 1, blocks: [] } });
+      this.articleLayers.push({ roles: [], public: false, title: '', tags: [], content: { version: 1, blocks: [] } });
       this.loadLayerIntoForm(this.articleLayers.length - 1);
     });
     // Копия выбранного слоя (роли+заголовок+текст) как новый слой выше —
@@ -1379,6 +1392,7 @@ class SPARouter {
         roles: source.roles.map((r) => ({ ...r })),
         public: !!source.public,
         title: source.title ? `${source.title} (копия)` : '',
+        tags: [...(source.tags || [])],
         content: JSON.parse(JSON.stringify(source.content))
       });
       this.loadLayerIntoForm(this.articleLayers.length - 1);
@@ -2519,6 +2533,7 @@ class SPARouter {
               roles: Array.isArray(l.roles) ? l.roles : [],
               public: !!l.public,
               title: l.title || '',
+              tags: Array.isArray(l.tags) ? l.tags : [],
               content: l.content || { version: 1, blocks: [] }
             }))
           : [];
@@ -3862,6 +3877,7 @@ class SPARouter {
             roles: Array.isArray(l.roles) ? l.roles : [],
             public: !!l.public,
             title: l.title || '',
+            tags: Array.isArray(l.tags) ? l.tags : [],
             content: l.content || { version: 1, blocks: [] }
           }));
           this.activeLayerIndex = this.articleLayers.length ? this.articleLayers.length - 1 : 0;

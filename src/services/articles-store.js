@@ -498,7 +498,9 @@ function tagKey(raw) {
  * @param {object[]} articles — статьи (уже отфильтрованные по доступу)
  * @returns {{tag: string, key: string, count: number}[]} по алфавиту
  */
-function collectTags(articles) {
+// tagsOf(article) → {own, hash} — теги, которые видит конкретный читатель
+// (см. articleLayers.readerTags); без него — все теги статьи по всем слоям.
+function collectTags(articles, tagsOf) {
   const byKey = new Map(); // ключ (нижний регистр) -> { tag, fromField, slugs:Set }
 
   const add = (raw, slug, fromField) => {
@@ -517,8 +519,9 @@ function collectTags(articles) {
   };
 
   for (const article of articles) {
-    (article.tags || []).forEach((t) => add(t, article.slug, true));
-    extractHashtags(article).forEach((t) => add(t, article.slug, false));
+    const t = tagsOf ? tagsOf(article) : { own: article.tags || [], hash: extractHashtags(article) };
+    (t.own || []).forEach((x) => add(x, article.slug, true));
+    (t.hash || []).forEach((x) => add(x, article.slug, false));
   }
 
   return [...byKey.values()]
