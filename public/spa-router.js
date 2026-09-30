@@ -761,8 +761,9 @@ class SPARouter {
     const layerRolesRoot = document.getElementById('articleLayerRolesField');
     this.layerRolesField = layerRolesRoot ? new ChipField(layerRolesRoot, {
       freeText: false,
-      placeholder: 'Пусто — слой публичный...',
-      emptyText: 'Сначала выберите сервер'
+      placeholder: 'Роли, которым виден слой...',
+      emptyText: 'Сначала выберите сервер',
+      onChange: () => this.updateLayerPublicRow()
     }) : null;
 
     // Состояние многослойности формы — см. setLayersMode/renderArticleLayersList.
@@ -820,7 +821,21 @@ class SPARouter {
     }
 
     this.layerRolesField.setOptions(options);
-    this.layerRolesField.setPlaceholder(options.length ? 'Пусто — слой публичный...' : 'Сначала выберите сервер...');
+    this.layerRolesField.setPlaceholder(options.length ? 'Роли, которым виден слой...' : 'Сначала выберите сервер...');
+  }
+
+  // Галочка "Открыть всем" имеет смысл только у слоя без ролей: с ролями
+  // доступ определяют они (см. layerRolesMatch), и видимая галочка рядом
+  // только сбивала с толку — непонятно, закрывает она слой или открывает.
+  updateLayerPublicRow() {
+    const row = document.getElementById('articleLayerPublicRow');
+    if (!row) return;
+    const hasRoles = (this.layerRolesField?.getValues() || []).length > 0;
+    row.hidden = hasRoles;
+    if (hasRoles) {
+      const cb = document.getElementById('articleLayerPublicCheckbox');
+      if (cb) cb.checked = false;
+    }
   }
 
   // Снимает текущее состояние формы (заголовок/контент редактора/роли) в
@@ -862,6 +877,7 @@ class SPARouter {
     this.layerRolesField?.setValues((layer.roles || []).map((r) => this.encodeRoleRef(r)));
     const publicCheckbox = document.getElementById('articleLayerPublicCheckbox');
     if (publicCheckbox) publicCheckbox.checked = !!layer.public;
+    this.updateLayerPublicRow();
 
     const hint = document.getElementById('articleLayerEditingHint');
     if (hint) hint.textContent = `(слой: ${layer.title || 'без названия'})`;
@@ -2054,6 +2070,7 @@ class SPARouter {
     this.layerRolesField?.setValues([]);
     const publicCheckboxReset = document.getElementById('articleLayerPublicCheckbox');
     if (publicCheckboxReset) publicCheckboxReset.checked = false;
+    this.updateLayerPublicRow();
 
     this.closeDraftsModal();
     this.currentDraftId = null; // Clear current draft ID
