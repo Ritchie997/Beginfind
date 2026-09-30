@@ -24,6 +24,10 @@
 
   const TYPE_LABELS = { bug: 'Проблема', idea: 'Идея', article: 'Статья' };
   const MAX_SCREENSHOTS = 5; // как MAX_SCREENSHOTS в feedback-store.js
+  // Сколько ждём загрузку одного скриншота. У fetch своего таймаута нет:
+  // на телефоне с плохой связью запрос мог висеть бесконечно, и всё это
+  // время «Отправить» оставалась заблокированной.
+  const UPLOAD_TIMEOUT_MS = 60 * 1000;
   // Совпадает с ARTICLE_REASONS в feedback-store.js.
   const ARTICLE_REASON_LABELS = {
     inaccurate: 'Недостоверная информация',
@@ -142,6 +146,7 @@
       this.myReports = new Map();
       this.queueReports = new Map();
       this.uploading = 0;
+      this.formSession = 0; // номер открытия формы — см. openCreateModal/uploadFiles
     }
 
     async api(endpoint, method = 'GET', data = null) {
@@ -156,6 +161,10 @@
     async init() {
       this.root = document.querySelector('.feedback-page');
       if (!this.root) return; // партиал ещё не в DOM
+      // Менеджер один на всё приложение и переживает уход со страницы:
+      // загрузки, начатые в прошлый заход, к новой форме отношения не имеют.
+      this.formSession++;
+      this.uploading = 0;
 
       const user = (window.authManager && authManager.getUser()) || {};
       const has = (key) => !!(user.is_root || (user.permissions && user.permissions[key]));
@@ -358,11 +367,18 @@
 
     // report — своё обращение для правки; без него — новое.
     openCreateModal(report = null) {
+      // Новая форма — новый сеанс: незавершённые загрузки прошлой формы
+      // больше не блокируют «Отправить» и не подкидывают сюда свои скриншоты.
+      this.formSession++;
+      this.uploading = 0;
       this.editingReport = report;
       const isArticle = !!(report && report.type === 'article');
       this.root.querySelector('#feedbackFormTitle').textContent = report ? `Обращение #${report.id}` : 'Новое обращение';
-      this.root.querySelector('#feedbackSubmitBtn').textContent = !report ? 'Отправить'
+      const submitBtn = this.root.querySelector('#feedbackSubmitBtn');
+      submitBtn.textContent = !report ? 'Отправить'
         : report.status === 'rejected' ? 'Отправить заново' : 'Сохранить';
+      submitBtn.dataset.label = submitBtn.textContent;
+      submitBtn.disabled = false;
       // Тип у отправленного не меняется; у жалобы на статью название
       // собирается само, а доказательства могут быть ссылками — правится
       // только описание.
@@ -397,15 +413,20 @@
     }
 
     // Пока скриншот грузится, «Отправить» заблокирована — иначе обращение
-    // ушло бы без него.
+    // ушло бы без него. Надпись на кнопке объясняет, почему она неактивна.
     setUploading(delta) {
-      this.uploading += delta;
-      this.root.querySelector('#feedbackSubmitBtn').disabled = this.uploading > 0;
+      this.uploading = Math.max(0, this.uploading + delta);
+      const btn = this.root.querySelector('#feedbackSubmitBtn');
+      btn.disabled = this.uploading > 0;
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+      btn.textContent = this.uploading > 0 ? 'Загрузка скриншота…' : btn.dataset.label;
     }
 
     async uploadFiles(input) {
       const files = Array.from(input.files || []);
       input.value = '';
+      if (!files.length) return;
+      const session = this.formSession;
       this.setUploading(1);
       try {
         for (const file of files) {
@@ -413,7 +434,14 @@
             showMessage(`Не больше ${MAX_SCREENSHOTS} скриншотов в одном обращении`, 'error');
             break;
           }
-          const result = await window.apiClient.uploadImage(file);
+          let timer;
+          const timeout = new Promise((resolve) => {
+            timer = setTimeout(() => resolve({ success: false, error: 'сервер слишком долго не отвечает' }), UPLOAD_TIMEOUT_MS);
+          });
+          const result = await Promise.race([window.apiClient.uploadImage(file), timeout]);
+          clearTimeout(timer);
+          // Форму за это время закрыли/открыли заново — результат не для неё.
+          if (session !== this.formSession) return;
           if (result.success && result.data && result.data.url) {
             this.attachments.push(result.data.url);
             this.renderFormAttachments();
@@ -422,12 +450,15 @@
           }
         }
       } finally {
-        this.setUploading(-1);
+        if (session === this.formSession) this.setUploading(-1);
       }
     }
 
     async submitReport() {
-      if (this.uploading) return;
+      if (this.uploading) {
+        showMessage('Дождитесь окончания загрузки скриншота', 'warning');
+        return;
+      }
       const val = (sel) => this.root.querySelector(sel).value;
       const editing = this.editingReport;
       const payload = { title: val('#feedbackTitle'), description: val('#feedbackDescription') };

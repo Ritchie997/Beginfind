@@ -249,6 +249,18 @@
 .feedback-queue-actions[hidden] { display: none; }
 .feedback-queue-actions .form-select { width: auto; max-width: 260px; }
 
+/* Окна обращений: шапка и кнопки стоят на месте, прокручивается только
+   содержимое. Раньше прокручивалось всё окно целиком (.modal-box с
+   overflow:auto), и скриншоты (.feedback-attachment — position:relative)
+   при прокрутке на телефонах рисовались поверх шапки/кнопок окна и
+   перехватывали нажатие на «Отправить». Теперь прокрутка — у .modal-body
+   (position:relative — позиционированные скриншоты обрезаются им самим),
+   а кнопки лежат вне её и перекрыться не могут. */
+.feedback-page .modal-box { overflow: hidden; max-height: 90vh; max-height: 90dvh; }
+.feedback-page .modal-header,
+.feedback-page .modal-footer { flex-shrink: 0; }
+.feedback-page .modal-body { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
 /* Карточка кейса */
 .feedback-case-box { width: 760px; }
 .feedback-case-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
