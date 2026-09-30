@@ -406,7 +406,10 @@ async function assertTriagable(actor, reportId) {
   const report = await getReport(reportId);
   if (!report) throw httpError(404, 'Обращение не найдено');
   if (report.status !== 'new') throw httpError(409, 'Обращение уже обработано');
-  if (report.authorId === actor.id && !actor.is_root) {
+  // Своё обращение по умолчанию проверяет другой модератор; право
+  // feedback_self (выдаётся роли, например кураторам) снимает это ограничение.
+  const canSelf = actor.is_root || !!(actor.permissions && actor.permissions.feedback_self);
+  if (report.authorId === actor.id && !canSelf) {
     throw httpError(403, 'Своё обращение должен проверить другой модератор');
   }
   return report;

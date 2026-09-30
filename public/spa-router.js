@@ -5967,7 +5967,8 @@ const PERMISSION_LABELS = {
   moderate_stickers: 'Подтверждать/отклонять наборы стикеров',
   feedback_triage: 'Обращения, 1 линия: отсеивать спам и нерелевант',
   feedback_cases: 'Обращения, 2 линия: собирать кейсы и передавать на решение',
-  feedback_decide: 'Обращения, 3 линия: принимать финальное решение по кейсу'
+  feedback_decide: 'Обращения, 3 линия: принимать финальное решение по кейсу',
+  feedback_self: 'Обращения: проверять на 1 линии свои собственные обращения'
 };
 
 SPARouter.prototype.loadUsersList = async function() {
