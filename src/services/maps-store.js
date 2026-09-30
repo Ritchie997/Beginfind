@@ -28,7 +28,36 @@ const HOVER_EFFECTS = ['outline', 'fill', 'glow', 'pulse'];
 const MAX_POINTS_TOTAL = 400000; // защита от случайно гигантских контуров (лассо без упрощения)
 const MAX_BASEMAPS = 20;
 const LOCKED_MODES = ['lock', 'hide'];
-const BASEMAP_STATUSES = ['uploading', 'queued', 'processing', 'ready', 'error'];
+// 'align' — фон другого размера, чем карта: нарезан как есть (для окна
+// выравнивания в редакторе) и ждёт трёх пар опорных точек (см. align ниже).
+const BASEMAP_STATUSES = ['uploading', 'queued', 'processing', 'ready', 'error', 'align'];
+
+// Выравнивание фона другого размера по трём опорным точкам: пары
+// [xФона, yФона, xКарты, yКарты]. По ним считается аффинное преобразование
+// (сдвиг, масштаб, поворот, перекос), которым картинка фона приводится к
+// системе координат карты перед нарезкой (см. map-tiler.js).
+function normalizeAlign(raw) {
+  if (!isPlainObject(raw) || !Array.isArray(raw.points) || raw.points.length !== 3) return null;
+  const points = raw.points.map((p) => (Array.isArray(p) && p.length === 4 ? p.map(Number) : null));
+  if (points.some((p) => !p || p.some((n) => !Number.isFinite(n)))) return null;
+  return { points: points.map((p) => p.map(round1)) };
+}
+
+// Аффинная матрица по трём парам точек: x' = a·x + b·y + e, y' = c·x + d·y + f.
+// null — точки фона лежат на одной прямой (преобразование не определено).
+function affineFromPoints(points) {
+  const [[x1, y1, u1, v1], [x2, y2, u2, v2], [x3, y3, u3, v3]] = points;
+  const det = x1 * (y2 - y3) - y1 * (x2 - x3) + (x2 * y3 - x3 * y2);
+  if (Math.abs(det) < 1e-6) return null;
+  const solve = (r1, r2, r3) => [
+    (r1 * (y2 - y3) - y1 * (r2 - r3) + (r2 * y3 - r3 * y2)) / det,
+    (x1 * (r2 - r3) - r1 * (x2 - x3) + (x2 * r3 - x3 * r2)) / det,
+    (x1 * (y2 * r3 - y3 * r2) - y1 * (x2 * r3 - x3 * r2) + r1 * (x2 * y3 - x3 * y2)) / det
+  ];
+  const [a, b, e] = solve(u1, u2, u3);
+  const [c, d, f] = solve(v1, v2, v3);
+  return { a, b, c, d, e, f };
+}
 
 function genId(prefix = '') {
   return prefix + crypto.randomBytes(6).toString('hex');
@@ -190,6 +219,9 @@ function normalizeZone(raw, budget) {
     article: str(raw.article, 120) || null,
     roles: normalizeLayerRoles(raw.roles),
     lockedMode: LOCKED_MODES.includes(raw.lockedMode) ? raw.lockedMode : 'lock',
+    // Туман войны: читателю без роли зоны (roles) область закрыта туманом —
+    // вместе с фоном под ней, а не просто не показана (см. buildViewerMap).
+    fog: raw.fog === true,
     style: normalizeStyle(raw.style),
     from: interval.from,
     to: interval.to,
@@ -330,6 +362,11 @@ function normalizeBasemap(raw) {
     // Идущая замена картинки фона (того же разрешения): старые тайлы
     // работают, пока новые не нарезаны; при ошибке остаются как были.
     replace: normalizeReplace(raw.replace),
+    align: normalizeAlign(raw.align),
+    // Размер исходной картинки фона (у выровненного фона width/height — уже
+    // размер карты, а окну выравнивания нужен исходный).
+    srcWidth: Number.isInteger(raw.srcWidth) ? raw.srcWidth : null,
+    srcHeight: Number.isInteger(raw.srcHeight) ? raw.srcHeight : null,
     created_at: str(raw.created_at, 40) || new Date().toISOString()
   };
 }
@@ -484,11 +521,20 @@ function removeBasemapFiles(mapId, basemap) {
     try { fs.unlinkSync(p); } catch (e) { /* нет файла */ }
   }
   removeReplaceFiles(mapId, basemap);
+  try { fs.unlinkSync(alignedPath(mapId, basemap.id)); } catch (e) { /* нет файла */ }
   fs.rmSync(tilesDir(mapId, basemap.id), { recursive: true, force: true });
+}
+
+// Выровненная (приведённая к размеру карты) копия исходника фона — её и режут.
+function alignedPath(mapId, basemapId) {
+  return path.join(sourceDir(mapId), `${basemapId}.aligned.png`);
 }
 
 module.exports = {
   MAX_ZONES,
+  normalizeAlign,
+  affineFromPoints,
+  alignedPath,
   genId,
   validId,
   normalizeMap,

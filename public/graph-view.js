@@ -71,8 +71,13 @@
   // названием), поэтому и подпись, и тултип — заглушка, а не n.title
   // (который для таких узлов null).
   function nodeDisplayTitle(n) {
+    if (n.kind === 'map') return `🗺 ${n.title || 'Карта'}`;
     return n.locked ? '???' : (n.title || n.slug);
   }
+
+  // Узел интерактивной карты (kind 'map', см. /api/articles-graph): связан
+  // со статьями, в которые ведут её зоны и метки; свой цвет, клик — карта.
+  const MAP_NODE_COLOR = '#1abc9c';
 
   // ---------------------------------------------------------------------------
   // Космический фон графа: мерцающие звёзды на <canvas> под SVG.
@@ -1064,6 +1069,7 @@
     // раньше, цвет первого тега. null — заливка из CSS (центр локального графа
     // и однотонный режим без colorByTag).
     const fillFor = (n) => {
+      if (n.kind === 'map') return MAP_NODE_COLOR;
       if (!colorByTag || n.slug === centerSlug) return null;
       const matched = matchingTagOf(n);
       return matched ? tagColors[matched].color : colorFor(n);
@@ -1288,16 +1294,19 @@
       glow.classed(name, predicate);
     };
 
-    node.style('cursor', (n) => n.locked ? 'not-allowed' : (onNodeClick ? 'pointer' : 'default'));
-    if (onNodeClick) {
-      // Узел-заглушка (locked) — недоступная статья; клик по нему ничего не
-      // открывает (сервер бы всё равно ответил 403), только тултип "???".
-      node.on('click', (event, n) => { if (!n.locked) onNodeClick(n.slug); });
-    }
+    node.style('cursor', (n) => n.locked ? 'not-allowed' : (onNodeClick || n.kind === 'map' ? 'pointer' : 'default'));
+    // Узел-заглушка (locked) — недоступная статья; клик по нему ничего не
+    // открывает (сервер бы всё равно ответил 403), только тултип "???".
+    // Узел карты открывает саму карту, в какой бы панели граф ни стоял.
+    node.on('click', (event, n) => {
+      if (n.kind === 'map') { window.MapsUI?.openMapPage(n.mapId); return; }
+      if (onNodeClick && !n.locked) onNodeClick(n.slug);
+    });
     // ПКМ (на телефоне — долгое нажатие) — показать окрестность статьи.
     if (options.onNodeFocus) {
       node.on('contextmenu', (event, n) => {
         event.preventDefault();
+        if (n.kind === 'map') return;
         options.onNodeFocus(n.slug);
       });
     }
@@ -1897,7 +1906,8 @@
       data.edges.forEach((e) => {
         if (e.from !== e.to) pairKeys.add(e.from < e.to ? `${e.from}\u0000${e.to}` : `${e.to}\u0000${e.from}`);
       });
-      if (countEl) countEl.textContent = `Статей: ${data.nodes.length} · Связей: ${pairKeys.size}`;
+      const mapCount = data.nodes.filter((n) => n.kind === 'map').length;
+      if (countEl) countEl.textContent = `Статей: ${data.nodes.length - mapCount}${mapCount ? ` · Карт: ${mapCount}` : ''} · Связей: ${pairKeys.size}`;
       renderFocusBar();
       instance = await renderGraph(container, data, {
         onNodeClick: navigateToArticle,

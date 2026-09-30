@@ -1275,6 +1275,8 @@
         panel.querySelectorAll('a[data-slug]').forEach((a) => {
           a.addEventListener('click', () => this.openArticleView(a.getAttribute('data-slug')));
         });
+        // Зоны и метки карт, ведущие сюда (см. MapsUI.renderMapRefs).
+        await window.MapsUI?.renderMapRefs(panel, slug);
       } catch (e) {
         panel.innerHTML = '<h3>Ссылки на эту статью</h3><div class="backlinks-empty">Не удалось загрузить</div>';
       }

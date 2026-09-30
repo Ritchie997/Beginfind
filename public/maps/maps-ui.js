@@ -69,7 +69,6 @@
     document.body.classList.add('map-fs-open');
     const root = appContent.querySelector('.map-fs');
     root.querySelector('[data-act="back"]').addEventListener('click', goBack);
-
     const params = pendingOpen && pendingOpen.mapId === mapId ? pendingOpen : {};
     pendingOpen = null;
 
@@ -143,6 +142,8 @@
         </details>
         <div class="map-fs-zone-list"></div>
       </div>`;
+    // Ручку ширины — после innerHTML выше (иначе он бы её стёр).
+    window.MapCore.makePanelResizable(panel, 'beginfind_map_panel_w', { def: 300 });
     if (viewer) viewer.mountLayersInto(panel.querySelector('.map-fs-layers'));
     const list = panel.querySelector('.map-fs-zone-list');
     const input = panel.querySelector('.map-fs-search');
@@ -303,12 +304,107 @@
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') createMap(ctx.server.id, input.value.trim()); });
   }
 
-  function renderMapCard(m) {
+  // ===== «На картах»: зоны и метки, ведущие в статью =====
+  // Дополняет панель обратных ссылок статьи (читалка Ибрипедии и редактор).
+  // Ничего не добавляет, если таких ссылок нет. Возвращает их число.
+  async function renderMapRefs(panel, slug) {
+    if (!panel || !slug) return 0;
+    const result = await api(`/api/articles/${encodeURIComponent(slug)}/map-refs`);
+    if (!panel.isConnected || !result.success || !Array.isArray(result.data) || !result.data.length) return 0;
+    const section = document.createElement('div');
+    section.className = 'map-refs';
+    let count = 0;
+    section.innerHTML = '<h4><i class="fas fa-map"></i> На картах</h4><ul>' + result.data.map((m) => m.items.map((it) => {
+      count++;
+      const what = it.kind === 'zone' ? 'Зона' : 'Метка';
+      return `<li><a href="javascript:void(0)" data-map-id="${escapeHtml(m.mapId)}" ${it.kind === 'zone' ? `data-zone-id="${escapeHtml(it.id)}"` : ''}>${what} «${escapeHtml(it.title)}»</a> <span class="map-refs-where">на карте «${escapeHtml(m.mapTitle)}»</span></li>`;
+    }).join('')).join('') + '</ul>';
+    section.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-map-id]');
+      if (!a) return;
+      openMapPage(a.dataset.mapId, a.dataset.zoneId ? { zoneId: a.dataset.zoneId } : {});
+    });
+    panel.appendChild(section);
+    // Сообщение «никто не сослался» больше не к месту, если сослались карты.
+    panel.querySelectorAll('.backlinks-empty').forEach((el) => el.remove());
+    return count;
+  }
+
+  // ===== Раздел «Карты» (/maps): все доступные карты с фильтром по миру =====
+  // Создают карту во вкладке «Карты» своего сервера — там же календарь мира;
+  // здесь — только общий список и переход к карте.
+
+  const MAPS_FILTER_KEY = 'beginfind_maps_world_filter';
+
+  async function loadMapsIndex() {
+    const appContent = document.getElementById('app-content');
+    if (!appContent) return;
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle) pageTitle.textContent = 'Карты';
+    appContent.innerHTML = '<div class="maps-index"><p class="maps-tab-loading">Загрузка карт…</p></div>';
+    const root = appContent.firstElementChild;
+
+    const result = await api('/api/maps');
+    if (!root.isConnected) return; // успели уйти на другую страницу
+    if (!result.success) {
+      root.innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(apiError(result))}</div>`;
+      return;
+    }
+    const maps = result.data || [];
+    const worlds = [...new Map(maps.map((m) => [m.serverId, m.serverName || `Сервер ${m.serverId}`])).entries()]
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ru'));
+    let world = '';
+    try { world = localStorage.getItem(MAPS_FILTER_KEY) || ''; } catch (e) { /* нет доступа */ }
+    if (world && !worlds.some(([id]) => String(id) === world)) world = '';
+    let query = '';
+
+    root.innerHTML = `
+      <div class="server-section-toolbar maps-index-toolbar">
+        <h3 class="server-section-title">Карты (<span data-el="count">${maps.length}</span>)</h3>
+        <select class="form-input maps-index-world" title="Мир (сервер)">
+          <option value="">Все миры</option>
+          ${worlds.map(([id, name]) => `<option value="${escapeHtml(String(id))}">${escapeHtml(name)}</option>`).join('')}
+        </select>
+        <input type="search" class="form-input maps-index-search" placeholder="Найти карту…">
+      </div>
+      <div data-el="list"></div>
+      <p class="maps-index-note">Новую карту создают во вкладке «Карты» своего сервера.</p>`;
+    const select = root.querySelector('.maps-index-world');
+    select.value = world;
+
+    const render = () => {
+      const q = query.toLowerCase().replace(/ё/g, 'е');
+      const list = maps.filter((m) => (!world || String(m.serverId) === world)
+        && (!q || String(m.title).toLowerCase().replace(/ё/g, 'е').includes(q)));
+      root.querySelector('[data-el="count"]').textContent = list.length;
+      root.querySelector('[data-el="list"]').innerHTML = list.length
+        ? `<div class="maps-grid">${list.map((m) => renderMapCard(m, { showWorld: !world })).join('')}</div>`
+        : `<div class="maps-empty"><i class="fas fa-map"></i><div>${maps.length ? 'Ничего не найдено' : 'Пока нет ни одной доступной вам карты'}</div></div>`;
+    };
+    render();
+
+    select.addEventListener('change', () => {
+      world = select.value;
+      try { localStorage.setItem(MAPS_FILTER_KEY, world); } catch (e) { /* нет доступа */ }
+      render();
+    });
+    root.querySelector('.maps-index-search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-act]');
+      const id = btn && btn.closest('[data-map-id]')?.dataset.mapId;
+      if (!id) return;
+      if (btn.dataset.act === 'open-map') openMapPage(id);
+      else if (btn.dataset.act === 'edit-map') openMapEditor(id);
+    });
+  }
+
+  function renderMapCard(m, { showWorld = false } = {}) {
     return `
       <article class="maps-card" data-map-id="${escapeHtml(m.id)}">
         <button type="button" class="maps-card-preview" data-act="open-map" title="Открыть карту">${renderPreview(m)}</button>
         <div class="maps-card-body">
           <div class="maps-card-title">${escapeHtml(m.title)}</div>
+          ${showWorld && m.serverName ? `<div class="maps-card-meta"><i class="fas fa-earth-europe"></i> ${escapeHtml(m.serverName)}</div>` : ''}
           <div class="maps-card-meta">Зон: ${m.zoneCount} · подложек: ${m.basemapCount} · ${new Date(m.updated_at).toLocaleDateString('ru-RU')}</div>
           <div class="maps-card-actions">
             <button class="btn btn-secondary btn-sm" data-act="open-map"><i class="fas fa-eye"></i> Открыть</button>
@@ -678,6 +774,8 @@
     cleanupPage,
     openMapPage,
     openMapEditor,
+    loadMapsIndex,
+    renderMapRefs,
     goBack,
     loadMapPage,
     renderServerMapsTab,

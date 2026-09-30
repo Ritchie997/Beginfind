@@ -36,7 +36,8 @@ function editorPayload(map, world) {
     ...map,
     basemaps: map.basemaps.map((b) => ({
       ...b,
-      url: b.status === 'ready' ? store.tilesUrl(map.id, b) : null,
+      // 'align' — фон нарезан как есть, его показывает окно выравнивания.
+      url: b.status === 'ready' || b.status === 'align' ? store.tilesUrl(map.id, b) : null,
       queuePosition: tiler.queuePosition(map.id, b.id),
       replaceQueuePosition: b.replace ? tiler.queuePosition(map.id, b.id, 'replace') : null
     })),
@@ -190,6 +191,7 @@ router.get('/maps/:id', auth.authenticateToken, auth.checkApproved, async (req, 
       basemaps: access.publicBasemaps(map),
       zones: visible.zones,
       markers: visible.markers,
+      fog: visible.fog,
       markerGroups: map.markerGroups,
       events: visible.events,
       timeline: map.timeline,
@@ -389,6 +391,37 @@ router.post('/maps/:id/basemaps/:bid/retile', auth.authenticateToken, auth.check
     }, { touch: false });
     tiler.enqueue(map.id, bm.id);
     res.json({ status: 'queued' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== Выравнивание фона другого размера по трём опорным точкам =====
+// points: [[xФона, yФона, xКарты, yКарты] × 3]. Фон перенарезается уже
+// приведённым к размеру карты (см. warpToMap в map-tiler.js); исходник
+// остаётся, так что выровнять можно и заново.
+router.post('/maps/:id/basemaps/:bid/align', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const map = await loadMapOr404(req, res);
+    if (!map) return;
+    if (!(await access.canEditMap(req.user, map))) return res.status(403).json({ error: 'Править эту карту вам нельзя' });
+    const bm = map.basemaps.find((b) => b.id === req.params.bid);
+    if (!bm) return res.status(404).json({ error: 'Фон не найден' });
+    if (!map.size) return res.status(409).json({ error: 'У карты ещё нет размера — выравнивать не к чему' });
+    if (!bm.srcWidth || !['align', 'ready', 'error'].includes(bm.status)) {
+      return res.status(409).json({ error: 'Этот фон сейчас нельзя выровнять' });
+    }
+    if (!fs.existsSync(store.sourcePath(map.id, bm))) return res.status(404).json({ error: 'Исходный файл фона не найден' });
+    const align = store.normalizeAlign(req.body);
+    if (!align) return res.status(400).json({ error: 'Нужно ровно три пары опорных точек' });
+    if (!store.affineFromPoints(align.points)) return res.status(400).json({ error: 'Опорные точки фона лежат на одной прямой — поставьте их треугольником' });
+    await store.updateMap(map.id, (m) => {
+      const b = m.basemaps.find((x) => x.id === bm.id);
+      if (b) Object.assign(b, { align, status: 'queued', error: null });
+      return m;
+    }, { touch: false });
+    tiler.enqueue(map.id, bm.id);
+    res.json({ status: 'queued', queuePosition: tiler.queuePosition(map.id, bm.id) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

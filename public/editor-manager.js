@@ -2978,6 +2978,8 @@
       panel.querySelectorAll('a[data-slug]').forEach((a) => {
         a.addEventListener('click', () => window.spaRouter?.editArticle(a.getAttribute('data-slug')));
       });
+      // Зоны и метки карт, ведущие сюда (см. MapsUI.renderMapRefs).
+      await window.MapsUI?.renderMapRefs(panel, slug);
     }
 
     async renderLocalGraphPanel(slug) {

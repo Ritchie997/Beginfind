@@ -17,6 +17,7 @@ class SPARouter {
       '/profile': this.loadProfile,
       // Интерактивные карты (public/maps/*): /map/:id и /map/:id/edit —
       // см. resolveRouteKey, id кладётся в this.mapRouteId.
+      '/maps': function () { return window.MapsUI.loadMapsIndex(this); },
       '/map': function () { return window.MapsUI.loadMapPage(this); },
       '/map-edit': function () { return window.MapEditor.loadMapEditor(this); }
     };
@@ -324,6 +325,7 @@ class SPARouter {
       '/users': 'Пользователи - Админ-панель BeginFind',
       '/settings': 'Настройки - Админ-панель BeginFind',
       '/profile': 'Профиль - Админ-панель BeginFind',
+      '/maps': 'Карты - Админ-панель BeginFind',
       '/map': 'Карта - Админ-панель BeginFind',
       '/map-edit': 'Редактор карты - Админ-панель BeginFind'
     };

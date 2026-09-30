@@ -15,6 +15,7 @@ const tagColors = require('../services/tag-colors');
 const dashboardStats = require('../services/dashboard-stats');
 const { serversDb } = require('../db/connections');
 const articleLayers = require('../services/article-layers');
+const mapAccess = require('../services/map-access');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
@@ -819,6 +820,31 @@ router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved
   }
 });
 
+// Зоны и метки интерактивных карт, ведущие в эту статью («зона на карте X
+// ведёт сюда») — рядом с обычными backlinks. Только то, что видно этому
+// читателю (см. mapAccess.articleRefsFor).
+router.get('/articles/:id/map-refs', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const article = store.getArticle(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    if (!(await canAccessArticle(req.user, article))) {
+      return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+    }
+    const all = await mapAccess.articleRefsFor(req.user);
+    const result = [];
+    for (const { map, refs } of all) {
+      const items = refs.get(article.slug);
+      if (!items) continue;
+      result.push({ mapId: map.id, mapTitle: map.title, serverName: await mapAccess.getServerName(map.serverId), items });
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- Реакции (эмодзи/стикером) — общая логика для статьи целиком и
 // для отдельных комментариев, см. таблицу reactions в src/db/connections.js
 // и toggleReaction/getReactionsForTargets в social-store.js. ----------
@@ -1225,6 +1251,17 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
     ghostSlugs.forEach((slug) => {
       nodes.push({ slug, title: null, server: null, tags: [], locked: true });
     });
+
+    // Карты — отдельные узлы (kind 'map'), связанные со статьями, в которые
+    // ведут их видимые читателю зоны и метки. slug узла — "map:<id>", чтобы
+    // не пересечься со slug статьи; клиент по kind открывает карту.
+    for (const { map, refs } of await mapAccess.articleRefsFor(req.user)) {
+      const targets = [...refs.keys()].filter((s) => slugs.has(s));
+      if (!targets.length) continue;
+      const mapSlug = `map:${map.id}`;
+      nodes.push({ slug: mapSlug, kind: 'map', mapId: map.id, title: map.title, server: map.serverId ?? null, tags: [] });
+      targets.forEach((to) => edges.push({ from: mapSlug, to }));
+    }
 
     res.json({ nodes, edges, tagColors: tagColorsOut });
   } catch (err) {

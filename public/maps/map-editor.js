@@ -28,9 +28,10 @@
 
   const TOOLS = [
     { id: 'select', key: 'v', icon: 'fa-arrow-pointer', label: 'Выбор', hint: 'Клик по зоне — выбрать. Двойной клик — править её точки.' },
-    { id: 'polygon', key: 'p', icon: 'fa-draw-polygon', label: 'Многоугольник', hint: 'Клик — точка. Двойной клик, Enter или клик по первой точке — готово. Backspace — убрать точку, Esc — отмена. Shift — добавить к выбранной, Alt — вырезать.' },
+    { id: 'polygon', key: 'p', icon: 'fa-draw-polygon', label: 'Многоугольник', hint: 'Клик — точка. Двойной клик, Enter или клик по первой точке — готово. Backspace — убрать точку, Esc — отмена. Shift — добавить к выбранной, Alt — вырезать. Точки прилипают к границам других зон (зелёный кружок); две точки подряд на границе одной зоны — контур пройдёт вдоль неё, Ctrl при клике — в обход с другой стороны.' },
     { id: 'lasso', key: 'l', icon: 'fa-signature', label: 'Лассо', hint: 'Зажмите кнопку мыши и обведите область. Shift — добавить к выбранной зоне, Alt — вырезать из неё. Пробел — двигать карту.' },
-    { id: 'vertex', key: 'e', icon: 'fa-bezier-curve', label: 'Правка точек', hint: 'Тяните точку. Промежуточная точка между двумя — добавить новую. Правый клик по точке — удалить.' },
+    { id: 'brush', key: 'b', icon: 'fa-paintbrush', label: 'Кисть', hint: 'Зажмите кнопку мыши и ведите — мазок заданной ширины. Выбрана зона — мазок добавляется к ней, Alt — вырезается из неё; не выбрана — мазок становится новой зоной. [ и ] — размер кисти. Пробел — двигать карту.' },
+    { id: 'vertex', key: 'e', icon: 'fa-bezier-curve', label: 'Правка точек', hint: 'Тяните точку — у границы другой зоны она прилипнет к ней. Промежуточная точка между двумя — добавить новую. Правый клик по точке — удалить.' },
     { id: 'marker', key: 'm', icon: 'fa-location-dot', label: 'Метка', hint: 'Клик — поставить метку. Метки перетаскиваются мышью; тип, описание и статья — в свойствах справа.' }
   ];
 
@@ -78,6 +79,78 @@
       if (rings.length) out.push(rings);
     });
     return out;
+  }
+
+  // Прилипание к границам: радиус в экранных пикселях.
+  const SNAP_PX = 10;
+  const NEIGHBOR_CUT_KEY = 'beginfind.mapNeighborCut';
+  // Кисть: диаметр в экранных пикселях, число сторон круга на концах мазка.
+  const BRUSH_KEY = 'beginfind.mapBrushPx';
+  const BRUSH_MIN = 4;
+  const BRUSH_MAX = 200;
+  const BRUSH_SIDES = 12;
+
+  // Позиция на кольце — число s: целое — вершина s, дробное — точка на
+  // ребре floor(s) → floor(s)+1. Вершины строго между sA и sB при обходе
+  // кольца вперёд (по возрастанию индексов, с переходом через конец).
+  function ringVertsForward(n, sA, sB) {
+    let span = sB - sA;
+    if (span <= 0) span += n;
+    const out = [];
+    const start = Math.floor(sA) + 1;
+    for (let step = 0; step < n; step++) {
+      const idx = (start + step) % n;
+      let off = idx - sA;
+      if (off <= 0) off += n;
+      if (off >= span - 1e-9) break;
+      out.push(idx);
+    }
+    return out;
+  }
+
+  function pathLength(pts) {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    return len;
+  }
+
+  // Участок границы между двумя точками кольца: вершины, через которые
+  // пройдёт контур от a до b (сами a и b не входят). По умолчанию — более
+  // короткий путь, longWay — обход с другой стороны.
+  function ringTrace(ring, a, b, longWay) {
+    const n = ring.length;
+    if (n < 3 || Math.abs(a.s - b.s) < 1e-9) return [];
+    const fwd = ringVertsForward(n, a.s, b.s).map((i) => ring[i]);
+    const back = ringVertsForward(n, b.s, a.s).reverse().map((i) => ring[i]);
+    const lf = pathLength([a.pt, ...fwd, b.pt]);
+    const lb = pathLength([a.pt, ...back, b.pt]);
+    const shortIsFwd = lf <= lb;
+    const useFwd = longWay ? !shortIsFwd : shortIsFwd;
+    return (useFwd ? fwd : back).map((p) => [p[0], p[1]]);
+  }
+
+  // Аффинное преобразование по трём парам [xФона, yФона, xКарты, yКарты] —
+  // зеркало affineFromPoints в src/services/maps-store.js. null — точки
+  // фона на одной прямой.
+  function affineFromPoints(points) {
+    const [[x1, y1, u1, v1], [x2, y2, u2, v2], [x3, y3, u3, v3]] = points;
+    const det = x1 * (y2 - y3) - y1 * (x2 - x3) + (x2 * y3 - x3 * y2);
+    if (Math.abs(det) < 1e-6) return null;
+    const solve = (r1, r2, r3) => [
+      (r1 * (y2 - y3) - y1 * (r2 - r3) + (r2 * y3 - r3 * y2)) / det,
+      (x1 * (r2 - r3) - r1 * (x2 - x3) + (x2 * r3 - x3 * r2)) / det,
+      (x1 * (y2 * r3 - y3 * r2) - y1 * (x2 * r3 - x3 * r2) + r1 * (x2 * y3 - x3 * y2)) / det
+    ];
+    const [a, b, e] = solve(u1, u2, u3);
+    const [c, d, f] = solve(v1, v2, v3);
+    return { a, b, c, d, e, f };
+  }
+  const affineApply = (M, p) => [M.a * p[0] + M.b * p[1] + M.e, M.c * p[0] + M.d * p[1] + M.f];
+  function affineInvert(M) {
+    const det = M.a * M.d - M.b * M.c;
+    if (Math.abs(det) < 1e-12) return null;
+    const a = M.d / det; const b = -M.b / det; const c = -M.c / det; const d = M.a / det;
+    return { a, b, c, d, e: -(a * M.e + b * M.f), f: -(c * M.e + d * M.f) };
   }
 
   function pointCount(multi) {
@@ -132,6 +205,9 @@
       this.sidebarTab = 'zones';
 
       this.buildLayout();
+      let cut = true;
+      try { cut = localStorage.getItem(NEIGHBOR_CUT_KEY) !== '0'; } catch (e) { /* нет доступа */ }
+      this.setNeighborCut(cut);
       this.bindCalendarSection();
       this.bindGlobal();
       this.initMap();
@@ -163,6 +239,8 @@
           <div class="me-body">
             <div class="me-tools">
               ${TOOLS.map((t) => `<button type="button" class="me-tool" data-tool="${t.id}" title="${esc(t.label)} (${t.key.toUpperCase()})"><i class="fas ${t.icon}"></i></button>`).join('')}
+              <span class="me-tools-sep"></span>
+              <button type="button" class="me-tool me-tool-toggle" data-act="toggle-neighbors" title=""><i class="fas fa-object-ungroup"></i></button>
             </div>
             <div class="me-canvas-wrap">
               <div class="me-canvas"></div>
@@ -207,6 +285,7 @@
       // («Просмотр», «Сохранить»…) срабатывали бы и у прежнего редактора.
       this._onRootClick = (e) => this.onRootClick(e);
       this.root.addEventListener('click', this._onRootClick);
+      MC().makePanelResizable(this.root.querySelector('.me-side'), 'beginfind_map_editor_side_w', { def: 340, min: 260 });
       this.root.querySelector('.me-title-input').addEventListener('focus', () => this.pushHistory());
       this.root.querySelector('.me-title-input').addEventListener('input', (e) => { this.doc.title = e.target.value; this.markDirty(); });
       this.el('basemap-select').addEventListener('change', (e) => this.setBasemap(e.target.value));
@@ -225,6 +304,44 @@
         case 'redo': this.redo(); break;
         case 'save': this.save(); break;
         case 'preview': this.preview(); break;
+        case 'toggle-neighbors': this.setNeighborCut(!this.neighborCut); break;
+      }
+    }
+
+    // «Не заходить на соседей»: новая форма (и то, что добавляется к
+    // выбранной зоне) обрезается по зонам того же уровня — соседние зоны не
+    // накладываются друг на друга. Запоминается в браузере.
+    setNeighborCut(on) {
+      this.neighborCut = !!on;
+      try { localStorage.setItem(NEIGHBOR_CUT_KEY, this.neighborCut ? '1' : '0'); } catch (e) { /* нет доступа */ }
+      const btn = this.root.querySelector('[data-act="toggle-neighbors"]');
+      if (btn) {
+        btn.classList.toggle('active', this.neighborCut);
+        btn.title = this.neighborCut
+          ? 'Не заходить на соседние зоны: ВКЛ — новая зона обрезается по зонам того же уровня (N)'
+          : 'Не заходить на соседние зоны: ВЫКЛ — зоны могут накладываться (N)';
+      }
+    }
+
+    // Вычесть из формы зоны того же уровня (те же parentId), существующие
+    // сейчас; excludeId — сама зона, к которой добавляем. null — вычитать
+    // нечего или выключено; [] — от формы ничего не осталось.
+    cutByNeighbors(multi, parentId, excludeId) {
+      const clip = this.clip();
+      if (!this.neighborCut || !clip) return null;
+      const bb = MC().polygonBBox(multi);
+      const others = this.doc.zones.filter((z) => z.id !== excludeId && (z.parentId || null) === (parentId || null) && this.existsNow(z))
+        .map((z) => this.zonePoly(z))
+        .filter((p) => {
+          if (!p.length || !bb) return false;
+          const ob = MC().polygonBBox(p);
+          return ob && ob.minX < bb.maxX && ob.maxX > bb.minX && ob.minY < bb.maxY && ob.maxY > bb.minY;
+        });
+      if (!others.length) return null;
+      try {
+        return cleanMulti(clip.difference(multi, ...others));
+      } catch (e) {
+        return null; // не вышло — оставим как нарисовано
       }
     }
 
@@ -324,6 +441,7 @@
       this.map.on('dblclick', (e) => this.onMapDblClick(e));
       this.map.on('mousemove', (e) => this.onMapMouseMove(e));
       this.map.on('mousedown', (e) => this.onMapMouseDown(e));
+      this.map.on('mouseout', () => { if (!this.draw || this.draw.kind !== 'brush') this.hideBrushCursor(); });
       this.map.on('moveend zoomend', () => { if (this.tool === 'vertex') this.renderHandles(); });
       this._resizeObserver = new ResizeObserver(() => this.map.invalidateSize());
       this._resizeObserver.observe(this.wrapEl);
@@ -494,7 +612,8 @@
       this.renderPaused();
       this.tool = tool;
       this.root.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
-      const drawing = tool === 'polygon' || tool === 'lasso';
+      const drawing = tool === 'polygon' || tool === 'lasso' || tool === 'brush';
+      if (tool !== 'brush') this.hideBrushCursor();
       this.wrapEl.classList.toggle('me-drawing', drawing);
       this.wrapEl.classList.toggle('me-tool-lasso', tool === 'lasso');
       if (drawing && !this.mods.space) this.map.dragging.disable(); else this.map.dragging.enable();
@@ -545,10 +664,65 @@
 
     clickPoint(e) { return MC().fromLatLng(e.latlng); }
 
+    // ----- Прилипание к границам других зон -----
+    //
+    // Точка многоугольника (и перетаскиваемая точка зоны), поставленная в
+    // пределах SNAP_PX от вершины или ребра существующей зоны, ложится ровно
+    // на её границу — у соседних зон получается общая граница без щелей и
+    // наложений. Вершина в приоритете перед ребром.
+    // @returns {{zoneId, pi, ri, s, pt}|null} s — позиция на кольце (см. ringTrace)
+    findSnap(pt, { excludeZoneId = null } = {}) {
+      if (!this.map) return null;
+      const tol = SNAP_PX / Math.pow(2, this.map.getZoom());
+      let vBest = null;
+      let eBest = null;
+      this.doc.zones.forEach((z) => {
+        if (z.id === excludeZoneId || !this.existsNow(z)) return;
+        this.zonePoly(z).forEach((rings, pi) => rings.forEach((ring, ri) => {
+          const n = ring.length;
+          for (let i = 0; i < n; i++) {
+            const a = ring[i];
+            const b = ring[(i + 1) % n];
+            // Быстрый отсев ребра целиком за пределами допуска.
+            if (pt[0] < Math.min(a[0], b[0]) - tol || pt[0] > Math.max(a[0], b[0]) + tol
+              || pt[1] < Math.min(a[1], b[1]) - tol || pt[1] > Math.max(a[1], b[1]) + tol) continue;
+            const dv = Math.hypot(pt[0] - a[0], pt[1] - a[1]);
+            if (dv <= tol && (!vBest || dv < vBest.d)) vBest = { d: dv, zoneId: z.id, pi, ri, s: i, pt: [a[0], a[1]] };
+            const dx = b[0] - a[0];
+            const dy = b[1] - a[1];
+            const len2 = dx * dx + dy * dy;
+            if (!len2) continue;
+            const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / len2));
+            const q = [a[0] + t * dx, a[1] + t * dy];
+            const de = Math.hypot(pt[0] - q[0], pt[1] - q[1]);
+            if (de <= tol && (!eBest || de < eBest.d)) {
+              eBest = { d: de, zoneId: z.id, pi, ri, s: t >= 1 ? (i + 1) % n : i + t, pt: [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10] };
+            }
+          }
+        }));
+      });
+      return vBest || eBest;
+    }
+
+    snapRing(snap) {
+      const z = snap && this.zoneById(snap.zoneId);
+      const poly = z && this.zonePoly(z);
+      return (poly && poly[snap.pi] && poly[snap.pi][snap.ri]) || null;
+    }
+
+    // Обход вдоль границы: предыдущая точка контура и новая лежат на одном
+    // кольце одной зоны — вернуть вершины границы между ними.
+    traceBetween(prevSnap, snap, longWay) {
+      if (!prevSnap || !snap) return [];
+      if (prevSnap.zoneId !== snap.zoneId || prevSnap.pi !== snap.pi || prevSnap.ri !== snap.ri) return [];
+      const ring = this.snapRing(snap);
+      return ring ? ringTrace(ring, prevSnap, snap, longWay) : [];
+    }
+
     onMapClick(e) {
       if (this.tool === 'polygon' && this.size) {
         if (this.mods.space) return;
-        const pt = this.clickPoint(e);
+        let pt = this.clickPoint(e);
         if (!this.draw) this.draw = { kind: 'polygon', points: [], redo: [] };
         const pts = this.draw.points;
         // Клик рядом с первой точкой — замкнуть.
@@ -556,9 +730,22 @@
           const first = this.map.latLngToContainerPoint(MC().toLatLng(pts[0]));
           if (first.distanceTo(e.containerPoint) < 10) { this.finishPolygon(); return; }
         }
+        const snap = this.findSnap(pt);
+        if (snap) pt = [snap.pt[0], snap.pt[1]];
+        // Две точки подряд на границе одной зоны — контур идёт вдоль неё
+        // (Ctrl — в обход с другой стороны). Вставленные точки — одна группа
+        // с кликнутой: Backspace/Ctrl+Z убирают их вместе.
+        const last = pts[pts.length - 1];
+        const traced = last && last.snap ? this.traceBetween(last.snap, snap, e.originalEvent && e.originalEvent.ctrlKey) : [];
+        if (traced.length) {
+          const group = genId('t');
+          traced.forEach((p) => { p.trace = group; pts.push(p); });
+          pt.traceEnd = group;
+        }
+        if (snap) pt.snap = snap;
         pts.push(pt);
         this.draw.redo = [];
-        this.renderDraft(e.latlng);
+        this.renderDraft(e.latlng, e.originalEvent && e.originalEvent.ctrlKey);
         this.drawingChanged();
         return;
       }
@@ -742,15 +929,31 @@
     }
 
     onMapMouseMove(e) {
-      if (this.draw && this.draw.kind === 'polygon' && this.draw.points.length) this.renderDraft(e.latlng);
+      if (this.tool === 'brush') { if (!this.mods.space) this.showBrushCursor(e.latlng); else this.hideBrushCursor(); return; }
+      if (this.tool === 'polygon' && !this.mods.space) this.renderDraft(e.latlng, e.originalEvent && e.originalEvent.ctrlKey);
     }
 
-    renderDraft(cursorLatLng) {
+    // cursorLatLng — где сейчас мышь: к ней тянется пунктир от последней
+    // точки; если курсор прилипает к границе зоны — там кружок-подсказка, а
+    // если выйдет обход вдоль границы — пунктир показывает его путь.
+    renderDraft(cursorLatLng, longWay) {
       this.drawLayer.clearLayers();
+      let cursor = cursorLatLng;
+      let cursorSnap = null;
+      if (cursor && this.tool === 'polygon') {
+        cursorSnap = this.findSnap(MC().fromLatLng(cursor));
+        if (cursorSnap) {
+          cursor = MC().toLatLng(cursorSnap.pt);
+          L.circleMarker(cursor, { radius: 7, color: '#3ba55d', weight: 2, fill: false, interactive: false }).addTo(this.drawLayer);
+        }
+      }
       if (!this.draw) return;
       const lls = this.draw.points.map(MC().toLatLng);
       if (this.draw.kind === 'polygon') {
-        const line = cursorLatLng ? [...lls, cursorLatLng] : lls;
+        const last = this.draw.points[this.draw.points.length - 1];
+        const traced = cursorSnap && last && last.snap ? this.traceBetween(last.snap, cursorSnap, longWay) : [];
+        if (traced.length) L.polyline([MC().toLatLng(last), ...traced.map(MC().toLatLng), cursor], { color: '#3ba55d', weight: 4, opacity: 0.9, interactive: false }).addTo(this.drawLayer);
+        const line = cursor ? [...lls, ...traced.map(MC().toLatLng), cursor] : lls;
         if (line.length > 1) L.polyline(line, { color: '#ffffff', weight: 2, dashArray: '5 5', interactive: false }).addTo(this.drawLayer);
         lls.forEach((ll, i) => L.circleMarker(ll, { radius: i === 0 ? 6 : 4, color: '#ffffff', weight: 2, fillColor: i === 0 ? '#faa81a' : '#5865f2', fillOpacity: 1, interactive: false }).addTo(this.drawLayer));
       } else if (this.draw.kind === 'lasso' && lls.length > 1) {
@@ -758,7 +961,119 @@
       }
     }
 
+    // ----- Кисть -----
+    //
+    // Мазок — ломаная в экранных пикселях; при отпускании каждая пара
+    // соседних точек становится «капсулой» (прямоугольник + круги на концах)
+    // шириной brushPx, капсулы склеиваются в один контур (polygon-clipping).
+
+    brushSize() {
+      if (!this.brushPx) {
+        let v = NaN;
+        try { v = parseInt(localStorage.getItem(BRUSH_KEY), 10); } catch (e) { /* нет доступа */ }
+        this.brushPx = Number.isFinite(v) ? Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, v)) : 24;
+      }
+      return this.brushPx;
+    }
+
+    setBrushSize(px) {
+      this.brushPx = Math.max(BRUSH_MIN, Math.min(BRUSH_MAX, Math.round(px)));
+      try { localStorage.setItem(BRUSH_KEY, String(this.brushPx)); } catch (e) { /* нет доступа */ }
+      if (this._brushCursor) this._brushCursor.setRadius(this.brushPx / 2);
+      this.el('hint').textContent = `Размер кисти: ${this.brushPx} px на экране. ${TOOLS.find((t) => t.id === 'brush').hint}`;
+    }
+
+    showBrushCursor(latlng) {
+      if (!this._brushCursor) {
+        this._brushCursor = L.circleMarker(latlng, { radius: this.brushSize() / 2, color: '#ffffff', weight: 1.5, dashArray: '3 3', fill: false, interactive: false });
+      }
+      this._brushCursor.setLatLng(latlng);
+      if (!this.map.hasLayer(this._brushCursor)) this._brushCursor.addTo(this.map);
+    }
+
+    hideBrushCursor() {
+      if (this._brushCursor && this.map && this.map.hasLayer(this._brushCursor)) this._brushCursor.remove();
+    }
+
+    startBrush(e) {
+      const cp = e.containerPoint;
+      this.draw = { kind: 'brush', cps: [cp], alt: !!(e.originalEvent && e.originalEvent.altKey) };
+      const renderStroke = () => {
+        this.drawLayer.clearLayers();
+        const lls = this.draw.cps.map((p) => this.map.containerPointToLatLng(p));
+        const style = { color: this.draw.alt ? '#ed4245' : '#3ba55d', opacity: 0.45, weight: this.brushSize(), lineCap: 'round', lineJoin: 'round', interactive: false };
+        if (lls.length > 1) L.polyline(lls, style).addTo(this.drawLayer);
+        else L.circleMarker(lls[0], { radius: this.brushSize() / 2, stroke: false, fillColor: style.color, fillOpacity: 0.45, interactive: false }).addTo(this.drawLayer);
+      };
+      renderStroke();
+      const onMove = (ev) => {
+        if (!this.draw || this.draw.kind !== 'brush') return;
+        const p = this.map.mouseEventToContainerPoint(ev);
+        this.showBrushCursor(this.map.containerPointToLatLng(p));
+        if (p.distanceTo(this.draw.cps[this.draw.cps.length - 1]) < 2) return;
+        this.draw.cps.push(p);
+        renderStroke();
+      };
+      const onUp = () => {
+        this._lassoUp = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        this.finishBrush();
+      };
+      this._lassoUp = onUp;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+
+    finishBrush() {
+      const d = this.draw;
+      this.cancelDrawing();
+      if (!d || d.kind !== 'brush' || !d.cps.length) return;
+      const clip = this.clip();
+      if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return; }
+      const rPx = this.brushSize() / 2;
+      // Упрощаем в экранных пикселях: дрожь руки меньше четверти кисти не нужна.
+      const cps = d.cps.length > 2 ? L.LineUtil.simplify(d.cps, Math.max(1, rPx / 4)) : d.cps;
+      const pts = cps.map((p) => MC().fromLatLng(this.map.containerPointToLatLng(p)));
+      const r = rPx / Math.pow(2, this.map.getZoom()); // радиус в пикселях карты
+      const circle = (c) => {
+        const ring = [];
+        for (let i = 0; i < BRUSH_SIDES; i++) {
+          const a = (i / BRUSH_SIDES) * Math.PI * 2;
+          ring.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]);
+        }
+        return [ring];
+      };
+      const parts = pts.map(circle);
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1];
+        const [bx, by] = pts[i];
+        const len = Math.hypot(bx - ax, by - ay);
+        if (!len) continue;
+        const nx = (-(by - ay) / len) * r;
+        const ny = ((bx - ax) / len) * r;
+        parts.push([[[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]]]);
+      }
+      let shape;
+      try {
+        shape = cleanMulti(clip.union(...parts));
+      } catch (err) {
+        this.toast(`Не удалось собрать мазок: ${err.message}`);
+        return;
+      }
+      if (!shape.length) return;
+      const selected = this.zoneById(this.selectedId);
+      this.applyNewShape(shape, selected ? (d.alt ? 'cut' : 'add') : 'new');
+    }
+
     onMapMouseDown(e) {
+      if (this.tool === 'brush' && this.size && !this.mods.space) {
+        const oe = e.originalEvent;
+        if (oe.button !== 0) return;
+        oe.preventDefault();
+        this.startBrush(e);
+        return;
+      }
       if (this.tool !== 'lasso' || !this.size || this.mods.space) return;
       const oe = e.originalEvent;
       if (oe.button !== 0) return;
@@ -821,8 +1136,15 @@
     }
 
     popDrawPoint() {
-      const p = this.draw.points.pop();
-      if (p) this.draw.redo.push(p);
+      const pts = this.draw.points;
+      const p = pts.pop();
+      if (p && p.traceEnd) {
+        // Точка, к которой контур шёл вдоль границы, — убираем вместе с
+        // вставленными точками обхода (в redo — одной группой).
+        const group = [p];
+        while (pts.length && pts[pts.length - 1].trace === p.traceEnd) group.unshift(pts.pop());
+        this.draw.redo.push({ group });
+      } else if (p) this.draw.redo.push(p);
       if (!this.draw.points.length) {
         // Убрали все точки — контура больше нет, но Ctrl+Y вернёт их.
         this.draw = { kind: 'polygon', points: [], redo: this.draw.redo };
@@ -915,16 +1237,24 @@
     }
 
     // true — форма применена; false — нет (причина уже показана тостом).
-    applyNewShape(multi) {
+    // mode: 'add' — добавить к выбранной зоне, 'cut' — вырезать из неё,
+    // 'new' — новая зона; не задан — по модификаторам (Shift / Alt).
+    applyNewShape(multi, mode) {
       multi = this.clipToImage(multi);
       if (!multi.length) { this.toast('Область целиком за краем карты'); return false; }
       const clip = this.clip();
       const selected = this.zoneById(this.selectedId);
-      if ((this.mods.shift || this.mods.alt) && selected) {
+      const op = mode || (this.mods.shift ? 'add' : this.mods.alt ? 'cut' : 'new');
+      if ((op === 'add' || op === 'cut') && selected) {
         if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return false; }
+        if (op === 'add') {
+          const cut = this.cutByNeighbors(multi, selected.parentId, selected.id);
+          if (cut && !cut.length) { this.toast('Эта область целиком занята соседними зонами (выключить: кнопка «Не заходить на соседей», N)'); return false; }
+          if (cut) multi = cut;
+        }
         let result;
         try {
-          result = this.mods.shift ? clip.union(this.zonePoly(selected), multi) : clip.difference(this.zonePoly(selected), multi);
+          result = op === 'add' ? clip.union(this.zonePoly(selected), multi) : clip.difference(this.zonePoly(selected), multi);
         } catch (err) { this.toast(`Не удалось совместить контуры: ${err.message}`); return false; }
         result = cleanMulti(result);
         if (!result.length) { this.toast('От зоны ничего не осталось — отменено'); return false; }
@@ -946,6 +1276,9 @@
         polygon = cleanMulti(clip ? clip.union(multi) : multi); // самопересечения лассо → корректный контур
         if (!polygon.length) polygon = multi;
       }
+      const cut = this.cutByNeighbors(polygon, parent ? parent.id : null, null);
+      if (cut && !cut.length) { this.toast('Эта область целиком занята соседними зонами (выключить: кнопка «Не заходить на соседей», N)'); return false; }
+      if (cut) polygon = cut;
 
       this.pushHistory();
       const sameType = this.doc.zones.filter((z) => z.typeId === (type && type.id)).length + 1;
@@ -1043,7 +1376,10 @@
 
     onHandleDrag(zone, h, ll) {
       const ring = this.zonePoly(zone)[h.pi][h.ri];
-      const p = this.clampToImage(MC().fromLatLng(ll));
+      let p = this.clampToImage(MC().fromLatLng(ll));
+      // Прилипание к границе другой зоны (см. findSnap).
+      const snap = this.findSnap(p, { excludeZoneId: zone.id });
+      if (snap) p = snap.pt;
       ring[h.i] = [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10];
       this.refreshZoneLayer(zone);
     }
@@ -1443,6 +1779,9 @@
             <div class="chip-field-dropdown" hidden></div><input type="hidden" class="chip-field-hidden">
           </div>
         </div>
+        <label class="me-check" title="Работает, когда выше заданы роли: остальным читателям область закрыта туманом вместе с фоном, а вложенные зоны и метки в ней скрыты">
+          <input type="checkbox" data-prop="fog"${zone.fog ? ' checked' : ''}> Туман войны: без этих ролей область закрыта туманом
+        </label>
         <label class="me-field"><span>Если статья читателю закрыта</span>
           <select class="form-select" data-prop="lockedMode">
             <option value="lock"${zone.lockedMode !== 'hide' ? ' selected' : ''}>Показать зону с замком</option>
@@ -1696,6 +2035,11 @@
       else if (f === 'typeId') { zone.typeId = v || null; this.refreshZoneLayer(zone); this.renderTree(); }
       else if (f === 'parentId') { this.undoStack.pop(); this.reparent(zone.id, v || null); return; }
       else if (f === 'lockedMode') zone.lockedMode = v === 'hide' ? 'hide' : 'lock';
+      else if (f === 'fog') {
+        if (zone.fog === input.checked) { this.undoStack.pop(); this._propHistoryPushed = false; return; } // input+change от одного клика
+        zone.fog = input.checked;
+        if (zone.fog && !(zone.roles || []).length) this.toast('Туман войны включён, но у зоны нет ролей — задайте в «Кому видна зона», кто уже исследовал эту область');
+      }
       else if (f === 'article') {
         const text = v.trim();
         const byTitle = this.articles.find((a) => a.title.toLowerCase() === text.toLowerCase());
@@ -2328,7 +2672,7 @@
         <p class="me-field-note">Роли мира (сервера) и общие роли платформы. Владелец и доверенный админ видят всё.</p>
 
         <div class="me-props-head">Фоны карты</div>
-        <p class="me-field-note">Все фоны одной карты должны быть одного размера${this.size ? ` — ${this.size.w}×${this.size.h}` : ''}. Большие файлы загружаются частями, затем сервер нарезает их на тайлы без сжатия — это может занять несколько минут. Кнопка <i class="fas fa-file-import"></i> у фона заменяет картинку новой того же разрешения: зоны и метки остаются на местах, а старый фон работает, пока новый не готов.</p>
+        <p class="me-field-note">Фоны одной карты — в одной системе координат${this.size ? ` (${this.size.w}×${this.size.h})` : ''}. Фон другого размера после нарезки попросит выровнять его по трём опорным точкам (кнопка <i class="fas fa-crosshairs"></i>). Большие файлы загружаются частями, затем сервер нарезает их на тайлы без сжатия — это может занять несколько минут. Кнопка <i class="fas fa-file-import"></i> у фона заменяет картинку новой того же разрешения: зоны и метки остаются на местах, а старый фон работает, пока новый не готов.</p>
         <div class="me-basemaps" data-el="basemaps"></div>
         <label class="btn btn-secondary btn-sm me-upload-btn"><i class="fas fa-upload"></i> Загрузить фон
           <input type="file" data-el="bm-file" accept=".jpg,.jpeg,.png,.webp,.tif,.tiff" hidden>
@@ -2372,6 +2716,7 @@
         if (b.status === 'processing') return '<span class="me-bm-wait"><i class="fas fa-spinner fa-spin"></i> нарезается на тайлы…</span>';
         if (b.status === 'queued') return `<span class="me-bm-wait"><i class="fas fa-clock"></i> в очереди${b.queuePosition ? ` (№${b.queuePosition})` : ''}</span>`;
         if (b.status === 'uploading') return '<span class="me-bm-wait">загрузка не завершена</span>';
+        if (b.status === 'align') return `<span class="me-bm-wait"><i class="fas fa-crosshairs"></i> ${b.width}×${b.height} — другой размер, нужно выровнять</span>`;
         return `<span class="me-bm-err"><i class="fas fa-triangle-exclamation"></i> ${esc(b.error || 'ошибка')}</span>`;
       };
       // Идущая замена картинки — отдельной строкой под статусом фона.
@@ -2394,6 +2739,7 @@
             ${statusText(b)}
             <span class="me-bm-btns">
               ${b.status === 'error' ? '<button type="button" class="map-icon-btn" data-bm-act="retile" title="Нарезать заново"><i class="fas fa-rotate"></i></button>' : ''}
+              ${b.status === 'align' || (b.status === 'ready' && b.align) ? `<button type="button" class="map-icon-btn${b.status === 'align' ? ' is-accent' : ''}" data-bm-act="align" title="${b.status === 'align' ? 'Выровнять по трём опорным точкам' : 'Выровнять заново'}"><i class="fas fa-crosshairs"></i></button>` : ''}
               ${canReplace(b) ? `<button type="button" class="map-icon-btn" data-bm-act="replace" title="Заменить картинку (то же разрешение ${b.width}×${b.height}; зоны и метки останутся)"><i class="fas fa-file-import"></i></button>` : ''}
               <button type="button" class="map-icon-btn" data-bm-act="up" title="Выше" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
               <button type="button" class="map-icon-btn is-danger" data-bm-act="delete" title="Удалить фон"><i class="fas fa-trash"></i></button>
@@ -2429,6 +2775,8 @@
           const res = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps/${id}/retile`, 'POST', {});
           if (!res.success) { this.toast(window.MapsUI.apiError(res)); return; }
           this.pollBasemapsSoon();
+        } else if (btn.dataset.bmAct === 'align') {
+          this.openAlignDialog(id);
         } else if (btn.dataset.bmAct === 'replace') {
           this._replaceTargetId = id;
           this.el('bm-replace-file').click();
@@ -2440,6 +2788,126 @@
       };
     }
 
+    // ----- Выравнивание фона другого размера по трём опорным точкам -----
+    //
+    // Слева — новый фон (его собственные тайлы), справа — карта (другой
+    // готовый фон и контуры зон). Пара = клик на фоне + клик в то же место
+    // карты; точки можно перетаскивать. Сервер по трём парам приводит
+    // картинку к системе координат карты и перенарезает (POST .../align).
+    // «Выровнять заново»: слева уже выровненный фон (координаты карты), и
+    // точки переводятся обратно в пиксели исходника прежней матрицей.
+    openAlignDialog(id) {
+      const bm = this.basemaps.find((b) => b.id === id);
+      if (!bm || !bm.url || !this.size) { this.toast('Фон ещё не нарезан — дождитесь окончания'); return; }
+      const oldM = bm.status === 'ready' && bm.align ? affineFromPoints(bm.align.points) : null;
+      const oldInv = oldM && affineInvert(oldM);
+      const leftSize = oldM ? this.size : { w: bm.srcWidth || bm.width, h: bm.srcHeight || bm.height };
+      const ref = this.basemaps.find((b) => b.status === 'ready' && b.url && b.id !== id) || (oldM ? bm : null);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'me-align';
+      overlay.innerHTML = `
+        <div class="me-align-box">
+          <div class="me-align-head">
+            <b>Выравнивание фона «${esc(bm.title)}»</b>
+            <span>Кликните приметное место на новом фоне, затем то же место на карте — это одна пара. Нужны три пары, лучше далеко друг от друга (треугольником). Точки можно перетаскивать.</span>
+          </div>
+          <div class="me-align-panes">
+            <div class="me-align-pane"><div class="me-align-cap">Новый фон · ${leftSize.w}×${leftSize.h}</div><div class="me-align-map" data-side="s"></div></div>
+            <div class="me-align-pane"><div class="me-align-cap">Карта · ${this.size.w}×${this.size.h}${ref ? '' : ' (готового фона нет — видны только контуры зон)'}</div><div class="me-align-map" data-side="m"></div></div>
+          </div>
+          <div class="me-align-foot">
+            <span class="me-align-status" data-el="align-status"></span>
+            <button type="button" class="btn btn-secondary btn-sm" data-align="reset"><i class="fas fa-rotate-left"></i> Сбросить</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-align="cancel">Отмена</button>
+            <button type="button" class="btn btn-primary btn-sm" data-align="apply"><i class="fas fa-crosshairs"></i> Выровнять</button>
+          </div>
+        </div>`;
+      this.root.appendChild(overlay);
+      this._alignOpen = true;
+
+      const makeMap = (el, basemap, size) => {
+        const m = L.map(el, { crs: L.CRS.Simple, minZoom: -((basemap && basemap.maxZoom) || 4) - 2, maxZoom: MC().MAX_EDITOR_ZOOM, zoomSnap: 1, attributionControl: false, doubleClickZoom: false });
+        if (basemap) MC().makeTileLayer(basemap, size).addTo(m);
+        m.fitBounds(MC().imageBounds(size));
+        return m;
+      };
+      const maps = {
+        s: makeMap(overlay.querySelector('[data-side="s"]'), bm, leftSize),
+        m: makeMap(overlay.querySelector('[data-side="m"]'), ref, this.size)
+      };
+      this.doc.zones.filter((z) => this.existsNow(z)).forEach((z) => {
+        L.polygon(MC().polygonToLatLngs(this.zonePoly(z)), { color: '#ffffff', weight: 1, opacity: 0.8, fill: false, interactive: false }).addTo(maps.m);
+      });
+
+      // pairs: [{ s: [x,y] | null, m: [x,y] | null }] — s в координатах
+      // левой панели (исходник или, при «заново», уже выровненный фон).
+      let pairs = oldM ? bm.align.points.map((p) => ({ s: affineApply(oldM, [p[0], p[1]]), m: [p[2], p[3]] })) : [];
+      const pins = { s: [], m: [] };
+      const statusEl = overlay.querySelector('[data-el="align-status"]');
+      const applyBtn = overlay.querySelector('[data-align="apply"]');
+      const complete = () => pairs.filter((p) => p.s && p.m);
+
+      const render = () => {
+        ['s', 'm'].forEach((side) => {
+          pins[side].forEach((mk) => mk.remove());
+          pins[side] = [];
+          pairs.forEach((p, i) => {
+            if (!p[side]) return;
+            const mk = L.marker(MC().toLatLng(p[side]), {
+              draggable: true,
+              keyboard: false,
+              icon: L.divIcon({ className: 'me-align-pin-anchor', iconSize: [24, 24], iconAnchor: [12, 12], html: `<span class="me-align-pin">${i + 1}</span>` })
+            }).addTo(maps[side]);
+            mk.on('dragend', () => { p[side] = MC().fromLatLng(mk.getLatLng()); render(); });
+            pins[side].push(mk);
+          });
+        });
+        const n = complete().length;
+        const waiting = pairs.find((p) => !p.s || !p.m);
+        statusEl.textContent = `Пар: ${n} из 3` + (waiting ? (waiting.s ? ` · теперь то же место на карте (справа) для точки ${pairs.indexOf(waiting) + 1}` : ` · теперь точку ${pairs.indexOf(waiting) + 1} на новом фоне (слева)`) : n < 3 ? ' · кликните приметное место на новом фоне' : ' · можно выравнивать');
+        applyBtn.disabled = n !== 3;
+      };
+      const setPoint = (side, pt) => {
+        let p = pairs.find((x) => !x[side]);
+        if (!p) {
+          if (pairs.length >= 3) { this.toast('Уже три пары — перетащите точки или нажмите «Сбросить»'); return; }
+          p = { s: null, m: null };
+          pairs.push(p);
+        }
+        p[side] = pt;
+        render();
+      };
+      maps.s.on('click', (e) => setPoint('s', MC().fromLatLng(e.latlng)));
+      maps.m.on('click', (e) => setPoint('m', MC().fromLatLng(e.latlng)));
+      render();
+
+      const close = () => {
+        this._alignOpen = false;
+        maps.s.remove();
+        maps.m.remove();
+        overlay.remove();
+      };
+      this._closeAlign = close;
+      overlay.querySelector('[data-align="cancel"]').onclick = close;
+      overlay.querySelector('[data-align="reset"]').onclick = () => { pairs = []; render(); };
+      applyBtn.onclick = async () => {
+        const done = complete();
+        if (done.length !== 3) return;
+        const points = done.map((p) => {
+          const src = oldInv ? affineApply(oldInv, p.s) : p.s;
+          return [src[0], src[1], p.m[0], p.m[1]];
+        });
+        if (!affineFromPoints(points)) { this.toast('Точки на новом фоне лежат на одной прямой — поставьте их треугольником'); return; }
+        applyBtn.disabled = true;
+        const res = await window.MapsUI.api(`/api/maps/${this.mapId}/basemaps/${id}/align`, 'POST', { points });
+        if (!res.success) { applyBtn.disabled = false; this.toast(window.MapsUI.apiError(res)); return; }
+        close();
+        window.showMessage?.('Фон выравнивается и перенарезается — это может занять несколько минут', 'info');
+        this.pollBasemapsSoon();
+      };
+    }
+
     // Замена картинки фона: та же загрузка частями, но в «тень» к фону.
     // Разрешение проверяем заранее (если браузер умеет прочитать картинку),
     // окончательно — на сервере перед подменой.
@@ -2447,8 +2915,10 @@
       const bm = this.basemaps.find((b) => b.id === id);
       if (!bm) return;
       const dims = await readImageSize(file);
-      if (dims && (dims.w !== bm.width || dims.h !== bm.height)) {
-        this.toast(`Разрешение ${dims.w}×${dims.h} не совпадает с фоном ${bm.width}×${bm.height} — заменить можно только картинкой того же размера`);
+      // У выровненного фона сравниваем с его исходной картинкой, а не с картой.
+      const need = bm.srcWidth && bm.srcHeight ? { w: bm.srcWidth, h: bm.srcHeight } : { w: bm.width, h: bm.height };
+      if (dims && (dims.w !== need.w || dims.h !== need.h)) {
+        this.toast(`Разрешение ${dims.w}×${dims.h} не совпадает с фоном ${need.w}×${need.h} — заменить можно только картинкой того же размера`);
         return;
       }
       if (!(await this.askDelete(`Картинка фона «${bm.title}» будет заменена файлом «${file.name}». Зоны и метки останутся на местах; старый фон работает, пока новый не нарезан.`, 'Заменить фон?', 'Заменить'))) return;
@@ -2641,7 +3111,8 @@
       if (this.draw && this.draw.kind === 'polygon') {
         const p = this.draw.redo.pop();
         if (!p) return;
-        this.draw.points.push(p);
+        if (p.group) this.draw.points.push(...p.group);
+        else this.draw.points.push(p);
         this.renderDraft();
         this.drawingChanged();
         return;
@@ -2875,7 +3346,7 @@
       this.mods = { shift: false, alt: false, space: false };
       if (hadSpace) {
         this.wrapEl.classList.remove('me-panning');
-        if (this.tool === 'polygon' || this.tool === 'lasso') this.map.dragging.disable();
+        if (this.tool === 'polygon' || this.tool === 'lasso' || this.tool === 'brush') this.map.dragging.disable();
       }
     }
 
@@ -2894,6 +3365,11 @@
     }
 
     onKeyDown(e) {
+      // Открыто окно выравнивания фона — горячие клавиши редактора молчат.
+      if (this._alignOpen) {
+        if (e.key === 'Escape' && this._closeAlign) this._closeAlign();
+        return;
+      }
       this.mods.shift = e.shiftKey;
       this.mods.alt = e.altKey;
       const mod = e.ctrlKey || e.metaKey;
@@ -2920,6 +3396,13 @@
         if (this.selectedId) { e.preventDefault(); this.deleteZone(this.selectedId); return; }
         if (this.selectedEventId && this.sidebarTab === 'time') { e.preventDefault(); this.deleteEvent(this.selectedEventId); return; }
       }
+      if (this.tool === 'brush' && (e.key === '[' || e.key === ']' || e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        e.preventDefault();
+        const up = e.key === ']' || e.code === 'BracketRight';
+        this.setBrushSize(this.brushSize() * (up ? 1.25 : 0.8));
+        return;
+      }
+      if (key === 'n') { this.setNeighborCut(!this.neighborCut); this.toast(this.neighborCut ? 'Новые зоны не заходят на соседние' : 'Зоны могут накладываться на соседние'); return; }
       const tool = TOOLS.find((t) => t.key === key);
       if (tool) this.setTool(tool.id);
     }
@@ -2930,7 +3413,7 @@
       if (e.key === ' ' && this.mods.space) {
         this.mods.space = false;
         this.wrapEl.classList.remove('me-panning');
-        if (this.tool === 'polygon' || this.tool === 'lasso') this.map.dragging.disable();
+        if (this.tool === 'polygon' || this.tool === 'lasso' || this.tool === 'brush') this.map.dragging.disable();
       }
     }
 
@@ -2954,6 +3437,7 @@
       this.saveDrawing();
       clearInterval(this._pollTimer);
       clearTimeout(this._draftTimer);
+      if (this._alignOpen && this._closeAlign) this._closeAlign();
       this.root.removeEventListener('click', this._onRootClick);
       document.removeEventListener('keydown', this._onKeyDown);
       document.removeEventListener('keyup', this._onKeyUp);

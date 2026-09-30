@@ -135,9 +135,15 @@ async function buildViewerMap(user, map) {
   };
   map.zones.forEach(visit);
 
+  // Туман войны: зона с fog, чьих ролей у читателя нет, — вместо зоны только
+  // её контур (без названия, типа, статьи), который просмотр закрашивает
+  // непрозрачно поверх фона. Вложенные зоны и метки внутри скрыты.
+  const fog = [];
   for (const z of ordered) {
     const parentVisible = z.parentId ? visibility.get(z.parentId) !== false : true;
-    let visible = parentVisible && (bypass || rolesMatch(z.roles, user, serverRoleIds));
+    const roleOk = bypass || rolesMatch(z.roles, user, serverRoleIds);
+    if (z.fog && !roleOk) fog.push({ id: z.id, from: z.from, to: z.to, shapes: z.shapes });
+    let visible = parentVisible && roleOk;
     let article = z.article;
     let articleTitle = null;
     let articleMissing = false;
@@ -178,6 +184,8 @@ async function buildViewerMap(user, map) {
   const markers = [];
   for (const m of map.markers || []) {
     if (m.zoneId && visibility.get(m.zoneId) === false) continue;
+    // Метка под туманом (даже привязанная к другой, видимой зоне) скрыта.
+    if (fog.some((f) => f.shapes.some((sh) => pointInMulti(m.pos, sh.polygon)))) continue;
     if (!(bypass || rolesMatch(m.roles, user, serverRoleIds))) continue;
     let article = m.article;
     let articleTitle = null;
@@ -218,10 +226,55 @@ async function buildViewerMap(user, map) {
       markerIds: e.markerIds.filter((id) => visibleMarkerIds.has(id))
     });
   }
-  return { zones: out, markers, events };
+  return { zones: out, markers, events, fog };
+}
+
+// Точка внутри MultiPolygon (внешние кольца минус дыры), чётно-нечётное правило.
+function pointInRing(p, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInMulti(p, multi) {
+  if (!Array.isArray(p)) return false;
+  return (multi || []).some((poly) => poly.length && pointInRing(p, poly[0]) && !poly.slice(1).some((hole) => pointInRing(p, hole)));
+}
+
+/**
+ * Какие зоны и метки карт ведут в статьи — только то, что видно этому
+ * читателю (через buildViewerMap: скрытые зоны/метки и закрытые статьи сюда
+ * не попадают). Для обратных ссылок статьи («зона на карте X ведёт сюда») и
+ * узлов карт в графе статей.
+ * @returns {Promise<{map, refs: Map<slug, {kind:'zone'|'marker', id, title}[]>}[]>}
+ *   только карты, у которых есть хотя бы одна такая ссылка
+ */
+async function articleRefsFor(user) {
+  const out = [];
+  for (const map of store.listMaps()) {
+    const hasLinks = map.zones.some((z) => z.article) || (map.markers || []).some((m) => m.article);
+    if (!hasLinks) continue; // не собираем версию карты без единой ссылки
+    const serverRoleIds = await serverRoleIdsFor(user, map);
+    if (!(await canViewMap(user, map, serverRoleIds))) continue;
+    const visible = await buildViewerMap(user, map);
+    const refs = new Map();
+    const add = (slug, item) => {
+      if (!refs.has(slug)) refs.set(slug, []);
+      refs.get(slug).push(item);
+    };
+    visible.zones.forEach((z) => { if (z.article && !z.articleMissing) add(z.article, { kind: 'zone', id: z.id, title: z.title || 'Зона' }); });
+    visible.markers.forEach((m) => { if (m.article && !m.articleMissing) add(m.article, { kind: 'marker', id: m.id, title: m.title || 'Метка' }); });
+    if (refs.size) out.push({ map, refs });
+  }
+  return out;
 }
 
 module.exports = {
+  articleRefsFor,
   bypasses,
   canViewMap,
   canEditMap,

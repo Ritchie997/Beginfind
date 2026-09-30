@@ -451,6 +451,14 @@
       this.labelVisible = new Set();
       this.renderZones();
       this.renderMarkers();
+      // Туман войны (см. buildViewerMap на сервере): поверх зон и меток, но
+      // под подписями; мышь не ловит. Сервер уже убрал всё, что под ним.
+      this.fogPane = this.map.createPane('fogPane');
+      this.fogPane.style.zIndex = 620;
+      this.fogPane.style.pointerEvents = 'none';
+      this.fogRenderer = L.svg({ padding: 0.4, pane: 'fogPane' });
+      this.fogLayers = [];
+      this.renderFog();
       this.map.on('zoomend moveend', () => { this.updateZoomVisibility(); this.updateLabels(); });
       // Контейнер может быть ещё скрыт (статья Ибрипедии рендерится до
       // показа секции) — тогда начальный вид выставим, когда появится размер,
@@ -562,6 +570,29 @@
         this.zoneLayers.set(zone.id, layer);
       });
       this.renderLabels();
+    }
+
+    // Туман: форма на текущий момент шкалы, непрозрачная заливка.
+    renderFog() {
+      if (!this.fogRenderer) return;
+      this.fogLayers.forEach((l) => l.remove());
+      this.fogLayers = [];
+      (this.data.fog || []).forEach((f) => {
+        if (!existsAt(f, this.time)) return;
+        const sh = f.shapes && f.shapes[shapeIndexAt(f, this.time)];
+        if (!sh || !sh.polygon || !sh.polygon.length) return;
+        const layer = L.polygon(polygonToLatLngs(sh.polygon), {
+          renderer: this.fogRenderer,
+          interactive: false,
+          className: 'map-fog',
+          color: '#3a3c42',
+          weight: 1,
+          opacity: 0.9,
+          fillColor: '#1b1c20',
+          fillOpacity: 0.97
+        }).addTo(this.map);
+        this.fogLayers.push(layer);
+      });
     }
 
     // ----- Подписи зон (в стиле подписей графа: текст с обводкой цвета фона) -----
@@ -1158,6 +1189,7 @@
       if (this.selectedMarkerId && !existsAt(this.markerById(this.selectedMarkerId) || {}, t)) this.selectZone(null);
       const bm = this.basemapForTime(t);
       if (bm) this.fadeToBasemap(bm.id);
+      this.renderFog();
       this.updateZoomVisibility();
       if (shapeChanged) {
         clearTimeout(this._labelTimer);
@@ -1497,7 +1529,51 @@
     el.appendChild(bar);
   }
 
+  // Боковая панель (список зон просмотра, панель редактора) с шириной,
+  // которую пользователь тянет за левый край. Ширина фиксированная — длинное
+  // название зоны/метки больше не распирает панель (обрезается многоточием),
+  // и запоминается в браузере под storageKey. Двойной клик по краю — ширина
+  // по умолчанию. На узком экране (панель снизу) ручка скрыта стилями.
+  function makePanelResizable(panel, storageKey, { min = 220, max = 720, def = 300 } = {}) {
+    if (!panel || panel.querySelector(':scope > .map-panel-resizer')) return;
+    const clampW = (w) => Math.max(min, Math.min(max, Math.round(w)));
+    const apply = (w) => { panel.style.setProperty('--panel-w', `${clampW(w)}px`); };
+    let saved = null;
+    try { saved = parseInt(localStorage.getItem(storageKey), 10); } catch (e) { /* нет доступа к хранилищу */ }
+    apply(Number.isFinite(saved) ? saved : def);
+    panel.classList.add('map-panel-resizable');
+
+    const handle = document.createElement('div');
+    handle.className = 'map-panel-resizer';
+    handle.title = 'Потяните, чтобы изменить ширину панели (двойной клик — по умолчанию)';
+    panel.prepend(handle);
+
+    const store = (w) => { try { localStorage.setItem(storageKey, String(clampW(w))); } catch (e) { /* нет доступа */ } };
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = panel.getBoundingClientRect().width;
+      document.body.classList.add('map-panel-resizing');
+      // Панель справа: тянем влево — шире. Слушаем окно целиком, а не
+      // ручку: курсор быстро уходит с узкой полоски.
+      const onMove = (ev) => apply(startW + (startX - ev.clientX));
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        document.body.classList.remove('map-panel-resizing');
+        store(panel.getBoundingClientRect().width);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    });
+    handle.addEventListener('dblclick', () => { apply(def); store(def); });
+  }
+
   window.MapCore = {
+    makePanelResizable,
     TILE_SIZE,
     MAX_EDITOR_ZOOM,
     bindPixelZoom,
