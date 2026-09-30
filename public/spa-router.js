@@ -8,26 +8,48 @@
 window.modalHistory = {
   stack: [],
   ignorePops: 0,
+  _popWaiters: [],
   open(close) {
     const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     this.stack.push({ id, close });
-    history.pushState({ ...(history.state || {}), modalId: id }, '', window.location.href);
+    const push = () => {
+      if (!this.stack.some((m) => m.id === id)) return; // окно уже закрыли
+      history.pushState({ ...(history.state || {}), modalId: id }, '', window.location.href);
+    };
+    // Окно открыли, пока идёт переход (например, редактор карты при загрузке
+    // спрашивает про черновик): адрес новой страницы роутер запишет только
+    // в конце перехода — запись окна должна лечь поверх неё, а не под неё.
+    if (spaRouter && spaRouter.loading) spaRouter.afterNavigate(push);
+    else push();
     return id;
   },
   // Окно закрыли сами (не «Назад») — убираем его запись из истории.
+  // Promise — когда history.back() уже отработал: кто сразу после закрытия
+  // переходит на другую страницу (pushState), должен дождаться его, иначе
+  // запоздалый back() откатит уже новую запись.
   close(id) {
     const i = this.stack.findIndex((m) => m.id === id);
-    if (i < 0) return;
+    if (i < 0) return Promise.resolve();
     this.stack.splice(i, 1);
-    if (history.state && history.state.modalId === id) {
-      this.ignorePops++;
+    if (!(history.state && history.state.modalId === id)) return Promise.resolve();
+    this.ignorePops++;
+    return new Promise((resolve) => {
+      // Страховка: popstate может и не прийти (например, запись уже сняли).
+      const timer = setTimeout(done, 500);
+      function done() { clearTimeout(timer); resolve(); }
+      this._popWaiters.push(done);
       history.back();
-    }
+    });
   },
   // Из popstate: true — «Назад» обработано (закрыто окно или это наш же
   // history.back() из close()), навигацию делать не нужно.
   handlePop() {
-    if (this.ignorePops > 0) { this.ignorePops--; return true; }
+    if (this.ignorePops > 0) {
+      this.ignorePops--;
+      const waiter = this._popWaiters.shift();
+      if (waiter) waiter();
+      return true;
+    }
     const top = this.stack.pop();
     if (!top) return false;
     try { top.close(); } catch (e) { /* окно уже убрано со страницы */ }
@@ -218,7 +240,11 @@ class SPARouter {
       // Окна прошлой страницы при уходе с неё исчезают вместе с ней — их
       // записи в modalHistory больше не нужны («Назад» не должна «закрывать»
       // уже не существующее окно).
+      // Окно подтверждения живёт не в разметке страницы, а в body — само оно
+      // не исчезнет, закрываем явно (как отмену).
+      if (routeHandler) window.confirmDialog?.dismiss();
       if (routeHandler && window.modalHistory) window.modalHistory.stack = [];
+      if (routeHandler) this._afterNavigate = [];
 
       if (routeHandler) {
         // Update active menu item
@@ -262,7 +288,19 @@ class SPARouter {
       const pending = this._pendingPopPath;
       this._pendingPopPath = null;
       if (pending && pending === window.location.pathname) this.navigateTo(pending, false);
+      else {
+        const queued = this._afterNavigate || [];
+        this._afterNavigate = [];
+        queued.forEach((fn) => fn());
+      }
     }
+  }
+
+  // fn — после окончания текущего перехода (см. modalHistory.open). Если
+  // сразу за ним начался следующий (отложенная «Назад»), очередь сбросит он
+  // сам вместе с окнами прошлой страницы.
+  afterNavigate(fn) {
+    (this._afterNavigate || (this._afterNavigate = [])).push(fn);
   }
 
   // Helper function to normalize paths for routing

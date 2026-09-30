@@ -21,6 +21,7 @@
     constructor() {
       this._els = null;
       this._resolve = null;
+      this._hist = null; // id записи в window.modalHistory, пока окно открыто
     }
 
     ensureModal() {
@@ -47,15 +48,22 @@
       `;
       document.body.appendChild(overlay);
 
-      const finish = (result) => {
+      // fromHistory — окно закрыто кнопкой «Назад» (запись истории уже
+      // снята) или уходом со страницы (записи сбрасывает сам роутер).
+      // Иначе сначала снимаем свою запись и только потом отдаём ответ:
+      // вызывающий код часто сразу переходит на другую страницу.
+      const finish = async (result, { fromHistory = false } = {}) => {
         overlay.hidden = true;
         const resolve = this._resolve;
         this._resolve = null;
+        const hist = this._hist;
+        this._hist = null;
+        if (hist && !fromHistory && window.modalHistory) await window.modalHistory.close(hist);
         resolve?.(result);
       };
 
-      // Отмена (крестик, фон, Esc) — false у open() и null у choose().
-      const cancel = () => finish(this._mode === 'choose' ? null : false);
+      // Отмена (крестик, фон, Esc, «Назад») — false у open() и null у choose().
+      const cancel = (opts) => finish(this._mode === 'choose' ? null : false, opts);
       overlay.addEventListener('click', (e) => { if (e.target === overlay) cancel(); });
       overlay.querySelector('#confirmDialogCloseBtn').addEventListener('click', cancel);
       overlay.querySelector('#confirmDialogCancelBtn').addEventListener('click', cancel);
@@ -75,9 +83,36 @@
         footer: overlay.querySelector('.modal-footer'),
         cancelBtn: overlay.querySelector('#confirmDialogCancelBtn'),
         confirmBtn: overlay.querySelector('#confirmDialogConfirmBtn'),
-        finish
+        finish,
+        cancel
       };
       return this._els;
+    }
+
+    // Показать окно и завести ему запись истории: «Назад» (в том числе
+    // системная на телефоне) закрывает окно, а не уводит на прошлую
+    // страницу, оставив его висеть поверх неё.
+    _show() {
+      const els = this._els;
+      els.overlay.hidden = false;
+      if (!this._hist && window.modalHistory) {
+        this._hist = window.modalHistory.open(() => els.cancel({ fromHistory: true }));
+      }
+      return new Promise((resolve) => { this._resolve = resolve; });
+    }
+
+    // Окно открывают поверх ещё не закрытого — прошлый вызов получает
+    // отмену, а запись истории остаётся за окном (оно же и дальше открыто).
+    _resolvePrevious() {
+      const resolve = this._resolve;
+      this._resolve = null;
+      resolve?.(this._mode === 'choose' ? null : false);
+    }
+
+    // Закрыть как отмену, не трогая историю — роутер при уходе со страницы.
+    dismiss() {
+      if (!this._els || this._els.overlay.hidden) return;
+      this._els.cancel({ fromHistory: true });
     }
 
     // Выбор из нескольких вариантов (например «Сохранить» / «Не сохранять»)
@@ -86,7 +121,7 @@
     // есть; отмена (и Esc, и клик мимо окна) — null.
     choose({ title = 'Подтверждение', message = '', buttons = [] } = {}) {
       const els = this.ensureModal();
-      if (this._resolve) els.finish(this._mode === 'choose' ? null : false);
+      this._resolvePrevious();
       this._mode = 'choose';
       els.title.textContent = title;
       els.message.textContent = message;
@@ -101,8 +136,7 @@
         btn.textContent = b.label;
         els.footer.appendChild(btn);
       });
-      els.overlay.hidden = false;
-      return new Promise((resolve) => { this._resolve = resolve; });
+      return this._show();
     }
 
     // { title, message, confirmLabel, danger } — danger (по умолчанию true)
@@ -114,7 +148,7 @@
       // Предыдущий open(), если он ещё не закрыт (не должно случаться при
       // нормальном использовании — модалка модальна), разрешаем как false,
       // чтобы не оставить "зависший" Promise.
-      if (this._resolve) els.finish(this._mode === 'choose' ? null : false);
+      this._resolvePrevious();
       this._mode = 'confirm';
       els.footer.querySelectorAll('[data-choice]').forEach((b) => b.remove());
       els.confirmBtn.style.display = '';
@@ -124,8 +158,7 @@
       els.confirmBtn.textContent = confirmLabel;
       els.confirmBtn.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
 
-      els.overlay.hidden = false;
-      return new Promise((resolve) => { this._resolve = resolve; });
+      return this._show();
     }
   }
 

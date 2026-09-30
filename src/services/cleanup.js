@@ -11,7 +11,8 @@
 //   uploads  — файлы в public/uploads/ (плоская папка, БЕЗ uploads/stickers/),
 //              на которые не ссылается ни одна статья (обложка/тело/
 //              attachments), ни одно сообщение мессенджера, ни один
-//              комментарий, ни одно обращение (feedback) — и не моложе minOrphanAgeHours (грейс-период,
+//              комментарий, ни одно обращение (feedback), ни один черновик
+//              редактора (drafts.db) — и не моложе minOrphanAgeHours (грейс-период,
 //              чтобы не снести картинку, которую только что загрузили в
 //              редакторе, но статью с ней ещё не сохранили).
 //   stickers — файлы внутри public/uploads/stickers/<packId>/, на которые
@@ -30,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 const { UPLOADS_DIR, STICKERS_DIR } = require('../config/paths');
-const { messengerDb, socialDb, stickersDb } = require('../db/connections');
+const { messengerDb, socialDb, stickersDb, draftsDb } = require('../db/connections');
 const articlesStore = require('./articles-store');
 const feedbackStore = require('./feedback-store');
 
@@ -127,10 +128,17 @@ function extractFlatUploadNamesFromText(text) {
   return out;
 }
 
+function forEachString(value, fn) {
+  if (typeof value === 'string') fn(value);
+  else if (Array.isArray(value)) value.forEach((v) => forEachString(v, fn));
+  else if (value && typeof value === 'object') Object.values(value).forEach((v) => forEachString(v, fn));
+}
+
 // Собирает имена файлов из public/uploads/, на которые ссылается хоть
 // что-то в системе: статьи, включая лежащие в корзине (обложка + attachments + картинки/инфобоксы в
 // теле, включая вложенные columns/spoiler-section — см.
-// blocks.collectImagePaths), сообщения мессенджера, комментарии статей.
+// blocks.collectImagePaths), сообщения мессенджера, комментарии статей,
+// обращения и черновики редактора.
 async function collectUsedUploadNames() {
   const used = new Set();
   const add = (url) => {
@@ -154,6 +162,21 @@ async function collectUsedUploadNames() {
 
   // Скриншоты-доказательства, приложенные к обращениям (багрепорты/предложения).
   (await feedbackStore.listAttachmentUrls()).forEach(add);
+
+  // Черновики редактора — ещё не статья, но картинки в них уже загружены
+  // на сервер (обложка, блоки image/infobox, слои). Снимок формы — JSON со
+  // строковыми полями, а content внутри — снова JSON-строка документа
+  // блоков, поэтому не разбираем структуру, а обходим все строки снимка.
+  const drafts = await dbAll(draftsDb, 'SELECT data FROM drafts', []);
+  drafts.forEach((r) => {
+    let data;
+    try {
+      data = JSON.parse(r.data);
+    } catch (e) {
+      data = r.data; // битый JSON — ищем ссылки хотя бы в сыром тексте
+    }
+    forEachString(data, (str) => extractFlatUploadNamesFromText(str).forEach((n) => used.add(n)));
+  });
 
   return used;
 }
