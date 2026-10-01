@@ -2094,6 +2094,71 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
   }
 }
 
+/* === Просмотр статьи на телефоне — на весь экран, как редактор (см.
+   articles.html, body.articles-page). Раньше отступы складывались слоями:
+   .content-body (15px) + .ibripedia-page (16px) + рамка карточки + поля
+   самого текста (40px слева под закладки, 24px справа) — на 360-400px
+   экране под текст оставалось "узкое горлышко" в две трети ширины.
+   Только для открытой статьи (:has — витрина карточек сохраняет обычные
+   отступы): карточка, ссылки и комментарии сливаются с краями экрана,
+   внутри остаётся небольшой отступ, чтобы текст не упирался в край. === */
+@media (max-width: 768px) {
+  .content-body:has(.ibripedia-view:not([hidden])) {
+    padding: 0;
+  }
+  .ibripedia-page:has(> .ibripedia-view:not([hidden])) {
+    padding: 0;
+  }
+  .ibripedia-view-topbar {
+    padding: 10px 10px 0;
+  }
+  .ibripedia-view-layout {
+    gap: 10px;
+  }
+  .ibripedia-view-sidebar {
+    margin: 0 10px;
+  }
+  .ibripedia-view-article,
+  .ibripedia-view-backlinks,
+  .ibripedia-comments {
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+  }
+  .ibripedia-view-backlinks,
+  .ibripedia-comments {
+    margin-top: 10px;
+  }
+  .ibripedia-comments {
+    padding: 14px 12px;
+  }
+  .ibripedia-view-title {
+    margin: 14px 12px 8px;
+  }
+  .ibripedia-view-meta,
+  .ibripedia-view-badges,
+  .ibripedia-layer-switcher,
+  .ibripedia-view-actions {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+  .ibripedia-view-engagement {
+    margin: 0 12px 14px;
+  }
+  .ibripedia-view-content.preview-pane {
+    padding: 14px 12px 20px 40px;
+  }
+}
+@media (max-width: 640px) {
+  /* Поле под значки закладок: значок 22px (на тач-экране 30px) с left:4px — см. выше и (hover:none) ниже. */
+  .ibripedia-view-content.preview-pane {
+    padding-left: 36px;
+  }
+  .ibripedia-bm-hover-zone-compact {
+    width: 36px;
+  }
+}
+
 /* === Комфортные касания на тач-экранах — по указателю, а не по ширине
    экрана (тот же приём, что и в mobile-menu.css): у планшета в альбомной
    ориентации или тач-ноутбука ширина как у десктопа, но палец всё равно
