@@ -768,9 +768,9 @@
           className: 'map-fog',
           color: '#3a3c42',
           weight: 1,
-          opacity: 0.9,
+          opacity: 1,
           fillColor: '#1b1c20',
-          fillOpacity: 0.97
+          fillOpacity: 1
         }).addTo(this.fogLayer);
       });
     }
