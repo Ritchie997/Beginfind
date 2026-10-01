@@ -961,6 +961,36 @@
       this._resolve = null;
       this._histId = null;
       this.saving = false;
+      this._upload = null; // AbortController идущего сохранения
+      // Закрытие вкладки/перезагрузка посреди загрузки — системное окно
+      // «Покинуть сайт?» (свой текст браузеры в нём не показывают).
+      window.addEventListener('beforeunload', (e) => {
+        if (!this.saving) return;
+        e.preventDefault();
+        e.returnValue = '';
+      });
+    }
+
+    // Уход из редактора (крестик, «Отмена», «Назад», другая страница), пока
+    // картинки ещё грузятся. true — уходим (загрузка прервана), false —
+    // остаёмся ждать.
+    async confirmLeave() {
+      if (!this.saving) return true;
+      if (this._leaveAsk) return this._leaveAsk;
+      this._leaveAsk = window.confirmDialog.open({
+        title: 'Загрузка не завершена',
+        message: 'Вы точно хотите выйти? Загрузка ещё не завершена.',
+        confirmLabel: 'Выйти',
+        cancelLabel: 'Вернуться, дождаться загрузки'
+      });
+      const leave = await this._leaveAsk;
+      this._leaveAsk = null;
+      if (leave && this.saving) {
+        this._upload.abort();
+        this._upload = null;
+        this.saving = false;
+      }
+      return leave;
     }
 
     ensureDom() {
@@ -1251,10 +1281,17 @@
     }
 
     async finish(result, { fromHistory = false } = {}) {
-      if (this.saving && result === null && !fromHistory) {
-        showMessage('Дождитесь окончания загрузки', 'info');
-        return;
+      if (this.saving && result === null) {
+        // «Назад» запись окна уже сняла — если остаёмся, заводим её заново.
+        if (fromHistory) this._histId = null;
+        if (!(await this.confirmLeave())) {
+          if (!this._histId && !this.el.hidden && window.modalHistory) {
+            this._histId = window.modalHistory.open(() => this.finish(null, { fromHistory: true }));
+          }
+          return;
+        }
       }
+      if (this.el && this.el.hidden && !this._resolve) return; // уже закрыто
       this.pages.forEach((p) => p.variants.forEach((v) => { if (v.preview) URL.revokeObjectURL(v.preview); }));
       if (this.descSuggestEl) this.descSuggestEl.hidden = true;
       if (this.el) this.el.hidden = true;
@@ -1591,6 +1628,9 @@
       }
 
       const isNew = !this.work;
+      const run = new AbortController();
+      const checkAborted = () => { if (run.signal.aborted) throw new Error('aborted'); };
+      this._upload = run;
       this.saving = true;
       const saveBtn = this.$('save');
       saveBtn.disabled = true;
@@ -1605,6 +1645,7 @@
         const first = isNew
           ? await window.apiClient.createGalleryWork(meta)
           : await window.apiClient.updateGalleryWork(this.work.id, { ...meta, pages: this.pagesPayload() });
+        checkAborted();
         if (!first.success) throw new Error(errorText(first, 'Не удалось сохранить работу'));
         let saved = first.data;
         this.work = saved;
@@ -1615,7 +1656,8 @@
           for (let i = 0; i < variants.length; i += UPLOAD_CHUNK) {
             const chunk = variants.slice(i, i + UPLOAD_CHUNK);
             progress.textContent = `Загрузка: ${done} / ${total}`;
-            const res = await window.apiClient.uploadGalleryImages(saved.id, pageId, chunk.map((v) => v.file));
+            const res = await window.apiClient.uploadGalleryImages(saved.id, pageId, chunk.map((v) => v.file), run.signal);
+            checkAborted();
             if (!res.success) throw new Error(errorText(res, 'Не удалось загрузить картинки'));
             res.data.variants.forEach((uploaded, k) => {
               this.applyUploaded(chunk[k], uploaded);
@@ -1639,16 +1681,27 @@
         // 3) Итоговый порядок, имена и роли (новое могло стоять между старым).
         if (isNew || total > 0) {
           progress.textContent = 'Сохранение порядка…';
+          checkAborted();
           const final = await window.apiClient.updateGalleryWork(saved.id, { ...meta, pages: this.pagesPayload() });
           if (!final.success) throw new Error(errorText(final, 'Не удалось сохранить порядок страниц'));
           saved = final.data;
         }
+        showMessage(isNew ? 'Работа опубликована' : 'Работа сохранена', 'success');
+        // «Выйти» нажали, когда всё уже ушло на сервер, — редактор закрыт.
+        if (run.signal.aborted) return;
         progress.textContent = '';
         this.saving = false;
-        showMessage(isNew ? 'Работа опубликована' : 'Работа сохранена', 'success');
+        // Загрузка кончилась, пока открыт вопрос «Точно выйти?» — ждём ответа:
+        // «Выйти» закроет редактор сам, «Вернуться» — закрываем как сохранённое.
+        if (this._leaveAsk && await this._leaveAsk) return;
         await this.finish(saved);
       } catch (e) {
         progress.textContent = '';
+        if (run.signal.aborted) {
+          // Редактор уже закрыт; загруженное до прерывания остаётся в работе.
+          showMessage('Загрузка прервана', 'warning');
+          return;
+        }
         showMessage(e.message || 'Не удалось сохранить работу', 'error');
         // Работа уже создана — дальнейшие попытки должны её править, а не
         // плодить копии (this.work и id загруженного выставлены выше).
@@ -1658,7 +1711,11 @@
         }
         this.renderPages();
       } finally {
-        this.saving = false;
+        // Редактор за это время могли закрыть и открыть заново с новым сохранением.
+        if (this._upload === run) {
+          this._upload = null;
+          this.saving = false;
+        }
         saveBtn.disabled = false;
       }
     }

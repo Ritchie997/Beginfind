@@ -362,7 +362,8 @@ class ApiClient {
 
   // Пачка файлов в работу (multipart, поле images): без pageId каждый файл —
   // новая страница, с pageId — новые вариации этой страницы.
-  async uploadGalleryImages(workId, pageId, files) {
+  // signal — AbortController.signal, чтобы прервать загрузку (уход из редактора).
+  async uploadGalleryImages(workId, pageId, files, signal) {
     if (!authManager || !authManager.isAuthenticated()) {
       return { success: false, error: 'Authentication required. Please log in.' };
     }
@@ -373,7 +374,8 @@ class ApiClient {
       const response = await fetch(`${this.baseUrl}/api/gallery/works/${workId}/images${query}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authManager.getToken()}` },
-        body: formData
+        body: formData,
+        signal
       });
       if (response.status === 401) {
         authManager.logout();

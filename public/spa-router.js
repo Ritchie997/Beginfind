@@ -213,6 +213,20 @@ class SPARouter {
     // If already loading a view, skip
     if (this.loading) return;
 
+    // Редактор галереи ещё грузит картинки — сначала спрашиваем, точно ли
+    // уходить (до this.loading: окно вопроса заводит запись истории сразу).
+    const galleryEditor = window.galleryEditor;
+    if (galleryEditor && galleryEditor.saving) {
+      if (!(await galleryEditor.confirmLeave())) {
+        // «Назад»/«Вперёд» адрес уже сменили — возвращаем адрес страницы.
+        if (!updateHistory && this.shownPath && window.location.pathname !== this.shownPath) {
+          history.pushState({}, '', this.shownPath);
+        }
+        return;
+      }
+      await galleryEditor.finish(null, { fromHistory: true });
+    }
+
     this.loading = true;
 
     try {
@@ -276,6 +290,8 @@ class SPARouter {
             history.pushState(isMapRoute ? { mapDepth: prevDepth + 1 } : {}, '', normalizedPath);
           }
         }
+
+        this.shownPath = normalizedPath;
 
         // Update page title
         this.updatePageTitle(routeKey);

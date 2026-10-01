@@ -127,6 +127,7 @@
       els.message.textContent = message;
       // style, а не hidden: у .btn свой display, он перебивает [hidden].
       els.confirmBtn.style.display = 'none';
+      els.cancelBtn.textContent = 'Отмена';
       els.footer.querySelectorAll('[data-choice]').forEach((b) => b.remove());
       buttons.forEach((b) => {
         const btn = document.createElement('button');
@@ -139,11 +140,11 @@
       return this._show();
     }
 
-    // { title, message, confirmLabel, danger } — danger (по умолчанию true)
-    // красит кнопку подтверждения в btn-danger, как и было у window.confirm()
-    // для необратимых удалений; danger:false — обычная btn-primary для менее
-    // критичных подтверждений.
-    open({ title = 'Подтверждение', message = '', confirmLabel = 'Удалить', danger = true } = {}) {
+    // { title, message, confirmLabel, cancelLabel, danger } — danger (по
+    // умолчанию true) красит кнопку подтверждения в btn-danger, как и было у
+    // window.confirm() для необратимых удалений; danger:false — обычная
+    // btn-primary для менее критичных подтверждений.
+    open({ title = 'Подтверждение', message = '', confirmLabel = 'Удалить', cancelLabel = 'Отмена', danger = true } = {}) {
       const els = this.ensureModal();
       // Предыдущий open(), если он ещё не закрыт (не должно случаться при
       // нормальном использовании — модалка модальна), разрешаем как false,
@@ -156,6 +157,7 @@
       els.title.textContent = title;
       els.message.textContent = message;
       els.confirmBtn.textContent = confirmLabel;
+      els.cancelBtn.textContent = cancelLabel;
       els.confirmBtn.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
 
       return this._show();
