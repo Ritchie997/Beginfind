@@ -733,6 +733,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   padding: 20px 24px 28px 54px;
   min-height: 0;
   overflow-y: visible;
+  /* Плавающие инфобокс/картинки (float) должны заканчиваться внутри
+     текста статьи — без flow-root они "свисали" ниже, и панель лайков/
+     комментариев под статьёй вставала сбоку от картинки. */
+  display: flow-root;
   /* Точка отсчёта для .ibripedia-bm-toggle (position: absolute). */
   position: relative;
 }

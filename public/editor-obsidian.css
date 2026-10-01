@@ -579,14 +579,22 @@
 }
 
 /* --- image-блок (замена старых {width=...} картинок) --- */
+/* Ширину (widthPct, --w) задаём самой рамке figure, а картинка внутри
+   растягивается на 100% — так "50%" считается от ширины текста статьи.
+   Раньше --w стояло на img, а у плавающей figure без ширины размер
+   брался по натуральной ширине файла: 50% выходило "половиной самой
+   картинки" — большие арты распирали колонку и вылезали за карточку. */
 .preview-pane figure.blk-image {
   margin: .6em 0 1em;
+  width: var(--w, 100%);
   max-width: 100%;
+  box-sizing: border-box;
 }
 .preview-pane figure.blk-image img {
   display: block;
-  width: var(--w, 100%);
+  width: 100%;
   max-width: 100%;
+  height: auto;
   border-radius: 6px;
 }
 .preview-pane figure.blk-image-framed img {
@@ -601,7 +609,15 @@
 .preview-pane figure.blk-image-center img { margin: 0 auto; }
 .preview-pane figure.blk-image-left { float: left; margin: .2em 18px 12px 0; }
 .preview-pane figure.blk-image-right { float: right; margin: .2em 0 12px 18px; }
-.preview-pane figure.blk-image-full img { width: 100%; }
+.preview-pane figure.blk-image-full { width: 100%; }
+@media (max-width: 640px) {
+  .preview-pane figure.blk-image-left,
+  .preview-pane figure.blk-image-right {
+    float: none;
+    width: 100%;
+    margin: .8em 0;
+  }
+}
 
 /* --- ряд/колонки (замена неявных "рамок" по границе markdown-абзаца) --- */
 .preview-pane .blk-columns {
