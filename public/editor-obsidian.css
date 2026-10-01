@@ -304,6 +304,17 @@
   margin: 1.2em 0 0.5em;
 }
 .preview-pane h1:first-child, .preview-pane h2:first-child { margin-top: 0; }
+/* Разделы — как в вики: размер поскромнее (было 2em/1.5em от текста) и
+   черта снизу. flow-root — рядом с инфобоксом заголовок (а с ним и черта)
+   сужается до края инфобокса, а не уходит под него. */
+.preview-pane h1, .preview-pane h2 {
+  display: flow-root;
+  padding-bottom: .2em;
+  border-bottom: 1px solid var(--background-accent);
+}
+.preview-pane h1 { font-size: 1.68em; } /* ~26px при тексте 15.5px */
+.preview-pane h2 { font-size: 1.36em; }
+.preview-pane h3 { font-size: 1.16em; }
 .preview-pane p { margin: 0 0 1em; }
 .preview-pane a { color: var(--text-link); }
 .preview-pane code {
@@ -599,11 +610,16 @@
   max-width: 100%;
   box-sizing: border-box;
 }
+/* Высокий арт не выше 70% экрана (как в мобильной раскладке, см.
+   ibripedia.css) — картинка ужимается по высоте с сохранением пропорций и
+   встаёт по центру своей рамки; меньше рамки — не растягивается. */
 .preview-pane figure.blk-image img {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
+  max-height: 70vh;
   height: auto;
+  margin: 0 auto;
   border-radius: 6px;
 }
 .preview-pane figure.blk-image-framed img {
@@ -611,14 +627,21 @@
 }
 .preview-pane figure.blk-image figcaption {
   font-size: .82em;
+  line-height: 1.45;
+  text-align: center;
   color: var(--text-muted);
   margin-top: 4px;
 }
-.preview-pane figure.blk-image-center { margin-left: auto; margin-right: auto; text-align: center; }
-.preview-pane figure.blk-image-center img { margin: 0 auto; }
-.preview-pane figure.blk-image-left { float: left; margin: .2em 18px 12px 0; }
-.preview-pane figure.blk-image-right { float: right; margin: .2em 0 12px 18px; }
-.preview-pane figure.blk-image-full { width: 100%; }
+/* flow-root: рядом с инфобоксом картинка "по центру" встаёт в оставшееся
+   место сбоку от него (если влезает), а не уезжает целиком под нижний край
+   инфобокса, оставляя пустую дыру в тексте. */
+.preview-pane figure.blk-image-center { display: flow-root; margin-left: auto; margin-right: auto; text-align: center; }
+.preview-pane figure.blk-image-full { display: flow-root; width: 100%; }
+/* Как у "thumb" в Википедии: картинка у края не встаёт рядом с другой
+   плавающей у того же края (инфобоксом или картинкой выше), а ниже неё —
+   иначе текст между ними сжимался в узкую колонку в пару слов. */
+.preview-pane figure.blk-image-left { float: left; clear: left; margin: .2em 18px 12px 0; }
+.preview-pane figure.blk-image-right { float: right; clear: right; margin: .2em 0 12px 18px; }
 @media (max-width: 640px) {
   .preview-pane figure.blk-image-left,
   .preview-pane figure.blk-image-right {
@@ -652,7 +675,9 @@
 /* --- инфобокс: карточка характеристик, вики-стиль, плавает у края текста --- */
 .preview-pane aside.blk-infobox {
   float: right;
-  width: 240px;
+  /* 300px (было 240) — под строки в две колонки "подпись | значение",
+     как в вики: на 25 строк инфобокс вдвое короче, чем столбиком. */
+  width: 300px;
   margin: 0 0 16px 22px;
   background: var(--background-tertiary);
   border: 1px solid var(--background-accent);
@@ -678,10 +703,11 @@
 .preview-pane .blk-infobox-art img { max-width: 80%; max-height: 120px; }
 .preview-pane .blk-infobox-rows { display: flex; flex-direction: column; margin: 0; }
 .preview-pane .blk-infobox-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 9px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 40%) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 12px;
   border-top: 1px solid var(--background-accent);
 }
 .preview-pane .blk-infobox-row dt {
@@ -694,7 +720,7 @@
   overflow-wrap: break-word;
 }
 .preview-pane .blk-infobox-row dd {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-normal);
   margin: 0;
   line-height: 1.45;
@@ -703,8 +729,8 @@
      иначе в самой статье перенос молча схлопывался бы в пробел. */
   white-space: pre-wrap;
   /* Значение теперь рендерится как инлайн-markdown (см. blocks-renderer.js) —
-     длинная вики-ссылка/название статьи без пробелов внутри узкой (240px)
-     колонки инфобокса иначе вылезала бы за её край, а не переносилась
+     длинная вики-ссылка/название статьи без пробелов внутри узкой
+     колонки значения инфобокса иначе вылезала бы за её край, а не переносилась
      ("перенос рядом с инфобоксами... работает не совсем корректно"). */
   overflow-wrap: break-word;
 }
