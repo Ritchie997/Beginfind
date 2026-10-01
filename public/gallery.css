@@ -383,7 +383,11 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 .gv-author { margin-bottom: 8px; }
 .gv-author .ibripedia-person { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }
 .gv-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: 13px; margin-bottom: 12px; }
-.gv-desc { color: var(--text-normal); font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin-bottom: 12px; }
+/* Описание рендерится как текст статьи (.preview-pane — ради стилей
+   wiki-ссылок/тегов/спойлеров), но без отступов и рамки панели превью. */
+.gv-desc.preview-pane { min-height: 0; overflow: visible; padding: 0; border: none; flex: none; font-size: 14px; line-height: 1.55; word-break: break-word; margin-bottom: 12px; }
+.gv-desc.preview-pane p { margin: 0 0 0.6em; }
+.gv-desc.preview-pane p:last-child { margin-bottom: 0; }
 .gv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .gv-tags:empty { display: none; }
 .gv-tags .ibripedia-tag-pill { cursor: pointer; }
@@ -566,6 +570,10 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 .ge-add-pages i { font-size: 18px; }
 
 .ge-more { margin-top: 6px; }
+.ge-desc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.ge-desc-head .form-label { margin: 0; }
+/* Список статей для [подпись]((…)) — поверх окна выкладывания (у него 2000). */
+.ge-wikilink-suggest { position: fixed; z-index: 2100; }
 
 .ge-author { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .ge-author-current { display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }

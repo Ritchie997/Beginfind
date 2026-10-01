@@ -115,6 +115,31 @@
       </article>`;
   }
 
+  // Индекс статей (заголовки под читателя + недоступные ему slug'и) — для
+  // wiki-ссылок в описании работы: и для отрисовки (есть / нет / недоступно),
+  // и для автодополнения в окне выкладывания. Кэш на минуту.
+  let articlesIndexCache = null;
+  function loadArticlesIndex() {
+    if (articlesIndexCache && Date.now() - articlesIndexCache.at < 60 * 1000) return articlesIndexCache.promise;
+    const promise = window.apiClient.makeAuthenticatedRequest('/api/articles-index').then((r) => {
+      const data = (r.success && r.data) || {};
+      const list = Array.isArray(data.accessible) ? data.accessible : [];
+      return { list, bySlug: new Map(list.map((a) => [a.slug, a])), restricted: new Set(data.restrictedSlugs || []) };
+    }).catch(() => ({ list: [], bySlug: new Map(), restricted: new Set() }));
+    articlesIndexCache = { at: Date.now(), promise };
+    return promise;
+  }
+
+  // Описание работы — тем же рендерером, что и статьи: markdown, wiki-ссылки
+  // [подпись]((статья)), #теги, ||спойлеры||. Пустая строка — новый абзац.
+  async function renderDescriptionHtml(text) {
+    const paragraphs = String(text || '').split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean);
+    if (!paragraphs.length || !window.renderArticleBlocks) return '';
+    const index = await loadArticlesIndex();
+    const doc = { version: 1, blocks: paragraphs.map((markdown, i) => ({ id: `d${i}`, type: 'paragraph', data: { markdown } })) };
+    return window.renderArticleBlocks(doc, index.bySlug, index.restricted);
+  }
+
   function openArticle(slug) {
     if (window.spaRouter && typeof window.spaRouter.openIbripediaArticle === 'function') {
       window.spaRouter.openIbripediaArticle(slug);
@@ -173,7 +198,7 @@
             <div class="gv-badges" data-gv="badges"></div>
             <div class="gv-author" data-gv="author"></div>
             <div class="gv-meta" data-gv="meta"></div>
-            <div class="gv-desc" data-gv="desc"></div>
+            <div class="gv-desc preview-pane" data-gv="desc"></div>
             <div class="gv-tags" data-gv="tags"></div>
             <div class="gv-actions">
               <button type="button" class="btn btn-secondary btn-sm" data-gv="share"><i class="fas fa-link"></i> Поделиться</button>
@@ -265,6 +290,26 @@
       q('author').addEventListener('click', (e) => {
         const p = e.target.closest('[data-action="open-profile"]');
         if (p) this.close().then(() => window.spaRouter?.navigateTo(`/profile/${p.dataset.value}`));
+      });
+      // Описание: wiki-ссылка — статья в Ibripedia (как ссылка в статье),
+      // #тег — фильтр галереи по нему.
+      q('desc').addEventListener('click', (e) => {
+        const link = e.target.closest('.wiki-link, .wiki-link-missing, .wiki-link-restricted');
+        if (link) {
+          e.preventDefault();
+          if (link.classList.contains('wiki-link')) this.close().then(() => openArticle(link.dataset.slug));
+          else if (link.classList.contains('wiki-link-restricted')) showMessage('Эта статья недоступна вашей роли', 'info');
+          else showMessage('Такой статьи пока нет', 'info');
+          return;
+        }
+        const tag = e.target.closest('.hashtag');
+        if (tag && tag.dataset.tag) {
+          e.preventDefault();
+          this.close().then(async () => {
+            if (location.pathname !== '/gallery') await window.spaRouter?.navigateTo('/gallery');
+            window.galleryManager?.filterByTag(tag.dataset.tag);
+          });
+        }
       });
       q('tags').addEventListener('click', (e) => {
         const t = e.target.closest('[data-tag]');
@@ -465,8 +510,17 @@
       ];
       if (w.serverName) meta.push(`<span><i class="fas fa-server"></i> ${escapeHtml(w.serverName)}</span>`);
       this.$('meta').innerHTML = meta.join('');
-      this.$('desc').textContent = w.description || '';
-      this.$('desc').hidden = !w.description;
+      const descEl = this.$('desc');
+      descEl.innerHTML = '';
+      descEl.hidden = !w.description;
+      if (w.description) {
+        const workId = w.id;
+        renderDescriptionHtml(w.description).then((html) => {
+          if (!this.work || this.work.id !== workId) return; // успели открыть другую
+          descEl.innerHTML = html;
+          window.attachBlocksInteractions?.(descEl);
+        }).catch(() => { descEl.textContent = w.description; });
+      }
       this.$('tags').innerHTML = (w.tags || []).map((t) => `<span class="ibripedia-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('');
       this.$('edit').hidden = !w.can_edit;
       this.$('delete').hidden = !w.can_delete;
@@ -923,8 +977,11 @@
               <input type="text" class="form-input" data-ge="title" maxlength="200" placeholder="Например: Портрет героини">
             </div>
             <div class="form-group">
-              <label class="form-label">Описание</label>
-              <textarea class="form-textarea" data-ge="description" maxlength="5000" rows="3" placeholder="О работе, ссылки, история создания…"></textarea>
+              <div class="ge-desc-head">
+                <label class="form-label">Описание</label>
+                <button type="button" class="btn btn-secondary btn-sm" data-ge="insert-wikilink" title="Ссылка на статью Ibripedia — как в редакторе: [подпись]((статья))"><i class="fas fa-book-open"></i> Ссылка на статью</button>
+              </div>
+              <textarea class="form-textarea" data-ge="description" maxlength="5000" rows="3" placeholder="О работе, история создания… Ссылка на статью: [подпись]((Название статьи)) — начните с (( и выберите из списка."></textarea>
             </div>
             <div class="form-group" data-ge="author-group" hidden>
               <label class="form-label">Автор</label>
@@ -1003,6 +1060,94 @@
       this.bindPagesEvents(q('pages'));
       this.bindDetailEvents(q('detail'));
       this.bindAuthorEvents();
+      this.bindDescriptionLinks();
+    }
+
+    // ----- Wiki-ссылки в описании: [подпись]((статья)) с автодополнением,
+    // как в редакторе статей (см. updateWikilinkSuggest в editor-manager.js) -----
+
+    bindDescriptionLinks() {
+      const ta = this.$('description');
+      const suggest = document.createElement('div');
+      suggest.className = 'eb-wikilink-suggest ge-wikilink-suggest';
+      suggest.hidden = true;
+      document.body.appendChild(suggest);
+      this.descSuggestEl = suggest;
+
+      const OPEN_RE = /\]\(\(([^()#\n]*)$/; // "[подпись]((начало названия" перед курсором
+      const close = () => { suggest.hidden = true; };
+      const update = async () => {
+        const m = OPEN_RE.exec(ta.value.slice(0, ta.selectionStart));
+        if (!m) { close(); return; }
+        const index = await loadArticlesIndex();
+        const query = m[1].toLowerCase();
+        const options = index.list.filter((a) => (a.title || a.slug).toLowerCase().includes(query)).slice(0, 20);
+        if (!options.length || document.activeElement !== ta) { close(); return; }
+        suggest.innerHTML = options.map((a, i) => `<button type="button" data-slug="${escapeHtml(a.slug)}" class="${i === 0 ? 'eb-suggest-active' : ''}">${escapeHtml(a.title || a.slug)}</button>`).join('');
+        const rect = ta.getBoundingClientRect();
+        suggest.style.left = `${Math.max(8, rect.left)}px`;
+        suggest.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 220)}px`;
+        suggest.style.minWidth = `${Math.min(rect.width, 360)}px`;
+        suggest.hidden = false;
+        suggest.scrollTop = 0;
+      };
+      const apply = (btn) => {
+        const m = OPEN_RE.exec(ta.value.slice(0, ta.selectionStart));
+        if (!btn || !m) { close(); return; }
+        const slug = btn.dataset.slug;
+        const title = btn.textContent;
+        // Как в редакторе: название, если оно само даёт тот же slug и не
+        // содержит ( ) # (ими ссылка разбирается), иначе — slug.
+        const roundTrips = window.wikiSlugify && window.wikiSlugify(title) === slug;
+        const target = roundTrips && !/[()#]/.test(title) ? title : slug;
+        const openStart = ta.selectionStart - m[1].length;
+        const after = ta.value.slice(ta.selectionStart);
+        const insert = target + (after.startsWith('))') ? '' : '))');
+        ta.value = ta.value.slice(0, openStart) + insert + after;
+        ta.selectionStart = ta.selectionEnd = openStart + insert.length + (after.startsWith('))') ? 2 : 0);
+        close();
+        ta.focus();
+      };
+
+      ta.addEventListener('input', update);
+      ta.addEventListener('click', update);
+      ta.addEventListener('blur', () => setTimeout(close, 150));
+      ta.addEventListener('keydown', (e) => {
+        if (suggest.hidden) return;
+        const buttons = Array.from(suggest.querySelectorAll('button'));
+        let i = buttons.findIndex((b) => b.classList.contains('eb-suggest-active'));
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          buttons[i]?.classList.remove('eb-suggest-active');
+          i = (i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+          buttons[i].classList.add('eb-suggest-active');
+          buttons[i].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          apply(buttons[i]);
+        } else if (e.key === 'Escape') {
+          e.stopPropagation();
+          close();
+        }
+      });
+      suggest.addEventListener('mousedown', (e) => {
+        const btn = e.target.closest('button[data-slug]');
+        if (!btn) return;
+        e.preventDefault();
+        apply(btn);
+      });
+
+      // Кнопка: выделенный текст становится подписью — [выделение]((|)),
+      // курсор внутри (( )), и сразу открывается список статей.
+      this.$('insert-wikilink').addEventListener('click', () => {
+        const start = ta.selectionStart, end = ta.selectionEnd;
+        const label = ta.value.slice(start, end);
+        const insert = `[${label}]((`;
+        ta.value = ta.value.slice(0, start) + insert + '))' + ta.value.slice(end);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = start + insert.length;
+        update();
+      });
     }
 
     // ----- Автор (только владелец и доверенный админ) -----
@@ -1099,6 +1244,7 @@
         return;
       }
       this.pages.forEach((p) => p.variants.forEach((v) => { if (v.preview) URL.revokeObjectURL(v.preview); }));
+      if (this.descSuggestEl) this.descSuggestEl.hidden = true;
       if (this.el) this.el.hidden = true;
       const hist = this._histId;
       this._histId = null;

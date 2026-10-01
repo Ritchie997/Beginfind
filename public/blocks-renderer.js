@@ -673,4 +673,7 @@
   window.parseWikilinkVariants = parseWikilinkVariants;
   window.buildWikilinkVariantsLabel = buildWikilinkVariantsLabel;
   window.WIKILINK_PARSE_RE_G = WIKILINK_PARSE_RE_G;
+  // Тот же slug, по которому разбирается цель wiki-ссылки — для мест вне
+  // редактора, где ссылку вставляют автодополнением (описание работы галереи).
+  window.wikiSlugify = slugify;
 })();
