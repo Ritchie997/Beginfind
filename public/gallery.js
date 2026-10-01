@@ -1074,13 +1074,16 @@
       document.body.appendChild(suggest);
       this.descSuggestEl = suggest;
 
-      const OPEN_RE = /\]\(\(([^()#\n]*)$/; // "[подпись]((начало названия" перед курсором
+      // "((начало названия" перед курсором — с подписью "[…]((" или без неё:
+      // список статей открывается уже на "((" (подпись, если её не было,
+      // вставляется пустой — тогда ссылка показывает название статьи).
+      const OPEN_RE = /(\])?\(\(([^()#\n]*)$/;
       const close = () => { suggest.hidden = true; };
       const update = async () => {
         const m = OPEN_RE.exec(ta.value.slice(0, ta.selectionStart));
         if (!m) { close(); return; }
         const index = await loadArticlesIndex();
-        const query = m[1].toLowerCase();
+        const query = m[2].toLowerCase();
         const options = index.list.filter((a) => (a.title || a.slug).toLowerCase().includes(query)).slice(0, 20);
         if (!options.length || document.activeElement !== ta) { close(); return; }
         suggest.innerHTML = options.map((a, i) => `<button type="button" data-slug="${escapeHtml(a.slug)}" class="${i === 0 ? 'eb-suggest-active' : ''}">${escapeHtml(a.title || a.slug)}</button>`).join('');
@@ -1100,10 +1103,16 @@
         // содержит ( ) # (ими ссылка разбирается), иначе — slug.
         const roundTrips = window.wikiSlugify && window.wikiSlugify(title) === slug;
         const target = roundTrips && !/[()#]/.test(title) ? title : slug;
-        const openStart = ta.selectionStart - m[1].length;
+        let openStart = ta.selectionStart - m[2].length;
+        let head = ta.value.slice(0, openStart);
+        if (!m[1]) {
+          // Без подписи: "((" -> "[]((" (wiki-ссылке нужны квадратные скобки).
+          head = head.slice(0, -2) + '[]((';
+          openStart += 2;
+        }
         const after = ta.value.slice(ta.selectionStart);
         const insert = target + (after.startsWith('))') ? '' : '))');
-        ta.value = ta.value.slice(0, openStart) + insert + after;
+        ta.value = head + insert + after;
         ta.selectionStart = ta.selectionEnd = openStart + insert.length + (after.startsWith('))') ? 2 : 0);
         close();
         ta.focus();

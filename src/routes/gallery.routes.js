@@ -18,6 +18,8 @@ const { uploadGallery } = require('../uploads/multer-config');
 const { readSettings } = require('../services/system-settings');
 const { getAvatarUrl } = require('../services/avatars');
 const { serversDb } = require('../db/connections');
+const userNotifications = require('../services/user-notifications');
+const mentions = require('../services/mentions');
 const { dbPath } = require('../config/paths');
 
 const router = express.Router();
@@ -415,6 +417,11 @@ async function attachCommentReactions(comments, userId) {
   });
 }
 
+// + упоминания @пользователь -> {имя: id} (см. mentions.js).
+async function attachCommentExtras(comments, userId) {
+  return mentions.attachMentions(await attachCommentReactions(comments, userId));
+}
+
 router.get('/gallery/works/:id/reactions', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const work = await loadAccessibleWork(req, res);
@@ -449,7 +456,7 @@ router.get('/gallery/works/:id/comments', auth.authenticateToken, auth.checkAppr
     const work = await loadAccessibleWork(req, res);
     if (!work) return;
     const withStickers = await stickers.attachStickersToItems(await gallery.listComments(work.id));
-    res.json(await attachCommentReactions(withStickers, req.user.id));
+    res.json(await attachCommentExtras(withStickers, req.user.id));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -462,17 +469,33 @@ router.post('/gallery/works/:id/comments', auth.authenticateToken, auth.checkApp
     await stickers.validateContentForPosting(req.user.id, req.body.content);
     // Один уровень вложенности — ответ на ответ подшивается к его родителю.
     let parentId = req.body.parentId ? Number(req.body.parentId) : null;
+    let parentAuthorId = null;
     if (parentId) {
       const parent = await gallery.getComment(parentId);
       if (!parent || parent.workId !== work.id) {
         return res.status(400).json({ error: 'Комментарий, на который вы отвечаете, не найден' });
       }
-      if (parent.parentId) parentId = parent.parentId;
+      parentAuthorId = parent.userId;
+      if (parent.parentId) {
+        parentId = parent.parentId;
+        const top = await gallery.getComment(parentId);
+        parentAuthorId = top ? top.userId : parentAuthorId;
+      }
     }
     const comment = await gallery.addComment(req.user.id, displayName(req.user), work.id, req.body.content, parentId);
     const [withStickers] = await stickers.attachStickersToItems([comment]);
-    const [withReactions] = await attachCommentReactions([withStickers], req.user.id);
+    const [withReactions] = await attachCommentExtras([withStickers], req.user.id);
     res.status(201).json(withReactions);
+
+    // Ответ автору ветки и @упоминания — после ответа клиенту.
+    userNotifications.notifyAboutComment({
+      actor: req.user,
+      comment,
+      parentAuthorId,
+      targetType: 'gallery',
+      targetId: work.id,
+      titleFor: async (user) => (gallery.canViewWork(work, await gallery.getAccessContext(user)) ? work.title : null)
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

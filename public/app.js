@@ -1017,6 +1017,8 @@ async function refreshNotificationBadges() {
     });
 
     Object.entries(totals).forEach(([elementId, total]) => renderNavBadge(elementId, total));
+    // Личные уведомления (ответы, @упоминания) — колокольчик в шапке.
+    window.userNotificationsUI?.applySummary(summary);
   } catch (e) {
     console.error('Error refreshing notification badges:', e);
   }

@@ -283,6 +283,28 @@ const socialDb = new sqlite3.Database(dbPath('social.db'), (err) => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, category, item_key)
       )`);
+
+      // Личные уведомления: ответ на комментарий пользователя и упоминание
+      // @пользователь (см. src/services/user-notifications.js). target —
+      // статья (slug) или работа галереи (id); comment_id — куда вести.
+      // notified_at — всплывающее уведомление уже показано (один раз),
+      // read_at — пользователь открыл его в колокольчике.
+      socialDb.run(`CREATE TABLE IF NOT EXISTS user_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        actor_id INTEGER,
+        actor_name TEXT,
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        target_title TEXT,
+        comment_id INTEGER,
+        excerpt TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        notified_at DATETIME,
+        read_at DATETIME
+      )`);
+      socialDb.run('CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications (user_id, id)');
     });
   }
 });

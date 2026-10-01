@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/editor-blocks.css">
     <link rel="stylesheet" href="/ibripedia.css">
     <link rel="stylesheet" href="/gallery.css">
+    <link rel="stylesheet" href="/user-notifications.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
@@ -23,6 +24,18 @@
             <span></span>
         </button>
         <div class="logo">BeginFind Admin</div>
+        <div class="header-right">
+        <!-- Колокольчик: ответы на ваши комментарии и @упоминания (user-notifications.js) -->
+        <div class="notif-bell" id="notif-bell">
+            <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+            <div class="notif-bell-dropdown" hidden>
+                <div class="notif-bell-head">
+                    <b>Уведомления</b>
+                    <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+                </div>
+                <div class="notif-bell-list"></div>
+            </div>
+        </div>
         <div class="user-info" id="user-info">
             <div class="user-avatar">А</div>
             <div class="username-display">Пользователь</div>
@@ -30,6 +43,7 @@
                 <div class="dropdown-item" id="profile-btn">Мой профиль</div>
                 <div class="dropdown-item" id="logout-btn">Выход</div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -119,6 +133,7 @@
     <script src="/graph-view.js"></script>
     <script src="/ibripedia.js"></script>
     <script src="/gallery.js"></script>
+    <script src="/user-notifications.js"></script>
     <script src="/stickers-manager.js"></script>
     <script src="/feedback-manager.js"></script>
     <script src="/confirm-dialog.js"></script>

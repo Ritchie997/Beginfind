@@ -17,6 +17,8 @@ const { serversDb } = require('../db/connections');
 const articleLayers = require('../services/article-layers');
 const mapAccess = require('../services/map-access');
 const gallery = require('../services/gallery-store');
+const userNotifications = require('../services/user-notifications');
+const mentions = require('../services/mentions');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
@@ -467,10 +469,18 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const tags = tag ? String(tag).split(',').map((s) => s.trim()).filter(Boolean) : [];
     const lockedFilter = locked === 'true' ? true : locked === 'false' ? false : undefined;
 
+    // Слова с # в строке поиска ("#персонаж") — это теги, а не текст: теги из
+    // поля «Теги» в текст статьи не входят, и раньше такой запрос находил
+    // статью, только если хештег написан прямо в тексте. Совпадение — по
+    // началу тега ("#перс" найдёт и "персонаж"); несколько — все сразу.
+    const words = String(q).trim().split(/\s+/).filter(Boolean);
+    const hashKeys = words.filter((w) => w.startsWith('#')).map((w) => store.tagKey(w)).filter(Boolean);
+    const textQuery = words.filter((w) => !w.startsWith('#')).join(' ');
+
     const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
     // Теги фильтруем здесь, а не в filterArticles: у каждого читателя свои
     // видимые теги (только с доступных ему слоёв, см. readerTagKeys).
-    const filtered = store.filterArticles({ q, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    const filtered = store.filterArticles({ q: textQuery, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
     const tagKeys = tags.map((t) => store.tagKey(t));
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический
@@ -481,6 +491,10 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
       const resolved = await articleLayers.resolveArticleLayer(article, req.user);
       if (!resolved) continue;
       if (tagKeys.length && !tagKeys.some((k) => readerTagKeys(resolved).has(k))) continue;
+      if (hashKeys.length) {
+        const own = [...readerTagKeys(resolved)];
+        if (!hashKeys.every((k) => own.some((t) => t.startsWith(k)))) continue;
+      }
       accessible.push(article);
     }
 
@@ -911,6 +925,12 @@ async function attachCommentReactions(comments, userId) {
   });
 }
 
+// Упоминания @пользователь в комментариях -> {имя: id} (см. mentions.js) —
+// клиент делает из них ссылки на профиль.
+async function attachCommentExtras(comments, userId) {
+  return mentions.attachMentions(await attachCommentReactions(comments, userId));
+}
+
 // Лайки статьи — count + "лайкнул ли её я" одним ответом (см. панель
 // лайка/комментариев под статьёй в public/ibripedia.js).
 router.get('/articles/:id/likes', auth.authenticateToken, auth.checkApproved, async (req, res) => {
@@ -1002,7 +1022,7 @@ router.get('/articles/:id/comments', auth.authenticateToken, auth.checkApproved,
     // мало на статью.
     const comments = await social.listComments(req.params.id);
     const withStickers = await stickers.attachStickersToItems(comments);
-    res.json(await attachCommentReactions(withStickers, req.user.id));
+    res.json(await attachCommentExtras(withStickers, req.user.id));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1028,19 +1048,40 @@ router.post('/articles/:id/comments', auth.authenticateToken, auth.checkApproved
     // подшивается к тому же родителю, а не плодит цепочку — иначе пришлось
     // бы рекурсивно отрисовывать сколь угодно глубокое дерево.
     let parentId = req.body.parentId ? Number(req.body.parentId) : null;
+    let parentAuthorId = null;
     if (parentId) {
       const parent = await social.getComment(parentId);
       if (!parent || parent.slug !== req.params.id) {
         return res.status(400).json({ error: 'Комментарий, на который вы отвечаете, не найден' });
       }
-      if (parent.parentId) parentId = parent.parentId;
+      parentAuthorId = parent.userId;
+      if (parent.parentId) {
+        parentId = parent.parentId;
+        // Ответ на ответ подшивается к ветке — уведомить нужно автора
+        // ветки (тот, кому отвечали, получит своё через @упоминание).
+        const top = await social.getComment(parentId);
+        parentAuthorId = top ? top.userId : parentAuthorId;
+      }
     }
 
     const authorName = req.user.display_name || req.user.username;
     const comment = await social.addComment(req.user.id, authorName, req.params.id, req.body.content, parentId);
     const [withStickers] = await stickers.attachStickersToItems([comment]);
-    const [withReactions] = await attachCommentReactions([withStickers], req.user.id);
+    const [withReactions] = await attachCommentExtras([withStickers], req.user.id);
     res.status(201).json(withReactions);
+
+    // Ответ автору ветки и @упоминания — после ответа клиенту, не задерживая его.
+    userNotifications.notifyAboutComment({
+      actor: req.user,
+      comment,
+      parentAuthorId,
+      targetType: 'article',
+      targetId: article.slug || req.params.id,
+      titleFor: async (user) => {
+        const resolved = await articleLayers.resolveArticleLayer(article, user);
+        return resolved ? (resolved.layer.title || article.title || article.slug) : null;
+      }
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

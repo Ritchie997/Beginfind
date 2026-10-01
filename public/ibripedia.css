@@ -2405,3 +2405,15 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
     font-size: 15px;
   }
 }
+
+/* @упоминания в комментариях (см. linkMentions в ibripedia.js) и подсказка
+   пользователей при вводе "@" — поверх просмотра работы галереи (1800). */
+.comment-mention { color: var(--text-link); background: rgba(88, 101, 242, 0.14); border-radius: 4px; padding: 0 3px; cursor: pointer; }
+.comment-mention:hover { text-decoration: underline; }
+.mention-suggest { z-index: 2100; }
+/* Комментарий, к которому перешли из уведомления (focusComment) */
+.ibripedia-comment.is-highlighted { animation: commentFocus 2.6s ease-out; border-radius: 8px; }
+@keyframes commentFocus {
+  0%, 40% { background: rgba(88, 101, 242, 0.28); box-shadow: 0 0 0 2px var(--blurple); }
+  100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}

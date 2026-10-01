@@ -61,7 +61,30 @@
   //   - шорткод(ы) среди прочего текста — маленькая инлайн-картинка;
   //   - шорткод без соответствия в stickersMap (набор удалён/отклонён после
   //     публикации комментария) — остаётся как обычный текст.
-  function formatCommentContent(content, stickersMap) {
+  // Упоминания @Имя и @[Имя Фамилия] — ссылкой на профиль, если сервер
+  // узнал пользователя (mentions: {имя в нижнем регистре: id}, см.
+  // src/services/mentions.js). Работает по уже экранированному HTML.
+  const MENTION_HTML_RE = /(^|[^\p{L}\p{N}_@])@(?:\[([^\]\n<]{1,64})\]|([\p{L}\p{N}_.-]{1,64}))/gu;
+  function unescapeHtml(str) {
+    return String(str).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  }
+  function linkMentions(html, mentions) {
+    if (!mentions || !Object.keys(mentions).length) return html;
+    return html.replace(MENTION_HTML_RE, (full, pre, bracketed, plain) => {
+      let name = bracketed || plain;
+      let tail = '';
+      if (plain) {
+        const trimmed = plain.replace(/[.-]+$/, '');
+        tail = plain.slice(trimmed.length);
+        name = trimmed;
+      }
+      const id = mentions[unescapeHtml(name).trim().toLowerCase()];
+      if (!id) return full;
+      return `${pre}<span class="comment-mention" data-action="open-profile" data-value="${id}" title="Открыть профиль">@${name}</span>${tail}`;
+    });
+  }
+
+  function formatCommentContent(content, stickersMap, mentions) {
     const raw = String(content || '');
     const soloMatch = raw.trim().match(STICKER_SOLO_RE);
     if (soloMatch) {
@@ -78,7 +101,7 @@
       }
     }
 
-    const html = escapeHtml(raw).replace(STICKER_SHORTCODE_RE, (match, pack, alias) => {
+    const html = linkMentions(escapeHtml(raw), mentions).replace(STICKER_SHORTCODE_RE, (match, pack, alias) => {
       const code = `${pack.toLowerCase()}:${alias.toLowerCase()}`;
       const sticker = stickersMap && stickersMap[code];
       if (!sticker) return match;
@@ -1485,7 +1508,11 @@
       // удаления всего текста — иначе :empty (плейсхолдер) не сработает.
       inputEl.addEventListener('input', () => {
         if (!inputEl.textContent.trim() && !inputEl.querySelector('img')) inputEl.innerHTML = '';
+        this.updateMentionSuggest(inputEl);
       });
+      // Подсказка @пользователя: стрелки/Enter/Tab/Esc, пока список открыт.
+      inputEl.addEventListener('keydown', (e) => this.handleMentionKeydown(e, inputEl), true);
+      inputEl.addEventListener('blur', () => setTimeout(() => this.closeMentionSuggest(), 150));
 
       // onSelect — что делает короткий клик по стикеру (или "Отправить" в
       // увеличенном превью, см. wireStickerPickerGestures) в ЭТОМ пикере:
@@ -1549,6 +1576,134 @@
         clear: () => { inputEl.innerHTML = ''; },
         focus: () => inputEl.focus()
       };
+    }
+
+    // ---------- @упоминания: подсказка пользователей при вводе ----------
+
+    ensureMentionSuggest() {
+      if (this._mentionEl) return this._mentionEl;
+      const el = document.createElement('div');
+      el.className = 'eb-wikilink-suggest mention-suggest';
+      el.hidden = true;
+      el.addEventListener('mousedown', (e) => {
+        const btn = e.target.closest('button[data-name]');
+        if (!btn) return;
+        e.preventDefault();
+        this.applyMention(btn);
+      });
+      document.body.appendChild(el);
+      this._mentionEl = el;
+      return el;
+    }
+
+    closeMentionSuggest() {
+      if (this._mentionEl) this._mentionEl.hidden = true;
+      this._mentionState = null;
+    }
+
+    // "@начало имени" прямо перед кареткой (в одном текстовом узле) — можно
+    // с одним пробелом внутри, для имён из двух слов.
+    mentionQueryAtCaret(inputEl) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return null;
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      if (!range.collapsed || node.nodeType !== Node.TEXT_NODE || !inputEl.contains(node)) return null;
+      const before = node.data.slice(0, range.startOffset);
+      const m = /(^|[\s\u00a0(])@([^@\n\[\]\u00a0]{1,32})$/.exec(before);
+      if (!m || (m[2].match(/ /g) || []).length > 1 || /^\s|\s$/.test(m[2])) return null;
+      return { node, end: range.startOffset, start: range.startOffset - m[2].length - 1, query: m[2] };
+    }
+
+    updateMentionSuggest(inputEl) {
+      const state = this.mentionQueryAtCaret(inputEl);
+      if (!state) { this.closeMentionSuggest(); return; }
+      clearTimeout(this._mentionTimer);
+      this._mentionTimer = setTimeout(async () => {
+        const seq = (this._mentionSeq = (this._mentionSeq || 0) + 1);
+        let users = [];
+        try {
+          const res = await window.apiClient.searchUsers(state.query);
+          users = res && res.success && Array.isArray(res.data) ? res.data : [];
+        } catch (e) { /* без подсказки — просто текст */ }
+        if (seq !== this._mentionSeq || document.activeElement !== inputEl) return;
+        const fresh = this.mentionQueryAtCaret(inputEl);
+        if (!fresh || !users.length) { this.closeMentionSuggest(); return; }
+        const el = this.ensureMentionSuggest();
+        el.innerHTML = users.slice(0, 8).map((u, i) => {
+          const name = u.display_name || u.username;
+          return `<button type="button" data-name="${escapeHtml(name)}" class="${i === 0 ? 'eb-suggest-active' : ''}">@${escapeHtml(name)}</button>`;
+        }).join('');
+        const rect = document.createRange();
+        rect.setStart(fresh.node, fresh.start);
+        rect.setEnd(fresh.node, fresh.end);
+        const box = rect.getBoundingClientRect();
+        el.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - 240))}px`;
+        el.style.top = `${box.bottom + 4 + 220 > window.innerHeight ? Math.max(8, box.top - 224) : box.bottom + 4}px`;
+        el.hidden = false;
+        this._mentionState = { inputEl, ...fresh };
+      }, 150);
+    }
+
+    handleMentionKeydown(e, inputEl) {
+      const el = this._mentionEl;
+      if (!el || el.hidden || !this._mentionState || this._mentionState.inputEl !== inputEl) return;
+      const buttons = Array.from(el.querySelectorAll('button'));
+      let i = buttons.findIndex((b) => b.classList.contains('eb-suggest-active'));
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        buttons[i]?.classList.remove('eb-suggest-active');
+        i = (i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[i].classList.add('eb-suggest-active');
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.applyMention(buttons[i]);
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        this.closeMentionSuggest();
+      }
+    }
+
+    // "@нач" -> "@Имя " (или "@[Имя Фамилия] " для имён с пробелами).
+    applyMention(btn) {
+      const state = this._mentionState;
+      if (!btn || !state) { this.closeMentionSuggest(); return; }
+      const fresh = this.mentionQueryAtCaret(state.inputEl) || state;
+      const name = btn.dataset.name;
+      const text = (/\s/.test(name) ? `@[${name}]` : `@${name}`) + '\u00a0';
+      const node = fresh.node;
+      node.data = node.data.slice(0, fresh.start) + text + node.data.slice(fresh.end);
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.setStart(node, fresh.start + text.length);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      this.closeMentionSuggest();
+      state.inputEl.focus();
+    }
+
+    // Прокрутить к комментарию и подсветить его (переход из уведомления).
+    // Комментарии грузятся отдельным запросом — ждём его до ~4 секунд;
+    // ответ, спрятанный под "Показать ещё ответы", раскрываем.
+    async focusComment(commentId) {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const el = this.commentsListEl?.querySelector(`.ibripedia-comment[data-id="${commentId}"]`);
+        if (el) {
+          const extra = el.closest('.ibripedia-replies-extra');
+          if (extra && extra.hidden) {
+            const toggle = extra.parentElement.querySelector('[data-action="toggle-replies"]');
+            if (toggle) this.toggleReplies(toggle);
+          }
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('is-highlighted');
+          setTimeout(() => el.classList.remove('is-highlighted'), 2600);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
     }
 
     // Наполняется наборами, добавленными себе ("Добавить себе" — теперь и во
@@ -2062,7 +2217,7 @@
     // возможности отвечать на комментарии под комментариями").
     renderCommentHtml(comment, replies, me, canModerate, isReply, topParentId) {
       const canDelete = canModerate || (me && me.id === comment.userId);
-      const { html, standalone } = formatCommentContent(comment.content, comment.stickers);
+      const { html, standalone } = formatCommentContent(comment.content, comment.stickers, comment.mentions);
       const reactionsBar = `<div class="ibripedia-reactions" data-target-type="comment" data-target-id="${comment.id}">${reactionsBarInnerHtml(comment.reactions)}</div>`;
 
       return `
@@ -2206,7 +2361,8 @@
       // "@Имя " — как в YouTube, чтобы было видно, кому именно отвечаешь,
       // если это ответ не на самый первый (видимый) комментарий треда.
       if (mentionName && composer) {
-        composer.inputEl.textContent = `@${mentionName} `;
+        // Имя с пробелами — в скобках, иначе упоминание оборвалось бы на пробеле.
+        composer.inputEl.textContent = /\s/.test(mentionName) ? `@[${mentionName}]\u00a0` : `@${mentionName}\u00a0`;
         const range = document.createRange();
         range.selectNodeContents(composer.inputEl);
         range.collapse(false);

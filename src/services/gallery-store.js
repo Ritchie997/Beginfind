@@ -351,6 +351,17 @@ async function deleteCommentCascade(id) {
 
 // ===== Список / поиск =====
 
+// Теги работы для поиска/фильтра: поле «Теги» + #хештеги из описания (как у
+// статей, где #тег в тексте — тоже тег). Нижний регистр, без '#'.
+const DESCRIPTION_HASHTAG_RE = /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
+function workTagKeys(work) {
+  const keys = new Set((work.tags || []).map((t) => String(t).toLowerCase()));
+  let m;
+  DESCRIPTION_HASHTAG_RE.lastIndex = 0;
+  while ((m = DESCRIPTION_HASHTAG_RE.exec(work.description || '')) !== null) keys.add(m[2].toLowerCase());
+  return [...keys];
+}
+
 const SORTS = {
   newest: (a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.id - a.id,
   oldest: (a, b) => String(a.created_at).localeCompare(String(b.created_at)) || a.id - b.id,
@@ -368,7 +379,10 @@ const SORTS = {
 async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids } = {}) {
   const where = ['(EXISTS (SELECT 1 FROM gallery_images i WHERE i.work_id = w.id) OR w.author_id = ?)'];
   const params = [user.id];
-  const terms = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+  // Слова с # ("#персонаж") — фильтр по тегам работы (по началу тега), остальные — текст.
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+  const hashTerms = words.filter((w) => w.startsWith('#')).map((w) => w.replace(/^#+/, '')).filter(Boolean);
+  const terms = words.filter((w) => !w.startsWith('#'));
   terms.forEach((t) => {
     where.push("w.search_text LIKE ? ESCAPE '\\'");
     params.push(`%${t.replace(/[\\%_]/g, (c) => '\\' + c)}%`);
@@ -388,7 +402,13 @@ async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0,
   const ctx = await getAccessContext(user);
   const tagKey = String(tag || '').trim().replace(/^#+/, '').toLowerCase();
   let works = rows.map(rowToWork).filter((w) => canViewWork(w, ctx));
-  if (tagKey) works = works.filter((w) => w.tags.some((t) => String(t).toLowerCase() === tagKey));
+  if (tagKey) works = works.filter((w) => workTagKeys(w).includes(tagKey));
+  if (hashTerms.length) {
+    works = works.filter((w) => {
+      const keys = workTagKeys(w);
+      return hashTerms.every((h) => keys.some((t) => t.startsWith(h)));
+    });
+  }
 
   let counts = null;
   if (sort === 'likes' || sort === 'views' || sort === 'comments') {

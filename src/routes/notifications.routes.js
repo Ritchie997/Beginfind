@@ -12,6 +12,7 @@ const auth = require('../middleware/auth');
 const stickersStore = require('../services/stickers-store');
 const feedbackStore = require('../services/feedback-store');
 const notificationSeen = require('../services/notification-seen');
+const userNotifications = require('../services/user-notifications');
 
 const router = express.Router();
 
@@ -51,7 +52,34 @@ router.get('/notifications/summary', auth.authenticateToken, auth.checkApproved,
       const fresh = await notificationSeen.markSeen(req.user.id, category, keys);
       if (fresh) summary.fresh[category] = fresh;
     }
+    // Личные (ответы на комментарии, @упоминания): число непрочитанных для
+    // колокольчика и новые — для всплывающего уведомления, один раз.
+    summary.personalUnread = await userNotifications.countUnread(req.user.id);
+    summary.personalFresh = await userNotifications.takeUnnotified(req.user.id);
     res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Колокольчик: последние личные уведомления + сколько непрочитанных.
+router.get('/notifications', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const [items, unread] = await Promise.all([
+      userNotifications.list(req.user.id, 30),
+      userNotifications.countUnread(req.user.id)
+    ]);
+    res.json({ items, unread });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Отметить прочитанными: { ids: [..] } или { all: true }.
+router.post('/notifications/read', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await userNotifications.markRead(req.user.id, req.body.all ? 'all' : req.body.ids);
+    res.json({ unread: await userNotifications.countUnread(req.user.id) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
