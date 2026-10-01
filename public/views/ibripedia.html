@@ -112,8 +112,8 @@
   <!-- ===== Просмотр одной статьи ===== -->
   <section id="ibripediaView" class="ibripedia-view" hidden>
     <div class="ibripedia-view-topbar">
-      <button type="button" id="ibripediaBackBtn" class="btn btn-secondary btn-sm ibripedia-back-btn">
-        <i class="fas fa-arrow-left"></i> К списку статей
+      <button type="button" id="ibripediaBackBtn" class="btn btn-secondary btn-sm ibripedia-back-btn" title="К списку статей">
+        <i class="fas fa-arrow-left"></i> <span class="ibripedia-btn-label">К списку статей</span>
       </button>
 
       <!-- Поиск по тексту ОТКРЫТОЙ статьи (не путать с поиском по витрине
@@ -130,8 +130,8 @@
 
       <!-- Только на телефоне/планшете (см. @media в ibripedia.css) —
            разворачивает боковую панель "Оглавление/Закладки" под текстом. -->
-      <button type="button" id="ibripediaSidebarToggleBtn" class="ibripedia-filters-toggle ibripedia-sidebar-toggle" aria-expanded="false" aria-controls="ibripediaViewSidebar">
-        <i class="fas fa-list-ul"></i> Оглавление и закладки
+      <button type="button" id="ibripediaSidebarToggleBtn" class="ibripedia-filters-toggle ibripedia-sidebar-toggle" title="Оглавление и закладки" aria-expanded="false" aria-controls="ibripediaViewSidebar">
+        <i class="fas fa-list-ul"></i> <span class="ibripedia-btn-label">Оглавление и закладки</span>
         <i class="fas fa-chevron-down ibripedia-filters-chev"></i>
       </button>
     </div>
@@ -159,8 +159,8 @@
         <div id="ibripediaViewLayerSwitcher" class="ibripedia-layer-switcher" hidden></div>
 
         <div class="ibripedia-view-actions">
-          <button type="button" id="ibripediaEditBtn" class="btn btn-primary"><i class="fas fa-pen"></i> Редактировать</button>
-          <button type="button" id="ibripediaDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Удалить</button>
+          <button type="button" id="ibripediaEditBtn" class="btn btn-primary" title="Редактировать"><i class="fas fa-pen"></i> <span class="ibripedia-btn-label">Редактировать</span></button>
+          <button type="button" id="ibripediaDeleteBtn" class="btn btn-danger" title="Удалить"><i class="fas fa-trash"></i> <span class="ibripedia-btn-label">Удалить</span></button>
         </div>
 
         <div id="ibripediaViewContent" class="preview-pane ibripedia-view-content"></div>

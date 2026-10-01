@@ -2149,13 +2149,236 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
     padding: 14px 12px 20px 40px;
   }
 }
+/* Кнопка "Показать все (N)" у длинного инфобокса (setupInfoboxCollapse в
+   ibripedia.js) — видна только на телефоне, см. @media ниже; на ПК
+   инфобокс всегда целиком. */
+.blk-infobox-more {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--background-accent);
+  color: var(--text-link);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* === Статья на телефоне (≤640px) — компоновка по мотивам мобильной
+   Википедии: до первой фразы раньше было ~2.7 экрана (шапка страницы,
+   три строки панели, большие кнопки, инфобокс на 25 строк столбиком).
+   Цвета/карточки/функции те же — меняются размеры и порядок. === */
 @media (max-width: 640px) {
-  /* Поле под значки закладок: значок 22px (на тач-экране 30px) с left:4px — см. выше и (hover:none) ниже. */
+  /* Полоса "Ibripedia - Админ-панель" над статьёй — дубль навигации:
+     назад ведёт стрелка в панели статьи. На витрине полоса остаётся. */
+  .main-content:has(#ibripediaView:not([hidden])) .content-header {
+    display: none;
+  }
+
+  /* Панель статьи — одна строка: [←] [поиск по статье] [☰]. Подписи
+     кнопок остаются в title (см. views/ibripedia.html). */
+  .ibripedia-view-topbar {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 0;
+    margin-bottom: 10px;
+  }
+  .ibripedia-view-topbar .ibripedia-btn-label,
+  .ibripedia-sidebar-toggle .ibripedia-filters-chev {
+    display: none;
+  }
+  .ibripedia-back-btn,
+  .ibripedia-sidebar-toggle {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    margin: 0;
+    justify-content: center;
+  }
+  .ibripedia-inline-search {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    height: 38px;
+    justify-content: flex-start;
+  }
+
+  /* Шапка карточки — сетка: "Редактировать"/"Удалить" — иконки справа от
+     мета-строки (dense ставит их в свободную ячейку рядом с ней), а не
+     полоса из двух больших кнопок во всю ширину. */
+  .ibripedia-view-article {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-auto-flow: row dense;
+  }
+  .ibripedia-view-article > * {
+    grid-column: 1 / -1;
+  }
+  .ibripedia-view-title {
+    font-size: 22px;
+    line-height: 1.25;
+    margin: 14px 16px 6px;
+  }
+  .ibripedia-view-meta {
+    grid-column: 1;
+    margin: 0 0 0 16px;
+    gap: 6px 12px;
+    font-size: 12.5px;
+  }
+  .ibripedia-view-badges,
+  .ibripedia-layer-switcher {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+  .ibripedia-view-actions {
+    grid-column: 2;
+    align-self: start;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin: 0 16px 0 8px;
+    padding: 0;
+    border: none;
+  }
+  .ibripedia-view-actions .btn {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+  .ibripedia-view-actions .ibripedia-btn-label {
+    display: none;
+  }
+  /* Иконка удаления — контурная: сплошная красная кнопка под пальцем
+     рядом с "Редактировать" слишком легко нажимается случайно. */
+  .ibripedia-view-actions .btn-danger {
+    background: transparent;
+    color: var(--red, #ed4245);
+    border: 1px solid currentColor;
+  }
+
+  /* Текст: поля 16px с обеих сторон (было 36px слева под значки закладок,
+     хотя на тач-экране значок есть только у уже поставленной закладки —
+     см. renderBookmarkGutter). Значок теперь — узкая метка в самом поле. */
   .ibripedia-view-content.preview-pane {
-    padding-left: 36px;
+    margin-top: 12px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--background-accent);
+    font-size: 16px;
+    line-height: 1.65;
+    /* Колонка вместо flow-root: на телефоне плавающих блоков уже нет
+       (инфобокс и картинки — на всю ширину), а flex даёт переставить
+       вводные абзацы выше инфобокса через order (см. ниже). */
+    display: flex;
+    flex-direction: column;
+  }
+  .ibripedia-view-content.preview-pane > * {
+    min-width: 0;
+  }
+  .ibripedia-view-content .ibripedia-bm-toggle {
+    left: 0;
+    width: 16px;
+    height: 28px;
+    font-size: 13px;
   }
   .ibripedia-bm-hover-zone-compact {
-    width: 36px;
+    width: 16px;
+  }
+
+  /* Как в мобильной Википедии: вводные абзацы (всё до первого заголовка)
+     — над инфобоксом, чтобы сразу было видно, о чём статья; инфобокс —
+     после них, остальная статья — следом. Порядок в DOM не меняется
+     (оглавление, поиск, закладки работают как прежде). */
+  .ibripedia-view-content > aside.blk-infobox {
+    order: 1;
+  }
+  .ibripedia-view-content > :is(h1, h2, h3),
+  .ibripedia-view-content > :is(h1, h2, h3) ~ *,
+  .ibripedia-view-content > :is(h1, h2, h3) ~ aside.blk-infobox {
+    order: 2;
+  }
+
+  /* Заголовки разделов — мельче и с чертой снизу, как в вики. */
+  .ibripedia-view-content :is(h1, h2, h3) {
+    margin: 1.1em 0 0.45em;
+    line-height: 1.3;
+  }
+  .ibripedia-view-content h1 {
+    font-size: 22px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--background-accent);
+  }
+  .ibripedia-view-content h2 {
+    font-size: 19px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--background-accent);
+  }
+  .ibripedia-view-content h3 {
+    font-size: 17px;
+  }
+
+  /* Инфобокс: подпись и значение в одной строке (две колонки) — строка
+     ~30px вместо 56px. Длинный — свёрнут до первых строк, см.
+     setupInfoboxCollapse в ibripedia.js (n+7 = INFOBOX_COLLAPSED_ROWS+1). */
+  .ibripedia-view-content aside.blk-infobox {
+    margin: 4px 0 16px;
+  }
+  .ibripedia-view-content .blk-infobox-art img {
+    max-height: 220px;
+  }
+  .ibripedia-view-content .blk-infobox-row {
+    display: grid;
+    grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: baseline;
+    padding: 7px 12px;
+  }
+  .ibripedia-view-content .blk-infobox-row dd {
+    font-size: 13.5px;
+  }
+  .ibripedia-view-content .blk-infobox.is-collapsed .blk-infobox-row:nth-child(n+7) {
+    display: none;
+  }
+  .ibripedia-view-content .blk-infobox-more {
+    display: flex;
+  }
+
+  /* Картинки — все на всю ширину (и "по центру 50%" тоже, иначе на
+     телефоне выходила миниатюра), но не выше 70% экрана: высокий арт
+     больше не занимает весь экран целиком. */
+  .ibripedia-view-content figure.blk-image {
+    float: none;
+    width: 100%;
+    margin: 0.4em 0 1em;
+  }
+  .ibripedia-view-content figure.blk-image img {
+    width: auto;
+    max-width: 100%;
+    max-height: 70vh;
+    margin: 0 auto;
+  }
+  .ibripedia-view-content figure.blk-image figcaption {
+    text-align: center;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .ibripedia-view-engagement {
+    margin: 0 16px 14px;
+  }
+  /* Пустая "Ссылки на эту статью" ("Пока никто не сослался…") на телефоне
+     только занимает экран — показываем панель, когда в ней что-то есть. */
+  .ibripedia-view-backlinks:has(> .backlinks-empty) {
+    display: none;
+  }
+  .ibripedia-comments {
+    padding: 14px 16px;
   }
 }
 

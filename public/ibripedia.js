@@ -19,6 +19,9 @@
   'use strict';
 
   const PAGE_SIZE = 24;
+  // Сколько строк инфобокса видно на телефоне до "Показать все" (см.
+  // setupInfoboxCollapse и .blk-infobox.is-collapsed в ibripedia.css).
+  const INFOBOX_COLLAPSED_ROWS = 6;
 
   // Палитра цветов для закладок (попап "Установить закладку?") — те же
   // discord-подобные акцентные цвета, что и в остальном интерфейсе
@@ -1171,6 +1174,7 @@
       if (window.renderArticleBlocks) {
         contentEl.innerHTML = await window.renderArticleBlocks(article.content, this.articlesIndexBySlug, this.restrictedSlugs);
         window.attachBlocksInteractions?.(contentEl);
+        this.setupInfoboxCollapse(contentEl);
       } else {
         contentEl.textContent = '';
       }
@@ -1184,6 +1188,36 @@
       // когда догрузятся.
       contentEl.querySelectorAll('img').forEach((img) => {
         if (!img.complete) img.addEventListener('load', () => this.scheduleBookmarkGutterRefresh(), { once: true });
+      });
+    }
+
+    // Длинный инфобокс на телефоне сворачивается до первых строк с кнопкой
+    // "Показать все (N)" (см. .blk-infobox.is-collapsed в ibripedia.css —
+    // строки прячет только @media телефона, на ПК кнопки и сворачивания
+    // нет). Без этого карточка из 25 строк занимала два экрана, и текст
+    // статьи начинался только на третьем.
+    setupInfoboxCollapse(contentEl) {
+      contentEl.querySelectorAll('aside.blk-infobox').forEach((box) => {
+        const rows = box.querySelectorAll('.blk-infobox-row');
+        if (rows.length <= INFOBOX_COLLAPSED_ROWS) return;
+        box.classList.add('is-collapsible', 'is-collapsed');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'blk-infobox-more';
+        const sync = () => {
+          const collapsed = box.classList.contains('is-collapsed');
+          btn.innerHTML = collapsed
+            ? `Показать все (${rows.length}) <i class="fas fa-chevron-down"></i>`
+            : 'Свернуть <i class="fas fa-chevron-up"></i>';
+          btn.setAttribute('aria-expanded', String(!collapsed));
+        };
+        btn.addEventListener('click', () => {
+          box.classList.toggle('is-collapsed');
+          sync();
+          this.scheduleBookmarkGutterRefresh();
+        });
+        sync();
+        box.appendChild(btn);
       });
     }
 
@@ -2427,6 +2461,8 @@
       if (this._searchIndex >= 0) this._searchHits[this._searchIndex].classList.remove('ibripedia-search-hit-current');
       this._searchIndex = (this._searchIndex + dir + this._searchHits.length) % this._searchHits.length;
       const hit = this._searchHits[this._searchIndex];
+      // Совпадение в спрятанной строке свёрнутого инфобокса — разворачиваем.
+      hit.closest('.blk-infobox.is-collapsed')?.querySelector('.blk-infobox-more')?.click();
       hit.classList.add('ibripedia-search-hit-current');
       hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
       this.updateSearchCount();

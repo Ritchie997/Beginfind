@@ -397,14 +397,22 @@
 
   const IMG_ALIGN_CLASS = { left: 'blk-image-left', right: 'blk-image-right', center: 'blk-image-center', full: 'blk-image-full' };
 
-  function renderImageBlock(data) {
+  function renderImageBlock(data, marked) {
     const align = IMG_ALIGN_CLASS[data.align] ? data.align : 'center';
     const style = [`--w:${data.widthPct}%`];
     if (data.frame && data.frame.show) style.push(`--frame-color:${data.frame.color}`);
     return `<figure class="blk-image ${IMG_ALIGN_CLASS[align]}${data.frame && data.frame.show ? ' blk-image-framed' : ''}" style="${style.join(';')}">`
-      + `<img src="${escapeAttr(data.src)}" alt="${escapeAttr(data.alt)}" loading="lazy">`
-      + (data.alt ? `<figcaption>${escapeHtml(data.alt)}</figcaption>` : '')
+      + `<img src="${escapeAttr(data.src)}" alt="${escapeAttr(plainCaption(data.alt))}" loading="lazy">`
+      // Подпись — инлайн-markdown, как значения инфобокса: раньше шла через
+      // escapeHtml, и wiki-ссылка [Мары Бавас]((Мара Бавас)) показывалась
+      // читателю сырой разметкой со скобками.
+      + (data.alt ? `<figcaption>${renderInline(marked, data.alt)}</figcaption>` : '')
       + `</figure>`;
+  }
+
+  // alt у <img> — только текст: wiki-ссылка -> её подпись (или цель).
+  function plainCaption(md) {
+    return String(md || '').replace(WIKILINK_PARSE_RE_G(), (full, label, target) => (label.trim() || target.trim()));
   }
 
   const CALLOUT_ICON = { info: 'fa-circle-info', tip: 'fa-lightbulb', warning: 'fa-triangle-exclamation' };
@@ -464,7 +472,7 @@
       case 'divider':
         return '<hr class="blk-divider">';
       case 'image':
-        return renderImageBlock(d);
+        return renderImageBlock(d, marked);
       case 'columns': {
         // --w — доля flex-grow (число, НЕ проценты, см. .blk-column в
         // editor-obsidian.css) — с процентным flex-basis ряд из колонок был
