@@ -127,11 +127,18 @@
       if (node.tagName === 'IMG' && node.dataset.shortcode) { out += node.dataset.shortcode; return; }
       if (node.tagName === 'BR') { out += '\n'; return; }
       const isBlock = node.tagName === 'DIV' || node.tagName === 'P';
+      // Enter в contenteditable (Chrome) оборачивает новую строку в <div>:
+      // "a<div>b</div>". Перенос нужен и ПЕРЕД блоком — раньше он ставился
+      // только после, и строки склеивались ("ab"). Пустая строка (<div><br>
+      // </div>) остаётся пустой — это и есть отбивка абзаца.
+      if (isBlock && out.length && !out.endsWith('\n')) out += '\n';
       const lenBefore = out.length;
       Array.from(node.childNodes).forEach(walk);
       if (isBlock && out.length > lenBefore && !out.endsWith('\n')) out += '\n';
     }
     Array.from(el.childNodes).forEach(walk);
+    // Больше одной пустой строки подряд — в одну (абзацы, а не простыни пустоты).
+    out = out.replace(/\n{3,}/g, '\n\n');
     return out.replace(/ /g, ' ').trim();
   }
 

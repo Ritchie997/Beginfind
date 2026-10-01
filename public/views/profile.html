@@ -98,7 +98,7 @@
         <div>
             <div style="display: flex; gap: 4px; border-bottom: 2px solid var(--background-accent, #4f545c); margin-bottom: 16px;">
                 <button class="profile-media-tab active" data-tab="articles" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-normal, #dcddde); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid #5865f2; margin-bottom: -2px;">📄 Статьи</button>
-                <button class="profile-media-tab" data-tab="arts" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">🎨 Арты</button>
+                <button class="profile-media-tab" data-tab="arts" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">🎨 Арты <span id="profile-arts-count" style="color: var(--text-muted, #b9bbbe); font-weight: 400;"></span></button>
                 <button class="profile-media-tab" data-tab="stickers" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">😀 Наборы стикеров</button>
                 <!-- Видна только на СВОЁМ профиле (закладки — личные, см. setupProfileBookmarks в spa-router.js) -->
                 <button id="profile-bookmarks-tab-btn" class="profile-media-tab" data-tab="bookmarks" style="display: none; padding: 10px 16px; background: transparent; border: none; color: var(--text-muted, #b9bbbe); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">🔖 Закладки</button>
@@ -110,10 +110,22 @@
                 <div id="profile-articles-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
 
-            <div id="profile-media-arts" class="profile-media-panel" style="display: none; text-align: center; padding: 40px 20px; color: var(--text-muted, #b9bbbe);">
-                <div style="font-size: 40px; margin-bottom: 10px;">🎨</div>
-                <div style="font-weight: 600; margin-bottom: 4px;">Загруженные арты</div>
-                <div style="font-size: 13px;">В разработке — появится отдельная страница с артами пользователя</div>
+            <!-- Работы пользователя в Галерее (см. renderProfileArts в spa-router.js):
+                 те же карточки, что на странице /gallery, клик — просмотр работы.
+                 Закрытые по ролям работы видны только тем, кому они доступны. -->
+            <div id="profile-media-arts" class="profile-media-panel" style="display: none;">
+                <div id="profile-arts-toolbar" style="display: none; justify-content: flex-end; margin-bottom: 12px;">
+                    <button type="button" class="btn btn-primary btn-sm" id="profile-arts-upload"><i class="fas fa-upload"></i> Выложить работу</button>
+                </div>
+                <div id="profile-arts-loading" style="color: var(--text-muted, #b9bbbe); font-size: 13px;">Загрузка…</div>
+                <div id="profile-arts-empty" style="display: none; text-align: center; padding: 30px 20px; color: var(--text-muted, #b9bbbe);">
+                    <div style="font-size: 36px; margin-bottom: 8px;">🎨</div>
+                    <div id="profile-arts-empty-text" style="font-size: 13px;">Пока нет ни одной работы в галерее</div>
+                </div>
+                <div id="profile-arts-grid" class="profile-arts-grid"></div>
+                <div style="text-align: center; margin-top: 14px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="profile-arts-more" style="display: none;">Показать ещё</button>
+                </div>
             </div>
 
             <!-- Наборы стикеров, СОЗДАННЫЕ пользователем (автор = владелец

@@ -684,6 +684,9 @@
       }
       await this.close();
       window.galleryManager?.removeCard(work.id);
+      // Карточки вне страницы галереи (вкладка «Арты» в профиле, полоса под
+      // статьёй) — тоже убираем.
+      document.querySelectorAll(`.gallery-card[data-work-id="${work.id}"]`).forEach((el) => el.remove());
       showMessage('Работа удалена', 'success');
     }
   }
@@ -1811,4 +1814,6 @@
   window.galleryEditor = new GalleryEditor();
   window.galleryPicker = new GalleryPicker();
   window.galleryRenderArticleStrip = renderArticleStrip;
+  // Карточка работы — и для вкладки «Арты» в профиле (spa-router.js).
+  window.galleryCardHtml = cardHtml;
 })();

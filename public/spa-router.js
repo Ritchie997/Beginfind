@@ -6862,6 +6862,7 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     this.setupProfileBio(targetId, profile);
     this.setupProfileNote(targetId, profile);
     await this.renderProfileArticles(targetId);
+    await this.renderProfileArts(targetId);
     await this.renderProfileStickers(targetId);
 
     const me = authManager.getUser() || {};
@@ -7083,8 +7084,75 @@ SPARouter.prototype.setupProfileNote = function(targetId, profile) {
   };
 };
 
+// Арты пользователя — его работы в Галерее (GET /api/gallery/works?author=,
+// сервер сам отбрасывает работы, закрытые от смотрящего по ролям). Карточки —
+// те же, что на /gallery (window.galleryCardHtml), клик — просмотр работы.
+// На своём профиле — кнопка «Выложить работу»; подгрузка по PROFILE_ARTS_PAGE.
+const PROFILE_ARTS_PAGE = 24;
+SPARouter.prototype.renderProfileArts = async function(targetId) {
+  const loadingEl = document.getElementById('profile-arts-loading');
+  const emptyEl = document.getElementById('profile-arts-empty');
+  const gridEl = document.getElementById('profile-arts-grid');
+  const moreBtn = document.getElementById('profile-arts-more');
+  const countEl = document.getElementById('profile-arts-count');
+  if (!gridEl) return;
+
+  const me = authManager.getUser() || {};
+  const isSelf = String(targetId) === String(me.id);
+  document.getElementById('profile-arts-toolbar').style.display = isSelf ? 'flex' : 'none';
+  document.getElementById('profile-arts-empty-text').textContent = isSelf
+    ? 'Вы ещё не выкладывали работ в галерею'
+    : 'Пока нет ни одной работы в галерее';
+
+  let offset = 0;
+  let total = 0;
+  const loadPage = async () => {
+    moreBtn.disabled = true;
+    try {
+      const res = await apiClient.getGalleryWorks({ author: targetId, sort: 'newest' }, PROFILE_ARTS_PAGE, offset);
+      if (!res.success) throw new Error(res.data?.error || res.error || 'Не удалось загрузить арты');
+      const items = res.data.data || [];
+      total = res.data.total || 0;
+      offset += items.length;
+      gridEl.insertAdjacentHTML('beforeend', items.map((w) => window.galleryCardHtml(w)).join(''));
+      loadingEl.style.display = 'none';
+      emptyEl.style.display = total ? 'none' : 'block';
+      countEl.textContent = total ? `(${total})` : '';
+      moreBtn.style.display = offset < total ? '' : 'none';
+    } catch (error) {
+      loadingEl.style.display = 'none';
+      showMessage(error.message, 'error');
+    } finally {
+      moreBtn.disabled = false;
+    }
+  };
+
+  const reload = () => {
+    offset = 0;
+    gridEl.innerHTML = '';
+    return loadPage();
+  };
+
+  gridEl.addEventListener('click', (e) => {
+    const card = e.target.closest('[data-work-id]');
+    if (card) window.galleryViewer?.openWork(card.dataset.workId);
+  });
+  gridEl.addEventListener('keydown', (e) => {
+    const card = e.target.closest('[data-work-id]');
+    if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); window.galleryViewer?.openWork(card.dataset.workId); }
+  });
+  moreBtn.addEventListener('click', loadPage);
+  document.getElementById('profile-arts-upload')?.addEventListener('click', async () => {
+    const saved = await window.galleryEditor?.open(null);
+    if (!saved) return;
+    await reload();
+    window.galleryViewer?.openWork(saved.id);
+  });
+
+  await loadPage();
+};
+
 // Статьи пользователя (авторство/соавторство уже есть в articles-store).
-// "Арты" пока остаётся заготовкой под будущую фичу (см. profile.html);
 // "Наборы стикеров" — см. renderProfileStickers ниже.
 SPARouter.prototype.renderProfileArticles = async function(targetId) {
   const loadingEl = document.getElementById('profile-articles-loading');

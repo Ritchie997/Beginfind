@@ -627,6 +627,20 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
   font-size: 11px;
 }
 
+/* === Вкладка «Арты» в профиле (renderProfileArts в spa-router.js) === */
+
+.profile-arts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+}
+/* Ровная сетка квадратных превью — кладка на узкой колонке профиля
+   смотрелась бы рваной. */
+.profile-arts-grid .gallery-card-media { aspect-ratio: 1 / 1 !important; }
+@media (max-width: 640px) {
+  .profile-arts-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
+
 /* === Полоса «Из галереи» под статьёй и арт в тексте статьи === */
 
 .ibripedia-view-gallery { margin: 0 0 20px; }
