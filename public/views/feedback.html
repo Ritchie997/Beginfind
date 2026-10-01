@@ -48,16 +48,20 @@
     <!-- ============ 2 линия: кейсы ============ -->
     <div class="feedback-panel" id="feedbackPanelCases" hidden>
         <h3 class="feedback-section-title">Принятые обращения без кейса</h3>
-        <p class="feedback-explain">Отметьте одинаковые обращения и соберите из них кейс — он сразу уйдёт на третью линию. Новые дубли можно добавить в кейс, пока по нему нет решения.</p>
-        <div class="feedback-queue-actions btns-compact" id="feedbackQueueActions" hidden>
-            <span id="feedbackQueueSelected">Выбрано: 0</span>
-            <button type="button" class="btn btn-primary btn-sm" id="feedbackQueueCreateBtn"><i class="fas fa-arrow-up"></i> Собрать кейс</button>
-            <select class="form-select" id="feedbackQueueCaseSelect"></select>
-            <button type="button" class="btn btn-secondary btn-sm" id="feedbackQueueAttachBtn"><i class="fas fa-link"></i> Добавить в кейс</button>
-        </div>
+        <p class="feedback-explain">Одно обращение — кнопка «На третью линию» прямо на карточке. Несколько одинаковых — отметьте их галочкой слева и соберите в один кейс (или добавьте в существующий, пока по нему нет решения).</p>
         <div class="loading-pulse" id="feedbackQueueLoading">Загрузка...</div>
         <div class="feedback-empty" id="feedbackQueueEmpty" hidden>Все принятые обращения уже разобраны по кейсам.</div>
         <div class="feedback-list" id="feedbackQueueList"></div>
+        <!-- Действия с отмеченными — прилипают к низу экрана (см. syncQueueSelection) -->
+        <div class="feedback-queue-actions btns-compact" id="feedbackQueueActions" hidden>
+            <span class="feedback-queue-count" id="feedbackQueueSelected">Выбрано: 0</span>
+            <button type="button" class="btn btn-primary btn-sm" id="feedbackQueueCreateBtn"><i class="fas fa-arrow-up"></i> На третью линию</button>
+            <span class="feedback-queue-attach">
+                <select class="form-select" id="feedbackQueueCaseSelect"></select>
+                <button type="button" class="btn btn-secondary btn-sm" id="feedbackQueueAttachBtn"><i class="fas fa-link"></i> Добавить в кейс</button>
+            </span>
+            <button type="button" class="btn btn-secondary btn-sm" id="feedbackQueueClearBtn" title="Снять выделение"><i class="fas fa-xmark"></i></button>
+        </div>
 
         <div class="feedback-section-head">
             <h3 class="feedback-section-title">Кейсы</h3>
@@ -131,12 +135,12 @@
     <div class="modal-overlay" id="feedbackNewCaseModal" hidden>
         <div class="modal-box">
             <div class="modal-header">
-                <h3>Собрать кейс</h3>
+                <h3 id="feedbackNewCaseHeading">На третью линию</h3>
                 <button class="modal-close" data-close-modal="feedbackNewCaseModal">&times;</button>
             </div>
             <div class="modal-body">
                 <p class="feedback-explain" id="feedbackNewCaseInfo"></p>
-                <div class="form-group"><label class="form-label">Суть проблемы *</label><textarea class="form-textarea" id="feedbackNewCaseSummary" maxlength="5000"></textarea></div>
+                <div class="form-group"><label class="form-label" id="feedbackNewCaseSummaryLabel">Суть проблемы *</label><textarea class="form-textarea" id="feedbackNewCaseSummary" maxlength="5000"></textarea></div>
                 <div class="form-group"><label class="form-label">Комментарий (по желанию)</label><textarea class="form-textarea" id="feedbackNewCaseComment" maxlength="2000"></textarea></div>
                 <div class="form-group"><label class="form-label">Критичность</label><select class="form-select" id="feedbackNewCaseSeverity"></select></div>
                 <p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс сразу уйдёт на третью линию. Добавлять в него новые дубли и править его можно и дальше, пока нет решения.</p>
@@ -234,6 +238,27 @@
 .feedback-attachments { display: flex; flex-wrap: wrap; gap: 6px; }
 .feedback-attachment { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
 .feedback-attachment img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--background-accent); display: block; }
+/* Скриншоты обращения в списках и в кейсе — крупнее, по клику просмотрщик */
+.feedback-shots .feedback-attachment img { width: 96px; height: 72px; }
+.feedback-case-shots { gap: 8px; }
+.feedback-case-shots .feedback-attachment img { width: 132px; height: 96px; }
+.feedback-attachment a[data-shot] { position: relative; display: block; cursor: zoom-in; }
+.feedback-attachment a[data-shot]:hover img { border-color: var(--blurple); }
+.feedback-shot-label { position: absolute; left: 4px; bottom: 4px; padding: 0 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 11px; }
+
+/* Просмотрщик скриншотов (openLightbox в feedback-manager.js) — поверх окон */
+.feedback-lightbox { position: fixed; inset: 0; z-index: 2600; background: rgba(8, 8, 10, 0.94); display: flex; align-items: center; justify-content: center; }
+.feedback-lightbox[hidden] { display: none; }
+.feedback-lightbox-img { max-width: calc(100vw - 140px); max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px); object-fit: contain; border-radius: 6px; user-select: none; }
+.feedback-lightbox-top { position: absolute; top: 10px; left: 14px; right: 14px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.feedback-lightbox-counter { margin-right: auto; color: #ccc; font-size: 14px; }
+.feedback-lightbox-btn { width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.1); color: #eee; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.feedback-lightbox-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.feedback-lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 52px; height: 52px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 20px; cursor: pointer; }
+.feedback-lightbox-nav:hover { background: rgba(255, 255, 255, 0.22); }
+.feedback-lightbox-nav.prev { left: 16px; }
+.feedback-lightbox-nav.next { right: 16px; }
+.feedback-lightbox-nav[hidden] { display: none; }
 .feedback-attachment a.feedback-link { font-size: 12px; overflow-wrap: anywhere; }
 .feedback-attachment-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 20px; cursor: pointer; padding: 0; }
 .feedback-attachment.is-link { background: var(--background-tertiary); border-radius: 6px; padding: 4px 26px 4px 8px; }
@@ -245,9 +270,19 @@
 .feedback-type-switch .btn.active { background: var(--blurple); color: #fff; }
 .feedback-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .feedback-form-row > .form-group { flex: 1; min-width: 150px; }
-.feedback-queue-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; color: var(--text-muted); }
+/* Очередь второй линии: выбор — круглая галочка слева, выбранная карточка
+   подсвечена; действия с выбранными — панель, прилипшая к низу экрана. */
+.feedback-select { flex-shrink: 0; width: 24px; height: 24px; margin-top: -1px; border-radius: 50%; border: 2px solid var(--interactive-normal); background: transparent; color: transparent; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.feedback-select:hover { border-color: var(--blurple); color: var(--blurple); }
+.feedback-queue-card.is-selected { border-color: var(--blurple); background: rgba(88, 101, 242, 0.08); box-shadow: inset 3px 0 0 var(--blurple); }
+.feedback-queue-card.is-selected .feedback-select { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+.feedback-queue-escalate { flex-shrink: 0; }
+.feedback-queue-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--background-floating, #18191c); border: 1px solid var(--blurple); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); font-size: 13px; color: var(--text-normal); }
 .feedback-queue-actions[hidden] { display: none; }
-.feedback-queue-actions .form-select { width: auto; max-width: 260px; }
+.feedback-queue-count { font-weight: 600; margin-right: 4px; }
+.feedback-queue-attach { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.feedback-queue-actions .form-select { width: auto; max-width: 260px; min-width: 0; }
+#feedbackQueueClearBtn { margin-left: auto; }
 
 /* Окна обращений: шапка и кнопки стоят на месте, прокручивается только
    содержимое. Раньше прокручивалось всё окно целиком (.modal-box с
@@ -275,5 +310,10 @@
 @media (max-width: 600px) {
     .feedback-attach-row .form-input { order: -1; flex: 1 1 100%; min-width: 0; }
     .feedback-section-head { flex-wrap: wrap; }
+    .feedback-queue-escalate span { display: none; } /* на телефоне — только стрелка */
+    .feedback-queue-attach { flex: 1 1 100%; }
+    .feedback-queue-attach .form-select { flex: 1; max-width: none; }
+    .feedback-lightbox-img { max-width: 100vw; max-height: calc(100dvh - 70px); border-radius: 0; }
+    .feedback-lightbox-nav { display: none; } /* листание свайпом */
 }
 </style>

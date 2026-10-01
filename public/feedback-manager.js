@@ -38,7 +38,38 @@
     other: 'Другое'
   };
   const FREQUENCY_LABELS = { always: 'Всегда', often: 'Часто', sometimes: 'Иногда', once: 'Один раз' };
-  const SEVERITY_LABELS = { 1: '1 — косметика', 2: '2 — мешает', 3: '3 — ломает функцию', 4: '4 — потеря данных / безопасность' };
+  // Критичность — число 1–4 (по нему сервер считает приоритет, а 4 сразу
+  // отправляет кейс на третью линию — см. feedback-store.js), но смысл
+  // ступеней у проблемы, идеи и жалобы на статью разный: "потеря данных"
+  // для идеи звучала бы нелепо. short — для чипа на карточке кейса.
+  const SEVERITY_SCALES = {
+    bug: {
+      1: { short: 'Косметика', full: '1 — Косметика: выглядит не так, но работает' },
+      2: { short: 'Мешает', full: '2 — Мешает: неудобно, но есть обходной путь' },
+      3: { short: 'Ломает функцию', full: '3 — Ломает функцию: обхода нет' },
+      4: { short: 'Критично', full: '4 — Критично: потеря данных или безопасность' }
+    },
+    idea: {
+      1: { short: 'Мелочь', full: '1 — Мелочь: приятно, но можно и без этого' },
+      2: { short: 'Полезно', full: '2 — Полезно: заметно улучшит удобство' },
+      3: { short: 'Важно', full: '3 — Важно: нужно многим или давно просят' },
+      4: { short: 'Срочно', full: '4 — Срочно: без этого не работает важный сценарий' }
+    },
+    article: {
+      1: { short: 'Мелочь', full: '1 — Мелочь: опечатки, оформление' },
+      2: { short: 'Неточность', full: '2 — Неточность: ошибки в деталях' },
+      3: { short: 'Серьёзная ошибка', full: '3 — Серьёзная ошибка: неверные факты, вводит в заблуждение' },
+      4: { short: 'Срочно', full: '4 — Срочно: нарушение правил, оскорбления, вред' }
+    }
+  };
+  function severityInfo(type, sev) {
+    const scale = SEVERITY_SCALES[type] || SEVERITY_SCALES.bug;
+    return scale[sev] || { short: String(sev), full: String(sev) };
+  }
+  function severityOptions(type, selected) {
+    return [1, 2, 3, 4].map((sev) => `<option value="${sev}" ${sev === selected ? 'selected' : ''}>${escapeHtml(severityInfo(type, sev).full)}</option>`).join('');
+  }
+  const SUMMARY_LABELS = { bug: 'Суть проблемы', idea: 'Суть идеи', article: 'Суть жалобы' };
   const CASE_STATUS_LABELS = { open: 'На доработке', escalated: 'На третьей линии', accepted: 'Принят, в работе', resolved: 'Решён', archived: 'Архив' };
   const EVENT_LABELS = {
     report_created: 'обращение создано',
@@ -92,7 +123,9 @@
     return (urls || []).map((url, index) => {
       const remove = removable ? `<button type="button" class="feedback-attachment-remove" data-remove-attachment="${index}" title="Убрать">&times;</button>` : '';
       if (url.startsWith('/uploads/')) {
-        return `<span class="feedback-attachment"><a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(url)}" alt=""></a>${remove}</span>`;
+        // data-shot — открыть во встроенном просмотрщике (см. openLightbox);
+        // href остаётся — средней кнопкой/Ctrl+клик откроется оригинал.
+        return `<span class="feedback-attachment"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" data-shot="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="" loading="lazy"></a>${remove}</span>`;
       }
       return `<span class="feedback-attachment is-link"><a class="feedback-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>${remove}</span>`;
     }).join('');
@@ -128,9 +161,17 @@
         ${field('Ожидаемое поведение', report.expected)}
         ${field('Фактическое поведение', report.actual)}
         ${field('Версия · платформа · частота', env)}
-        ${report.attachments && report.attachments.length ? `<div><div class="feedback-field-label">Скриншоты</div><div class="feedback-attachments">${renderAttachments(report.attachments, false)}</div></div>` : ''}
         ${field('Комментарий', report.comment)}
       </div>`;
+  }
+
+  // Скриншоты обращения — отдельно от текстовых полей: их видно сразу, без
+  // "Подробнее" (смотреть приходится часто, а раскрывать каждое — долго).
+  function renderReportShots(report) {
+    const shots = (report.attachments || []).filter((u) => u.startsWith('/uploads/'));
+    const links = (report.attachments || []).filter((u) => !u.startsWith('/uploads/'));
+    if (!shots.length && !links.length) return '';
+    return `<div class="feedback-attachments feedback-shots">${renderAttachments([...shots, ...links], false)}</div>`;
   }
 
   class FeedbackManager {
@@ -147,6 +188,9 @@
       this.editingReport = null; // своё обращение в форме правки (null — новое)
       this.myReports = new Map();
       this.queueReports = new Map();
+      this.triageReports = new Map();
+      this.newCaseIds = [];
+      this._lightbox = null;
       this.uploading = 0;
       this.formSession = 0; // номер открытия формы — см. openCreateModal/uploadFiles
     }
@@ -240,14 +284,26 @@
       });
 
       // --- Вторая линия ---
-      root.querySelector('#feedbackQueueList').addEventListener('change', (e) => {
-        const box = e.target.closest('[data-queue-select]');
-        if (!box) return;
-        if (box.checked) this.queueSelected.add(Number(box.dataset.queueSelect));
-        else this.queueSelected.delete(Number(box.dataset.queueSelect));
-        this.updateQueueActions();
+      // Выбор — только кнопкой-галочкой слева (раньше вся шапка карточки была
+      // <label>, и клик по заголовку незаметно ставил галочку). Одиночная
+      // передача на третью линию — кнопкой прямо на карточке.
+      root.querySelector('#feedbackQueueList').addEventListener('click', (e) => {
+        const toggle = e.target.closest('[data-queue-select]');
+        if (toggle) {
+          const id = Number(toggle.dataset.queueSelect);
+          if (this.queueSelected.has(id)) this.queueSelected.delete(id);
+          else this.queueSelected.add(id);
+          this.syncQueueSelection();
+          return;
+        }
+        const single = e.target.closest('[data-queue-escalate]');
+        if (single) this.openNewCaseModal([Number(single.dataset.queueEscalate)], this.queueReports);
       });
-      root.querySelector('#feedbackQueueCreateBtn').addEventListener('click', () => this.openNewCaseModal());
+      root.querySelector('#feedbackQueueCreateBtn').addEventListener('click', () => this.openNewCaseModal(Array.from(this.queueSelected), this.queueReports));
+      root.querySelector('#feedbackQueueClearBtn').addEventListener('click', () => {
+        this.queueSelected.clear();
+        this.syncQueueSelection();
+      });
       root.querySelector('#feedbackNewCaseConfirm').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.createCaseFromQueue()));
       root.querySelector('#feedbackQueueAttachBtn').addEventListener('click', (e) => runExclusive(e.currentTarget, () => this.attachQueueToCase()));
       root.querySelector('#feedbackCasesFilter').addEventListener('change', () => this.loadCasesList());
@@ -266,6 +322,19 @@
       });
 
       root.querySelector('#feedbackTextModalConfirm').addEventListener('click', () => this.resolveTextModal(true));
+
+      // Скриншоты — во встроенном просмотрщике, листаются в пределах своей
+      // группы (обращение или лента скриншотов кейса). Ctrl/Cmd/средняя кнопка
+      // — как обычная ссылка, в новой вкладке.
+      root.addEventListener('click', (e) => {
+        const shot = e.target.closest('[data-shot]');
+        if (!shot || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const group = shot.closest('.feedback-attachments') || shot.parentElement;
+        const urls = Array.from(group.querySelectorAll('[data-shot]')).map((a) => a.dataset.shot);
+        this.openLightbox(urls, Math.max(0, urls.indexOf(shot.dataset.shot)));
+      });
 
       // Ссылки на статьи в жалобах — во всех списках и в карточке кейса.
       root.addEventListener('click', (e) => {
@@ -522,12 +591,19 @@
 
       await this.loadList(
         { loading: '#feedbackTriageLoading', empty: '#feedbackTriageEmpty', list: '#feedbackTriageList' },
-        () => this.api(`/api/feedback/reports?status=${view}`),
+        async () => {
+          const list = await this.api(`/api/feedback/reports?status=${view}`);
+          this.triageReports = new Map(list.map((r) => [r.id, r]));
+          return list;
+        },
         (r) => {
           let actions = '';
           if (view === 'new') {
+            // С правом второй линии — сразу и кейс на третью линию, без
+            // захода во вкладку «Кейсы» ради одного обращения.
             actions = `
               <button class="btn btn-success btn-sm" data-report-action="accept" data-id="${r.id}"><i class="fas fa-check"></i> Принять</button>
+              ${this.perms.cases ? `<button class="btn btn-primary btn-sm" data-report-action="accept-escalate" data-id="${r.id}"><i class="fas fa-arrow-up"></i> Принять и на третью линию</button>` : ''}
               <button class="btn btn-danger btn-sm" data-report-action="reject" data-id="${r.id}"><i class="fas fa-xmark"></i> Отклонить</button>`;
           } else if (this.perms.cases) {
             actions = `<button class="btn btn-secondary btn-sm" data-report-action="restore" data-id="${r.id}"><i class="fas fa-rotate-left"></i> Вернуть в очередь</button>`;
@@ -540,6 +616,7 @@
               <div class="feedback-card-meta">${typeChip(r.type)}<span>${escapeHtml(r.authorName)}</span><span>${formatDate(r.createdAt)}</span></div>
               ${rejected}
               ${renderReportFields(r)}
+              ${renderReportShots(r)}
               <div class="feedback-card-actions btns-compact">${actions}</div>
             </div>`;
         }
@@ -550,6 +627,11 @@
       try {
         if (action === 'accept') {
           await this.api(`/api/feedback/reports/${id}/accept`, 'POST');
+        } else if (action === 'accept-escalate') {
+          // Принимаем сразу — окно кейса можно и закрыть, тогда обращение
+          // просто останется в очереди второй линии.
+          await this.api(`/api/feedback/reports/${id}/accept`, 'POST');
+          this.openNewCaseModal([Number(id)], this.triageReports);
         } else if (action === 'reject') {
           const reason = await this.askText({ title: `Отклонить обращение #${id}`, label: 'Причина (её увидит автор)', confirm: 'Отклонить' });
           if (reason == null) return;
@@ -568,24 +650,39 @@
     // ---------- Вторая линия ----------
 
     async loadQueue() {
-      this.queueSelected.clear();
       await this.loadList(
         { loading: '#feedbackQueueLoading', empty: '#feedbackQueueEmpty', list: '#feedbackQueueList' },
         async () => {
           const list = await this.api('/api/feedback/queue');
           this.queueReports = new Map(list.map((r) => [r.id, r]));
+          // Отметки на оставшихся в очереди сохраняем (отправили одно
+          // обращение — выбор остальных не сбрасывается); ушедшие — снимаем.
+          this.queueSelected.forEach((id) => { if (!this.queueReports.has(id)) this.queueSelected.delete(id); });
           return list;
         },
         (r) => `
-          <div class="feedback-card">
-            <label class="feedback-card-head">
-              <input type="checkbox" data-queue-select="${r.id}">
-              <span class="feedback-card-title">#${r.id} · ${escapeHtml(r.title)}</span>
-            </label>
+          <div class="feedback-card feedback-queue-card" data-queue-card="${r.id}">
+            <div class="feedback-card-head">
+              <button type="button" class="feedback-select" data-queue-select="${r.id}" title="Выбрать — чтобы собрать несколько одинаковых обращений в один кейс" aria-pressed="false"><i class="fas fa-check"></i></button>
+              <div class="feedback-card-title">#${r.id} · ${escapeHtml(r.title)}</div>
+              <button type="button" class="btn btn-primary btn-sm feedback-queue-escalate" data-queue-escalate="${r.id}" title="Передать одно это обращение на третью линию"><i class="fas fa-arrow-up"></i> <span>На третью линию</span></button>
+            </div>
             <div class="feedback-card-meta">${typeChip(r.type)}<span>${escapeHtml(r.authorName)}</span><span>${formatDate(r.createdAt)}</span></div>
+            ${renderReportShots(r)}
             <details class="feedback-details"><summary>Подробнее</summary>${renderReportFields(r)}</details>
           </div>`
       );
+      this.syncQueueSelection();
+    }
+
+    // Подсветка выбранных карточек + панель действий с выбранными (прилипает
+    // к низу экрана — видна, где бы в списке ни была отмеченная карточка).
+    syncQueueSelection() {
+      this.root.querySelectorAll('[data-queue-card]').forEach((card) => {
+        const on = this.queueSelected.has(Number(card.dataset.queueCard));
+        card.classList.toggle('is-selected', on);
+        card.querySelector('[data-queue-select]')?.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
       this.updateQueueActions();
     }
 
@@ -593,6 +690,9 @@
       const count = this.queueSelected.size;
       this.root.querySelector('#feedbackQueueActions').hidden = count === 0;
       this.root.querySelector('#feedbackQueueSelected').textContent = `Выбрано: ${count}`;
+      this.root.querySelector('#feedbackQueueCreateBtn').innerHTML = count > 1
+        ? `<i class="fas fa-layer-group"></i> Собрать кейс из ${count} и на третью линию`
+        : '<i class="fas fa-arrow-up"></i> На третью линию';
       const select = this.root.querySelector('#feedbackQueueCaseSelect');
       select.innerHTML = this.openCases.length
         ? this.openCases.map((c) => `<option value="${c.id}">#${c.id} · ${escapeHtml(TYPE_LABELS[c.type])} · ${escapeHtml(c.title)}</option>`).join('')
@@ -600,16 +700,23 @@
       this.root.querySelector('#feedbackQueueAttachBtn').disabled = !this.openCases.length;
     }
 
-    openNewCaseModal() {
-      const ids = Array.from(this.queueSelected);
-      if (!ids.length) return;
-      const first = this.queueReports.get(ids[0]);
+    // ids — обращения будущего кейса (одно — одиночная передача на третью
+    // линию, несколько — сборка дублей); reports — откуда взять их тексты.
+    openNewCaseModal(ids, reports) {
+      if (!ids || !ids.length) return;
+      this.newCaseIds = ids.slice();
+      const first = reports && reports.get(ids[0]);
+      const type = first ? first.type : 'bug';
+      const single = ids.length === 1;
       const modal = this.root.querySelector('#feedbackNewCaseModal');
-      modal.querySelector('#feedbackNewCaseInfo').textContent = `Обращения: ${ids.map((id) => '#' + id).join(', ')}`;
+      modal.querySelector('#feedbackNewCaseHeading').textContent = single ? `Обращение #${ids[0]} — на третью линию` : `Кейс из ${ids.length} обращений`;
+      modal.querySelector('#feedbackNewCaseInfo').innerHTML = single
+        ? (first ? `${typeChip(type)} ${escapeHtml(first.title)}` : '')
+        : `Обращения: ${ids.map((id) => '#' + id).join(', ')}`;
+      modal.querySelector('#feedbackNewCaseSummaryLabel').textContent = `${SUMMARY_LABELS[type] || SUMMARY_LABELS.bug} *`;
       modal.querySelector('#feedbackNewCaseSummary').value = first ? first.description : '';
       modal.querySelector('#feedbackNewCaseComment').value = '';
-      modal.querySelector('#feedbackNewCaseSeverity').innerHTML = [1, 2, 3, 4]
-        .map((sev) => `<option value="${sev}" ${sev === 2 ? 'selected' : ''}>${SEVERITY_LABELS[sev]}</option>`).join('');
+      modal.querySelector('#feedbackNewCaseSeverity').innerHTML = severityOptions(type, 2);
       modal.hidden = false;
       modal.querySelector('#feedbackNewCaseSummary').focus();
     }
@@ -618,14 +725,14 @@
       const modal = this.root.querySelector('#feedbackNewCaseModal');
       try {
         const created = await this.api('/api/feedback/cases', 'POST', {
-          reportIds: Array.from(this.queueSelected),
+          reportIds: this.newCaseIds,
           summary: modal.querySelector('#feedbackNewCaseSummary').value,
           comment: modal.querySelector('#feedbackNewCaseComment').value,
           severity: modal.querySelector('#feedbackNewCaseSeverity').value
         });
         modal.hidden = true;
-        showMessage(`Кейс #${created.id} собран и передан на третью линию`, 'success');
-        await Promise.all([this.loadQueue(), this.loadCasesList()]);
+        showMessage(`Кейс #${created.id} передан на третью линию`, 'success');
+        await this.refreshCurrentTab();
         this.refreshBadges();
         this.showCase(created);
       } catch (err) {
@@ -654,7 +761,7 @@
           <div class="feedback-card-head"><div class="feedback-card-title">Кейс #${c.id} · ${escapeHtml(c.title)}</div></div>
           <div class="feedback-card-meta">
             ${typeChip(c.type)}
-            <span class="feedback-chip sev-${c.severity}">критичность ${c.severity}</span>
+            <span class="feedback-chip sev-${c.severity}" title="${escapeHtml(severityInfo(c.type, c.severity).full)}">${c.severity} · ${escapeHtml(severityInfo(c.type, c.severity).short)}</span>
             <span class="feedback-chip">приоритет ${c.priority}</span>
             <span>${c.usersCount} польз. · ${c.reportsCount} обращ.</span>
             ${decision}
@@ -742,18 +849,18 @@
       const header = editable
         ? `
           <div class="feedback-card-title">${escapeHtml(c.title)}</div>
-          <div class="form-group"><label class="form-label">Суть проблемы *</label><textarea class="form-textarea" id="feedbackCaseSummary" maxlength="5000">${escapeHtml(c.summary || '')}</textarea></div>
+          <div class="form-group"><label class="form-label">${SUMMARY_LABELS[c.type] || SUMMARY_LABELS.bug} *</label><textarea class="form-textarea" id="feedbackCaseSummary" maxlength="5000">${escapeHtml(c.summary || '')}</textarea></div>
           <div class="form-group"><label class="form-label">Комментарий (по желанию)</label><textarea class="form-textarea" id="feedbackCaseComment" maxlength="2000">${escapeHtml(c.comment || '')}</textarea></div>
           <div class="form-group"><label class="form-label">Критичность</label>
-            <select class="form-select" id="feedbackCaseSeverity">${[1, 2, 3, 4].map((s) => `<option value="${s}" ${s === c.severity ? 'selected' : ''}>${SEVERITY_LABELS[s]}</option>`).join('')}</select>
+            <select class="form-select" id="feedbackCaseSeverity">${severityOptions(c.type, c.severity)}</select>
           </div>
           ${c.status === 'open' ? '<p class="modal-hint"><i class="fas fa-circle-info"></i> Кейс возвращён на доработку. Критичность 4 сразу передаёт его обратно на третью линию.</p>' : ''}
           <div class="btns-compact"><button class="btn btn-secondary btn-sm" data-case-action="save-case">Сохранить</button></div>`
         : `
           <div class="feedback-card-title">${escapeHtml(c.title)}</div>
-          ${field('Суть проблемы', c.summary)}
+          ${field(SUMMARY_LABELS[c.type] || SUMMARY_LABELS.bug, c.summary)}
           ${field('Комментарий', c.comment)}
-          <div class="feedback-card-meta"><span>Критичность: ${escapeHtml(SEVERITY_LABELS[c.severity] || c.severity)}</span></div>`;
+          <div class="feedback-card-meta"><span>Критичность: ${escapeHtml(severityInfo(c.type, c.severity).full)}</span></div>`;
 
       this.root.querySelector('#feedbackCaseBody').innerHTML = `
         <div class="feedback-card-meta">${typeChip(c.type)}<span class="feedback-chip">${CASE_STATUS_LABELS[c.status] || c.status}</span><span>создан ${formatDate(c.createdAt)}${c.createdBy ? ' · ' + escapeHtml(c.createdBy) : ''}</span></div>
@@ -765,6 +872,7 @@
         </div>
         ${c.type === 'article' && c.reports.length ? `<div><div class="feedback-field-label">Статья</div>${articleLink(c.reports[0])}</div>` : ''}
         ${header}
+        ${this.renderCaseShots(c)}
         ${decisionBlock}
         ${actions.length ? `<div class="feedback-card-actions btns-compact">${actions.join('')}</div>` : ''}
         <div class="feedback-case-section">
@@ -774,6 +882,7 @@
               <div class="feedback-card-head"><div class="feedback-card-title">#${r.id} · ${escapeHtml(r.title)}</div></div>
               <div class="feedback-card-meta"><span>${escapeHtml(r.authorName)}</span><span>${formatDate(r.createdAt)}</span>
                 ${editable && c.reports.length > 1 ? `<button class="btn btn-secondary btn-sm" data-case-action="detach" data-report-id="${r.id}">Отвязать</button>` : ''}</div>
+              ${renderReportShots(r)}
               <details class="feedback-details"><summary>Подробнее</summary>${renderReportFields(r)}</details>
             </div>`).join('')}
         </div>
@@ -784,6 +893,103 @@
             </div>
           </details>
         </div>`;
+    }
+
+    // Все скриншоты всех обращений кейса — одной лентой, листаются подряд.
+    renderCaseShots(c) {
+      const shots = [];
+      c.reports.forEach((r) => (r.attachments || []).forEach((url) => {
+        if (url.startsWith('/uploads/') && !shots.some((s) => s.url === url)) shots.push({ url, reportId: r.id });
+      }));
+      if (!shots.length) return '';
+      return `
+        <div class="feedback-case-section">
+          <h4>Скриншоты (${shots.length})</h4>
+          <div class="feedback-attachments feedback-case-shots">
+            ${shots.map((s) => `<span class="feedback-attachment"><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" data-shot="${escapeHtml(s.url)}" title="Из обращения #${s.reportId}"><img src="${escapeHtml(s.url)}" alt="" loading="lazy"><span class="feedback-shot-label">#${s.reportId}</span></a></span>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    // ---------- Просмотр скриншотов ----------
+
+    ensureLightbox() {
+      if (this._lightbox) return this._lightbox;
+      const el = document.createElement('div');
+      el.className = 'feedback-lightbox';
+      el.hidden = true;
+      el.innerHTML = `
+        <div class="feedback-lightbox-top">
+          <span class="feedback-lightbox-counter"></span>
+          <a class="feedback-lightbox-btn" data-lb="original" target="_blank" rel="noopener" title="Открыть оригинал в новой вкладке"><i class="fas fa-up-right-from-square"></i></a>
+          <button type="button" class="feedback-lightbox-btn" data-lb="close" title="Закрыть (Esc)"><i class="fas fa-xmark"></i></button>
+        </div>
+        <button type="button" class="feedback-lightbox-nav prev" data-lb="prev" title="Назад (←)"><i class="fas fa-chevron-left"></i></button>
+        <img class="feedback-lightbox-img" alt="">
+        <button type="button" class="feedback-lightbox-nav next" data-lb="next" title="Вперёд (→)"><i class="fas fa-chevron-right"></i></button>`;
+      document.body.appendChild(el);
+      const lb = { el, img: el.querySelector('img'), urls: [], index: 0, hist: null };
+      this._lightbox = lb;
+
+      el.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-lb]');
+        if (btn && btn.dataset.lb === 'prev') this.lightboxStep(-1);
+        else if (btn && btn.dataset.lb === 'next') this.lightboxStep(1);
+        else if (btn && btn.dataset.lb === 'close') this.closeLightbox();
+        else if (e.target === el) this.closeLightbox(); // клик мимо картинки
+      });
+      document.addEventListener('keydown', (e) => {
+        if (el.hidden) return;
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeLightbox(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); this.lightboxStep(-1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); this.lightboxStep(1); }
+      }, true);
+      // Свайп на телефоне: справа налево — следующий скриншот.
+      let x0 = null;
+      el.addEventListener('touchstart', (e) => { x0 = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+      el.addEventListener('touchend', (e) => {
+        if (x0 === null) return;
+        const dx = e.changedTouches[0].clientX - x0;
+        x0 = null;
+        if (Math.abs(dx) > 50) this.lightboxStep(dx < 0 ? 1 : -1);
+      });
+      return lb;
+    }
+
+    openLightbox(urls, index) {
+      if (!urls.length) return;
+      const lb = this.ensureLightbox();
+      lb.urls = urls;
+      const wasHidden = lb.el.hidden;
+      lb.el.hidden = false;
+      this.showLightboxImage(index);
+      if (wasHidden && window.modalHistory) lb.hist = window.modalHistory.open(() => this.closeLightbox({ fromHistory: true }));
+    }
+
+    showLightboxImage(index) {
+      const lb = this._lightbox;
+      lb.index = (index + lb.urls.length) % lb.urls.length;
+      const url = lb.urls[lb.index];
+      lb.img.src = url;
+      lb.el.querySelector('[data-lb="original"]').href = url;
+      const many = lb.urls.length > 1;
+      lb.el.querySelector('.feedback-lightbox-counter').textContent = many ? `${lb.index + 1} / ${lb.urls.length}` : '';
+      lb.el.querySelectorAll('.feedback-lightbox-nav').forEach((b) => { b.hidden = !many; });
+    }
+
+    lightboxStep(delta) {
+      const lb = this._lightbox;
+      if (lb && lb.urls.length > 1) this.showLightboxImage(lb.index + delta);
+    }
+
+    closeLightbox({ fromHistory = false } = {}) {
+      const lb = this._lightbox;
+      if (!lb || lb.el.hidden) return;
+      lb.el.hidden = true;
+      lb.img.removeAttribute('src');
+      const hist = lb.hist;
+      lb.hist = null;
+      if (hist && !fromHistory && window.modalHistory) window.modalHistory.close(hist);
     }
 
     async caseAction(action, dataset) {
