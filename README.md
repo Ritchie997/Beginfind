@@ -26,6 +26,7 @@ src/
     server-permissions.js       — проверка прав/иерархии ролей на сервере
     server-system-logic.js      — CRUD для серверов, ролей, участников
     dashboard-stats.js          — пользователи/сообщения/свежие события для дашборда
+    gallery-store.js            — Галерея: работы, вариации, страницы, доступ по ролям, лайки/просмотры/комментарии (gallery.db)
   uploads/
     multer-config.js           — конфигурация загрузки изображений и ZIP-бэкапов
   routes/
@@ -37,6 +38,7 @@ src/
     servers.routes.js           — /api/servers*, /api/users
     uploads.routes.js           — /api/upload-image
     backups.routes.js           — /api/backups*
+    gallery.routes.js           — /api/gallery/* (Галерея, файлы в public/uploads/gallery/<id>/)
 
 scripts/
   make-owner.js               — назначить пользователя владельцем (npm run make-owner)

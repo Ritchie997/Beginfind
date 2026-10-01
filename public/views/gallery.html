@@ -1,0 +1,36 @@
+<div class="gallery-page" id="galleryPage">
+
+  <!-- Тулбар: поиск, сортировка, "Мои работы", выкладывание (см. GalleryManager в gallery.js) -->
+  <div class="ibripedia-toolbar gallery-toolbar">
+    <div class="ibripedia-toolbar-row ibripedia-toolbar-row-main">
+      <h1 class="ibripedia-heading"><i class="fas fa-images"></i> Галерея</h1>
+      <div class="ibripedia-search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="gallerySearch" class="ibripedia-search-input" placeholder="Поиск по названию, описанию, тегам, автору…">
+      </div>
+      <select id="gallerySort" class="form-select gallery-sort" title="Сортировка">
+        <option value="newest">Сначала новые</option>
+        <option value="oldest">Сначала старые</option>
+        <option value="updated">Недавно обновлённые</option>
+        <option value="likes">По лайкам</option>
+        <option value="views">По просмотрам</option>
+        <option value="comments">По комментариям</option>
+      </select>
+      <button type="button" id="galleryMineBtn" class="btn btn-secondary gallery-mine-btn" title="Только мои работы"><i class="fas fa-user"></i> <span class="ibripedia-btn-label">Мои</span></button>
+      <button type="button" id="galleryUploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> <span class="ibripedia-btn-label">Выложить работу</span></button>
+    </div>
+    <div class="ibripedia-toolbar-row gallery-tags-row">
+      <div id="galleryTags" class="gallery-tags"></div>
+      <span id="galleryCount" class="ibripedia-count"></span>
+    </div>
+  </div>
+
+  <div id="galleryGrid" class="gallery-grid"></div>
+
+  <div id="galleryEmpty" class="ibripedia-empty" hidden>
+    <i class="fas fa-images"></i>
+    <p>Здесь пока пусто — выложите первую работу.</p>
+  </div>
+  <div id="galleryLoadingMore" class="ibripedia-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
+  <div id="gallerySentinel" class="ibripedia-sentinel"></div>
+</div>

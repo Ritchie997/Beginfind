@@ -16,6 +16,7 @@ const dashboardStats = require('../services/dashboard-stats');
 const { serversDb } = require('../db/connections');
 const articleLayers = require('../services/article-layers');
 const mapAccess = require('../services/map-access');
+const gallery = require('../services/gallery-store');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
@@ -382,7 +383,9 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     // теги закрытых слоёв в ответ не попадают.
     tags: resolved ? (viewLayer.tags || []) : [],
     excerpt: viewLayer.excerpt ?? article.excerpt,
-    content: updateImageUrlsInContent(viewLayer.content, req),
+    // Арты, пересланные из галереи (image-блок с data.gallery): src — из
+    // самой работы, закрытая для читателя работа не показывается.
+    content: updateImageUrlsInContent(req && req.user ? await gallery.resolveEmbedsInDocument(viewLayer.content, req.user) : viewLayer.content, req),
     image: formatImageUrl(viewLayer.image, req),
     layerIndex,
     layerCount,
@@ -564,11 +567,11 @@ router.get('/articles/:id/layers', auth.authenticateToken, auth.checkApproved, a
     if (!resolved) {
       return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
     }
-    const reachable = resolved.accessible.map((i) => resolved.layers[i]).map((l) => ({
+    const reachable = await Promise.all(resolved.accessible.map((i) => resolved.layers[i]).map(async (l) => ({
       ...l,
-      content: updateImageUrlsInContent(l.content, req),
+      content: updateImageUrlsInContent(await gallery.resolveEmbedsInDocument(l.content, req.user), req),
       image: formatImageUrl(l.image, req)
-    }));
+    })));
     res.json({
       usingLayers: Array.isArray(article.layers) && article.layers.length > 0,
       maxIndex: resolved.index,

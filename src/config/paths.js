@@ -17,6 +17,10 @@ const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
 // отдаётся статикой как /uploads (см. server.js), так что /uploads/stickers/*
 // работает без отдельного app.use — заводить второй static-маунт не нужно.
 const STICKERS_DIR = path.join(UPLOADS_DIR, 'stickers');
+// Файлы галереи — uploads/gallery/<workId>/ (оригиналы + превью .thumb.webp).
+// Очистка сирот (src/services/cleanup.js) смотрит только плоскую uploads/,
+// сюда не заходит — файлы удаляются вместе со страницей/работой.
+const GALLERY_DIR = path.join(UPLOADS_DIR, 'gallery');
 const BACKUPS_DIR = path.join(ROOT_DIR, 'backups');
 const CONTENT_DIR = path.join(ROOT_DIR, 'content'); // Статьи — JSON-документы из блоков, см. src/services/blocks.js
 // Интерактивные карты (см. src/services/maps-store.js): сами карты и
@@ -40,6 +44,7 @@ module.exports = {
   PUBLIC_DIR,
   UPLOADS_DIR,
   STICKERS_DIR,
+  GALLERY_DIR,
   BACKUPS_DIR,
   CONTENT_DIR,
   MAPS_DIR,

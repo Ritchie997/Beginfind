@@ -1744,8 +1744,21 @@
       if (!block.data.src) {
         const placeholder = document.createElement('div');
         placeholder.className = 'eb-image-placeholder';
-        placeholder.innerHTML = '<i class="fas fa-image"></i> Нажмите, чтобы загрузить изображение';
-        placeholder.addEventListener('click', () => this.pickAndUploadImageForBlock(block));
+        if (block.data.gallery && block.data.gallery.locked) {
+          // Пересланная работа галереи закрыта для текущего редактора —
+          // ссылка на неё сохранится как есть, читателям с доступом арт виден.
+          placeholder.innerHTML = '<i class="fas fa-lock"></i> Арт из галереи, недоступный вашей роли';
+          placeholder.addEventListener('click', () => this.editImageBlock(block));
+        } else {
+          // Загрузить файл (в галерею НЕ попадает) или переслать арт из галереи.
+          placeholder.innerHTML = '<span data-img-src="upload"><i class="fas fa-image"></i> Загрузить изображение</span>'
+            + '<span class="eb-image-placeholder-sep">или</span>'
+            + '<span data-img-src="gallery"><i class="fas fa-images"></i> Выбрать из галереи</span>';
+          placeholder.addEventListener('click', (e) => {
+            if (e.target.closest('[data-img-src="gallery"]')) this.pickGalleryImageForBlock(block);
+            else this.pickAndUploadImageForBlock(block);
+          });
+        }
         wrap.appendChild(placeholder);
         return wrap;
       }
@@ -1763,6 +1776,13 @@
       settingsBtn.innerHTML = '<i class="fas fa-gear"></i> Настроить';
       settingsBtn.addEventListener('click', () => this.editImageBlock(block));
       holder.append(img, settingsBtn);
+      if (block.data.gallery && block.data.gallery.workId) {
+        const badge = document.createElement('span');
+        badge.className = 'eb-image-gallery-badge';
+        badge.title = 'Арт из галереи — картинка всегда берётся из работы';
+        badge.innerHTML = `<i class="fas fa-images"></i> ${String(block.data.gallery.title || 'Галерея').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}`;
+        holder.appendChild(badge);
+      }
       wrap.appendChild(holder);
       // Подпись под картинкой, как <figcaption> в превью (blocks-renderer.js).
       if (block.data.alt) {
@@ -2095,6 +2115,25 @@
     }
 
 
+    // Пересылка арта из галереи (см. window.galleryPicker в gallery.js):
+    // те же настройки, что у обычной картинки (подпись, положение, размер,
+    // рамка), плюс data.gallery — по ней сервер при отдаче статьи подставляет
+    // актуальную картинку работы и прячет её от тех, кому работа закрыта.
+    async pickGalleryImageForBlock(block) {
+      if (!window.galleryPicker) return;
+      const picked = await window.galleryPicker.open();
+      if (!picked) return;
+      const choice = await this.openImageDialog({ title: 'Арт из галереи', src: picked.src, alt: block.data.alt || picked.title || '', width: block.data.widthPct || 100, align: block.data.align || 'center', frameShow: !!(block.data.frame && block.data.frame.show), frameColor: (block.data.frame && block.data.frame.color) || DEFAULT_FRAME_COLOR, allowDelete: false, allowReplace: false });
+      if (!choice || choice.action !== 'save') return;
+      block.data = {
+        src: picked.src, alt: choice.alt, widthPct: choice.width, align: choice.align,
+        frame: { show: choice.frameShow, color: choice.frameColor },
+        gallery: { workId: picked.workId, imageId: picked.imageId || null, title: picked.title }
+      };
+      this.renderAll();
+      this.scheduleRenderPreview();
+    }
+
     async pickAndUploadImageForBlock(block) {
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
@@ -2126,7 +2165,9 @@
         this.removeBlockFrom(this.findBlockList(block) || list, block);
         return;
       }
+      const gallery = !choice.replacedSrc && block.data.gallery ? block.data.gallery : null;
       block.data = { src: choice.replacedSrc || block.data.src, alt: choice.alt, widthPct: choice.width, align: choice.align, frame: { show: choice.frameShow, color: choice.frameColor } };
+      if (gallery) block.data.gallery = gallery;
       this.renderAll();
       this.scheduleRenderPreview();
     }
@@ -2810,6 +2851,11 @@
         case 'image': {
           const block = this.insertBlockAfterActive('image', {});
           this.pickAndUploadImageForBlock(block);
+          break;
+        }
+        case 'gallery-image': {
+          const block = this.insertBlockAfterActive('image', {});
+          this.pickGalleryImageForBlock(block);
           break;
         }
       }

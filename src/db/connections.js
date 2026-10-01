@@ -7,6 +7,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const { dbPath } = require('../config/paths');
 const { migrateStickerFilesToPackFolders } = require('./migrate-stickers-pack-folders');
+const { migrateGalleryToPages } = require('./migrate-gallery-pages');
 
 const messengerDb = new sqlite3.Database(dbPath('messenger.db'), (err) => {
   if (err) {
@@ -559,4 +560,122 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
   }
 });
 
-module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb };
+// Галерея (см. src/services/gallery-store.js): работа = упорядоченные
+// страницы (массовая загрузка листается слайдером или вертикальной лентой), у
+// страницы — одна или несколько вариаций (картинок с именем от автора и
+// своими ролями на просмотр). Лайки/просмотры/комментарии — свои
+// таблицы по образцу article_* в social.db; реакции — общая таблица
+// reactions в social.db (target_type 'gallery' / 'gallery_comment').
+const galleryDb = new sqlite3.Database(dbPath('gallery.db'), (err) => {
+  if (err) {
+    console.error('Error opening gallery database', err);
+  } else {
+    console.log('Connected to gallery SQLite database');
+    galleryDb.run("PRAGMA encoding = 'UTF-8'");
+    // Старая схема (вариации на уровне работы, см. migrate-gallery-pages.js)
+    // — откладываем её картинки в gallery_images_legacy и переносим после
+    // создания новых таблиц.
+    galleryDb.all('PRAGMA table_info(gallery_images)', [], (infoErr, columns) => {
+      const legacy = !infoErr && (columns || []).some((c) => c.name === 'variant_id');
+      createGalleryTables(legacy);
+    });
+  }
+});
+
+function createGalleryTables(legacy) {
+  galleryDb.serialize(() => {
+    if (legacy) {
+      galleryDb.run('DROP INDEX IF EXISTS idx_gallery_images_variant');
+      galleryDb.run('DROP INDEX IF EXISTS idx_gallery_images_work');
+      galleryDb.run('ALTER TABLE gallery_images RENAME TO gallery_images_legacy');
+    }
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_works (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      author_id INTEGER NOT NULL,
+      server_id INTEGER,
+      roles TEXT NOT NULL DEFAULT '[]',
+      tags TEXT NOT NULL DEFAULT '[]',
+      scroll_mode TEXT NOT NULL DEFAULT 'horizontal',
+      article_slugs TEXT NOT NULL DEFAULT '[]',
+      search_text TEXT NOT NULL DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_works_author ON gallery_works (author_id)');
+
+    // Страницы работы — то, что листается (слайдером или вертикальной лентой).
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_id INTEGER NOT NULL REFERENCES gallery_works(id),
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_pages_work ON gallery_pages (work_id, position)');
+
+    // Вариации страницы — сами картинки: у страницы одна или несколько
+    // (имя вводит автор, читатель переключается между ними), у каждой —
+    // свои роли на просмотр (roles, формат как у слоёв статей).
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_id INTEGER NOT NULL REFERENCES gallery_works(id),
+      page_id INTEGER NOT NULL REFERENCES gallery_pages(id),
+      name TEXT NOT NULL DEFAULT '',
+      roles TEXT NOT NULL DEFAULT '[]',
+      file_url TEXT NOT NULL,
+      thumb_url TEXT,
+      width INTEGER,
+      height INTEGER,
+      is_animated INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_images_page ON gallery_images (page_id, position)');
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_images_work ON gallery_images (work_id)');
+
+    // Ассоциированные работы — связь симметричная, хранится в обе стороны.
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_associations (
+      work_id INTEGER NOT NULL,
+      related_id INTEGER NOT NULL,
+      PRIMARY KEY (work_id, related_id)
+    )`);
+
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_likes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      work_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, work_id)
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_likes_work ON gallery_likes (work_id)');
+
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      work_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, work_id)
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_views_work ON gallery_views (work_id)');
+
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      author_name TEXT NOT NULL,
+      work_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      parent_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_comments_work ON gallery_comments (work_id)');
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_comments_parent ON gallery_comments (parent_id)', () => {
+      if (!legacy) return;
+      migrateGalleryToPages(galleryDb)
+        .then(() => console.log('[gallery] Вариации перенесены на уровень страниц'))
+        .catch((migrateErr) => console.error('[gallery] Не удалось перенести вариации на уровень страниц:', migrateErr));
+    });
+  });
+}
+
+module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb, galleryDb };

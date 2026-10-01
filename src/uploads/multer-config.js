@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const multer = require('multer');
-const { UPLOADS_DIR, STICKERS_DIR } = require('../config/paths');
+const { UPLOADS_DIR, STICKERS_DIR, GALLERY_DIR } = require('../config/paths');
 
 // Директория стикеров — подпапка uploads/, её не создаёт initializeAutoBackup
 // (тот знает только про сам UPLOADS_DIR), поэтому создаём здесь же, при
@@ -164,4 +164,46 @@ const uploadAvatar = multer({
   }
 });
 
-module.exports = { uploadImage, uploadBackupZip, uploadSticker, uploadAvatar, ALLOWED_IMAGE_EXTENSIONS };
+// Галерея: каждая работа пишет в свою папку GALLERY_DIR/<workId>/ — тот же
+// приём и та же проверка id из URL против path traversal, что у стикеров
+// (POST /api/gallery/works/:id/variants/:variantId/images, см.
+// gallery.routes.js). Права на работу проверяются уже в обработчике; файлы
+// отклонённого запроса он сам и удаляет. Потолок 20 МБ — как у uploadImage,
+// настраиваемый владельцем лимит проверяется после загрузки.
+const galleryStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const workId = String(req.params.id || '').trim();
+    if (!/^[1-9][0-9]*$/.test(workId)) {
+      cb(new Error('Некорректный ID работы'));
+      return;
+    }
+    const workDir = path.join(GALLERY_DIR, workId);
+    fs.mkdir(workDir, { recursive: true }, (err) => {
+      if (err) cb(err);
+      else cb(null, workDir);
+    });
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, 'img-' + uniqueSuffix + ext);
+  }
+});
+
+const uploadGallery = multer({
+  storage: galleryStorage,
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+    files: 60
+  },
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (file.mimetype.startsWith('image/') && ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Разрешены только изображения (jpg, jpeg, png, gif, webp)!'));
+    }
+  }
+});
+
+module.exports = { uploadImage, uploadBackupZip, uploadSticker, uploadAvatar, uploadGallery, ALLOWED_IMAGE_EXTENSIONS };

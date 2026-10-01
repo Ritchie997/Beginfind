@@ -1,0 +1,657 @@
+/* gallery.css — Галерея: сетка-кладка превью, просмотр работы (листание как
+   слайдером / вертикальной лентой), окно выкладывания, выбор арта для статьи.
+   См. public/gallery.js и public/views/gallery.html. */
+
+.gallery-page {
+  padding: 28px;
+  max-width: 1700px;
+  margin: 0 auto;
+}
+.gallery-page [hidden],
+.gallery-viewer [hidden],
+.gallery-editor-modal [hidden],
+.gallery-picker-modal [hidden] {
+  display: none !important;
+}
+
+.gallery-sort { width: auto; min-width: 170px; }
+.gallery-mine-btn.active { background: var(--blurple); color: #fff; border-color: var(--blurple); }
+
+.gallery-tags-row { justify-content: space-between; flex-wrap: nowrap; }
+.gallery-tags {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+.gallery-tags .filter-chip {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--background-accent);
+  background: var(--background-tertiary);
+  color: var(--header-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gallery-tags .filter-chip:hover { color: var(--text-normal); }
+.gallery-tags .filter-chip.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+
+/* === Кладка === */
+
+.gallery-grid {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.gallery-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gallery-card {
+  cursor: pointer;
+  border-radius: 14px;
+  outline: none;
+}
+.gallery-card-media {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--background-tertiary);
+  width: 100%;
+}
+.gallery-card-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+.gallery-card:hover .gallery-card-media img,
+.gallery-card:focus-visible .gallery-card-media img { transform: scale(1.03); }
+.gallery-card:focus-visible .gallery-card-media { box-shadow: 0 0 0 3px var(--blurple); }
+
+.gallery-card-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.gallery-card-empty i { font-size: 28px; }
+
+.gallery-card-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+}
+.gallery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+}
+.gallery-badge-inline { background: var(--background-tertiary); color: var(--header-secondary); font-weight: 600; }
+
+.gallery-card-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 12px;
+  padding: 22px 10px 8px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.gallery-card:hover .gallery-card-foot { opacity: 1; }
+.gallery-card-foot .is-liked i { color: var(--red); }
+@media (hover: none) {
+  .gallery-card-foot { opacity: 1; }
+}
+
+.gallery-card-caption { padding: 8px 4px 0; }
+.gallery-card-title {
+  color: var(--text-normal);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gallery-card-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gallery-card-compact .gallery-card-caption { padding-top: 5px; }
+.gallery-card-compact .gallery-card-title { font-size: 12px; -webkit-line-clamp: 1; }
+
+@media (max-width: 640px) {
+  .gallery-page { padding: 12px; }
+  .gallery-grid, .gallery-column { gap: 10px; }
+  .gallery-card-media { border-radius: 10px; }
+  .gallery-sort { min-width: 0; flex: 1 1 140px; }
+}
+
+/* === Просмотр работы === */
+
+.gallery-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  background: #0c0c0e;
+  overflow: hidden;
+}
+body.gallery-viewer-open { overflow: hidden; }
+/* Пикеры стикеров/превью — над просмотром (у них 1500/2000 для статей). */
+body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
+
+.gv-shell {
+  display: flex;
+  height: 100%;
+}
+.gv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gv-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  z-index: 2;
+}
+.gv-counter {
+  margin-left: auto;
+  color: #ccc;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.gv-icon-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ddd;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.gv-icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.gv-icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* Переключатель вариаций — имена, введённые автором */
+.gv-variants {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.gv-variant {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ddd;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-variant:hover { background: rgba(255, 255, 255, 0.14); }
+.gv-variant.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+.gv-variant i { font-size: 10px; opacity: 0.8; }
+
+/* Слайдер (scroll_mode 'horizontal') */
+.gv-frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+}
+.gv-track {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px 12px;
+  transition: transform 0.2s ease;
+}
+.gv-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.gv-single .gv-image { cursor: default; }
+.gv-image.gv-in-next { animation: gvInNext 0.22s ease-out; }
+.gv-image.gv-in-prev { animation: gvInPrev 0.22s ease-out; }
+@keyframes gvInNext { from { opacity: 0.3; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+@keyframes gvInPrev { from { opacity: 0.3; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+
+/* Стрелки по бокам — появляются при наведении (на ПК) */
+.gv-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  max-width: 140px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 26px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.18s ease, background 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gv-arrow-prev { left: 0; background: linear-gradient(90deg, rgba(0, 0, 0, 0.35), transparent); }
+.gv-arrow-next { right: 0; background: linear-gradient(270deg, rgba(0, 0, 0, 0.35), transparent); }
+.gv-arrow i {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gv-frame:hover .gv-arrow { opacity: 0.85; }
+.gv-arrow:hover { opacity: 1 !important; }
+/* На тач-экранах стрелок нет — листание свайпом справа налево. */
+@media (hover: none) {
+  .gv-arrow { display: none; }
+}
+
+.gv-strip {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
+}
+.gv-thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #222;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.gv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gv-thumb:hover { opacity: 0.9; }
+.gv-thumb.active { border-color: var(--blurple); opacity: 1; }
+
+/* Вертикальная лента (scroll_mode 'vertical') */
+.gv-pages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 12px 40px;
+}
+.gv-page {
+  display: block;
+  width: 100%;
+  max-width: 900px;
+  height: auto;
+  background: #1a1a1d;
+}
+.gv-no-pages { color: #aaa; padding: 40px; text-align: center; }
+.gv-page-block { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.gv-page-variants { padding: 10px 0 6px; max-width: 100%; }
+.gv-thumb { position: relative; }
+.gv-thumb-layers {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 0 0 3px #000;
+}
+
+/* Панель информации */
+.gv-panel {
+  flex: 0 0 400px;
+  max-width: 400px;
+  background: var(--background-secondary);
+  border-left: 1px solid var(--background-accent);
+  overflow-y: auto;
+  padding: 20px 0 30px;
+}
+.gv-panel > *:not(.gv-engagement):not(.gv-comments) { margin-left: 20px; margin-right: 20px; }
+.gv-title { margin: 0 0 8px; font-size: 20px; color: var(--header-primary); word-break: break-word; }
+.gv-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.gv-badges:empty { display: none; }
+.gv-author { margin-bottom: 8px; }
+.gv-author .ibripedia-person { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }
+.gv-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: 13px; margin-bottom: 12px; }
+.gv-desc { color: var(--text-normal); font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin-bottom: 12px; }
+.gv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.gv-tags:empty { display: none; }
+.gv-tags .ibripedia-tag-pill { cursor: pointer; }
+.gv-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.gv-engagement { margin: 14px 20px 6px !important; }
+.gv-section { margin-top: 18px; }
+.gv-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--header-secondary); }
+.gv-articles { display: flex; flex-direction: column; gap: 6px; }
+.gv-article-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background-tertiary);
+  color: var(--text-link);
+  text-decoration: none;
+  font-size: 14px;
+}
+.gv-article-link:hover { background: var(--background-accent); }
+.gv-associated {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.gv-associated .gallery-card-media { aspect-ratio: 1 / 1 !important; border-radius: 8px; }
+.gv-comments { margin-top: 20px; padding: 0 20px; }
+
+@media (max-width: 900px) {
+  .gallery-viewer { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .gv-shell { flex-direction: column; height: auto; min-height: 100%; }
+  .gv-stage { flex: none; }
+  .gv-topbar { position: sticky; top: 0; background: rgba(10, 10, 12, 0.9); }
+  .gv-frame { flex: none; height: min(72vh, 680px); }
+  .gv-track { padding: 0 0 8px; }
+  .gv-pages { overflow: visible; padding: 0 0 20px; }
+  .gv-page { max-width: 100%; }
+  .gv-panel { flex: none; max-width: none; border-left: none; border-top: 1px solid var(--background-accent); border-radius: 16px 16px 0 0; }
+  .gv-panel > *:not(.gv-engagement):not(.gv-comments) { margin-left: 14px; margin-right: 14px; }
+  .gv-engagement { margin: 14px 14px 6px !important; }
+  .gv-comments { padding: 0 14px; }
+  .gv-associated { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* === Окно выкладывания === */
+
+.gallery-editor-box { width: 760px; max-height: 92vh; }
+.gallery-editor-body { overflow-y: auto; }
+.gallery-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--background-accent);
+}
+.ge-progress { margin-right: auto; color: var(--text-muted); font-size: 13px; }
+
+.ge-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ge-mode { position: relative; cursor: pointer; }
+.ge-mode input { position: absolute; opacity: 0; pointer-events: none; }
+.ge-mode span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-accent);
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.ge-mode span i { color: var(--blurple); margin-bottom: 2px; }
+.ge-mode small { color: var(--text-muted); font-size: 12px; }
+.ge-mode input:checked + span { border-color: var(--blurple); box-shadow: 0 0 0 1px var(--blurple) inset; }
+.ge-mode input:focus-visible + span { outline: 2px solid var(--blurple); }
+
+.ge-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  min-height: 84px;
+  border-radius: 8px;
+}
+.ge-pages.is-drop-target { box-shadow: 0 0 0 2px var(--blurple) inset; }
+.ge-page {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #222;
+  cursor: grab;
+}
+.ge-page img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.ge-page.is-selected { box-shadow: 0 0 0 3px var(--blurple); }
+.ge-page.is-dragging { opacity: 0.4; }
+.ge-page.is-drop-target { box-shadow: -3px 0 0 var(--blurple); }
+.ge-page-num, .ge-page-new {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+}
+.ge-page-new { left: auto; right: 4px; background: var(--green); }
+.ge-page-layers, .ge-page-lock {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+}
+.ge-page-lock { top: auto; bottom: 4px; left: auto; right: 4px; }
+.ge-page-new + .ge-page-lock, .ge-page-lock + .ge-page-new { right: 40px; }
+
+/* Вариации выбранной страницы */
+.ge-detail:not(:empty) {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  background: var(--background-tertiary);
+}
+.ge-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-normal); }
+.ge-add-variant { cursor: pointer; }
+.ge-variant-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--background-accent);
+}
+.ge-variant-row > img {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #222;
+}
+.ge-variant-fields { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ge-variant-actions { display: flex; gap: 4px; }
+.ge-variant-actions .gv-icon-btn { background: var(--background-secondary); color: var(--interactive-normal); width: 30px; height: 30px; font-size: 13px; }
+.ge-page-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ge-page-remove:hover { background: var(--red); }
+.ge-add-pages {
+  aspect-ratio: 1 / 1;
+  border: 2px dashed var(--background-accent);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ge-add-pages:hover { border-color: var(--blurple); color: var(--text-normal); }
+.ge-add-pages i { font-size: 18px; }
+
+.ge-more { margin-top: 6px; }
+.ge-more summary { cursor: pointer; color: var(--header-secondary); font-weight: 600; margin-bottom: 12px; }
+
+@media (max-width: 640px) {
+  .ge-modes { grid-template-columns: 1fr; }
+  .ge-pages { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+}
+
+/* === Выбор арта для статьи === */
+
+.gallery-picker-box { width: 860px; max-height: 90vh; }
+.gallery-picker-box .modal-body { overflow-y: auto; }
+.gallery-picker-search { position: relative; margin-bottom: 12px; }
+.gallery-picker-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.gallery-picker-search .form-input { padding-left: 34px; width: 100%; }
+.gallery-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.gallery-picker-grid .gallery-card-media { aspect-ratio: 1 / 1 !important; }
+.gallery-picker-loading, .gallery-picker-empty { color: var(--text-muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+.gallery-picker-variant { grid-column: 1 / -1; }
+.gallery-picker-variant-name { font-weight: 600; color: var(--header-secondary); margin: 6px 0 8px; }
+.gallery-picker-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.gallery-picker-page {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #222;
+  cursor: pointer;
+}
+.gallery-picker-page:hover { border-color: var(--blurple); }
+.gallery-picker-page img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-picker-page span {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+}
+
+/* === Полоса «Из галереи» под статьёй и арт в тексте статьи === */
+
+.ibripedia-view-gallery { margin: 0 0 20px; }
+.ibripedia-view-gallery h3 { margin: 0 0 12px; font-size: 16px; color: var(--header-primary); }
+.gallery-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 150px;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.gallery-strip .gallery-card-media { aspect-ratio: 1 / 1 !important; }
+
+.blk-image-gallery { position: relative; }
+.blk-image-gallery img { cursor: zoom-in; }
+.blk-gallery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-link);
+  font-size: 11px;
+  font-style: normal;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.blk-image-gallery-locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  border: 1px dashed var(--background-accent);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+}

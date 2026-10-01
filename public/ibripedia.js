@@ -267,6 +267,17 @@
   }
 
   // Русское склонение "N ответ/ответа/ответов" для кнопки "Показать ещё N…".
+  const ARTICLE_ENGAGEMENT_API = {
+    getLikes: (id) => window.apiClient.getArticleLikes(id),
+    toggleLike: (id) => window.apiClient.toggleArticleLike(id),
+    getReactions: (id) => window.apiClient.getArticleReactions(id),
+    toggleReaction: (id, shortcode) => window.apiClient.toggleArticleReaction(id, shortcode),
+    getComments: (id) => window.apiClient.getArticleComments(id),
+    addComment: (id, content, parentId) => window.apiClient.addArticleComment(id, content, parentId),
+    deleteComment: (id, commentId) => window.apiClient.deleteArticleComment(id, commentId),
+    toggleCommentReaction: (id, commentId, shortcode) => window.apiClient.toggleCommentReaction(id, commentId, shortcode)
+  };
+
   function pluralizeReplies(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -289,6 +300,11 @@
 
   class IbripediaManager {
     constructor() {
+      // Куда ходят лайки/реакции/комментарии открытого объекта (this.currentSlug
+      // — его id). У статьи — /api/articles/:slug/*; галерея (public/gallery.js)
+      // наследует этот класс и подставляет свой набор эндпоинтов с тем же
+      // форматом ответов — UI комментариев/реакций один на оба раздела.
+      this.engagementApi = ARTICLE_ENGAGEMENT_API;
       this.tagField = null;
       this.articlesIndex = [];
       this.articlesIndexBySlug = new Map();
@@ -1099,6 +1115,13 @@
         window.scrollTo(0, 0);
         this.renderBookmarkGutter();
 
+        // Работы галереи, привязанные к статье (см. public/gallery.js) — не
+        // await: полоса появится, когда придёт ответ.
+        const galleryEl = document.getElementById('ibripediaViewGallery');
+        if (galleryEl) {
+          galleryEl.dataset.slug = String(this.currentSlug);
+          window.galleryRenderArticleStrip?.(galleryEl, this.currentSlug);
+        }
         await this.renderBacklinksView(this.currentSlug);
         await this.loadArticleBookmarks();
         await this.loadEngagement();
@@ -1257,6 +1280,15 @@
     }
 
     handleViewContentClick(e) {
+      // Арт, пересланный из галереи (image-блок с data.gallery, см.
+      // blocks-renderer.js) — открываем его просмотр поверх статьи.
+      const galleryFig = e.target.closest('[data-gallery-work]');
+      if (galleryFig && window.galleryViewer && !e.target.closest('a:not([data-gallery-open])')) {
+        e.preventDefault();
+        window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
+        return;
+      }
+
       const layerBtn = e.target.closest('.ibripedia-layer-btn');
       if (layerBtn) {
         e.preventDefault();
@@ -1892,15 +1924,15 @@
     // targetId, а не по "текущей открытой" статье.
     async toggleReaction(targetType, targetId, shortcode) {
       try {
-        const result = targetType === 'article'
-          ? await window.apiClient.toggleArticleReaction(targetId, shortcode)
-          : await window.apiClient.toggleCommentReaction(this.currentSlug, targetId, shortcode);
+        const result = targetType !== 'comment'
+          ? await this.engagementApi.toggleReaction(targetId, shortcode)
+          : await this.engagementApi.toggleCommentReaction(this.currentSlug, targetId, shortcode);
         if (!result.success) {
           showMessage(`Не удалось изменить реакцию: ${result.data?.error || result.error || ''}`, 'error');
           return;
         }
         const reactions = result.data.reactions || [];
-        if (targetType === 'article') {
+        if (targetType !== 'comment') {
           if (String(targetId) === String(this.currentSlug)) {
             this.currentReactions = reactions;
             if (this.reactionsBarEl) this.reactionsBarEl.innerHTML = reactionsBarInnerHtml(reactions);
@@ -1931,7 +1963,7 @@
       if (!this.currentSlug || !this.reactionsBarEl) return;
       this.reactionsBarEl.dataset.targetId = this.currentSlug;
       try {
-        const result = await window.apiClient.getArticleReactions(this.currentSlug);
+        const result = await this.engagementApi.getReactions(this.currentSlug);
         this.currentReactions = result.success ? (result.data.reactions || []) : [];
       } catch (e) {
         this.currentReactions = [];
@@ -1942,7 +1974,7 @@
     async loadLikeSummary() {
       if (!this.currentSlug) return;
       try {
-        const result = await window.apiClient.getArticleLikes(this.currentSlug);
+        const result = await this.engagementApi.getLikes(this.currentSlug);
         if (result.success) this.renderLikeSummary(result.data);
       } catch (e) {
         // Панель лайка просто останется на нулях — не критично для чтения статьи
@@ -1961,7 +1993,7 @@
       if (!this.currentSlug || !this.likeBtn) return;
       this.likeBtn.disabled = true;
       try {
-        const result = await window.apiClient.toggleArticleLike(this.currentSlug);
+        const result = await this.engagementApi.toggleLike(this.currentSlug);
         if (result.success) {
           this.renderLikeSummary(result.data);
         } else {
@@ -1984,7 +2016,7 @@
     async loadComments() {
       if (!this.currentSlug) return;
       try {
-        const result = await window.apiClient.getArticleComments(this.currentSlug);
+        const result = await this.engagementApi.getComments(this.currentSlug);
         this._commentsLoaded = true;
         this.renderComments(result.success && Array.isArray(result.data) ? result.data : []);
       } catch (e) {
@@ -2188,7 +2220,7 @@
     async submitReply(parentId, content) {
       if (!content || !this.currentSlug) return;
       try {
-        const result = await window.apiClient.addArticleComment(this.currentSlug, content, parentId);
+        const result = await this.engagementApi.addComment(this.currentSlug, content, parentId);
         if (result.success) {
           this._activeReplyParentId = null;
           // Свой же ответ не должен схлопнуть только что открытую ветку
@@ -2207,7 +2239,7 @@
     async submitComment(content) {
       if (!content || !this.currentSlug) return;
       try {
-        const result = await window.apiClient.addArticleComment(this.currentSlug, content);
+        const result = await this.engagementApi.addComment(this.currentSlug, content);
         if (result.success) {
           this.mainComposer?.clear();
           await this.loadComments();
@@ -2229,7 +2261,7 @@
       if (!ok) return;
 
       try {
-        const result = await window.apiClient.deleteArticleComment(this.currentSlug, id);
+        const result = await this.engagementApi.deleteComment(this.currentSlug, id);
         if (result.success) {
           await this.loadComments();
         } else {
@@ -2986,5 +3018,6 @@
     }
   }
 
+  window.IbripediaManager = IbripediaManager;
   window.ibripediaManager = new IbripediaManager();
 })();

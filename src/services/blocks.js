@@ -142,7 +142,13 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
           color: (isPlainObject(data.frame) && /^#[0-9a-fA-F]{3,8}$/.test(data.frame.color || ''))
             ? data.frame.color
             : '#5865f2'
-        }
+        },
+        // Пересылка арта из галереи (см. resolveEmbedsInDocument в
+        // gallery-store.js): src при отдаче статьи подставляется из работы.
+        // Флаги locked/missing/title — только в ответе, на диск не пишутся.
+        ...(isPlainObject(data.gallery) && parseInt(data.gallery.workId, 10) > 0
+          ? { gallery: { workId: parseInt(data.gallery.workId, 10), imageId: parseInt(data.gallery.imageId, 10) > 0 ? parseInt(data.gallery.imageId, 10) : null } }
+          : {})
       };
 
     case 'columns': {

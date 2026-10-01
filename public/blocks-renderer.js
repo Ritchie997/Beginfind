@@ -401,12 +401,28 @@
     const align = IMG_ALIGN_CLASS[data.align] ? data.align : 'center';
     const style = [`--w:${data.widthPct}%`];
     if (data.frame && data.frame.show) style.push(`--frame-color:${data.frame.color}`);
-    return `<figure class="blk-image ${IMG_ALIGN_CLASS[align]}${data.frame && data.frame.show ? ' blk-image-framed' : ''}" style="${style.join(';')}">`
+    // Арт, пересланный из галереи (data.gallery, см. resolveEmbedsInDocument
+    // в src/services/gallery-store.js): по клику — просмотр работы (см.
+    // handleViewContentClick в ibripedia.js). Закрытая для читателя работа
+    // приходит без src — показываем заглушку, а не битую картинку.
+    const g = data.gallery && data.gallery.workId && !data.gallery.missing ? data.gallery : null;
+    if (g && g.locked) {
+      return `<figure class="blk-image ${IMG_ALIGN_CLASS[align]}" style="${style.join(';')}">`
+        + `<div class="blk-image-gallery-locked"><i class="fas fa-lock"></i> Работа из галереи недоступна вашей роли</div>`
+        + `</figure>`;
+    }
+    const galleryAttrs = g
+      ? ` data-gallery-work="${escapeAttr(g.workId)}"${g.imageId ? ` data-gallery-image="${escapeAttr(g.imageId)}"` : ''}`
+      : '';
+    const badge = g
+      ? `<span class="blk-gallery-badge" title="Открыть в галерее"><i class="fas fa-images"></i> ${escapeHtml(g.title || 'Галерея')}</span>`
+      : '';
+    return `<figure class="blk-image ${IMG_ALIGN_CLASS[align]}${data.frame && data.frame.show ? ' blk-image-framed' : ''}${g ? ' blk-image-gallery' : ''}" style="${style.join(';')}"${galleryAttrs}>`
       + `<img src="${escapeAttr(data.src)}" alt="${escapeAttr(plainCaption(data.alt))}" loading="lazy">`
       // Подпись — инлайн-markdown, как значения инфобокса: раньше шла через
       // escapeHtml, и wiki-ссылка [Мары Бавас]((Мара Бавас)) показывалась
       // читателю сырой разметкой со скобками.
-      + (data.alt ? `<figcaption>${renderInline(marked, data.alt)}</figcaption>` : '')
+      + (data.alt || badge ? `<figcaption>${data.alt ? renderInline(marked, data.alt) : ''}${badge}</figcaption>` : '')
       + `</figure>`;
   }
 

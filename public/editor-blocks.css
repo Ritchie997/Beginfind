@@ -389,6 +389,21 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   cursor: pointer;
 }
 .eb-image-placeholder:hover { border-color: var(--blurple); color: var(--text-normal); }
+.eb-image-placeholder [data-img-src] { cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.eb-image-placeholder [data-img-src]:hover { background: var(--background-accent); color: var(--text-normal); }
+.eb-image-placeholder-sep { margin: 0 6px; opacity: 0.6; }
+/* Арт, пересланный из галереи (см. pickGalleryImageForBlock в editor-manager.js) */
+.eb-image-gallery-badge {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  pointer-events: none;
+}
 
 /* --- инфобокс --- */
 .eb-infobox-editor { max-width: 320px; border: 1px solid var(--background-accent); border-radius: 8px; padding: 12px; background: var(--background-floating); }

@@ -322,6 +322,70 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments/${commentId}/reactions/toggle`, 'POST', { shortcode });
   }
 
+  // Галерея (см. src/routes/gallery.routes.js и public/gallery.js).
+  // filters — {q, tag, author, sort}.
+  async getGalleryWorks(filters = {}, limit = 30, offset = 0) {
+    const params = new URLSearchParams({ limit, offset });
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value != null && value !== '') params.set(key, value);
+    });
+    return this.makeAuthenticatedRequest(`/api/gallery/works?${params.toString()}`);
+  }
+
+  async getGalleryWork(id) {
+    return this.makeAuthenticatedRequest(`/api/gallery/works/${id}`);
+  }
+
+  async createGalleryWork(data) {
+    return this.makeAuthenticatedRequest('/api/gallery/works', 'POST', data);
+  }
+
+  async updateGalleryWork(id, data) {
+    return this.makeAuthenticatedRequest(`/api/gallery/works/${id}`, 'PUT', data);
+  }
+
+  async deleteGalleryWork(id) {
+    return this.makeAuthenticatedRequest(`/api/gallery/works/${id}`, 'DELETE');
+  }
+
+  async recordGalleryView(id) {
+    return this.makeAuthenticatedRequest(`/api/gallery/works/${id}/view`, 'POST');
+  }
+
+  async getGalleryTags() {
+    return this.makeAuthenticatedRequest('/api/gallery/tags');
+  }
+
+  async getGalleryWorksForArticle(slug) {
+    return this.makeAuthenticatedRequest(`/api/gallery/by-article/${encodeURIComponent(slug)}`);
+  }
+
+  // Пачка файлов в работу (multipart, поле images): без pageId каждый файл —
+  // новая страница, с pageId — новые вариации этой страницы.
+  async uploadGalleryImages(workId, pageId, files) {
+    if (!authManager || !authManager.isAuthenticated()) {
+      return { success: false, error: 'Authentication required. Please log in.' };
+    }
+    const formData = new FormData();
+    files.forEach((file) => formData.append('images', file));
+    try {
+      const query = pageId ? `?pageId=${encodeURIComponent(pageId)}` : '';
+      const response = await fetch(`${this.baseUrl}/api/gallery/works/${workId}/images${query}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authManager.getToken()}` },
+        body: formData
+      });
+      if (response.status === 401) {
+        authManager.logout();
+        return { success: false, error: 'Authentication required. Please log in.' };
+      }
+      const result = await response.json();
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Наборы стикеров (см. src/routes/stickers.routes.js) — вкладка "Стикеры"
   // в public/stickers-manager.js и пикер стикеров в комментариях Ibripedia.
   async getMyStickerPacks() {

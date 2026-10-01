@@ -16,7 +16,8 @@ const DATABASE_FILES = [
   'social.db', // лайки и комментарии статей Ibripedia — см. src/db/connections.js
   'stickers.db', // наборы стикеров, подписки, избранное — см. src/db/connections.js
   'drafts.db', // черновики статей редактора, привязанные к профилю — см. src/db/connections.js
-  'feedback.db' // обращения (баги/предложения) и кейсы модерации — см. src/services/feedback-store.js
+  'feedback.db', // обращения (баги/предложения) и кейсы модерации — см. src/services/feedback-store.js
+  'gallery.db' // галерея: работы, вариации, страницы, лайки/просмотры/комментарии — см. src/services/gallery-store.js
 ];
 
 // Файлы настроек сайта (Настройки → владелец). backup-settings.json сюда

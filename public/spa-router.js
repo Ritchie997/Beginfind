@@ -63,6 +63,9 @@ class SPARouter {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
       '/ibripedia': this.loadIbripedia,
+      // /gallery/:id — та же страница + сразу открытый просмотр работы
+      // (см. resolveRouteKey, id кладётся в this.galleryWorkId).
+      '/gallery': this.loadGallery,
       '/articles': this.loadArticles,
       '/tags': this.loadTags,
       '/stickers': this.loadStickers,
@@ -79,6 +82,7 @@ class SPARouter {
       '/map-edit': function () { return window.MapEditor.loadMapEditor(this); }
     };
     this.mapRouteId = null;
+    this.galleryWorkId = null;
 
     // id из "/profile/123" — единственный маршрут с динамическим сегментом,
     // поэтому отдельного mini-роутера не заводим (см. normalizePathForRouting
@@ -243,6 +247,8 @@ class SPARouter {
       // Окно подтверждения живёт не в разметке страницы, а в body — само оно
       // не исчезнет, закрываем явно (как отмену).
       if (routeHandler) window.confirmDialog?.dismiss();
+      // Просмотр работы галереи тоже живёт в body, а не в разметке страницы.
+      if (routeHandler) window.galleryViewer?.close({ fromHistory: true });
       if (routeHandler && window.modalHistory) window.modalHistory.stack = [];
       if (routeHandler) this._afterNavigate = [];
 
@@ -338,6 +344,11 @@ class SPARouter {
       this.mapRouteId = mapMatch[1];
       return mapMatch[2] ? '/map-edit' : '/map';
     }
+    const galleryMatch = normalizedPath.match(/^\/gallery(?:\/(\d+))?$/);
+    if (galleryMatch) {
+      this.galleryWorkId = galleryMatch[1] || null;
+      return '/gallery';
+    }
     const profileMatch = normalizedPath.match(/^\/profile(?:\/(\d+))?$/);
     if (profileMatch) {
       this.profileUserId = profileMatch[1] || null;
@@ -418,6 +429,7 @@ class SPARouter {
       '/': 'Аналитика - Админ-панель BeginFind',
       '/dashboard': 'Аналитика - Админ-панель BeginFind',
       '/ibripedia': 'Ibripedia - Админ-панель BeginFind',
+      '/gallery': 'Галерея - Админ-панель BeginFind',
       '/articles': 'Редактор - Админ-панель BeginFind',
       '/tags': 'Теги - Админ-панель BeginFind',
       '/servers': 'Сервера - Админ-панель BeginFind',
@@ -495,6 +507,33 @@ class SPARouter {
     } catch (error) {
       console.error('Error loading Ibripedia:', error);
       showMessage('Ошибка при загрузке Ibripedia', 'error');
+    } finally {
+      this.hideLoader();
+    }
+  }
+
+  // Галерея (public/gallery.js): сетка работ; /gallery/:id — ещё и сразу
+  // открытый просмотр работы (ссылка "Поделиться").
+  async loadGallery() {
+    this.showLoader();
+    const workId = this.galleryWorkId;
+    this.galleryWorkId = null;
+
+    try {
+      const html = await this.loadTemplate('/views/gallery.html');
+      const appContent = document.getElementById('app-content');
+      if (appContent) {
+        appContent.innerHTML = html;
+        const titleElement = document.getElementById('page-title');
+        if (titleElement) titleElement.textContent = 'Галерея';
+      }
+      await window.galleryManager?.init();
+      // Просмотр — после перехода: его запись в истории («Назад» закрывает
+      // просмотр) должна лечь поверх адреса страницы (см. modalHistory.open).
+      if (workId) this.afterNavigate(() => window.galleryViewer?.openWork(workId));
+    } catch (error) {
+      console.error('Error loading gallery:', error);
+      showMessage('Ошибка при загрузке галереи', 'error');
     } finally {
       this.hideLoader();
     }
