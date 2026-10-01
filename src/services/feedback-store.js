@@ -762,6 +762,20 @@ async function countQueues() {
   return row || { triage: 0, unassigned: 0, escalated: 0, returned: 0 };
 }
 
+// То же, что countQueues, но id элементов каждой очереди — по ним
+// уведомления понимают, что именно появилось нового (см.
+// src/services/notification-seen.js), а не только сколько всего.
+async function listQueueIds() {
+  const ids = (sql) => all(sql).then((rows) => rows.map((r) => r.id));
+  const [triage, unassigned, escalated, returned] = await Promise.all([
+    ids("SELECT id FROM feedback_reports WHERE status = 'new'"),
+    ids("SELECT id FROM feedback_reports WHERE status = 'accepted' AND case_id IS NULL"),
+    ids("SELECT id FROM feedback_cases WHERE status = 'escalated'"),
+    ids("SELECT id FROM feedback_cases WHERE status = 'open'")
+  ]);
+  return { triage, unassigned, escalated, returned };
+}
+
 // Все ссылки на доказательства — чтобы cleanup.js не счёл загруженные к
 // обращениям скриншоты "сиротами".
 async function listAttachmentUrls() {
@@ -795,5 +809,6 @@ module.exports = {
   completeCase,
   returnCase,
   countQueues,
+  listQueueIds,
   listAttachmentUrls
 };

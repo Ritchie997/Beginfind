@@ -947,24 +947,31 @@ window.initMaintenanceBanner = async function() {
 // только рисуем то, что пришло — никакой отдельной проверки прав на клиенте
 // нет и не нужно.
 //
-// Тост при УВЕЛИЧЕНИИ числа (не при каждой проверке — иначе он бы всплывал
-// заново каждые пару минут, пока заявка просто лежит необработанной)
-// сравнивается с последним увиденным значением в localStorage; на первом
-// же запуске (значения ещё нет) тост не показываем — иначе внезапно
-// "уведомили" бы о недельной давности бэклоге при первом открытии панели.
+// Всплывающее уведомление — только о ЭЛЕМЕНТАХ, которых пользователь ещё
+// не видел: сервер помнит, о каких заявках/обращениях/наборах уже
+// уведомлял (summary.fresh, см. src/services/notification-seen.js), поэтому
+// каждое приходит один раз — на все вкладки и устройства. Раньше здесь
+// сравнивалось только КОЛИЧЕСТВО с localStorage, и уведомление повторялось,
+// когда число колебалось (8 → 7 → 8) или в другой вкладке/браузере.
+// toastText(fresh, total): fresh — сколько новых, total — сколько всего.
 const NOTIF_BADGE_TARGETS = {
-  pendingUsers: { elementId: 'sidebar-pending-users', seenKey: 'beginfind_notif_seen_users', toastText: (n) => `Новая заявка на регистрацию (всего ${n})` },
-  pendingStickerPacks: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_stickers', toastText: (n) => `Новый набор стикеров на модерации (всего ${n})` },
+  pendingUsers: { elementId: 'sidebar-pending-users', toastText: (k, n) => (k > 1 ? `Новые заявки на регистрацию: ${k} (всего ${n})` : `Новая заявка на регистрацию (всего ${n})`) },
+  pendingStickerPacks: { elementId: 'sidebar-stickers', toastText: (k, n) => (k > 1 ? `Новые наборы стикеров на модерации: ${k} (всего ${n})` : `Новый набор стикеров на модерации (всего ${n})`) },
   // Предложения коллабораций на СВОИ наборы — приходят всем авторам, а не
   // только модераторам; бейдж у пункта "Стикеры" общий с модерацией (см.
   // суммирование по elementId в refreshNotificationBadges).
-  incomingStickerCollabs: { elementId: 'sidebar-stickers', seenKey: 'beginfind_notif_seen_sticker_collabs', toastText: (n) => `Новое предложение коллаборации для вашего набора стикеров (всего ${n})` },
+  incomingStickerCollabs: { elementId: 'sidebar-stickers', toastText: (k, n) => (k > 1 ? `Новые предложения коллабораций для ваших наборов: ${k} (всего ${n})` : `Новое предложение коллаборации для вашего набора стикеров (всего ${n})`) },
   // Очереди трёх линий модерации обращений — у каждой линии своя, общий
   // бейдж на пункте "Обращения" (см. src/routes/notifications.routes.js).
-  feedbackTriage: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_triage', toastText: (n) => `Новое обращение ждёт проверки (всего ${n})` },
-  feedbackUnassigned: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_cases', toastText: (n) => `Принятое обращение ждёт объединения в кейс (всего ${n})` },
-  feedbackEscalated: { elementId: 'sidebar-feedback', seenKey: 'beginfind_notif_seen_feedback_decide', toastText: (n) => `Кейс ждёт решения третьей линии (всего ${n})` }
+  feedbackTriage: { elementId: 'sidebar-feedback', toastText: (k, n) => (k > 1 ? `Новые обращения ждут проверки: ${k} (всего ${n})` : `Новое обращение ждёт проверки (всего ${n})`) },
+  feedbackUnassigned: { elementId: 'sidebar-feedback', toastText: (k, n) => (k > 1 ? `Новые обращения и кейсы для второй линии: ${k} (всего ${n})` : `Обращение или кейс ждёт второй линии (всего ${n})`) },
+  feedbackEscalated: { elementId: 'sidebar-feedback', toastText: (k, n) => (k > 1 ? `Новые кейсы ждут решения третьей линии: ${k} (всего ${n})` : `Кейс ждёт решения третьей линии (всего ${n})`) }
 };
+
+// Счётчики "последнего увиденного" прежней схемы больше не нужны.
+['users', 'stickers', 'sticker_collabs', 'feedback_triage', 'feedback_cases', 'feedback_decide'].forEach((k) => {
+  try { localStorage.removeItem(`beginfind_notif_seen_${k}`); } catch (e) { /* нет доступа — не страшно */ }
+});
 
 function renderNavBadge(elementId, count) {
   const el = document.getElementById(elementId);
@@ -1003,11 +1010,10 @@ async function refreshNotificationBadges() {
         return;
       }
 
-      const seen = parseInt(localStorage.getItem(target.seenKey), 10);
-      if (Number.isFinite(seen) && count > seen && typeof window.showMessage === 'function') {
-        window.showMessage(target.toastText(count), 'info');
+      const fresh = (summary.fresh && summary.fresh[key]) || 0;
+      if (fresh > 0 && typeof window.showMessage === 'function') {
+        window.showMessage(target.toastText(fresh, count), 'info');
       }
-      localStorage.setItem(target.seenKey, String(count));
     });
 
     Object.entries(totals).forEach(([elementId, total]) => renderNavBadge(elementId, total));

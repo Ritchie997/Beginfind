@@ -11,40 +11,46 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const stickersStore = require('../services/stickers-store');
 const feedbackStore = require('../services/feedback-store');
+const notificationSeen = require('../services/notification-seen');
 
 const router = express.Router();
 
+// Ответ: { <категория>: число, …, fresh: { <категория>: сколько из них
+// пользователь видит впервые } } — по fresh клиент показывает всплывающее
+// уведомление, ровно один раз на каждый элемент (см. notification-seen.js).
 router.get('/notifications/summary', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const canSeeUsers = req.user.is_root || !!(req.user.permissions && req.user.permissions.manage_pending_users);
-    const canSeeStickers = req.user.is_root || !!(req.user.permissions && req.user.permissions.moderate_stickers);
+    const perms = req.user.permissions || {};
+    const canSeeUsers = req.user.is_root || !!perms.manage_pending_users;
+    const canSeeStickers = req.user.is_root || !!perms.moderate_stickers;
+    const canTriage = req.user.is_root || !!perms.feedback_triage;
+    const canCases = req.user.is_root || !!perms.feedback_cases;
+    const canDecide = req.user.is_root || !!perms.feedback_decide;
 
-    const summary = {};
-    if (canSeeUsers) {
-      const pending = await auth.getPendingUsers();
-      summary.pendingUsers = pending.length;
-    }
-    if (canSeeStickers) {
-      const pending = await stickersStore.listPending();
-      summary.pendingStickerPacks = pending.length;
-    }
+    // Категория -> ключи элементов, лежащих в ней сейчас.
+    const items = {};
+    if (canSeeUsers) items.pendingUsers = (await auth.getPendingUsers()).map((u) => u.id);
+    if (canSeeStickers) items.pendingStickerPacks = await stickersStore.listPendingIds();
     // Очереди трёх линий модерации обращений — каждая только тем, у кого
     // есть право соответствующей линии (см. src/services/feedback-store.js).
-    const canTriage = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_triage);
-    const canCases = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_cases);
-    const canDecide = req.user.is_root || !!(req.user.permissions && req.user.permissions.feedback_decide);
     if (canTriage || canCases || canDecide) {
-      const queues = await feedbackStore.countQueues();
-      if (canTriage) summary.feedbackTriage = queues.triage;
-      // Второй линии — и новые обращения без кейса, и кейсы, возвращённые на доработку.
-      if (canCases) summary.feedbackUnassigned = queues.unassigned + queues.returned;
-      if (canDecide) summary.feedbackEscalated = queues.escalated;
+      const queues = await feedbackStore.listQueueIds();
+      if (canTriage) items.feedbackTriage = queues.triage;
+      // Второй линии — и новые обращения без кейса, и кейсы, возвращённые на
+      // доработку (id обращений и кейсов пересекаются — отсюда префиксы).
+      if (canCases) items.feedbackUnassigned = [...queues.unassigned.map((id) => `report:${id}`), ...queues.returned.map((id) => `case:${id}`)];
+      if (canDecide) items.feedbackEscalated = queues.escalated;
     }
-
     // Предложения коллабораций на МОИ наборы стикеров — видны любому автору
     // (не зависят от прав), поэтому поле приходит всем.
-    summary.incomingStickerCollabs = await stickersStore.countIncomingCollabs(req.user.id);
+    items.incomingStickerCollabs = await stickersStore.listIncomingCollabIds(req.user.id);
 
+    const summary = { fresh: {} };
+    for (const [category, keys] of Object.entries(items)) {
+      summary[category] = keys.length;
+      const fresh = await notificationSeen.markSeen(req.user.id, category, keys);
+      if (fresh) summary.fresh[category] = fresh;
+    }
     res.json(summary);
   } catch (error) {
     res.status(500).json({ error: error.message });

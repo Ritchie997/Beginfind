@@ -270,6 +270,19 @@ const socialDb = new sqlite3.Database(dbPath('social.db'), (err) => {
         UNIQUE(target_type, target_id, user_id, shortcode)
       )`);
       socialDb.run('CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions (target_type, target_id)');
+
+      // О каких элементах очередей (заявки, обращения, наборы стикеров…)
+      // пользователь уже получил всплывающее уведомление — каждое
+      // показывается один раз на все вкладки и устройства (см.
+      // src/services/notification-seen.js). item_key '__init__' — отметка,
+      // что категория у пользователя уже заведена.
+      socialDb.run(`CREATE TABLE IF NOT EXISTS notification_seen (
+        user_id INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, category, item_key)
+      )`);
     });
   }
 });

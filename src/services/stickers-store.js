@@ -737,6 +737,23 @@ async function countIncomingCollabs(authorId) {
   return row?.count || 0;
 }
 
+// id ждущих решения заявок на мои наборы и ждущих модерации наборов —
+// для уведомлений (см. src/services/notification-seen.js).
+async function listIncomingCollabIds(authorId) {
+  const rows = await all(
+    `SELECT r.id FROM sticker_collab_requests r
+     JOIN sticker_packs p ON p.id = r.pack_id
+     WHERE p.author_id = ? AND r.status = 'pending'`,
+    [authorId]
+  );
+  return rows.map((r) => r.id);
+}
+
+async function listPendingIds() {
+  const rows = await all("SELECT id FROM sticker_packs WHERE status = 'pending'");
+  return rows.map((r) => r.id);
+}
+
 // Исходящие: мои заявки любого статуса (свежие сверху) — чтобы видеть, что
 // с ними стало (ждёт / принято / отклонено).
 async function listMyCollabs(userId) {
@@ -958,6 +975,8 @@ module.exports = {
   cancelCollab,
   listIncomingCollabs,
   countIncomingCollabs,
+  listIncomingCollabIds,
+  listPendingIds,
   listMyCollabs,
   acceptCollab,
   declineCollab,
