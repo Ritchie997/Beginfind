@@ -5456,14 +5456,14 @@ class SPARouter {
   // Dashboard stats with real data and weekly activity
   async loadDashboardStats() {
     try {
-      // Load articles count and recent articles
+      // Статьи — только для ленты активности (она, в отличие от счётчиков,
+      // показывает лишь доступное пользователю). Сами счётчики статей и
+      // тегов приходят глобальными из сводки ниже: /api/articles и /api/tags
+      // отфильтрованы по правам, и статистика отличалась бы у разных людей.
       const articlesResult = await apiClient.getArticles();
       let articlesData = [];
       if (articlesResult.success) {
-        const totalArticles = document.getElementById('total-articles');
-        if (totalArticles) totalArticles.textContent = articlesResult.data.length;
         articlesData = articlesResult.data;
-        this.renderTrendBadge('trend-articles', this.countToday(articlesData));
       } else {
         console.error('Error loading articles count:', articlesResult.error);
       }
@@ -5491,6 +5491,11 @@ class SPARouter {
         const summaryResult = await apiClient.getDashboardSummary();
         if (summaryResult.success) {
           summary = summaryResult.data;
+          const totalArticles = document.getElementById('total-articles');
+          if (totalArticles) totalArticles.textContent = summary.articles.total;
+          this.renderTrendBadge('trend-articles', summary.articles.trend);
+          const totalTags = document.getElementById('total-tags');
+          if (totalTags) totalTags.textContent = summary.tags.total;
           const totalUsers = document.getElementById('total-users');
           if (totalUsers) totalUsers.textContent = summary.users.total;
           this.renderTrendBadge('trend-users', summary.users.trend);
@@ -5515,36 +5520,14 @@ class SPARouter {
         console.error('Error loading dashboard summary:', error);
       }
 
-      // Load tags count
-      const tagsResult = await apiClient.getTags();
-      if (tagsResult.success) {
-        const totalTags = document.getElementById('total-tags');
-        if (totalTags) totalTags.textContent = tagsResult.data.length;
-      } else {
-        console.error('Error loading tags count:', tagsResult.error);
-      }
-
       // Load activity list with recent items
       this.loadActivityList({ articles: articlesData, servers: serversData, summary });
 
       // Initialize charts with real data
-      this.initDashboardChartsWithData(articlesData, summary);
+      this.initDashboardChartsWithData(summary);
     } catch (error) {
       console.error('Unexpected error loading dashboard stats:', error);
     }
-  }
-
-  // Сколько элементов создано СЕГОДНЯ — календарный день по UTC, та же зона,
-  // что и у дат на сервере (см. TODAY_CUTOFF_SQL в dashboard-stats.js) — для
-  // бейджа "▲+N" в сводке. Раньше здесь считалось за последние 7 дней — на
-  // небольшой базе, где почти вся активность свежая, бейдж почти всегда
-  // совпадал с общим количеством статей и выглядел как ложный "не считается".
-  countToday(items, dateField = 'created_at') {
-    const todayUtc = new Date().toISOString().slice(0, 10);
-    return items.filter(item => {
-      const d = new Date(item[dateField]);
-      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === todayUtc;
-    }).length;
   }
 
   // Рисует бейдж "+N" рядом со значением метрики; при отсутствии прироста бейдж не показываем
@@ -5558,7 +5541,7 @@ class SPARouter {
     }
     el.textContent = `▲+${delta}`;
     el.classList.add('stat-chip-trend-up');
-    el.title = `+${delta} за последние 7 дней`;
+    el.title = `+${delta} за сегодня`;
   }
 
   // Значения из SQLite (CURRENT_TIMESTAMP, "2026-09-12 14:53:28") — это UTC без
@@ -5736,9 +5719,9 @@ class SPARouter {
   }
 
   // Initialize dashboard charts with real data
-  initDashboardChartsWithData(articlesData, summary = null) {
-    // Статьи — силуэт активности за текущую неделю (пн-вс)
-    this.renderSparkline('articlesSparkline', this.calculateWeeklyActivity(articlesData));
+  initDashboardChartsWithData(summary = null) {
+    // Статьи — последние 7 суток, по дням (глобально, см. dashboard-summary)
+    this.renderSparkline('articlesSparkline', summary?.articles?.daily || []);
     // Сообщения мессенджера — последние 7 суток, по дням
     this.renderSparkline('messagesSparkline', summary?.messages?.daily || []);
   }
@@ -5782,34 +5765,6 @@ class SPARouter {
         }
       }
     });
-  }
-
-  // Calculate weekly activity from articles data
-  calculateWeeklyActivity(articlesData) {
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Adjust for Monday start
-    
-    // Get Monday of current week
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - mondayOffset);
-    monday.setHours(0, 0, 0, 0);
-
-    // Initialize array for 7 days
-    const dailyCounts = [0, 0, 0, 0, 0, 0, 0];
-
-    // Count articles per day
-    articlesData.forEach(article => {
-      const articleDate = new Date(article.created_at);
-      if (articleDate >= monday) {
-        const dayIndex = Math.floor((articleDate - monday) / (1000 * 60 * 60 * 24));
-        if (dayIndex >= 0 && dayIndex < 7) {
-          dailyCounts[dayIndex]++;
-        }
-      }
-    });
-
-    return dailyCounts;
   }
 
 }

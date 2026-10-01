@@ -1351,7 +1351,34 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
       dashboardStats.getCommentsSummary(50)
     ]);
 
-    const articlesBySlug = new Map(store.listArticles().map((a) => [a.slug, a]));
+    const allArticles = store.listArticles();
+    const articlesBySlug = new Map(allArticles.map((a) => [a.slug, a]));
+
+    // Счётчики статей и тегов — по ВСЕМ статьям и слоям, без учёта прав
+    // читателя: это статистика, и она должна быть одинаковой у всех (раньше
+    // клиент считал их по /api/articles и /api/tags, уже отфильтрованным по
+    // доступу, и у пользователя без доступа к статье цифры были меньше).
+    // Наружу уходят только числа — ни названий, ни тегов закрытых статей.
+    // Дни — по UTC, как у сообщений (см. getMessengerSummary).
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const articleDays = [];
+    for (let i = 6; i >= 0; i--) {
+      articleDays.push(new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+    }
+    const articlesDaily = articleDays.map(() => 0);
+    let articlesTrend = 0;
+    for (const a of allArticles) {
+      const d = new Date(a.created_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const day = d.toISOString().slice(0, 10);
+      if (day === todayUtc) articlesTrend += 1;
+      const idx = articleDays.indexOf(day);
+      if (idx >= 0) articlesDaily[idx] += 1;
+    }
+    const tagsTotal = store.collectTags(allArticles, (a) => {
+      const layers = articleLayers.getEffectiveLayers(a);
+      return articleLayers.readerTags({ layers, accessible: layers.map((_, i) => i) });
+    }).length;
 
     // Комментарии удалённых статей остаются в БД — в счётчик не берём.
     let commentsTotal = 0;
@@ -1376,6 +1403,8 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
     }
 
     res.json({
+      articles: { total: allArticles.length, trend: articlesTrend, daily: articlesDaily },
+      tags: { total: tagsTotal },
       users: { total: users.total, trend: users.trend },
       messages: {
         total: messenger.total,
