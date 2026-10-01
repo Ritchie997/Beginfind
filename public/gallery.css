@@ -566,6 +566,11 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 .ge-add-pages i { font-size: 18px; }
 
 .ge-more { margin-top: 6px; }
+
+.ge-author { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ge-author-current { display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }
+.ge-author-search { position: relative; flex: 1 1 240px; min-width: 0; }
+.ge-author-search .form-input { width: 100%; }
 .ge-more summary { cursor: pointer; color: var(--header-secondary); font-weight: 600; margin-bottom: 12px; }
 
 @media (max-width: 640px) {

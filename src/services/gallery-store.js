@@ -493,12 +493,14 @@ async function setAssociations(workId, relatedIds) {
  * см. addImages). body: {title, description, tags, roles, serverId,
  * scrollMode, articleSlugs, associatedIds}.
  */
-async function createWork(user, body, authorName) {
+// authorId — обычно сам выкладывающий; другого автора назначать могут только
+// владелец и доверенный админ (проверка — в gallery.routes.js).
+async function createWork(authorId, body, authorName) {
   const meta = cleanMeta(body);
   const { lastID: workId } = await run(
     `INSERT INTO gallery_works (title, description, author_id, server_id, roles, tags, scroll_mode, article_slugs)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [meta.title, meta.description, user.id, meta.server_id, JSON.stringify(meta.roles), JSON.stringify(meta.tags), meta.scroll_mode, JSON.stringify(meta.article_slugs)]
+    [meta.title, meta.description, authorId, meta.server_id, JSON.stringify(meta.roles), JSON.stringify(meta.tags), meta.scroll_mode, JSON.stringify(meta.article_slugs)]
   );
   await setAssociations(workId, body.associatedIds);
   await syncSearchText(workId, authorName);
@@ -520,7 +522,9 @@ async function getVariantRolesMap(workId) {
  * другую страницу. Страницы/вариации, которых в списке нет, удаляются
  * вместе с файлами — КРОМЕ вариаций, которых правящий не видит (их роли ему
  * недоступны): он их не получал и прислать не мог, они остаются на своих
- * страницах как были. Без pages состав не трогается.
+ * страницах как были. Без pages состав не трогается. body.authorId —
+ * смена автора (права проверяет gallery.routes.js; authorName — имя уже
+ * нового автора, для поиска).
  */
 async function updateWork(workId, body, authorName, editorCtx) {
   const current = await getWorkRow(workId);
@@ -538,6 +542,7 @@ async function updateWork(workId, body, authorName, editorCtx) {
        article_slugs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
     [meta.title, meta.description, meta.server_id, JSON.stringify(meta.roles), JSON.stringify(meta.tags), meta.scroll_mode, JSON.stringify(meta.article_slugs), workId]
   );
+  if (toId(body.authorId)) await run('UPDATE gallery_works SET author_id = ? WHERE id = ?', [toId(body.authorId), workId]);
 
   if (Array.isArray(body.pages)) {
     const existingPages = await all('SELECT * FROM gallery_pages WHERE work_id = ? ORDER BY position, id', [workId]);

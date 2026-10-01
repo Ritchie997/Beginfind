@@ -926,6 +926,17 @@
               <label class="form-label">Описание</label>
               <textarea class="form-textarea" data-ge="description" maxlength="5000" rows="3" placeholder="О работе, ссылки, история создания…"></textarea>
             </div>
+            <div class="form-group" data-ge="author-group" hidden>
+              <label class="form-label">Автор</label>
+              <div class="ge-author">
+                <span class="ge-author-current" data-ge="author-current"></span>
+                <div class="ge-author-search">
+                  <input type="text" class="form-input" data-ge="author-search" placeholder="Найти пользователя, чтобы назначить автором…" autocomplete="off">
+                  <div class="chip-field-dropdown" data-ge="author-dropdown" hidden></div>
+                </div>
+              </div>
+              <p class="form-label-hint">Назначать автором другого человека могут только владелец и доверенный админ.</p>
+            </div>
             <div class="form-group">
               <label class="form-label">Теги</label>
               <div class="chip-field" data-ge="tags">${CHIP_FIELD_MARKUP}</div>
@@ -991,6 +1002,55 @@
       q('server').addEventListener('change', () => this.loadRoleOptions());
       this.bindPagesEvents(q('pages'));
       this.bindDetailEvents(q('detail'));
+      this.bindAuthorEvents();
+    }
+
+    // ----- Автор (только владелец и доверенный админ) -----
+
+    renderAuthor() {
+      const a = this.author;
+      this.$('author-current').innerHTML = a
+        ? `${window.avatarHtml({ name: a.display_name, avatar: a.avatar }, 22)} <b>${escapeHtml(a.display_name)}</b>`
+        : '';
+    }
+
+    hideAuthorDropdown() {
+      const dd = this.$('author-dropdown');
+      dd.hidden = true;
+      dd.innerHTML = '';
+    }
+
+    bindAuthorEvents() {
+      const input = this.$('author-search');
+      const dropdown = this.$('author-dropdown');
+      let debounce = null;
+      let seq = 0;
+      input.addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+          const query = input.value.trim();
+          const mySeq = ++seq;
+          if (!query) { this.hideAuthorDropdown(); return; }
+          const res = await window.apiClient.searchUsers(query).catch(() => null);
+          if (mySeq !== seq) return;
+          const users = res && res.success && Array.isArray(res.data) ? res.data : [];
+          dropdown.innerHTML = users.length
+            ? users.map((u) => `<div class="chip-field-dropdown-item" data-user-id="${u.id}" data-name="${escapeHtml(u.display_name || u.username)}">${escapeHtml(u.display_name || u.username)} <span style="color: var(--text-muted);">(ID ${u.id})</span></div>`).join('')
+            : '<div class="chip-field-dropdown-empty">Никого не найдено</div>';
+          dropdown.hidden = false;
+        }, 200);
+      });
+      dropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-user-id]');
+        if (!item) return;
+        const id = parseInt(item.dataset.userId, 10);
+        // Поиск отдаёт только id и имя — аватар (буква) до сохранения.
+        this.author = { id, display_name: item.dataset.name, avatar: null };
+        input.value = '';
+        this.hideAuthorDropdown();
+        this.renderAuthor();
+      });
+      input.addEventListener('blur', () => setTimeout(() => this.hideAuthorDropdown(), 150));
     }
 
     /** @returns {Promise<object|null>} сохранённая работа (полная) или null */
@@ -1003,6 +1063,13 @@
       this.$('title').value = work ? work.title : '';
       this.$('description').value = work ? (work.description || '') : '';
       this.tagsField.setValues(work ? work.tags || [] : []);
+      const me = window.authManager?.getCurrentUser?.();
+      this.canChangeAuthor = !!(me && (me.is_root || me.is_role_manager));
+      this.author = work ? work.author : (me ? { id: me.id, display_name: me.display_name || me.username, avatar: me.avatar } : null);
+      this.$('author-group').hidden = !this.canChangeAuthor;
+      this.$('author-search').value = '';
+      this.hideAuthorDropdown();
+      this.renderAuthor();
       this.el.querySelector(`input[name="geScrollMode"][value="${work && work.scrollMode === 'vertical' ? 'vertical' : 'horizontal'}"]`).checked = true;
       this.pages = work
         ? work.pages.map((p) => ({
@@ -1332,7 +1399,8 @@
         serverId: this.$('server').value || null,
         roles: this.rolesField.getValues().map(decodeRole).filter(Boolean),
         articleSlugs: this.articlesField.getValues(),
-        associatedIds: this.associatedField.getValues().map((v) => parseInt(v, 10)).filter(Boolean)
+        associatedIds: this.associatedField.getValues().map((v) => parseInt(v, 10)).filter(Boolean),
+        ...(this.canChangeAuthor && this.author ? { authorId: this.author.id } : {})
       };
     }
 

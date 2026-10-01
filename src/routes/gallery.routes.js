@@ -67,6 +67,25 @@ function displayName(user) {
   return user.display_name || user.username;
 }
 
+// Назначить автором другого человека могут только владелец и доверенный
+// админ (как управление авторами статей). Возвращает {id, name} нового
+// автора или null, если автор не меняется; кидает Error для 400/403.
+async function resolveRequestedAuthor(req, currentAuthorId) {
+  const raw = req.body.authorId;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) throw new Error('Некорректный id автора');
+  if (id === currentAuthorId) return null;
+  if (!(req.user.is_root || req.user.is_role_manager)) {
+    const err = new Error('Назначать автором другого человека могут только владелец и доверенный админ');
+    err.status = 403;
+    throw err;
+  }
+  const user = (await getUsersByIds([id])).get(id);
+  if (!user) throw new Error('Пользователь, назначенный автором, не найден');
+  return { id, name: user.display_name || user.username };
+}
+
 function workCard(item, usersMap) {
   return {
     id: item.id,
@@ -189,7 +208,8 @@ async function fullWork(work, user) {
     created_at: work.created_at,
     updated_at: work.updated_at,
     can_edit: canManage,
-    can_delete: canManage
+    can_delete: canManage,
+    can_change_author: !!(user.is_root || user.is_role_manager)
   };
 }
 
@@ -248,10 +268,11 @@ router.post('/gallery/works', auth.authenticateToken, auth.checkApproved, auth.c
   try {
     await validateRolesOrThrow(req.user, req.body.roles);
     const body = { ...req.body, articleSlugs: await filterArticleSlugs(req.body.articleSlugs, req.user) };
-    const id = await gallery.createWork(req.user, body, displayName(req.user));
+    const author = await resolveRequestedAuthor(req, req.user.id);
+    const id = await gallery.createWork(author ? author.id : req.user.id, body, author ? author.name : displayName(req.user));
     res.status(201).json(await fullWork(await gallery.getWorkRow(id), req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -285,11 +306,15 @@ router.put('/gallery/works/:id', auth.authenticateToken, auth.checkApproved, aut
       }));
       await validateRolesOrThrow(req.user, addedVariantRoles);
     }
+    const author = await resolveRequestedAuthor(req, work.author_id);
+    if (author) body.authorId = author.id;
+    else delete body.authorId;
     const usersMap = await getUsersByIds([work.author_id]);
-    await gallery.updateWork(work.id, body, authorInfo(work.author_id, usersMap).display_name, await gallery.getAccessContext(req.user));
+    const authorName = author ? author.name : authorInfo(work.author_id, usersMap).display_name;
+    await gallery.updateWork(work.id, body, authorName, await gallery.getAccessContext(req.user));
     res.json(await fullWork(await gallery.getWorkRow(work.id), req.user));
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
