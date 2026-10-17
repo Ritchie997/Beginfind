@@ -89,7 +89,7 @@ function normalizeLayer(raw) {
     public: raw.public === true,
     title: str(raw.title),
     excerpt: str(raw.excerpt),
-    image: raw.image || null,
+    image: raw.image ? blocks.toRelativeUploadPath(raw.image) : null,
     // Теги слоя: видны только тем, кому доступен этот слой (см. readerTags).
     // null — слой сохранён до появления тегов по слоям (см. layerTagsOf).
     tags: Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : null,

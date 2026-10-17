@@ -262,6 +262,11 @@ function getServerIP() {
 // SQLite-версии — не менялась при переезде на Markdown)
 function formatImageUrl(imagePath, req = null) {
   if (!imagePath) return null;
+  // Старые статьи могли сохранить картинку с хостом, на котором их правили
+  // ("http://старый-хост/uploads/x.png"). Для своих /uploads/ хост отбрасываем
+  // и строим адрес под текущий запрос — иначе после переезда/восстановления
+  // бэкапа на другом адресе такие картинки не открываются.
+  imagePath = store.blocks.toRelativeUploadPath(imagePath);
   if (imagePath.startsWith('http')) {
     return imagePath;
   }

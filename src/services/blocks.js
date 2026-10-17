@@ -87,6 +87,23 @@ function normalizeChildBlocks(raw, { allowContainers = false } = {}) {
     .filter(Boolean);
 }
 
+/**
+ * Абсолютный адрес картинки с нашего же /uploads/ ("http://старый-хост:3000/uploads/x.png")
+ * приводит к относительному ("/uploads/x.png"). Хост в адресе зависит от того,
+ * с какого устройства/домена открыли сайт при сохранении статьи, и ломается
+ * при переезде или восстановлении бэкапа на другом адресе. Внешние картинки
+ * (путь не начинается с /uploads/) и уже относительные пути не трогаются.
+ */
+function toRelativeUploadPath(src) {
+  const s = typeof src === 'string' ? src.trim() : '';
+  if (!/^https?:\/\//i.test(s)) return typeof src === 'string' ? src : '';
+  try {
+    const u = new URL(s);
+    if (u.pathname.startsWith('/uploads/')) return u.pathname + u.search;
+  } catch (e) { /* битый URL — оставляем как есть */ }
+  return s;
+}
+
 // Приводит data блока к ожидаемой форме по типу; неизвестные лишние поля
 // отбрасываются (не копим мусор), отсутствующие — дополняются дефолтом.
 // allowContainers=false — используется при нормализации блоков ВНУТРИ
@@ -133,7 +150,7 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
 
     case 'image':
       return {
-        src: str(data.src),
+        src: toRelativeUploadPath(str(data.src)),
         alt: str(data.alt),
         widthPct: clampPct(data.widthPct, 100),
         align: ['left', 'right', 'center', 'full'].includes(data.align) ? data.align : 'center',
@@ -162,7 +179,7 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
 
     case 'infobox': {
       const image = isPlainObject(data.image) && data.image.src
-        ? { src: str(data.image.src), alt: str(data.image.alt) }
+        ? { src: toRelativeUploadPath(str(data.image.src)), alt: str(data.image.alt) }
         : null;
       const rows = Array.isArray(data.rows)
         ? data.rows.map((r) => ({ label: str(isPlainObject(r) ? r.label : ''), value: str(isPlainObject(r) ? r.value : '') }))
@@ -492,6 +509,7 @@ module.exports = {
   extractWikiLinksFromDocument,
   extractHashtagsFromDocument,
   collectImagePaths,
+  toRelativeUploadPath,
   mapImages,
   rewriteWikiLinksInDocument
 };

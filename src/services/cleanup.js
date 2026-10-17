@@ -152,6 +152,12 @@ async function collectUsedUploadNames() {
     add(article.image);
     (article.attachments || []).forEach((a) => add(typeof a === 'string' ? a : a && a.url));
     articlesStore.blocks.collectImagePaths(article.content).forEach(add);
+    // Многослойные статьи: у каждого слоя своя обложка и своё тело — без этого
+    // их картинки считались бы сиротами и удалялись очисткой.
+    (article.layers || []).forEach((layer) => {
+      add(layer.image);
+      articlesStore.blocks.collectImagePaths(layer.content).forEach(add);
+    });
   }
 
   const messages = await dbAll(messengerDb, 'SELECT content FROM messages', []);

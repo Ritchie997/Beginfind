@@ -253,6 +253,16 @@ async function restoreBackup(backupPath) {
       try {
         fs.mkdirSync(path.dirname(targetPath), { recursive: true });
         fs.writeFileSync(targetPath, entry.getData());
+        // Возвращаем файлу его исходную дату изменения из архива: иначе у всех
+        // восстановленных картинок mtime = "сейчас", и очистка сирот (грейс-период
+        // minOrphanAgeHours) считает их свежими и игнорирует. Для баз и настроек
+        // дата не важна, трогаем только загрузки.
+        if (category === 'uploads') {
+          try {
+            const t = entry.header && entry.header.time;
+            if (t instanceof Date && !isNaN(t.getTime())) fs.utimesSync(targetPath, t, t);
+          } catch (e) { /* не критично */ }
+        }
         restoredFiles.push(entry.entryName);
         summary[category] += 1;
       } catch (err) {
