@@ -104,6 +104,30 @@ function toRelativeUploadPath(src) {
   return s;
 }
 
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i;
+
+/**
+ * Приводит значение обложки (статьи или слоя) к валидному пути либо null.
+ * Допустимо: "/uploads/..." (хост отбрасывается), внешний http(s)-адрес
+ * (остаётся как есть), "uploads/x.png" и голое имя файла с расширением
+ * картинки, а также любой "/путь/к/файлу.png". Всё остальное — например
+ * "/gZfLhZTD" (то, что остаётся от внешней ссылки, если оставить только
+ * pathname) — не путь к картинке, и такое значение никогда не пишется на диск.
+ */
+function sanitizeCoverPath(raw) {
+  if (typeof raw !== 'string') return null;
+  let s = raw.trim();
+  if (!s) return null;
+  s = toRelativeUploadPath(s);
+  if (/^https?:\/\//i.test(s)) return s;
+  const pathOnly = s.split(/[?#]/)[0];
+  if (s.startsWith('/uploads/')) return s;
+  if (s.startsWith('uploads/')) return '/' + s;
+  if (s.startsWith('/') && IMAGE_EXT_RE.test(pathOnly)) return s;
+  if (!s.includes('/') && IMAGE_EXT_RE.test(pathOnly)) return '/uploads/' + s;
+  return null;
+}
+
 // Приводит data блока к ожидаемой форме по типу; неизвестные лишние поля
 // отбрасываются (не копим мусор), отсутствующие — дополняются дефолтом.
 // allowContainers=false — используется при нормализации блоков ВНУТРИ
@@ -510,6 +534,7 @@ module.exports = {
   extractHashtagsFromDocument,
   collectImagePaths,
   toRelativeUploadPath,
+  sanitizeCoverPath,
   mapImages,
   rewriteWikiLinksInDocument
 };

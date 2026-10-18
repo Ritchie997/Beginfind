@@ -23,7 +23,6 @@
 // статьи продолжают работать без миграции, один в один как раньше вело себя
 // canAccessArticle в articles.routes.js.
 
-const { serversDb } = require('../db/connections');
 const blocks = require('./blocks');
 
 function genId() {
@@ -89,7 +88,7 @@ function normalizeLayer(raw) {
     public: raw.public === true,
     title: str(raw.title),
     excerpt: str(raw.excerpt),
-    image: raw.image ? blocks.toRelativeUploadPath(raw.image) : null,
+    image: blocks.sanitizeCoverPath(raw.image),
     // Теги слоя: видны только тем, кому доступен этот слой (см. readerTags).
     // null — слой сохранён до появления тегов по слоям (см. layerTagsOf).
     tags: Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : null,
@@ -200,6 +199,10 @@ function readerTags(resolved) {
 // === Резолв доступа ===
 
 function getUserServerRoleIds(userId, serverId) {
+  // Подключение к БД берём лениво: модуль нормализации (и скрипты миграции
+  // статей) не должны открывать SQLite-файлы только ради того, чтобы
+  // прочитать слои.
+  const { serversDb } = require('../db/connections');
   return new Promise((resolve) => {
     serversDb.all(
       'SELECT role_id FROM user_server_role_assignments WHERE user_id = ? AND server_id = ?',

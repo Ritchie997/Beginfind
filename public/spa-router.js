@@ -1383,7 +1383,7 @@ class SPARouter {
     if (this._layersStateKnown) {
       if (this.articleLayersEnabled) this.snapshotActiveLayer(); // теги/текст активного слоя — в его запись
       data.layers = this.articleLayersEnabled
-        ? this.articleLayers.map((l) => ({ roles: l.roles, public: !!l.public, title: l.title, tags: Array.isArray(l.tags) ? l.tags : [], content: l.content }))
+        ? this.articleLayers.map((l) => ({ roles: l.roles, public: !!l.public, title: l.title, image: l.image || null, tags: Array.isArray(l.tags) ? l.tags : [], content: l.content }))
         : [];
       // У многослойной статьи общих тегов нет — только теги слоёв (поле
       // «Теги» формы показывает теги активного слоя). Иначе общий список
@@ -1897,6 +1897,11 @@ class SPARouter {
         initCleanupPage();
       } else {
         console.warn('[SPA] initCleanupPage не найден');
+      }
+      if (typeof initArticleMigrationPage === 'function') {
+        initArticleMigrationPage();
+      } else {
+        console.warn('[SPA] initArticleMigrationPage не найден');
       }
     }, 100);
   }
@@ -2713,6 +2718,7 @@ class SPARouter {
               roles: Array.isArray(l.roles) ? l.roles : [],
               public: !!l.public,
               title: l.title || '',
+              image: typeof l.image === 'string' && l.image ? l.image : null,
               tags: Array.isArray(l.tags) ? l.tags : [],
               content: l.content || { version: 1, blocks: [] }
             }))
@@ -4074,6 +4080,7 @@ class SPARouter {
             roles: Array.isArray(l.roles) ? l.roles : [],
             public: !!l.public,
             title: l.title || '',
+            image: typeof l.image === 'string' && l.image ? l.image : null,
             tags: Array.isArray(l.tags) ? l.tags : [],
             content: l.content || { version: 1, blocks: [] }
           }));
