@@ -9,7 +9,7 @@
 //     вниз (вертикальная лента) — режим выбирает автор при выкладывании.
 //     Переключатель вариаций — по введённым автором именам. Лайки/реакции/
 //     комментарии — тот же UI, что у статей (класс наследуется от
-//     IbripediaManager, см. engagementApi в public/ibripedia.js);
+//     AntropediaManager, см. engagementApi в public/antropedia.js);
 //   window.galleryEditor  — окно выкладывания/правки работы (массовая
 //     загрузка страниц, вариации, доступ по ролям, привязка к статьям,
 //     ассоциированные работы);
@@ -55,23 +55,23 @@
   }
 
   // Разметка пикера стикеров — та же, что STICKER_PICKER_MARKUP в
-  // ibripedia.js (wireComposer ищет его по классам внутри формы).
+  // antropedia.js (wireComposer ищет его по классам внутри формы).
   const STICKER_PICKER_MARKUP = `
-    <div class="ibripedia-sticker-picker" hidden>
-      <div class="ibripedia-sticker-picker-header">
+    <div class="antropedia-sticker-picker" hidden>
+      <div class="antropedia-sticker-picker-header">
         Стикеры
-        <span class="ibripedia-sticker-picker-links">
+        <span class="antropedia-sticker-picker-links">
           <a href="#" data-nav="/stickers">управлять наборами</a> ·
           <a href="#" data-role="open-store">магазин наборов</a>
         </span>
       </div>
-      <div class="ibripedia-sticker-picker-tabs"></div>
-      <div class="ibripedia-sticker-picker-subtitle"></div>
-      <div class="ibripedia-sticker-picker-body"></div>
+      <div class="antropedia-sticker-picker-tabs"></div>
+      <div class="antropedia-sticker-picker-subtitle"></div>
+      <div class="antropedia-sticker-picker-body"></div>
     </div>`;
 
   // Эндпоинты лайков/реакций/комментариев работы — тот же формат ответов,
-  // что у статей (см. ARTICLE_ENGAGEMENT_API в ibripedia.js).
+  // что у статей (см. ARTICLE_ENGAGEMENT_API в antropedia.js).
   const api = (path, method, body) => window.apiClient.makeAuthenticatedRequest(path, method, body);
   const GALLERY_ENGAGEMENT_API = {
     getLikes: (id) => api(`/api/gallery/works/${id}/likes`),
@@ -141,8 +141,8 @@
   }
 
   function openArticle(slug) {
-    if (window.spaRouter && typeof window.spaRouter.openIbripediaArticle === 'function') {
-      window.spaRouter.openIbripediaArticle(slug);
+    if (window.spaRouter && typeof window.spaRouter.openAntropediaArticle === 'function') {
+      window.spaRouter.openAntropediaArticle(slug);
     }
   }
 
@@ -150,7 +150,7 @@
   // Просмотр работы
   // ========================================================================
 
-  const BaseManager = window.IbripediaManager;
+  const BaseManager = window.AntropediaManager;
 
   class GalleryViewer extends BaseManager {
     constructor() {
@@ -169,7 +169,7 @@
     }
 
     // Жалобы на работы пока нет — у статьи кнопка жалобы ищется по id
-    // (ibripediaReportBtn), и на странице Ibripedia её нашёл бы и этот класс.
+    // (antropediaReportBtn), и на странице Antropedia её нашёл бы и этот класс.
     initReportModal() {}
 
     ensureDom() {
@@ -206,10 +206,10 @@
               <button type="button" class="btn btn-primary btn-sm" data-gv="edit" hidden><i class="fas fa-pen"></i> Изменить</button>
               <button type="button" class="btn btn-danger btn-sm" data-gv="delete" hidden><i class="fas fa-trash"></i></button>
             </div>
-            <div class="ibripedia-view-engagement gv-engagement">
-              <button type="button" class="ibripedia-engagement-btn" data-gv="like" title="Нравится"><i class="far fa-heart"></i> <span data-gv="like-count">0</span></button>
-              <div class="ibripedia-reactions" data-gv="reactions" data-target-type="gallery" data-target-id=""></div>
-              <button type="button" class="ibripedia-engagement-btn" data-gv="comments-btn" title="К комментариям"><i class="far fa-comment"></i> <span data-gv="comments-count">0</span></button>
+            <div class="antropedia-view-engagement gv-engagement">
+              <button type="button" class="antropedia-engagement-btn" data-gv="like" title="Нравится"><i class="far fa-heart"></i> <span data-gv="like-count">0</span></button>
+              <div class="antropedia-reactions" data-gv="reactions" data-target-type="gallery" data-target-id=""></div>
+              <button type="button" class="antropedia-engagement-btn" data-gv="comments-btn" title="К комментариям"><i class="far fa-comment"></i> <span data-gv="comments-count">0</span></button>
             </div>
             <div class="gv-section" data-gv="articles-wrap" hidden>
               <h4><i class="fas fa-book-open"></i> В энциклопедии</h4>
@@ -219,18 +219,18 @@
               <h4><i class="fas fa-link"></i> Связанные работы</h4>
               <div class="gv-associated" data-gv="associated"></div>
             </div>
-            <section class="ibripedia-comments gv-comments" data-gv="comments-section">
+            <section class="antropedia-comments gv-comments" data-gv="comments-section">
               <h3><i class="far fa-comment"></i> Комментарии <span data-gv="comments-header-count"></span></h3>
-              <form class="ibripedia-comment-form" data-gv="comment-form">
-                <div class="ibripedia-comment-input" contenteditable="true" data-placeholder="Написать комментарий…"></div>
-                <div class="ibripedia-comment-form-actions">
-                  <button type="button" class="ibripedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
+              <form class="antropedia-comment-form" data-gv="comment-form">
+                <div class="antropedia-comment-input" contenteditable="true" data-placeholder="Написать комментарий…"></div>
+                <div class="antropedia-comment-form-actions">
+                  <button type="button" class="antropedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
                   <button type="submit" data-role="submit" class="btn btn-primary btn-sm">Отправить</button>
                 </div>
                 ${STICKER_PICKER_MARKUP}
               </form>
-              <div class="ibripedia-comments-list" data-gv="comments-list"></div>
-              <div class="ibripedia-comments-empty" data-gv="comments-empty" hidden>Комментариев пока нет — будьте первым.</div>
+              <div class="antropedia-comments-list" data-gv="comments-list"></div>
+              <div class="antropedia-comments-empty" data-gv="comments-empty" hidden>Комментариев пока нет — будьте первым.</div>
             </section>
           </aside>
         </div>`;
@@ -249,7 +249,7 @@
       this.commentsListEl = q('comments-list');
       this.commentsEmptyEl = q('comments-empty');
       this.commentFormEl = q('comment-form');
-      this.commentInputEl = this.commentFormEl.querySelector('.ibripedia-comment-input');
+      this.commentInputEl = this.commentFormEl.querySelector('.antropedia-comment-input');
       this.reactionsBarEl = q('reactions');
       this.initEngagement();
 
@@ -291,7 +291,7 @@
         const p = e.target.closest('[data-action="open-profile"]');
         if (p) this.close().then(() => window.spaRouter?.navigateTo(`/profile/${p.dataset.value}`));
       });
-      // Описание: wiki-ссылка — статья в Ibripedia (как ссылка в статье),
+      // Описание: wiki-ссылка — статья в Antropedia (как ссылка в статье),
       // #тег — фильтр галереи по нему.
       q('desc').addEventListener('click', (e) => {
         const link = e.target.closest('.wiki-link, .wiki-link-missing, .wiki-link-restricted');
@@ -332,11 +332,11 @@
       });
 
       // Закрытие пикеров стикеров кликом мимо — как _docClickHandler в
-      // ibripedia.js (там он вешается только на странице Ibripedia).
+      // antropedia.js (там он вешается только на странице Antropedia).
       document.addEventListener('click', (e) => {
-        if (!this.isOpen() || e.target.closest('.ibripedia-sticker-preview-overlay')) return;
-        el.querySelectorAll('.ibripedia-sticker-picker').forEach((picker) => this.closePickerIfOutside(picker, e));
-        document.querySelectorAll('body > .ibripedia-sticker-picker').forEach((picker) => this.closePickerIfOutside(picker, e));
+        if (!this.isOpen() || e.target.closest('.antropedia-sticker-preview-overlay')) return;
+        el.querySelectorAll('.antropedia-sticker-picker').forEach((picker) => this.closePickerIfOutside(picker, e));
+        document.querySelectorAll('body > .antropedia-sticker-picker').forEach((picker) => this.closePickerIfOutside(picker, e));
       });
     }
 
@@ -503,7 +503,7 @@
       if (w.restricted) badges.push('<span class="gallery-badge gallery-badge-inline"><i class="fas fa-lock"></i> Доступ по ролям</span>');
       if (w.scrollMode === 'vertical') badges.push('<span class="gallery-badge gallery-badge-inline"><i class="fas fa-scroll"></i> Вертикальная лента</span>');
       this.$('badges').innerHTML = badges.join('');
-      this.$('author').innerHTML = `<span class="ibripedia-person" data-action="open-profile" data-value="${w.author.id}" title="Открыть профиль">${window.avatarHtml({ name: w.author.display_name, avatar: w.author.avatar }, 28)} <b>${escapeHtml(w.author.display_name)}</b></span>`;
+      this.$('author').innerHTML = `<span class="antropedia-person" data-action="open-profile" data-value="${w.author.id}" title="Открыть профиль">${window.avatarHtml({ name: w.author.display_name, avatar: w.author.avatar }, 28)} <b>${escapeHtml(w.author.display_name)}</b></span>`;
       const meta = [
         `<span><i class="fas fa-calendar"></i> ${formatDate(w.created_at)}</span>`,
         `<span><i class="fas fa-eye"></i> <span data-gv="views">${w.views || 0}</span></span>`
@@ -521,7 +521,7 @@
           window.attachBlocksInteractions?.(descEl);
         }).catch(() => { descEl.textContent = w.description; });
       }
-      this.$('tags').innerHTML = (w.tags || []).map((t) => `<span class="ibripedia-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('');
+      this.$('tags').innerHTML = (w.tags || []).map((t) => `<span class="antropedia-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('');
       this.$('edit').hidden = !w.can_edit;
       this.$('delete').hidden = !w.can_delete;
 
@@ -1012,7 +1012,7 @@
             <div class="form-group">
               <div class="ge-desc-head">
                 <label class="form-label">Описание</label>
-                <button type="button" class="btn btn-secondary btn-sm" data-ge="insert-wikilink" title="Ссылка на статью Ibripedia — как в редакторе: [подпись]((статья))"><i class="fas fa-book-open"></i> Ссылка на статью</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-ge="insert-wikilink" title="Ссылка на статью Antropedia — как в редакторе: [подпись]((статья))"><i class="fas fa-book-open"></i> Ссылка на статью</button>
               </div>
               <textarea class="form-textarea" data-ge="description" maxlength="5000" rows="3" placeholder="О работе, история создания… Ссылка на статью: [подпись]((Название статьи)) — начните с (( и выберите из списка."></textarea>
             </div>
@@ -1841,7 +1841,7 @@
   }
 
   // ========================================================================
-  // Полоса «Из галереи» под статьёй Ibripedia
+  // Полоса «Из галереи» под статьёй Antropedia
   // ========================================================================
 
   async function renderArticleStrip(container, slug) {

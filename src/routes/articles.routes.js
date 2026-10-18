@@ -1,4 +1,4 @@
-// articles.routes.js — CRUD и поиск статей (Ibripedia).
+// articles.routes.js — CRUD и поиск статей (Antropedia).
 //
 // С Этапа 3 статьи хранятся как Markdown-файлы в content/ (см.
 // src/services/articles-store.js) вместо articles.db. id статьи теперь —
@@ -464,7 +464,7 @@ router.get('/articles', auth.authenticateToken, auth.checkApproved, async (req, 
   }
 });
 
-// Витрина статей (Ibripedia) — комбинация текстового поиска, фильтров
+// Витрина статей (Antropedia) — комбинация текстового поиска, фильтров
 // (теги/сервер/статус/диапазон дат) и сортировки, с постраничной
 // подгрузкой. Зарегистрирован ДО "/articles/:id" — иначе Express принял бы
 // "browse" за значение :id и сюда бы запрос вообще не долетал.
@@ -522,7 +522,7 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const usersMap = await getUsersByIds(allUserIds);
 
     // Лайки/комментарии/просмотры — счётчики на карточках витрины (см.
-    // buildCard в public/ibripedia.js), одним батч-запросом на всю страницу,
+    // buildCard в public/antropedia.js), одним батч-запросом на всю страницу,
     // а не по одному на статью (см. social.getCountsForSlugs). Реакции —
     // отдельным батчем по той же причине (см. getArticleReactionsForSlugs).
     const slugs = page.map((a) => a.slug);
@@ -567,7 +567,7 @@ router.get('/articles/:id', auth.authenticateToken, auth.checkApproved, async (r
     const formatted = await formatArticleResponse(article, req, undefined, undefined, undefined, requestedLayer);
     // Реальный счётчик просмотров (см. article_views в connections.js) —
     // сам просмотр этим запросом НЕ засчитывается (см. POST .../view ниже):
-    // этот GET дёргает и читалка Ibripedia, и редактор при открытии статьи
+    // этот GET дёргает и читалка Antropedia, и редактор при открытии статьи
     // на правку, а редактирование не должно накручивать статистику.
     formatted.viewsCount = await social.getViewCount(article.slug);
     res.json(formatted);
@@ -607,8 +607,8 @@ router.get('/articles/:id/layers', auth.authenticateToken, auth.checkApproved, a
 
 // Засчитать просмотр статьи текущим пользователем — один просмотр на
 // пользователя (повторные заходы того же не увеличивают счётчик, см.
-// social.recordView), вызывается явно из читалки Ibripedia (см.
-// openArticleView в public/ibripedia.js) сразу после открытия статьи, а не
+// social.recordView), вызывается явно из читалки Antropedia (см.
+// openArticleView в public/antropedia.js) сразу после открытия статьи, а не
 // автоматически при GET /articles/:id (см. комментарий там же).
 router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -941,7 +941,7 @@ async function attachCommentExtras(comments, userId) {
 }
 
 // Лайки статьи — count + "лайкнул ли её я" одним ответом (см. панель
-// лайка/комментариев под статьёй в public/ibripedia.js).
+// лайка/комментариев под статьёй в public/antropedia.js).
 router.get('/articles/:id/likes', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const article = store.getArticle(req.params.id);
@@ -975,7 +975,7 @@ router.post('/articles/:id/likes/toggle', auth.authenticateToken, auth.checkAppr
 });
 
 // Реакции на статью целиком — рядом с лайком, но эмодзи/стикером из
-// добавленных себе наборов (см. панель реакций в public/ibripedia.js).
+// добавленных себе наборов (см. панель реакций в public/antropedia.js).
 router.get('/articles/:id/reactions', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const article = store.getArticle(req.params.id);
@@ -1026,7 +1026,7 @@ router.get('/articles/:id/comments', auth.authenticateToken, auth.checkApproved,
     // ":slug:alias:") — см. комментарий в начале stickers-store.js.
     // parentId (см. rowToComment в social-store.js) группируется в дерево
     // "комментарий + ответы" уже на клиенте (см. renderComments в
-    // public/ibripedia.js) — плоский список проще было бы разбить пополам,
+    // public/antropedia.js) — плоский список проще было бы разбить пополам,
     // чем удобно постранично подгружать вложенные ответы, а их пока и так
     // мало на статью.
     const comments = await social.listComments(req.params.id);
@@ -1052,7 +1052,7 @@ router.post('/articles/:id/comments', auth.authenticateToken, auth.checkApproved
     // руками вписать шорткод чужого/неподтверждённого набора мимо пикера.
     await stickers.validateContentForPosting(req.user.id, req.body.content);
 
-    // parentId — ответ на комментарий (см. "Ответить" в public/ibripedia.js).
+    // parentId — ответ на комментарий (см. "Ответить" в public/antropedia.js).
     // Один уровень вложенности, как в YouTube: ответ на чужой ОТВЕТ
     // подшивается к тому же родителю, а не плодит цепочку — иначе пришлось
     // бы рекурсивно отрисовывать сколь угодно глубокое дерево.
@@ -1347,7 +1347,7 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
 });
 
 // Сводка для дашборда: пользователи, сообщения мессенджера, комментарии
-// статей Ibripedia (отдельная статистика) и свежие события для ленты
+// статей Antropedia (отдельная статистика) и свежие события для ленты
 // "Последняя активность". Здесь
 // (рядом с articles-graph), а не в отдельном роутере, потому что комментарии
 // нужно отфильтровать по canAccessArticle — иначе текст комментариев к

@@ -1,12 +1,12 @@
-/* ibripedia.css — витрина статей (страница Ibripedia): фильтры, сетка/список
+/* antropedia.css — витрина статей (страница Antropedia): фильтры, сетка/список
    карточек, страница просмотра одной статьи. Раньше это был раздел
    "Управление статьями" под формой редактора (public/views/articles.html) —
    вынесено на отдельную страницу, т.к. со временем статей станет много
    тысяч и большой плоский список стал бы неудобным (пагинация вместо
    "отдать всё сразу", фильтры вместо одного поля поиска по заголовку).
-   См. public/views/ibripedia.html и public/ibripedia.js. */
+   См. public/views/antropedia.html и public/antropedia.js. */
 
-.ibripedia-page {
+.antropedia-page {
   padding: 28px;
   max-width: 1420px; /* было 1180px — по отзыву "много пустого места по бокам", +20% */
   margin: 0 auto;
@@ -15,7 +15,7 @@
 /* Любой элемент этой страницы, которому JS ставит el.hidden = true, обязан
    реально скрыться — а [hidden] (атрибутный селектор из UA-таблицы стилей,
    специфичность 0-1-0) и класс с явным display (например,
-   .ibripedia-sidebar-tab{display:flex} и т.п.) имеют РАВНУЮ специфичность:
+   .antropedia-sidebar-tab{display:flex} и т.п.) имеют РАВНУЮ специфичность:
    выигрывает не hidden, а то правило, что идёт позже в каскаде — то есть
    наше. Без этого правила элементы, которым JS ставит .hidden=true,
    оставались бы видны (и перехватывали бы клики), хотя обработчик исправно
@@ -23,13 +23,13 @@
    (.servers-page [hidden]) и public/editor-obsidian.css
    (.img-dialog-backdrop[hidden]) — здесь так же накрываем этим правилом
    всю страницу разом. */
-.ibripedia-page [hidden] {
+.antropedia-page [hidden] {
   display: none !important;
 }
 
 /* === Тулбар: поиск, фильтры, сортировка, переключатель вида === */
 
-.ibripedia-toolbar {
+.antropedia-toolbar {
   position: sticky;
   /* top:0, не отступ под шапку — .header в этом приложении не зафиксирован
      (обычный блок, уходит со страницей при скролле), так что отступ
@@ -47,18 +47,18 @@
   gap: 14px;
 }
 
-.ibripedia-toolbar-row {
+.antropedia-toolbar-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.ibripedia-toolbar-row-main {
+.antropedia-toolbar-row-main {
   gap: 12px;
 }
 
-.ibripedia-heading {
+.antropedia-heading {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
@@ -69,11 +69,11 @@
   white-space: nowrap;
 }
 
-.ibripedia-heading i {
+.antropedia-heading i {
   color: var(--blurple);
 }
 
-.ibripedia-search-wrap {
+.antropedia-search-wrap {
   flex: 1 1 240px;
   min-width: 160px;
   position: relative;
@@ -81,7 +81,7 @@
   align-items: center;
 }
 
-.ibripedia-search-wrap i {
+.antropedia-search-wrap i {
   position: absolute;
   left: 12px;
   color: var(--text-muted);
@@ -89,7 +89,7 @@
   pointer-events: none;
 }
 
-.ibripedia-search-input {
+.antropedia-search-input {
   width: 100%;
   padding: 10px 12px 10px 34px;
   border: 1px solid var(--background-accent);
@@ -99,34 +99,34 @@
   font-size: 14px;
 }
 
-.ibripedia-search-input:focus {
+.antropedia-search-input:focus {
   outline: none;
   border-color: var(--blurple);
   box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
 }
 
-.ibripedia-toolbar-row-filters {
+.antropedia-toolbar-row-filters {
   align-items: flex-end;
   padding-top: 12px;
   border-top: 1px solid var(--background-accent);
   order: 1;
 }
 
-.ibripedia-filter {
+.antropedia-filter {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 160px;
 }
 
-.ibripedia-filter label {
+.antropedia-filter label {
   font-size: 12px;
   font-weight: 600;
   color: var(--header-secondary);
 }
 
-.ibripedia-filter .form-select,
-.ibripedia-filter .form-input {
+.antropedia-filter .form-select,
+.antropedia-filter .form-input {
   padding: 9px 10px;
   border: 1px solid var(--background-accent);
   border-radius: 6px;
@@ -135,11 +135,11 @@
   font-size: 13px;
 }
 
-/* === Сворачивание фильтров на телефоне (см. #ibripediaFiltersToggleBtn/
-   #ibripediaFiltersPanel в views/ibripedia.html и initFiltersCollapse()/
-   applyFiltersOpenState() в ibripedia.js) — кнопка видна только ≤640px
+/* === Сворачивание фильтров на телефоне (см. #antropediaFiltersToggleBtn/
+   #antropediaFiltersPanel в views/antropedia.html и initFiltersCollapse()/
+   applyFiltersOpenState() в antropedia.js) — кнопка видна только ≤640px
    (ниже), панель на планшете/десктопе всегда показана независимо от
-   состояния JS (базовое правило .ibripedia-toolbar-row-filters{display:flex}
+   состояния JS (базовое правило .antropedia-toolbar-row-filters{display:flex}
    ничем не перекрыто вне телефонного @media), а на телефоне управляется
    классом .is-open. Пробовали нативный <details>+display:contents ради
    "без единой строчки JS", но открытая панель там не желала растягиваться
@@ -147,7 +147,7 @@
    анонимном боксе (::details-content), а не как обычный flex-потомок, так
    что flex:1 1 100% на вложенном div не срабатывал. Обычная кнопка так не
    зависит от этой особенности. === */
-.ibripedia-filters-toggle {
+.antropedia-filters-toggle {
   display: none;
   align-items: center;
   gap: 8px;
@@ -160,40 +160,40 @@
   font-weight: 600;
   cursor: pointer;
 }
-.ibripedia-filters-count {
+.antropedia-filters-count {
   background: var(--blurple);
   color: #fff;
   border-radius: 9px;
   padding: 1px 7px;
   font-size: 11px;
 }
-.ibripedia-filters-chev {
+.antropedia-filters-chev {
   font-size: 11px;
   color: var(--text-muted);
   transition: transform 0.15s;
 }
-.ibripedia-filters-toggle.is-open .ibripedia-filters-chev { transform: rotate(180deg); }
+.antropedia-filters-toggle.is-open .antropedia-filters-chev { transform: rotate(180deg); }
 
-.ibripedia-chip-field {
+.antropedia-chip-field {
   min-width: 200px;
   max-width: 260px;
 }
 
-.ibripedia-date-range {
+.antropedia-date-range {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.ibripedia-date-range input {
+.antropedia-date-range input {
   width: 130px;
 }
 
-.ibripedia-date-range span {
+.antropedia-date-range span {
   color: var(--text-muted);
 }
 
-.ibripedia-toolbar-row-status {
+.antropedia-toolbar-row-status {
   justify-content: space-between;
   padding-top: 10px;
   border-top: 1px solid var(--background-accent);
@@ -204,12 +204,12 @@
   order: 2;
 }
 
-.ibripedia-count {
+.antropedia-count {
   font-size: 13px;
   color: var(--header-secondary);
 }
 
-.ibripedia-view-toggle {
+.antropedia-view-toggle {
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -218,7 +218,7 @@
   border-radius: 8px;
 }
 
-.ibripedia-view-btn {
+.antropedia-view-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,18 +231,18 @@
   cursor: pointer;
 }
 
-.ibripedia-view-btn:hover {
+.antropedia-view-btn:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
-.ibripedia-view-btn.active {
+.antropedia-view-btn.active {
   background: var(--blurple);
   color: #fff;
 }
 
-/* === Выбор нескольких статей для удаления (setSelectMode в ibripedia.js) === */
-.ibripedia-select-toggle {
+/* === Выбор нескольких статей для удаления (setSelectMode в antropedia.js) === */
+.antropedia-select-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -258,13 +258,13 @@
   margin-left: auto; /* рядом с переключателем вида, а не посередине строки */
 }
 @media (max-width: 420px) {
-  .ibripedia-select-toggle span { display: none; }
+  .antropedia-select-toggle span { display: none; }
 }
-.ibripedia-select-toggle[hidden] { display: none; }
-.ibripedia-select-toggle:hover { color: var(--text-normal); border-color: var(--blurple); }
-.ibripedia-select-toggle.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
+.antropedia-select-toggle[hidden] { display: none; }
+.antropedia-select-toggle:hover { color: var(--text-normal); border-color: var(--blurple); }
+.antropedia-select-toggle.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
 
-.ibripedia-card-check {
+.antropedia-card-check {
   display: none;
   position: absolute;
   top: 10px;
@@ -280,21 +280,21 @@
   color: transparent;
   font-size: 12px;
 }
-.ibripedia-grid.is-selecting .ibripedia-card-check { display: flex; }
-.ibripedia-grid.is-selecting .ibripedia-card-lock { left: 42px; }
-.ibripedia-grid.is-selecting .ibripedia-card-menu { display: none; }
-.ibripedia-grid.is-selecting .ibripedia-card:not([data-can-delete]) { opacity: .45; }
-.ibripedia-grid.is-selecting .ibripedia-card.is-selected {
+.antropedia-grid.is-selecting .antropedia-card-check { display: flex; }
+.antropedia-grid.is-selecting .antropedia-card-lock { left: 42px; }
+.antropedia-grid.is-selecting .antropedia-card-menu { display: none; }
+.antropedia-grid.is-selecting .antropedia-card:not([data-can-delete]) { opacity: .45; }
+.antropedia-grid.is-selecting .antropedia-card.is-selected {
   border-color: var(--blurple);
   box-shadow: 0 0 0 2px var(--blurple);
 }
-.ibripedia-card.is-selected .ibripedia-card-check {
+.antropedia-card.is-selected .antropedia-card-check {
   background: var(--blurple);
   border-color: var(--blurple);
   color: #fff;
 }
 
-.ibripedia-select-bar {
+.antropedia-select-bar {
   position: fixed;
   left: 50%;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -312,9 +312,9 @@
   color: var(--text-normal);
   font-size: 13px;
 }
-.ibripedia-select-bar[hidden] { display: none; }
-.ibripedia-select-bar-count { margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ibripedia-select-bar button {
+.antropedia-select-bar[hidden] { display: none; }
+.antropedia-select-bar-count { margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.antropedia-select-bar button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -327,26 +327,26 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.ibripedia-select-bar button:hover:not(:disabled) { filter: brightness(1.15); }
-.ibripedia-select-bar button:disabled { opacity: .5; cursor: default; }
-.ibripedia-select-bar button.ibripedia-select-bar-danger { background: var(--red); color: #fff; }
+.antropedia-select-bar button:hover:not(:disabled) { filter: brightness(1.15); }
+.antropedia-select-bar button:disabled { opacity: .5; cursor: default; }
+.antropedia-select-bar button.antropedia-select-bar-danger { background: var(--red); color: #fff; }
 
 /* === Сетка карточек ===
    auto-fit + minmax(320px, 1fr) внутри контейнера с max-width:1180px даёт
    ровно 2-3 карточки в ряд на десктопе (как просили), 1 — на мобильном, и
    само перестраивается при изменении ширины окна. */
 
-.ibripedia-grid {
+.antropedia-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
 }
 
-.ibripedia-grid.ibripedia-grid--list {
+.antropedia-grid.antropedia-grid--list {
   grid-template-columns: 1fr;
 }
 
-.ibripedia-card {
+.antropedia-card {
   display: flex;
   flex-direction: column;
   background: var(--background-secondary);
@@ -358,18 +358,18 @@
   transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
 }
 
-.ibripedia-card:hover {
+.antropedia-card:hover {
   transform: translateY(-2px);
   border-color: var(--blurple);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
-.ibripedia-grid--list .ibripedia-card {
+.antropedia-grid--list .antropedia-card {
   flex-direction: row;
   align-items: stretch;
 }
 
-.ibripedia-card-cover {
+.antropedia-card-cover {
   flex: 0 0 auto;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -380,24 +380,24 @@
   overflow: hidden;
 }
 
-.ibripedia-grid--list .ibripedia-card-cover {
+.antropedia-grid--list .antropedia-card-cover {
   width: 160px;
   aspect-ratio: auto;
 }
 
-.ibripedia-card-cover img {
+.antropedia-card-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.ibripedia-card-cover-empty i {
+.antropedia-card-cover-empty i {
   font-size: 28px;
   color: var(--text-muted);
 }
 
-.ibripedia-card-lock {
+.antropedia-card-lock {
   position: absolute;
   top: 10px;
   left: 10px;
@@ -408,7 +408,7 @@
   font-size: 12px;
 }
 
-.ibripedia-card-body {
+.antropedia-card-body {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -417,7 +417,7 @@
   padding: 14px 16px;
 }
 
-.ibripedia-badge {
+.antropedia-badge {
   display: inline-block;
   padding: 2px 9px;
   border-radius: 10px;
@@ -427,7 +427,7 @@
   white-space: nowrap;
 }
 
-.ibripedia-card-title {
+.antropedia-card-title {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
@@ -439,7 +439,7 @@
   -webkit-box-orient: vertical;
 }
 
-.ibripedia-card-excerpt {
+.antropedia-card-excerpt {
   margin: 0;
   font-size: 13px;
   color: var(--header-secondary);
@@ -451,13 +451,13 @@
   -webkit-box-orient: vertical;
 }
 
-.ibripedia-card-tags {
+.antropedia-card-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.ibripedia-tag-pill {
+.antropedia-tag-pill {
   padding: 2px 8px;
   border-radius: 10px;
   background: var(--background-tertiary);
@@ -466,12 +466,12 @@
   cursor: pointer;
 }
 
-.ibripedia-tag-pill:hover {
+.antropedia-tag-pill:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
-.ibripedia-card-meta {
+.antropedia-card-meta {
   margin-top: auto;
   display: flex;
   flex-wrap: wrap;
@@ -480,7 +480,7 @@
   color: var(--text-muted);
 }
 
-.ibripedia-card-meta span {
+.antropedia-card-meta span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -488,17 +488,17 @@
 
 /* Просмотры/лайк/комментарии карточки витрины — тот же язык "пилюль", что
    и панель лайка/комментариев внутри открытой статьи (см.
-   .ibripedia-engagement-btn выше), просто в масштабе карточки: раньше это
-   были голые мелкие иконки вперемешку с автором/датой в .ibripedia-card-meta
+   .antropedia-engagement-btn выше), просто в масштабе карточки: раньше это
+   были голые мелкие иконки вперемешку с автором/датой в .antropedia-card-meta
    и визуально терялись. */
-.ibripedia-card-engagement {
+.antropedia-card-engagement {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-.ibripedia-card-pill {
+.antropedia-card-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -514,27 +514,27 @@
 }
 
 /* Просмотры — не кнопка, только счётчик, курсор обычный. */
-span.ibripedia-card-pill { cursor: default; }
+span.antropedia-card-pill { cursor: default; }
 
-button.ibripedia-card-pill { cursor: pointer; }
-button.ibripedia-card-pill:hover { background: var(--background-accent); color: var(--text-normal); }
-button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
+button.antropedia-card-pill { cursor: pointer; }
+button.antropedia-card-pill:hover { background: var(--background-accent); color: var(--text-normal); }
+button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 
-.ibripedia-card-pill.is-liked,
-.ibripedia-card-pill.is-liked:hover {
+.antropedia-card-pill.is-liked,
+.antropedia-card-pill.is-liked:hover {
   color: var(--red);
   border-color: var(--red);
 }
 
 /* === Меню действий (⋮) на карточке === */
 
-.ibripedia-card-menu {
+.antropedia-card-menu {
   position: absolute;
   top: 8px;
   right: 8px;
 }
 
-.ibripedia-card-menu-btn {
+.antropedia-card-menu-btn {
   width: 28px;
   height: 28px;
   display: flex;
@@ -548,11 +548,11 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 15px;
 }
 
-.ibripedia-card-menu-btn:hover {
+.antropedia-card-menu-btn:hover {
   background: rgba(0, 0, 0, 0.75);
 }
 
-.ibripedia-card-menu-dropdown {
+.antropedia-card-menu-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -565,7 +565,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   z-index: 10;
 }
 
-.ibripedia-card-menu-dropdown button {
+.antropedia-card-menu-dropdown button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -579,17 +579,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
 }
 
-.ibripedia-card-menu-dropdown button:hover {
+.antropedia-card-menu-dropdown button:hover {
   background: var(--background-accent);
 }
 
-.ibripedia-card-menu-dropdown button.ibripedia-danger {
+.antropedia-card-menu-dropdown button.antropedia-danger {
   color: var(--red);
 }
 
 /* === Пустое состояние / индикатор подгрузки === */
 
-.ibripedia-empty {
+.antropedia-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -599,70 +599,70 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   text-align: center;
 }
 
-.ibripedia-empty i {
+.antropedia-empty i {
   font-size: 32px;
   color: var(--text-muted);
 }
 
-.ibripedia-loading-more {
+.antropedia-loading-more {
   text-align: center;
   padding: 20px;
   color: var(--header-secondary);
   font-size: 13px;
 }
 
-.ibripedia-sentinel {
+.antropedia-sentinel {
   height: 1px;
 }
 
 /* === Skeleton-заглушки при первой загрузке === */
 
-.ibripedia-skeleton-card {
+.antropedia-skeleton-card {
   height: 260px;
   border-radius: 10px;
   background: linear-gradient(100deg, var(--background-secondary) 30%, var(--background-accent) 50%, var(--background-secondary) 70%);
   background-size: 300% 100%;
-  animation: ibripedia-shimmer 1.4s ease-in-out infinite;
+  animation: antropedia-shimmer 1.4s ease-in-out infinite;
 }
 
-@keyframes ibripedia-shimmer {
+@keyframes antropedia-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
 
 /* === Страница просмотра одной статьи === */
 
-.ibripedia-view {
+.antropedia-view {
   max-width: 1090px; /* было 780px — тот же отзыв "много пустого места", +40% */
   margin: 0 auto;
 }
 
-.ibripedia-back-btn {
+.antropedia-back-btn {
   margin-bottom: 16px;
 }
 
-.ibripedia-view-article {
+.antropedia-view-article {
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   border-radius: 10px;
   overflow: hidden;
 }
 
-.ibripedia-view-cover img {
+.antropedia-view-cover img {
   width: 100%;
   max-height: 360px;
   object-fit: cover;
   display: block;
 }
 
-.ibripedia-view-title {
+.antropedia-view-title {
   margin: 20px 24px 8px;
   font-size: 26px;
   font-weight: 700;
   color: var(--text-normal);
 }
 
-.ibripedia-view-meta {
+.antropedia-view-meta {
   margin: 0 24px;
   display: flex;
   flex-wrap: wrap;
@@ -671,13 +671,13 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   color: var(--text-muted);
 }
 
-.ibripedia-view-meta span {
+.antropedia-view-meta span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.ibripedia-view-badges {
+.antropedia-view-badges {
   margin: 12px 24px 0;
   display: flex;
   flex-wrap: wrap;
@@ -685,9 +685,9 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 }
 
 /* Переключатель слоя многослойной статьи (renderLayerSwitcher в
-   ibripedia.js) — показывается только когда читателю доступно больше одного
+   antropedia.js) — показывается только когда читателю доступно больше одного
    слоя; кнопки — доступные слои по порядку, активная подсвечена. */
-.ibripedia-layer-switcher {
+.antropedia-layer-switcher {
   margin: 12px 24px 0;
   display: flex;
   align-items: center;
@@ -696,7 +696,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   color: var(--text-muted);
   font-size: 13px;
 }
-.ibripedia-layer-btn {
+.antropedia-layer-btn {
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   color: var(--text-normal);
@@ -706,17 +706,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
-.ibripedia-layer-btn:hover {
+.antropedia-layer-btn:hover {
   background: var(--background-accent);
 }
-.ibripedia-layer-btn.active {
+.antropedia-layer-btn.active {
   background: var(--blurple);
   border-color: var(--blurple);
   color: #fff;
   cursor: default;
 }
 
-.ibripedia-view-actions {
+.antropedia-view-actions {
   margin: 16px 24px 0;
   display: flex;
   gap: 10px;
@@ -724,10 +724,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-bottom: 1px solid var(--background-accent);
 }
 
-.ibripedia-view-content.preview-pane {
+.antropedia-view-content.preview-pane {
   border-left: none;
   /* Слева — расширенное поле (было 24px) под значки закладок (см.
-     .ibripedia-bm-toggle и renderBookmarkGutter в ibripedia.js) — каждый
+     .antropedia-bm-toggle и renderBookmarkGutter в antropedia.js) — каждый
      значок абсолютно позиционирован внутри этого поля, напротив своего
      блока, независимо от типа блока. */
   padding: 20px 24px 28px 54px;
@@ -737,17 +737,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
      текста статьи — без flow-root они "свисали" ниже, и панель лайков/
      комментариев под статьёй вставала сбоку от картинки. */
   display: flow-root;
-  /* Точка отсчёта для .ibripedia-bm-toggle (position: absolute). */
+  /* Точка отсчёта для .antropedia-bm-toggle (position: absolute). */
   position: relative;
 }
 
-.ibripedia-view-backlinks {
+.antropedia-view-backlinks {
   margin-top: 20px;
 }
 
 /* === Лайк + комментарии под статьёй === */
 
-.ibripedia-view-engagement {
+.antropedia-view-engagement {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -757,7 +757,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-top: 1px solid var(--background-accent);
 }
 
-.ibripedia-engagement-btn {
+.antropedia-engagement-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -772,26 +772,26 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.ibripedia-engagement-btn:hover {
+.antropedia-engagement-btn:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
-.ibripedia-engagement-btn.is-active {
+.antropedia-engagement-btn.is-active {
   color: var(--red);
   border-color: var(--red);
 }
 
 /* Жалоба — в стороне от лайка/реакций, чтобы не нажать её случайно. */
-.ibripedia-report-btn {
+.antropedia-report-btn {
   margin-left: auto;
 }
 
-.ibripedia-report-btn:hover {
+.antropedia-report-btn:hover {
   color: var(--red);
 }
 
-.ibripedia-comments {
+.antropedia-comments {
   max-width: 1090px;
   margin: 20px auto 0;
   padding: 16px 24px;
@@ -800,7 +800,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-radius: 10px;
 }
 
-.ibripedia-comments h3 {
+.antropedia-comments h3 {
   margin: 0 0 14px;
   font-size: 14px;
   color: var(--header-secondary);
@@ -808,26 +808,26 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   letter-spacing: 0.5px;
 }
 
-.ibripedia-comments h3 #ibripediaCommentsHeaderCount {
+.antropedia-comments h3 #antropediaCommentsHeaderCount {
   text-transform: none;
   letter-spacing: normal;
   color: var(--text-muted);
 }
 
-.ibripedia-comment-form {
+.antropedia-comment-form {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: flex-end;
   margin-bottom: 18px;
-  position: relative; /* точка отсчёта для .ibripedia-sticker-picker ниже */
+  position: relative; /* точка отсчёта для .antropedia-sticker-picker ниже */
 }
 
 /* CONTENTEDITABLE, а не textarea — вставленный стикер рендерится картинкой
-   прямо внутри поля (см. .ibripedia-inline-sticker-chip и
-   insertStickerChip()/serializeRichInput() в ibripedia.js), textarea такого
+   прямо внутри поля (см. .antropedia-inline-sticker-chip и
+   insertStickerChip()/serializeRichInput() в antropedia.js), textarea такого
    не умеет в принципе. data-placeholder показывается через :empty — см. ниже. */
-.ibripedia-comment-input {
+.antropedia-comment-input {
   flex: 1 1 auto;
   min-height: 40px;
   max-height: 220px;
@@ -843,8 +843,8 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   word-break: break-word;
   line-height: 1.4;
 }
-.ibripedia-comment-input:focus { outline: none; border-color: var(--blurple); }
-.ibripedia-comment-input:empty::before {
+.antropedia-comment-input:focus { outline: none; border-color: var(--blurple); }
+.antropedia-comment-input:empty::before {
   content: attr(data-placeholder);
   color: var(--text-muted);
   pointer-events: none;
@@ -853,7 +853,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* Стикер, вставленный в поле ввода — уже картинка, а не текст шорткода
    (см. задачу "видно сразу, без текста"): contenteditable="false" на самой
    картинке, чтобы курсор не заходил внутрь неё при редактировании. */
-.ibripedia-inline-sticker-chip {
+.antropedia-inline-sticker-chip {
   height: 22px;
   width: 22px;
   object-fit: contain;
@@ -862,12 +862,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   user-select: none;
 }
 
-.ibripedia-sticker-picker-links {
+.antropedia-sticker-picker-links {
   display: inline-flex;
   gap: 4px;
 }
 
-.ibripedia-comment-form-actions {
+.antropedia-comment-form-actions {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -885,14 +885,14 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    requirement "поле ввода слишком короткое, как только появляется символ").
    Двух классов (0,2,0) достаточно, чтобы перебить глобальный .btn (0,1,0) —
    без привязки к брейкпоинту самого global-styles.css. */
-.ibripedia-comment-form-actions .btn {
+.antropedia-comment-form-actions .btn {
   width: auto;
   flex-shrink: 0;
   padding: 6px 12px;
   font-size: 13px;
 }
 
-.ibripedia-sticker-picker-btn {
+.antropedia-sticker-picker-btn {
   width: 32px;
   height: 32px;
   display: flex;
@@ -906,27 +906,27 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 15px;
   transition: background 0.15s, color 0.15s;
 }
-.ibripedia-sticker-picker-btn:hover,
-.ibripedia-sticker-picker-btn.active {
+.antropedia-sticker-picker-btn:hover,
+.antropedia-sticker-picker-btn.active {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
 /* Попап пикера стикеров — общий и для формы комментария/ответа, и для
    полоски реакций (см. STICKER_PICKER_MARKUP/positionStickerPicker() в
-   ibripedia.js). position: FIXED, а не absolute — top/left считает и
+   antropedia.js). position: FIXED, а не absolute — top/left считает и
    проставляет JS по месту клика (рядом с кнопкой-триггером, зажимая в
    границы окна), а не CSS bottom/right относительно родителя: якорем может
    быть как широкая форма комментария, так и узкая полоска реакций, которая
    не обязана стоять у правого края своего контейнера — absolute+right:0
    в таком случае обрезался бы overflow:hidden соседней статьи. */
-.ibripedia-sticker-picker {
+.antropedia-sticker-picker {
   position: fixed;
   /* Больше прежних 300×320 (см. requirement "модульное окно сделай больше
      по размеру") — min() подрезает под узкий экран, чтобы на телефоне не
-     вылезать за края (positionStickerPicker в ibripedia.js зажимает left,
+     вылезать за края (positionStickerPicker в antropedia.js зажимает left,
      но сама ширина иначе так и осталась бы шире вьюпорта). Высота держится
-     в паре с STICKER_PICKER_MAX_HEIGHT в ibripedia.js — поменяете одно,
+     в паре с STICKER_PICKER_MAX_HEIGHT в antropedia.js — поменяете одно,
      поменяйте и другое. */
   width: min(400px, calc(100vw - 16px));
   max-height: min(480px, calc(100vh - 16px));
@@ -945,10 +945,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    равно клавиатура прячется и так будет удобнее"), так что якорить попап
    координатами кнопки больше незачем — удобнее знакомый паттерн "выезжает
    снизу на весь экран". top/left не в счёт — positionStickerPicker() в
-   ibripedia.js на этой ширине их не проставляет (специально не трогает
+   antropedia.js на этой ширине их не проставляет (специально не трогает
    инлайн-стили), чтобы не перебивать этот блок. */
 @media (max-width: 640px) {
-  .ibripedia-sticker-picker {
+  .antropedia-sticker-picker {
     left: 0;
     right: 0;
     bottom: 0;
@@ -960,7 +960,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   }
 }
 
-.ibripedia-sticker-picker-header {
+.antropedia-sticker-picker-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -970,13 +970,13 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-bottom: 1px solid var(--background-accent);
   flex-shrink: 0;
 }
-.ibripedia-sticker-picker-links a { color: var(--blurple); text-decoration: none; }
-.ibripedia-sticker-picker-links a:hover { text-decoration: underline; }
+.antropedia-sticker-picker-links a { color: var(--blurple); text-decoration: none; }
+.antropedia-sticker-picker-links a:hover { text-decoration: underline; }
 
 /* Лента вкладок-наборов сверху (аналог VK) — звёздочка избранного первая,
    дальше по одной вкладке на каждый добавленный себе набор, превью — первый
    стикер набора. Прокручивается по горизонтали, если наборов много. */
-.ibripedia-sticker-picker-tabs {
+.antropedia-sticker-picker-tabs {
   display: flex;
   gap: 5px;
   padding: 5px 10px;
@@ -984,14 +984,14 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   flex-shrink: 0;
   border-bottom: 1px solid var(--background-accent);
   /* Наборов может быть много — лента листается по горизонтали сама по себе;
-     contain здесь же (не только у .ibripedia-sticker-picker-body ниже),
+     contain здесь же (не только у .antropedia-sticker-picker-body ниже),
      чтобы долистывание этой ленты вбок на трекпаде/тачпаде тоже не утекало
      вертикальным скроллом на страницу под попапом. */
   overscroll-behavior: contain;
 }
-.ibripedia-sticker-picker-tabs::-webkit-scrollbar { height: 3px; }
+.antropedia-sticker-picker-tabs::-webkit-scrollbar { height: 3px; }
 
-.ibripedia-sticker-picker-tab {
+.antropedia-sticker-picker-tab {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -1007,13 +1007,13 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   color: var(--text-muted);
   font-size: 13px;
 }
-.ibripedia-sticker-picker-tab:hover { background: var(--background-accent); }
-.ibripedia-sticker-picker-tab.active { border-color: var(--blurple); }
-.ibripedia-sticker-picker-tab img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.ibripedia-sticker-picker-tab-fav { color: var(--yellow); }
-.ibripedia-sticker-picker-tab-fav.active { border-color: var(--yellow); }
+.antropedia-sticker-picker-tab:hover { background: var(--background-accent); }
+.antropedia-sticker-picker-tab.active { border-color: var(--blurple); }
+.antropedia-sticker-picker-tab img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.antropedia-sticker-picker-tab-fav { color: var(--yellow); }
+.antropedia-sticker-picker-tab-fav.active { border-color: var(--yellow); }
 
-.ibripedia-sticker-picker-subtitle {
+.antropedia-sticker-picker-subtitle {
   padding: 6px 12px 0;
   font-size: 12px;
   color: var(--text-muted);
@@ -1022,9 +1022,9 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   white-space: nowrap;
   flex-shrink: 0;
 }
-.ibripedia-sticker-picker-subtitle:empty { display: none; }
+.antropedia-sticker-picker-subtitle:empty { display: none; }
 
-.ibripedia-sticker-picker-body {
+.antropedia-sticker-picker-body {
   overflow-y: auto;
   padding: 8px;
   flex: 1 1 auto;
@@ -1036,28 +1036,28 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   overscroll-behavior: contain;
 }
 
-.ibripedia-sticker-picker-grid {
+.antropedia-sticker-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   gap: 6px;
 }
 
-.ibripedia-sticker-picker-item {
+.antropedia-sticker-picker-item {
   background: none;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 4px;
   cursor: pointer;
   /* Долгое нажатие не должно ещё и выделять текст/картинку вокруг (особенно
-     на тач-экранах — см. wireStickerPickerGestures в ibripedia.js). */
+     на тач-экранах — см. wireStickerPickerGestures в antropedia.js). */
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
 }
-.ibripedia-sticker-picker-item:hover { background: var(--background-accent); }
-.ibripedia-sticker-picker-item img { width: 100%; height: 56px; object-fit: contain; display: block; pointer-events: none; }
+.antropedia-sticker-picker-item:hover { background: var(--background-accent); }
+.antropedia-sticker-picker-item img { width: 100%; height: 56px; object-fit: contain; display: block; pointer-events: none; }
 
-.ibripedia-sticker-picker-empty {
+.antropedia-sticker-picker-empty {
   color: var(--text-muted);
   font-size: 13px;
   padding: 12px;
@@ -1066,8 +1066,8 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 
 /* Увеличенное превью по долгому нажатию (аналог VK) — отдельный оверлей
    поверх ВСЕГО экрана, а не внутри тесного попапа пикера: см.
-   ensureStickerPreviewOverlay()/openStickerPreviewOverlay() в ibripedia.js. */
-.ibripedia-sticker-preview-overlay {
+   ensureStickerPreviewOverlay()/openStickerPreviewOverlay() в antropedia.js. */
+.antropedia-sticker-preview-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
@@ -1077,18 +1077,18 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   z-index: 2000;
 }
 /* Элемент вешается прямо на document.body (см. ensureStickerPreviewOverlay в
-   ibripedia.js), а не внутрь .ibripedia-page — общее правило
-   ".ibripedia-page [hidden] { display:none !important }" (см. начало файла)
+   antropedia.js), а не внутрь .antropedia-page — общее правило
+   ".antropedia-page [hidden] { display:none !important }" (см. начало файла)
    его не накрывает. Без этой строки JS-овское closeStickerPreviewOverlay()
    (el.hidden = true) ничего не меняло бы визуально: атрибутный селектор
    [hidden] из UA-таблицы стилей и явный display:flex выше имеют РАВНУЮ
    специфичность — побеждает тот, что идёт позже в каскаде, то есть display:flex,
    а не скрытие. Тот же самый приём, что у .modal-overlay[hidden] в
    global-styles.css. */
-.ibripedia-sticker-preview-overlay[hidden] {
+.antropedia-sticker-preview-overlay[hidden] {
   display: none;
 }
-.ibripedia-sticker-preview-box {
+.antropedia-sticker-preview-box {
   position: relative; /* точка отсчёта для крестика закрытия ниже */
   background: var(--background-secondary);
   border-radius: 12px;
@@ -1102,33 +1102,33 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 }
 /* Клик по подложке ничего не закрывает (см. requirement) — крестик теперь
    единственный способ закрыть превью, не отправляя и не добавляя в избранное. */
-.ibripedia-sticker-preview-close {
+.antropedia-sticker-preview-close {
   position: absolute;
   top: 6px;
   right: 6px;
 }
-.ibripedia-sticker-preview-close:hover {
+.antropedia-sticker-preview-close:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
-.ibripedia-sticker-preview-img {
+.antropedia-sticker-preview-img {
   width: 100%;
   max-width: 220px;
   max-height: 220px;
   object-fit: contain;
 }
-.ibripedia-sticker-preview-actions {
+.antropedia-sticker-preview-actions {
   display: flex;
   gap: 10px;
   width: 100%;
 }
-.ibripedia-sticker-preview-actions .btn { flex: 1; }
-.ibripedia-sticker-preview-fav.is-active { color: var(--yellow); border-color: var(--yellow); }
+.antropedia-sticker-preview-actions .btn { flex: 1; }
+.antropedia-sticker-preview-fav.is-active { color: var(--yellow); border-color: var(--yellow); }
 
 /* Стикер внутри текста комментария — маленькая инлайн-картинка на строке
-   текста (см. formatCommentContent() в ibripedia.js). Кликабелен — открывает
+   текста (см. formatCommentContent() в antropedia.js). Кликабелен — открывает
    набор целиком (public/sticker-pack-view.js), поэтому курсор-указатель. */
-.ibripedia-inline-sticker {
+.antropedia-inline-sticker {
   height: 22px;
   width: 22px;
   object-fit: contain;
@@ -1140,10 +1140,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* Комментарий, целиком состоящий из одного шорткода — рендерится как
    отдельный крупный "стикер" (аналог сообщения-стикера в Telegram), без
    рамки/фона обычного текста комментария. */
-.ibripedia-comment-body.ibripedia-comment-sticker-only {
+.antropedia-comment-body.antropedia-comment-sticker-only {
   white-space: normal;
 }
-.ibripedia-comment-body.ibripedia-comment-sticker-only .ibripedia-standalone-sticker {
+.antropedia-comment-body.antropedia-comment-sticker-only .antropedia-standalone-sticker {
   display: block;
   width: 128px;
   height: 128px;
@@ -1151,52 +1151,52 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
 }
 
-.ibripedia-comments-list {
+.antropedia-comments-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.ibripedia-comment {
+.antropedia-comment {
   padding: 10px 12px;
   background: var(--background-tertiary);
   border-radius: 8px;
 }
 
-.ibripedia-comment-head {
+.antropedia-comment-head {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 4px;
 }
 
-.ibripedia-comment-person {
+.antropedia-comment-person {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   cursor: pointer;
 }
-.ibripedia-comment-person:hover .ibripedia-comment-author { text-decoration: underline; }
+.antropedia-comment-person:hover .antropedia-comment-author { text-decoration: underline; }
 
 /* Автор + соавторы в шапке открытой статьи — каждый с аватаркой. */
-.ibripedia-view-meta .ibripedia-people {
+.antropedia-view-meta .antropedia-people {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
-.ibripedia-view-meta .ibripedia-person { gap: 6px; color: var(--text-normal); }
-.ibripedia-view-meta .ibripedia-person[data-action]:hover { text-decoration: underline; }
-.ibripedia-people-plus { color: var(--text-muted); }
+.antropedia-view-meta .antropedia-person { gap: 6px; color: var(--text-normal); }
+.antropedia-view-meta .antropedia-person[data-action]:hover { text-decoration: underline; }
+.antropedia-people-plus { color: var(--text-muted); }
 
-.ibripedia-comment-author {
+.antropedia-comment-author {
   font-weight: 600;
   color: var(--text-normal);
   font-size: 13px;
 }
 
-.ibripedia-comment-date {
+.antropedia-comment-date {
   color: var(--text-muted);
   font-size: 11px;
 }
@@ -1204,7 +1204,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* Виден только при наведении на сам комментарий (или при фокусе с
    клавиатуры — иначе кнопка вообще не доступна без мыши) — не занимает
    внимание/место в обычном состоянии, как значок корзины в Discord/Slack. */
-.ibripedia-comment-delete {
+.antropedia-comment-delete {
   margin-left: auto;
   background: none;
   border: none;
@@ -1215,47 +1215,47 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   transition: opacity 0.15s, color 0.15s;
 }
 
-.ibripedia-comment:hover .ibripedia-comment-delete,
-.ibripedia-comment-delete:focus-visible {
+.antropedia-comment:hover .antropedia-comment-delete,
+.antropedia-comment-delete:focus-visible {
   opacity: 1;
 }
 
-.ibripedia-comment-delete:hover {
+.antropedia-comment-delete:hover {
   color: var(--red);
 }
 
 /* На тач-устройствах не бывает :hover — прячась, кнопка стала бы недоступна
    вообще никак, поэтому там она видна всегда. */
 @media (hover: none) {
-  .ibripedia-comment-delete { opacity: 1; }
+  .antropedia-comment-delete { opacity: 1; }
 }
 
-.ibripedia-comment-body {
+.antropedia-comment-body {
   color: var(--text-normal);
   font-size: 14px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.ibripedia-comments-empty {
+.antropedia-comments-empty {
   color: var(--text-muted);
   font-size: 13px;
 }
 
 /* === Реакции эмодзи/стикером — общая полоска "пилюль" и под статьёй
-   (#ibripediaReactionsBar), и под каждым комментарием/ответом (см.
-   reactionsBarInnerHtml()/handleReactionsClick() в ibripedia.js). Пустая
+   (#antropediaReactionsBar), и под каждым комментарием/ответом (см.
+   reactionsBarInnerHtml()/handleReactionsClick() в antropedia.js). Пустая
    (без единой реакции) — просто кнопка "добавить", поэтому :empty не
-   используется, разметка всегда рендерит хотя бы .ibripedia-reaction-add. */
-.ibripedia-reactions {
-  position: relative; /* точка отсчёта для .ibripedia-sticker-picker — см. openReactionPicker() в ibripedia.js */
+   используется, разметка всегда рендерит хотя бы .antropedia-reaction-add. */
+.antropedia-reactions {
+  position: relative; /* точка отсчёта для .antropedia-sticker-picker — см. openReactionPicker() в antropedia.js */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-.ibripedia-reaction-pill {
+.antropedia-reaction-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1268,15 +1268,15 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.ibripedia-reaction-pill:hover { background: var(--background-accent); color: var(--text-normal); }
-.ibripedia-reaction-pill.active {
+.antropedia-reaction-pill:hover { background: var(--background-accent); color: var(--text-normal); }
+.antropedia-reaction-pill.active {
   background: rgba(88, 101, 242, 0.16);
   border-color: var(--blurple);
   color: var(--text-normal);
 }
-.ibripedia-reaction-pill img { width: 16px; height: 16px; object-fit: contain; }
+.antropedia-reaction-pill img { width: 16px; height: 16px; object-fit: contain; }
 
-.ibripedia-reaction-add {
+.antropedia-reaction-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1290,11 +1290,11 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 13px;
   transition: background 0.15s, color 0.15s;
 }
-.ibripedia-reaction-add:hover,
-.ibripedia-reaction-add.active { background: var(--background-accent); color: var(--text-normal); }
+.antropedia-reaction-add:hover,
+.antropedia-reaction-add.active { background: var(--background-accent); color: var(--text-normal); }
 
 /* === Действия под комментарием (реакции + "Ответить") и сами ответы === */
-.ibripedia-comment-actions {
+.antropedia-comment-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1302,7 +1302,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   margin-top: 8px;
 }
 
-.ibripedia-comment-reply-btn {
+.antropedia-comment-reply-btn {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -1314,9 +1314,9 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   align-items: center;
   gap: 5px;
 }
-.ibripedia-comment-reply-btn:hover { color: var(--text-normal); }
+.antropedia-comment-reply-btn:hover { color: var(--text-normal); }
 
-.ibripedia-replies {
+.antropedia-replies {
   margin-top: 10px;
   padding-left: 18px;
   border-left: 2px solid var(--background-accent);
@@ -1325,22 +1325,22 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   gap: 10px;
 }
 
-/* Без этого правила у самого .ibripedia-replies (flex + gap) был отступ
+/* Без этого правила у самого .antropedia-replies (flex + gap) был отступ
    только ПЕРЕД этим блоком целиком (он для родителя — один flex-item), а
    ответы ВНУТРИ него (второй, третий…) визуально слипались без зазора —
    тот же gap нужен и здесь. */
-.ibripedia-replies-extra {
+.antropedia-replies-extra {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.ibripedia-comment-reply {
+.antropedia-comment-reply {
   padding: 8px 10px;
   background: var(--background-secondary);
 }
 
-.ibripedia-replies-toggle {
+.antropedia-replies-toggle {
   align-self: flex-start;
   background: none;
   border: none;
@@ -1353,26 +1353,26 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   align-items: center;
   gap: 5px;
 }
-.ibripedia-replies-toggle:hover { text-decoration: underline; }
+.antropedia-replies-toggle:hover { text-decoration: underline; }
 
-.ibripedia-reply-compose-mount:not(:empty) {
+.antropedia-reply-compose-mount:not(:empty) {
   margin-top: 10px;
 }
 
 /* === Форма ответа — динамически создаётся в toggleReplyComposer(), тот же
-   класс .ibripedia-comment-form, что и основная форма комментария, поэтому
+   класс .antropedia-comment-form, что и основная форма комментария, поэтому
    переиспользует все стили ниже без дублирования. === */
-.ibripedia-reply-form {
+.antropedia-reply-form {
   margin: 0;
 }
 
 /* === Просмотр статьи: расширяем страницу под боковую панель
-   (Оглавление/Закладки, см. #ibripediaViewSidebar) === */
-.ibripedia-view {
+   (Оглавление/Закладки, см. #antropediaViewSidebar) === */
+.antropedia-view {
   max-width: 1320px;
 }
 
-.ibripedia-view-topbar {
+.antropedia-view-topbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1380,12 +1380,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   margin-bottom: 16px;
 }
 
-.ibripedia-back-btn {
+.antropedia-back-btn {
   margin-bottom: 0;
 }
 
 /* === Поиск по тексту открытой статьи === */
-.ibripedia-inline-search {
+.antropedia-inline-search {
   flex: 1 1 240px;
   min-width: 160px;
   display: flex;
@@ -1397,12 +1397,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-radius: 6px;
 }
 
-.ibripedia-inline-search > i.fa-search {
+.antropedia-inline-search > i.fa-search {
   color: var(--text-muted);
   font-size: 13px;
 }
 
-.ibripedia-inline-search-input {
+.antropedia-inline-search-input {
   flex: 1 1 auto;
   min-width: 0;
   padding: 8px 0;
@@ -1412,17 +1412,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 13px;
 }
 
-.ibripedia-inline-search-input:focus {
+.antropedia-inline-search-input:focus {
   outline: none;
 }
 
-.ibripedia-inline-search-count {
+.antropedia-inline-search-count {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.ibripedia-inline-search-nav {
+.antropedia-inline-search-nav {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1436,24 +1436,24 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 12px;
 }
 
-.ibripedia-inline-search-nav:hover {
+.antropedia-inline-search-nav:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
 /* === Раскладка: статья + боковая панель === */
-.ibripedia-view-layout {
+.antropedia-view-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   align-items: start;
   gap: 20px;
-  /* Точка отсчёта для .ibripedia-bookmark-gutter — стикеры закладок должны
+  /* Точка отсчёта для .antropedia-bookmark-gutter — стикеры закладок должны
      торчать ЗА левым краем карточки статьи, а не внутри неё (у карточки
      overflow:hidden ради скруглённых углов обложки, он бы их обрезал). */
   position: relative;
 }
 
-.ibripedia-view-sidebar {
+.antropedia-view-sidebar {
   position: sticky;
   top: 16px;
   max-height: calc(100vh - 32px);
@@ -1467,7 +1467,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   gap: 10px;
 }
 
-.ibripedia-sidebar-tabs {
+.antropedia-sidebar-tabs {
   display: flex;
   gap: 4px;
   padding: 3px;
@@ -1475,7 +1475,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-radius: 8px;
 }
 
-.ibripedia-sidebar-tab {
+.antropedia-sidebar-tab {
   flex: 1 1 0;
   display: flex;
   align-items: center;
@@ -1491,16 +1491,16 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
 }
 
-.ibripedia-sidebar-tab:hover {
+.antropedia-sidebar-tab:hover {
   color: var(--text-normal);
 }
 
-.ibripedia-sidebar-tab.active {
+.antropedia-sidebar-tab.active {
   background: var(--blurple);
   color: #fff;
 }
 
-.ibripedia-sidebar-empty {
+.antropedia-sidebar-empty {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -1510,7 +1510,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* Оглавление — как панель "Навигация" в Word: список заголовков статьи
    с отступом по уровню, клик — плавный скролл к заголовку. Закладки (ниже)
    используют тот же список — тот же принцип "элемент списка -> телепорт". */
-.ibripedia-toc-list {
+.antropedia-toc-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1519,12 +1519,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   gap: 1px;
 }
 
-.ibripedia-toc-item {
+.antropedia-toc-item {
   display: flex;
   align-items: center;
 }
 
-.ibripedia-toc-item a {
+.antropedia-toc-item a {
   flex: 1 1 auto;
   min-width: 0;
   display: block;
@@ -1538,32 +1538,32 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   white-space: nowrap;
 }
 
-.ibripedia-toc-item a:hover {
+.antropedia-toc-item a:hover {
   background: var(--background-accent);
 }
 
-.ibripedia-toc-item a.active {
+.antropedia-toc-item a.active {
   background: var(--background-accent);
   color: var(--blurple);
   font-weight: 600;
 }
 
-.ibripedia-toc-level-2 a { padding-left: 20px; font-size: 12.5px; }
-.ibripedia-toc-level-3 a { padding-left: 32px; font-size: 12px; color: var(--header-secondary); }
+.antropedia-toc-level-2 a { padding-left: 20px; font-size: 12.5px; }
+.antropedia-toc-level-3 a { padding-left: 32px; font-size: 12px; color: var(--header-secondary); }
 
 /* === Закладки текущей статьи (панель) — элемент оглавления + иконка
    закладки её цвета + кнопка удаления. === */
-.ibripedia-bookmark-toc-item a {
+.antropedia-bookmark-toc-item a {
   display: flex;
   align-items: center;
   gap: 7px;
 }
 
-.ibripedia-bookmark-toc-item a i {
+.antropedia-bookmark-toc-item a i {
   flex: 0 0 auto;
 }
 
-.ibripedia-toc-item-del {
+.antropedia-toc-item-del {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
@@ -1578,23 +1578,23 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 11px;
 }
 
-.ibripedia-toc-item-del:hover {
+.antropedia-toc-item-del:hover {
   background: rgba(237, 66, 69, 0.15);
   color: var(--red);
 }
 
 /* === Стикеры закладок за левым краем карточки статьи (см.
-   renderBookmarkGutter/hasWideGutterSpace в ibripedia.js) — основной режим,
+   renderBookmarkGutter/hasWideGutterSpace в antropedia.js) — основной режим,
    когда слева от карточки достаточно места (широкий экран, сайдбар не
    отъедает всю ширину): именованный цветной флажок торчит из-за края
    страницы, чуть заходя НА карточку остриём — как книжная закладка между
-   листами. Живёт в #ibripediaBookmarkGutter (см. ibripedia.html) — это
+   листами. Живёт в #antropediaBookmarkGutter (см. antropedia.html) — это
    СОСЕД карточки, а не её потомок, поэтому overflow:hidden карточки (нужен
    ради скруглённых углов обложки) его не обрезает. Контейнер нулевого
-   размера в левом верхнем углу .ibripedia-view-layout — точка отсчёта; сами
+   размера в левом верхнем углу .antropedia-view-layout — точка отсчёта; сами
    стикеры позиционируются по top (напротив своего блока) и растут от
    правого края (см. right: -16px) влево, в поле страницы. */
-.ibripedia-bookmark-gutter {
+.antropedia-bookmark-gutter {
   position: absolute;
   top: 0;
   left: 0;
@@ -1605,11 +1605,11 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   z-index: 5;
 }
 
-.ibripedia-bookmark-gutter > * {
+.antropedia-bookmark-gutter > * {
   pointer-events: auto;
 }
 
-.ibripedia-bm-tab {
+.antropedia-bm-tab {
   position: absolute;
   right: -16px; /* заходит на 16px внутрь карточки — видно, что торчит из-за края, а не просто рядом лежит */
   max-width: 170px;
@@ -1634,32 +1634,32 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   transition: transform 0.15s, box-shadow 0.15s;
 }
 
-.ibripedia-bm-tab:hover {
+.antropedia-bm-tab:hover {
   transform: translateX(-4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.38);
 }
 
-/* Точки на ещё не отмеченном блоке (см. showBookmarkGhost в ibripedia.js) —
+/* Точки на ещё не отмеченном блоке (см. showBookmarkGhost в antropedia.js) —
    тот же флажок, но пунктирный и приглушённый, пока не станет настоящей
    закладкой. */
-.ibripedia-bm-tab.is-ghost {
+.antropedia-bm-tab.is-ghost {
   background: var(--background-secondary);
   color: var(--text-muted);
   border: 1px dashed var(--background-accent);
   box-shadow: none;
 }
 
-.ibripedia-bm-tab.is-ghost:hover {
+.antropedia-bm-tab.is-ghost:hover {
   color: var(--blurple);
   border-color: var(--blurple);
 }
 
 /* Зона наведения — пустое поле СЛЕВА от карточки (широкий режим), не сам
-   текст статьи (см. createHoverZone/handleGutterHoverMove в ibripedia.js) —
+   текст статьи (см. createHoverZone/handleGutterHoverMove в antropedia.js) —
    иначе призрак всплывал бы просто от чтения, когда курсор естественно
    гуляет по строкам. Ничего не рисует, только ловит mousemove/mouseleave;
    ширина с запасом покрывает место, где может оказаться флажок-призрак. */
-.ibripedia-bm-hover-zone {
+.antropedia-bm-hover-zone {
   position: absolute;
   top: 0;
   right: 0;
@@ -1669,10 +1669,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* === Компактный режим — слева от карточки недостаточно места (узкое окно,
    телефон) ЛИБО у устройства нет :hover (палец, см. showBookmarkGhost) и
    приглашение поставить закладку должно быть видно без наведения. Значок в
-   поле слева ВНУТРИ карточки (см. padding-left у .ibripedia-view-content),
+   поле слева ВНУТРИ карточки (см. padding-left у .antropedia-view-content),
    не пересекает её край. Полупрозрачный, пока блок не отмечен — не
    отвлекает; цветной и непрозрачный — когда закладка стоит. */
-.ibripedia-bm-toggle {
+.antropedia-bm-toggle {
   position: absolute;
   left: 10px;
   width: 26px;
@@ -1690,33 +1690,33 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
-.ibripedia-bm-toggle:hover {
+.antropedia-bm-toggle:hover {
   opacity: 1;
   background: var(--background-accent);
 }
 
 /* Закладка стоит — значок цвета закладки (--bm-color, см. renderBookmarkGutter
-   в ibripedia.js), непрозрачный, без фона при наведении (чтобы цвет не
+   в antropedia.js), непрозрачный, без фона при наведении (чтобы цвет не
    перебивался). */
-.ibripedia-bm-toggle.is-active {
+.antropedia-bm-toggle.is-active {
   opacity: 1;
   color: var(--bm-color, var(--blurple));
 }
 
-.ibripedia-bm-toggle.is-active:hover {
+.antropedia-bm-toggle.is-active:hover {
   background: none;
 }
 
 /* "Призрак" приглашения на ещё не отмеченном блоке (см. showBookmarkGhost) —
    сразу заметен, без дополнительного наведения ровно на сам значок. */
-.ibripedia-bm-toggle.is-ghost {
+.antropedia-bm-toggle.is-ghost {
   opacity: 1;
 }
 
-/* Зона наведения компактного режима — та же идея, что у .ibripedia-bm-hover-zone
+/* Зона наведения компактного режима — та же идея, что у .antropedia-bm-hover-zone
    выше, только это зарезервированное под значки поле ВНУТРИ карточки (см.
-   padding-left у .ibripedia-view-content.preview-pane), а не снаружи неё. */
-.ibripedia-bm-hover-zone-compact {
+   padding-left у .antropedia-view-content.preview-pane), а не снаружи неё. */
+.antropedia-bm-hover-zone-compact {
   position: absolute;
   top: 0;
   left: 0;
@@ -1730,17 +1730,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    без неё стикер мог бы на мгновение вылезти поверх остального контента
    страницы. */
 @media (max-width: 640px) {
-  .ibripedia-bookmark-gutter {
+  .antropedia-bookmark-gutter {
     display: none;
   }
 }
 
 /* === Попап "Закладка" (название + цвет) — открывается кликом по
-   .ibripedia-bm-toggle. position: fixed — координаты в пикселях окна
-   выставляет positionFloating() в ibripedia.js. На тач-устройствах (см.
+   .antropedia-bm-toggle. position: fixed — координаты в пикселях окна
+   выставляет positionFloating() в antropedia.js. На тач-устройствах (см.
    @media (hover:none) ниже) становится модальным окном по центру экрана —
-   см. ibripediaBookmarkModalBackdrop/handleContentDblClick в ibripedia.js. === */
-.ibripedia-bookmark-popover {
+   см. antropediaBookmarkModalBackdrop/handleContentDblClick в antropedia.js. === */
+.antropedia-bookmark-popover {
   position: fixed;
   z-index: 30;
   width: 280px;
@@ -1754,7 +1754,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.ibripedia-bookmark-popover-close {
+.antropedia-bookmark-popover-close {
   display: none; /* видна только в модальном режиме на тач-устройствах, см. ниже */
   position: absolute;
   top: 8px;
@@ -1771,12 +1771,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 13px;
 }
 
-.ibripedia-bookmark-popover-close:hover {
+.antropedia-bookmark-popover-close:hover {
   background: var(--background-accent);
   color: var(--text-normal);
 }
 
-.ibripedia-bookmark-popover-label {
+.antropedia-bookmark-popover-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1784,13 +1784,13 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   color: var(--header-secondary);
 }
 
-.ibripedia-bookmark-swatches {
+.antropedia-bookmark-swatches {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.ibripedia-bookmark-swatch {
+.antropedia-bookmark-swatch {
   width: 24px;
   height: 24px;
   padding: 0;
@@ -1799,11 +1799,11 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
 }
 
-.ibripedia-bookmark-swatch.active {
+.antropedia-bookmark-swatch.active {
   border-color: var(--text-normal);
 }
 
-.ibripedia-bookmark-popover-actions {
+.antropedia-bookmark-popover-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1811,17 +1811,17 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   margin-top: 2px;
 }
 
-.ibripedia-bookmark-popover-actions-right {
+.antropedia-bookmark-popover-actions-right {
   display: flex;
   gap: 8px;
   margin-left: auto;
 }
 
-/* Подложка модального окна закладки — см. ibripediaBookmarkModalBackdrop в
-   ibripedia.html, показывается только на тач-устройствах (JS-hidden,
+/* Подложка модального окна закладки — см. antropediaBookmarkModalBackdrop в
+   antropedia.html, показывается только на тач-устройствах (JS-hidden,
    логика в openBookmarkPopover). Просто затемняет фон, клик по ней ничего
    не делает — попап закрывается только явно. */
-.ibripedia-bookmark-modal-backdrop {
+.antropedia-bookmark-modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -1832,10 +1832,10 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    которым его логично поставить, и клик "мимо" на сенсорном экране
    случается куда чаще, чем на десктопе — поэтому здесь попап превращается
    в обычное модальное окно по центру экрана (небольшое, без inline-координат
-   от positionFloating — см. openBookmarkPopover в ibripedia.js) и не
+   от positionFloating — см. openBookmarkPopover в antropedia.js) и не
    закрывается кликом за его пределами (см. _docClickHandler). === */
 @media (hover: none) and (pointer: coarse) {
-  .ibripedia-bookmark-popover {
+  .antropedia-bookmark-popover {
     top: 50%;
     left: 50%;
     right: auto;
@@ -1845,7 +1845,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
     z-index: 31;
   }
 
-  .ibripedia-bookmark-popover-close {
+  .antropedia-bookmark-popover-close {
     display: flex;
   }
 }
@@ -1853,7 +1853,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* === Панель "Закладки" (боковая, список текущей статьи) — тот же принцип,
    что и оглавление: строка + клик-телепорт к блоку (см. scrollToBlock,
    переиспользуется из прыжков по оглавлению). === */
-.ibripedia-bookmark-item {
+.antropedia-bookmark-item {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1862,11 +1862,11 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   cursor: pointer;
 }
 
-.ibripedia-bookmark-item:hover {
+.antropedia-bookmark-item:hover {
   background: var(--background-accent);
 }
 
-.ibripedia-bookmark-dot {
+.antropedia-bookmark-dot {
   flex: 0 0 auto;
   width: 9px;
   height: 9px;
@@ -1874,12 +1874,12 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   border-radius: 50%;
 }
 
-.ibripedia-bookmark-item-body {
+.antropedia-bookmark-item-body {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.ibripedia-bookmark-item-name {
+.antropedia-bookmark-item-name {
   color: var(--text-normal);
   font-size: 13px;
   font-weight: 500;
@@ -1888,7 +1888,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   white-space: nowrap;
 }
 
-.ibripedia-bookmark-item-quote {
+.antropedia-bookmark-item-quote {
   color: var(--text-muted);
   font-size: 12px;
   font-style: italic;
@@ -1897,7 +1897,7 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   white-space: nowrap;
 }
 
-.ibripedia-bookmark-item-del {
+.antropedia-bookmark-item-del {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
@@ -1912,83 +1912,83 @@ button.ibripedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   font-size: 11px;
 }
 
-.ibripedia-bookmark-item-del:hover {
+.antropedia-bookmark-item-del:hover {
   background: rgba(237, 66, 69, 0.15);
   color: var(--red);
 }
 
 /* Кратковременная подсветка блока, к которому только что проскроллили
    (клик по оглавлению/закладке). */
-.ibripedia-block-flash {
-  animation: ibripedia-block-flash 1.6s ease-out;
+.antropedia-block-flash {
+  animation: antropedia-block-flash 1.6s ease-out;
   border-radius: 4px;
 }
 
-@keyframes ibripedia-block-flash {
+@keyframes antropedia-block-flash {
   0% { background: rgba(88, 101, 242, 0.25); }
   100% { background: transparent; }
 }
 
-.ibripedia-view-content [data-block-id] {
+.antropedia-view-content [data-block-id] {
   scroll-margin-top: 16px;
 }
 
 /* === Подсветка результатов поиска по статье === */
-mark.ibripedia-search-hit {
+mark.antropedia-search-hit {
   background: var(--yellow);
   color: #1a1a1a;
   border-radius: 2px;
   padding: 0 1px;
 }
 
-mark.ibripedia-search-hit.ibripedia-search-hit-current {
+mark.antropedia-search-hit.antropedia-search-hit-current {
   background: var(--blurple);
   color: #fff;
 }
 
-.ibripedia-sidebar-toggle {
+.antropedia-sidebar-toggle {
   display: none;
 }
 
 /* === Планшет: боковая панель сворачивается по кнопке в шапке просмотра === */
 @media (max-width: 1024px) {
-  .ibripedia-view-layout {
+  .antropedia-view-layout {
     grid-template-columns: 1fr;
   }
 
-  .ibripedia-view-sidebar {
+  .antropedia-view-sidebar {
     display: none;
     position: static;
     max-height: none;
     order: -1;
   }
 
-  .ibripedia-view-sidebar.is-open {
+  .antropedia-view-sidebar.is-open {
     display: flex;
   }
 
-  .ibripedia-sidebar-toggle {
+  .antropedia-sidebar-toggle {
     display: inline-flex;
   }
 }
 
-/* === Планшет (≤1024px) — фильтры остаются развёрнутыми (см. .ibripedia-filters
+/* === Планшет (≤1024px) — фильтры остаются развёрнутыми (см. .antropedia-filters
    выше), но сам тулбар больше не липнет к верху: развёрнутая панель фильтров
    заметно выше однострочной, и постоянно съедать экран при скролле карточек
    уже не оправдано (на десктопе панель компактнее — там sticky остаётся). === */
 @media (max-width: 1024px) {
-  .ibripedia-toolbar {
+  .antropedia-toolbar {
     position: static;
   }
 
-  .ibripedia-grid {
+  .antropedia-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 /* === Телефон (≤640px) === */
 @media (max-width: 640px) {
-  .ibripedia-page {
+  .antropedia-page {
     padding: 16px;
   }
 
@@ -1996,161 +1996,161 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
      строкой (иначе теснится с кнопками), кнопки — своей строкой ниже.
      "Написать статью" растягивается на всё, что осталось рядом с
      компактной иконкой "случайная статья", а не жмётся до нечитаемого. */
-  .ibripedia-toolbar-row-main .ibripedia-search-wrap {
+  .antropedia-toolbar-row-main .antropedia-search-wrap {
     flex-basis: 100%;
   }
-  .ibripedia-toolbar-row-main #ibripediaNewBtn {
+  .antropedia-toolbar-row-main #antropediaNewBtn {
     flex: 1 1 auto;
   }
 
   /* Кнопка "Фильтры" появляется и переезжает перед панелью (order:1) —
      панель разворачивается прямо под ней, а не строкой выше. Панель по
      умолчанию свёрнута, .is-open — переключает applyFiltersOpenState() в
-     ibripedia.js (см. initFiltersCollapse() там же). */
-  .ibripedia-filters-toggle {
+     antropedia.js (см. initFiltersCollapse() там же). */
+  .antropedia-filters-toggle {
     display: inline-flex;
   }
-  .ibripedia-toolbar-row-status {
+  .antropedia-toolbar-row-status {
     order: 1;
   }
-  .ibripedia-toolbar-row-filters {
+  .antropedia-toolbar-row-filters {
     order: 2;
     display: none;
     flex-direction: column;
     align-items: stretch;
   }
-  .ibripedia-toolbar-row-filters.is-open {
+  .antropedia-toolbar-row-filters.is-open {
     display: flex;
   }
 
-  .ibripedia-filter,
-  .ibripedia-chip-field {
+  .antropedia-filter,
+  .antropedia-chip-field {
     min-width: 0;
     max-width: none;
     flex: 1 1 100%;
   }
 
-  .ibripedia-grid {
+  .antropedia-grid {
     grid-template-columns: 1fr;
   }
 
-  .ibripedia-grid--list .ibripedia-card {
+  .antropedia-grid--list .antropedia-card {
     flex-direction: column;
   }
 
-  .ibripedia-grid--list .ibripedia-card-cover {
+  .antropedia-grid--list .antropedia-card-cover {
     width: 100%;
     aspect-ratio: 16 / 9;
   }
 
-  .ibripedia-view-title {
+  .antropedia-view-title {
     font-size: 21px;
   }
 
   /* Обложка статьи — защита от нестандартных (не 16:9) загруженных
      картинок: на десктопе высокая картинка просто ужимается до 360px, на
      телефоне это заметно больше половины экрана. */
-  .ibripedia-view-cover img {
+  .antropedia-view-cover img {
     max-height: 220px;
   }
 
   /* "Редактировать"/"Удалить" — по половине ширины каждая, а не мелкие
      кнопки рядом с длинным заголовком статьи. */
-  .ibripedia-view-actions {
+  .antropedia-view-actions {
     flex-wrap: wrap;
   }
-  .ibripedia-view-actions .btn {
+  .antropedia-view-actions .btn {
     flex: 1 1 0;
   }
 
   /* Шапка просмотра статьи (назад/поиск по статье/оглавление) — своими
      строками, иначе на телефоне не помещается. */
-  .ibripedia-view-topbar {
+  .antropedia-view-topbar {
     flex-direction: column;
     align-items: stretch;
   }
-  .ibripedia-inline-search,
-  .ibripedia-sidebar-toggle {
+  .antropedia-inline-search,
+  .antropedia-sidebar-toggle {
     flex-basis: auto;
     width: 100%;
     justify-content: center;
   }
 
   /* Поле под значки закладок — на телефоне уже, сами значки компактнее
-     (см. также ibripedia-bm-toggle в @media (hover:none) ниже — палец
+     (см. также antropedia-bm-toggle в @media (hover:none) ниже — палец
      толще курсора, там же его увеличиваем обратно по указателю, а не по
      ширине экрана). */
-  .ibripedia-view-content.preview-pane {
+  .antropedia-view-content.preview-pane {
     padding-left: 40px;
   }
-  .ibripedia-bm-toggle {
+  .antropedia-bm-toggle {
     left: 4px;
     width: 22px;
     height: 22px;
     font-size: 12px;
   }
-  .ibripedia-bm-hover-zone-compact {
+  .antropedia-bm-hover-zone-compact {
     width: 40px;
   }
 }
 
 /* === Просмотр статьи на телефоне — на весь экран, как редактор (см.
    articles.html, body.articles-page). Раньше отступы складывались слоями:
-   .content-body (15px) + .ibripedia-page (16px) + рамка карточки + поля
+   .content-body (15px) + .antropedia-page (16px) + рамка карточки + поля
    самого текста (40px слева под закладки, 24px справа) — на 360-400px
    экране под текст оставалось "узкое горлышко" в две трети ширины.
    Только для открытой статьи (:has — витрина карточек сохраняет обычные
    отступы): карточка, ссылки и комментарии сливаются с краями экрана,
    внутри остаётся небольшой отступ, чтобы текст не упирался в край. === */
 @media (max-width: 768px) {
-  .content-body:has(.ibripedia-view:not([hidden])) {
+  .content-body:has(.antropedia-view:not([hidden])) {
     padding: 0;
   }
-  .ibripedia-page:has(> .ibripedia-view:not([hidden])) {
+  .antropedia-page:has(> .antropedia-view:not([hidden])) {
     padding: 0;
   }
-  .ibripedia-view-topbar {
+  .antropedia-view-topbar {
     padding: 10px 10px 0;
   }
-  .ibripedia-view-layout {
+  .antropedia-view-layout {
     gap: 10px;
   }
-  .ibripedia-view-sidebar {
+  .antropedia-view-sidebar {
     margin: 0 10px;
   }
-  .ibripedia-view-article,
-  .ibripedia-view-backlinks,
-  .ibripedia-comments {
+  .antropedia-view-article,
+  .antropedia-view-backlinks,
+  .antropedia-comments {
     border-left: none;
     border-right: none;
     border-radius: 0;
   }
-  .ibripedia-view-backlinks,
-  .ibripedia-comments {
+  .antropedia-view-backlinks,
+  .antropedia-comments {
     margin-top: 10px;
   }
-  .ibripedia-comments {
+  .antropedia-comments {
     padding: 14px 12px;
   }
-  .ibripedia-view-title {
+  .antropedia-view-title {
     margin: 14px 12px 8px;
   }
-  .ibripedia-view-meta,
-  .ibripedia-view-badges,
-  .ibripedia-layer-switcher,
-  .ibripedia-view-actions {
+  .antropedia-view-meta,
+  .antropedia-view-badges,
+  .antropedia-layer-switcher,
+  .antropedia-view-actions {
     margin-left: 12px;
     margin-right: 12px;
   }
-  .ibripedia-view-engagement {
+  .antropedia-view-engagement {
     margin: 0 12px 14px;
   }
-  .ibripedia-view-content.preview-pane {
+  .antropedia-view-content.preview-pane {
     padding: 14px 12px 20px 40px;
   }
 }
 /* Кнопка "Показать все (N)" у длинного инфобокса (setupInfoboxCollapse в
-   ibripedia.js) — видна только на телефоне, см. @media ниже; на ПК
+   antropedia.js) — видна только на телефоне, см. @media ниже; на ПК
    инфобокс всегда целиком. */
 .blk-infobox-more {
   display: none;
@@ -2173,27 +2173,27 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
    три строки панели, большие кнопки, инфобокс на 25 строк столбиком).
    Цвета/карточки/функции те же — меняются размеры и порядок. === */
 @media (max-width: 640px) {
-  /* Полоса "Ibripedia - Админ-панель" над статьёй — дубль навигации:
+  /* Полоса "Antropedia - Админ-панель" над статьёй — дубль навигации:
      назад ведёт стрелка в панели статьи. На витрине полоса остаётся. */
-  .main-content:has(#ibripediaView:not([hidden])) .content-header {
+  .main-content:has(#antropediaView:not([hidden])) .content-header {
     display: none;
   }
 
   /* Панель статьи — одна строка: [←] [поиск по статье] [☰]. Подписи
-     кнопок остаются в title (см. views/ibripedia.html). */
-  .ibripedia-view-topbar {
+     кнопок остаются в title (см. views/antropedia.html). */
+  .antropedia-view-topbar {
     flex-direction: row;
     align-items: center;
     gap: 8px;
     padding: 8px 12px 0;
     margin-bottom: 10px;
   }
-  .ibripedia-view-topbar .ibripedia-btn-label,
-  .ibripedia-sidebar-toggle .ibripedia-filters-chev {
+  .antropedia-view-topbar .antropedia-btn-label,
+  .antropedia-sidebar-toggle .antropedia-filters-chev {
     display: none;
   }
-  .ibripedia-back-btn,
-  .ibripedia-sidebar-toggle {
+  .antropedia-back-btn,
+  .antropedia-sidebar-toggle {
     flex: 0 0 38px;
     width: 38px;
     height: 38px;
@@ -2201,7 +2201,7 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
     margin: 0;
     justify-content: center;
   }
-  .ibripedia-inline-search {
+  .antropedia-inline-search {
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
@@ -2212,31 +2212,31 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
   /* Шапка карточки — сетка: "Редактировать"/"Удалить" — иконки справа от
      мета-строки (dense ставит их в свободную ячейку рядом с ней), а не
      полоса из двух больших кнопок во всю ширину. */
-  .ibripedia-view-article {
+  .antropedia-view-article {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-auto-flow: row dense;
   }
-  .ibripedia-view-article > * {
+  .antropedia-view-article > * {
     grid-column: 1 / -1;
   }
-  .ibripedia-view-title {
+  .antropedia-view-title {
     font-size: 22px;
     line-height: 1.25;
     margin: 14px 16px 6px;
   }
-  .ibripedia-view-meta {
+  .antropedia-view-meta {
     grid-column: 1;
     margin: 0 0 0 16px;
     gap: 6px 12px;
     font-size: 12.5px;
   }
-  .ibripedia-view-badges,
-  .ibripedia-layer-switcher {
+  .antropedia-view-badges,
+  .antropedia-layer-switcher {
     margin-left: 16px;
     margin-right: 16px;
   }
-  .ibripedia-view-actions {
+  .antropedia-view-actions {
     grid-column: 2;
     align-self: start;
     flex-wrap: nowrap;
@@ -2245,19 +2245,19 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
     padding: 0;
     border: none;
   }
-  .ibripedia-view-actions .btn {
+  .antropedia-view-actions .btn {
     flex: 0 0 34px;
     width: 34px;
     height: 34px;
     padding: 0;
     justify-content: center;
   }
-  .ibripedia-view-actions .ibripedia-btn-label {
+  .antropedia-view-actions .antropedia-btn-label {
     display: none;
   }
   /* Иконка удаления — контурная: сплошная красная кнопка под пальцем
      рядом с "Редактировать" слишком легко нажимается случайно. */
-  .ibripedia-view-actions .btn-danger {
+  .antropedia-view-actions .btn-danger {
     background: transparent;
     color: var(--red, #ed4245);
     border: 1px solid currentColor;
@@ -2266,7 +2266,7 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
   /* Текст: поля 16px с обеих сторон (было 36px слева под значки закладок,
      хотя на тач-экране значок есть только у уже поставленной закладки —
      см. renderBookmarkGutter). Значок теперь — узкая метка в самом поле. */
-  .ibripedia-view-content.preview-pane {
+  .antropedia-view-content.preview-pane {
     margin-top: 12px;
     padding: 12px 16px 16px;
     border-top: 1px solid var(--background-accent);
@@ -2278,16 +2278,16 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
     display: flex;
     flex-direction: column;
   }
-  .ibripedia-view-content.preview-pane > * {
+  .antropedia-view-content.preview-pane > * {
     min-width: 0;
   }
-  .ibripedia-view-content .ibripedia-bm-toggle {
+  .antropedia-view-content .antropedia-bm-toggle {
     left: 0;
     width: 16px;
     height: 28px;
     font-size: 13px;
   }
-  .ibripedia-bm-hover-zone-compact {
+  .antropedia-bm-hover-zone-compact {
     width: 16px;
   }
 
@@ -2295,89 +2295,89 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
      — над инфобоксом, чтобы сразу было видно, о чём статья; инфобокс —
      после них, остальная статья — следом. Порядок в DOM не меняется
      (оглавление, поиск, закладки работают как прежде). */
-  .ibripedia-view-content > aside.blk-infobox {
+  .antropedia-view-content > aside.blk-infobox {
     order: 1;
   }
-  .ibripedia-view-content > :is(h1, h2, h3),
-  .ibripedia-view-content > :is(h1, h2, h3) ~ *,
-  .ibripedia-view-content > :is(h1, h2, h3) ~ aside.blk-infobox {
+  .antropedia-view-content > :is(h1, h2, h3),
+  .antropedia-view-content > :is(h1, h2, h3) ~ *,
+  .antropedia-view-content > :is(h1, h2, h3) ~ aside.blk-infobox {
     order: 2;
   }
 
   /* Заголовки разделов — мельче и с чертой снизу, как в вики. */
-  .ibripedia-view-content :is(h1, h2, h3) {
+  .antropedia-view-content :is(h1, h2, h3) {
     margin: 1.1em 0 0.45em;
     line-height: 1.3;
   }
-  .ibripedia-view-content h1 {
+  .antropedia-view-content h1 {
     font-size: 22px;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--background-accent);
   }
-  .ibripedia-view-content h2 {
+  .antropedia-view-content h2 {
     font-size: 19px;
     padding-bottom: 3px;
     border-bottom: 1px solid var(--background-accent);
   }
-  .ibripedia-view-content h3 {
+  .antropedia-view-content h3 {
     font-size: 17px;
   }
 
   /* Инфобокс: подпись и значение в одной строке (две колонки) — строка
      ~30px вместо 56px. Длинный — свёрнут до первых строк, см.
-     setupInfoboxCollapse в ibripedia.js (n+7 = INFOBOX_COLLAPSED_ROWS+1). */
-  .ibripedia-view-content aside.blk-infobox {
+     setupInfoboxCollapse в antropedia.js (n+7 = INFOBOX_COLLAPSED_ROWS+1). */
+  .antropedia-view-content aside.blk-infobox {
     margin: 4px 0 16px;
   }
-  .ibripedia-view-content .blk-infobox-art img {
+  .antropedia-view-content .blk-infobox-art img {
     max-height: 220px;
   }
-  .ibripedia-view-content .blk-infobox-row {
+  .antropedia-view-content .blk-infobox-row {
     display: grid;
     grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
     gap: 10px;
     align-items: baseline;
     padding: 7px 12px;
   }
-  .ibripedia-view-content .blk-infobox-row dd {
+  .antropedia-view-content .blk-infobox-row dd {
     font-size: 13.5px;
   }
-  .ibripedia-view-content .blk-infobox.is-collapsed .blk-infobox-row:nth-child(n+7) {
+  .antropedia-view-content .blk-infobox.is-collapsed .blk-infobox-row:nth-child(n+7) {
     display: none;
   }
-  .ibripedia-view-content .blk-infobox-more {
+  .antropedia-view-content .blk-infobox-more {
     display: flex;
   }
 
   /* Картинки — все на всю ширину (и "по центру 50%" тоже, иначе на
      телефоне выходила миниатюра), но не выше 70% экрана: высокий арт
      больше не занимает весь экран целиком. */
-  .ibripedia-view-content figure.blk-image {
+  .antropedia-view-content figure.blk-image {
     float: none;
     width: 100%;
     margin: 0.4em 0 1em;
   }
-  .ibripedia-view-content figure.blk-image img {
+  .antropedia-view-content figure.blk-image img {
     width: auto;
     max-width: 100%;
     max-height: 70vh;
     margin: 0 auto;
   }
-  .ibripedia-view-content figure.blk-image figcaption {
+  .antropedia-view-content figure.blk-image figcaption {
     text-align: center;
     font-size: 12.5px;
     line-height: 1.45;
   }
 
-  .ibripedia-view-engagement {
+  .antropedia-view-engagement {
     margin: 0 16px 14px;
   }
   /* Пустая "Ссылки на эту статью" ("Пока никто не сослался…") на телефоне
      только занимает экран — показываем панель, когда в ней что-то есть. */
-  .ibripedia-view-backlinks:has(> .backlinks-empty) {
+  .antropedia-view-backlinks:has(> .backlinks-empty) {
     display: none;
   }
-  .ibripedia-comments {
+  .antropedia-comments {
     padding: 14px 16px;
   }
 }
@@ -2388,31 +2388,31 @@ mark.ibripedia-search-hit.ibripedia-search-hit-current {
    толще курсора. Мелкие вспомогательные кнопки (⋮ на карточке, переключатель
    вида) увеличиваются здесь независимо от брейкпоинта макета. === */
 @media (hover: none) and (pointer: coarse) {
-  .ibripedia-card-menu-btn {
+  .antropedia-card-menu-btn {
     width: 34px;
     height: 34px;
     font-size: 17px;
   }
-  .ibripedia-view-btn {
+  .antropedia-view-btn {
     width: 36px;
     height: 36px;
   }
   /* Значок закладки — палец толще курсора: обратно увеличиваем размер
      тач-цели поверх сужения из @media (max-width: 640px) выше. */
-  .ibripedia-bm-toggle {
+  .antropedia-bm-toggle {
     width: 30px;
     height: 30px;
     font-size: 15px;
   }
 }
 
-/* @упоминания в комментариях (см. linkMentions в ibripedia.js) и подсказка
+/* @упоминания в комментариях (см. linkMentions в antropedia.js) и подсказка
    пользователей при вводе "@" — поверх просмотра работы галереи (1800). */
 .comment-mention { color: var(--text-link); background: rgba(88, 101, 242, 0.14); border-radius: 4px; padding: 0 3px; cursor: pointer; }
 .comment-mention:hover { text-decoration: underline; }
 .mention-suggest { z-index: 2100; }
 /* Комментарий, к которому перешли из уведомления (focusComment) */
-.ibripedia-comment.is-highlighted { animation: commentFocus 2.6s ease-out; border-radius: 8px; }
+.antropedia-comment.is-highlighted { animation: commentFocus 2.6s ease-out; border-radius: 8px; }
 @keyframes commentFocus {
   0%, 40% { background: rgba(88, 101, 242, 0.28); box-shadow: 0 0 0 2px var(--blurple); }
   100% { background: transparent; box-shadow: 0 0 0 0 transparent; }

@@ -1,11 +1,11 @@
 // blocks-renderer.js — дерево блоков статьи (см. src/services/blocks.js)
 // -> безопасный HTML. Единственное место на фронтенде, которое знает, как
 // выглядит каждый тип блока — используется и панелью "Просмотр" редактора
-// (editor-manager.js/Editor.js-инструменты), и чтением статьи на Ibripedia
-// (ibripedia.js), вместо двух независимых копий рендера, как было раньше
+// (editor-manager.js/Editor.js-инструменты), и чтением статьи на Antropedia
+// (antropedia.js), вместо двух независимых копий рендера, как было раньше
 // с markdown+regex-блоками.
 //
-// Не зависит от editor-manager.js — ibripedia.js (просто чтение статьи)
+// Не зависит от editor-manager.js — antropedia.js (просто чтение статьи)
 // больше не требует, чтобы редактор вообще был загружен на странице.
 
 (function () {
@@ -403,7 +403,7 @@
     if (data.frame && data.frame.show) style.push(`--frame-color:${data.frame.color}`);
     // Арт, пересланный из галереи (data.gallery, см. resolveEmbedsInDocument
     // в src/services/gallery-store.js): по клику — просмотр работы (см.
-    // handleViewContentClick в ibripedia.js). Закрытая для читателя работа
+    // handleViewContentClick в antropedia.js). Закрытая для читателя работа
     // приходит без src — показываем заглушку, а не битую картинку.
     const g = data.gallery && data.gallery.workId && !data.gallery.missing ? data.gallery : null;
     if (g && g.locked) {
@@ -436,9 +436,9 @@
 
   // Простановка id="blk-<id>"/data-block-id="<id>" на корневой тег
   // отрендеренного блока — общая точка привязки и для оглавления статьи
-  // (по заголовкам, см. ibripediaManager.buildToc), и для закладок (хвостик
-  // в поле слева от блока, см. ibripediaManager.renderBookmarkGutter в
-  // ibripedia.js). id совпадает с block.id (см. src/services/blocks.js) —
+  // (по заголовкам, см. antropediaManager.buildToc), и для закладок (хвостик
+  // в поле слева от блока, см. antropediaManager.renderBookmarkGutter в
+  // antropedia.js). id совпадает с block.id (см. src/services/blocks.js) —
   // стабилен, пока блок не пересоздали в редакторе, поэтому закладки
   // переживают правки других частей статьи.
   function withBlockAttrs(html, block) {
@@ -551,7 +551,7 @@
   /**
    * Рендерит документ статьи { version, blocks } в безопасный HTML.
    * articlesIndexBySlug — Map<slug, {slug,title,tags}> (см. loadArticlesIndex
-   * в editor-manager.js / ibripedia.js) — нужна, чтобы отличить существующую
+   * в editor-manager.js / antropedia.js) — нужна, чтобы отличить существующую
    * wiki-ссылку от несуществующей (класс wiki-link / wiki-link-missing).
    * restrictedSlugs — Set<slug> статей, которые существуют, но недоступны
    * читателю ни на одном слое (см. replaceWikilinkMarkersInDom выше) —
@@ -570,7 +570,7 @@
     const clean = DOMPurify.sanitize(rawHtml, {
       // id/data-block-id — простановлены withBlockAttrs() выше, нужны
       // оглавлению (клик по заголовку) и закладкам (привязка к блоку) в
-      // ibripedia.js; явно разрешаем, а не полагаемся на дефолтный список.
+      // antropedia.js; явно разрешаем, а не полагаемся на дефолтный список.
       ADD_ATTR: ['target', 'style', 'class', 'loading', 'open', 'id', 'data-block-id'],
       ADD_TAGS: ['details', 'summary', 'mark', 'figure', 'figcaption']
     });
@@ -586,7 +586,7 @@
    * Вешает делегированный обработчик клика по инлайн-спойлерам ||текст|| —
    * раскрывает их по клику (см. .spoiler/.revealed в blocks-view.css).
    * Wiki-ссылки/#хэштеги по-прежнему обрабатываются вызывающим кодом
-   * (ibripedia.js::handleViewContentClick и т.п.) — это единственное новое
+   * (antropedia.js::handleViewContentClick и т.п.) — это единственное новое
    * интерактивное поведение, которого раньше не было.
    */
   function attachInteractions(container) {

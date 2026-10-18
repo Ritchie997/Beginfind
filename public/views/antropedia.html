@@ -1,0 +1,314 @@
+<div class="antropedia-page">
+
+  <!-- ===== Витрина: фильтры + сетка/список статей ===== -->
+  <section id="antropediaBrowse" class="antropedia-browse">
+    <div class="antropedia-toolbar">
+      <div class="antropedia-toolbar-row antropedia-toolbar-row-main">
+        <h1 class="antropedia-heading"><i class="fas fa-book-open"></i> Antropedia</h1>
+        <div class="antropedia-search-wrap">
+          <i class="fas fa-search"></i>
+          <input type="text" id="antropediaSearch" class="antropedia-search-input" placeholder="Искать статью по названию или тексту… (нажмите /)">
+        </div>
+        <button type="button" id="antropediaRandomBtn" class="btn btn-secondary" title="Случайная статья"><i class="fas fa-dice"></i></button>
+        <button type="button" id="antropediaNewBtn" class="btn btn-primary"><i class="fas fa-pen"></i> Написать статью</button>
+      </div>
+
+      <!-- Кнопка "Фильтры" (видна только на телефоне, см. antropedia.css) —
+           в одном ряду со счётчиком/переключателем вида, а не сироткой над
+           ними. Показ/скрытие панели ниже — JS (initFiltersCollapse() /
+           applyFiltersOpenState() в antropedia.js), не <details>: пробовали
+           display:contents на <details>, но у Chrome контент диклоужера
+           рендерится в собственном анонимном боксе (::details-content),
+           который CSS-класс на вложенном div не превращает в full-width —
+           обычная кнопка+div надёжнее и не зависит от такой специфики. -->
+      <div class="antropedia-toolbar-row antropedia-toolbar-row-status">
+        <button type="button" id="antropediaFiltersToggleBtn" class="antropedia-filters-toggle" aria-expanded="true" aria-controls="antropediaFiltersPanel">
+          <i class="fas fa-filter"></i> Фильтры
+          <span id="antropediaFiltersCount" class="antropedia-filters-count" hidden>0</span>
+          <i class="fas fa-chevron-down antropedia-filters-chev"></i>
+        </button>
+
+        <span id="antropediaCount" class="antropedia-count"></span>
+        <button type="button" id="antropediaSelectBtn" class="antropedia-select-toggle" title="Выбрать несколько статей для удаления"><i class="far fa-check-square"></i> <span>Выбрать</span></button>
+        <div class="antropedia-view-toggle" role="group" aria-label="Вид списка">
+          <button type="button" class="antropedia-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
+          <button type="button" class="antropedia-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
+        </div>
+      </div>
+
+      <div class="antropedia-toolbar-row antropedia-toolbar-row-filters" id="antropediaFiltersPanel">
+        <div class="antropedia-filter">
+          <label>Теги</label>
+          <div id="antropediaTagField" class="chip-field antropedia-chip-field">
+            <div class="chip-field-box">
+              <div class="chip-field-chips"></div>
+              <input type="text" class="chip-field-input" placeholder="Все теги...">
+            </div>
+            <div class="chip-field-dropdown" hidden></div>
+            <input type="hidden" class="chip-field-hidden">
+          </div>
+        </div>
+
+        <div class="antropedia-filter">
+          <label>Сервер</label>
+          <select id="antropediaServerFilter" class="form-select">
+            <option value="">Все</option>
+          </select>
+        </div>
+
+        <div class="antropedia-filter">
+          <label>Статус</label>
+          <select id="antropediaStatusFilter" class="form-select">
+            <option value="">Любой</option>
+            <option value="false">🔓 Открытые</option>
+            <option value="true">🔒 Закрытые</option>
+          </select>
+        </div>
+
+        <div class="antropedia-filter antropedia-filter-dates">
+          <label>Дата создания</label>
+          <div class="antropedia-date-range">
+            <input type="date" id="antropediaDateFrom" class="form-input">
+            <span>—</span>
+            <input type="date" id="antropediaDateTo" class="form-input">
+          </div>
+        </div>
+
+        <div class="antropedia-filter">
+          <label>Сортировка</label>
+          <select id="antropediaSort" class="form-select">
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+            <option value="updated">Недавно обновлённые</option>
+            <option value="views">По просмотрам</option>
+            <option value="alpha">По алфавиту</option>
+          </select>
+        </div>
+
+        <button type="button" id="antropediaResetFiltersBtn" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+      </div>
+    </div>
+
+    <div id="antropediaGrid" class="antropedia-grid"></div>
+
+    <div id="antropediaEmpty" class="antropedia-empty" hidden>
+      <i class="fas fa-inbox"></i>
+      <p>Ничего не найдено по текущим фильтрам.</p>
+      <button type="button" id="antropediaEmptyResetBtn" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+    </div>
+
+    <div id="antropediaLoadingMore" class="antropedia-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
+    <div id="antropediaSentinel" class="antropedia-sentinel"></div>
+
+    <!-- Панель режима выбора (см. setSelectMode в antropedia.js) -->
+    <div id="antropediaSelectBar" class="antropedia-select-bar" hidden>
+      <span id="antropediaSelectCount" class="antropedia-select-bar-count"></span>
+      <button type="button" data-select-act="all"><i class="fas fa-check-double"></i> Все</button>
+      <button type="button" data-select-act="delete" class="antropedia-select-bar-danger"><i class="fas fa-trash"></i> Удалить</button>
+      <button type="button" data-select-act="cancel" title="Отмена (Esc)"><i class="fas fa-xmark"></i></button>
+    </div>
+  </section>
+
+  <!-- ===== Просмотр одной статьи ===== -->
+  <section id="antropediaView" class="antropedia-view" hidden>
+    <div class="antropedia-view-topbar">
+      <button type="button" id="antropediaBackBtn" class="btn btn-secondary btn-sm antropedia-back-btn" title="К списку статей">
+        <i class="fas fa-arrow-left"></i> <span class="antropedia-btn-label">К списку статей</span>
+      </button>
+
+      <!-- Поиск по тексту ОТКРЫТОЙ статьи (не путать с поиском по витрине
+           выше) — подсвечивает совпадения прямо в тексте и листает по ним
+           (см. runInArticleSearch()/gotoSearchHit() в antropedia.js). -->
+      <div class="antropedia-inline-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="antropediaInlineSearch" class="antropedia-inline-search-input" placeholder="Поиск по статье…">
+        <span id="antropediaInlineSearchCount" class="antropedia-inline-search-count" hidden></span>
+        <button type="button" id="antropediaInlineSearchPrev" class="antropedia-inline-search-nav" title="Предыдущее совпадение" hidden><i class="fas fa-chevron-up"></i></button>
+        <button type="button" id="antropediaInlineSearchNext" class="antropedia-inline-search-nav" title="Следующее совпадение" hidden><i class="fas fa-chevron-down"></i></button>
+        <button type="button" id="antropediaInlineSearchClear" class="antropedia-inline-search-nav" title="Очистить" hidden><i class="fas fa-times"></i></button>
+      </div>
+
+      <!-- Только на телефоне/планшете (см. @media в antropedia.css) —
+           разворачивает боковую панель "Оглавление/Закладки" под текстом. -->
+      <button type="button" id="antropediaSidebarToggleBtn" class="antropedia-filters-toggle antropedia-sidebar-toggle" title="Оглавление и закладки" aria-expanded="false" aria-controls="antropediaViewSidebar">
+        <i class="fas fa-list-ul"></i> <span class="antropedia-btn-label">Оглавление и закладки</span>
+        <i class="fas fa-chevron-down antropedia-filters-chev"></i>
+      </button>
+    </div>
+
+    <div class="antropedia-view-layout">
+      <!-- Стикеры закладок, когда слева от карточки статьи достаточно места
+           (см. .antropedia-bookmark-gutter/hasWideGutterSpace в antropedia.js) —
+           якорь position:relative для них здесь же, у .antropedia-view-layout,
+           а не внутри карточки (у неё overflow:hidden — стикер бы обрезало
+           по краю вместо того, чтобы ему из-за края торчать). -->
+      <div id="antropediaBookmarkGutter" class="antropedia-bookmark-gutter" aria-hidden="true"></div>
+
+      <article id="antropediaViewArticle" class="antropedia-view-article">
+        <div id="antropediaViewCover" class="antropedia-view-cover" hidden>
+          <img id="antropediaViewCoverImg" alt="">
+        </div>
+
+        <h1 id="antropediaViewTitle" class="antropedia-view-title"></h1>
+        <div id="antropediaViewMeta" class="antropedia-view-meta"></div>
+        <div id="antropediaViewBadges" class="antropedia-view-badges"></div>
+
+        <!-- Переключатель слоя многослойной статьи (см. renderArticleView/
+             switchArticleLayer в antropedia.js) — показывается только когда
+             читателю доступно больше одного слоя (article.layerOptions). -->
+        <div id="antropediaViewLayerSwitcher" class="antropedia-layer-switcher" hidden></div>
+
+        <div class="antropedia-view-actions">
+          <button type="button" id="antropediaEditBtn" class="btn btn-primary" title="Редактировать"><i class="fas fa-pen"></i> <span class="antropedia-btn-label">Редактировать</span></button>
+          <button type="button" id="antropediaDeleteBtn" class="btn btn-danger" title="Удалить"><i class="fas fa-trash"></i> <span class="antropedia-btn-label">Удалить</span></button>
+        </div>
+
+        <div id="antropediaViewContent" class="preview-pane antropedia-view-content"></div>
+
+        <!-- Лайк + переход к комментариям (см. renderEngagementBar()/
+             scrollToComments() в antropedia.js). Счётчики подгружаются
+             отдельными запросами при открытии статьи, как и закладки. -->
+        <div id="antropediaViewEngagement" class="antropedia-view-engagement">
+          <button type="button" id="antropediaLikeBtn" class="antropedia-engagement-btn" title="Нравится">
+            <i class="far fa-heart"></i> <span id="antropediaLikeCount">0</span>
+          </button>
+          <!-- Реакции эмодзи/стикером — сразу рядом с лайком (тот же значок
+               "смайлик", что и у пикера стикеров под комментарием, см.
+               reactionsBarInnerHtml()/handleReactionsClick() в antropedia.js):
+               лайк ведь тоже своего рода реакция, логично держать их вместе,
+               а не относить комментарии между ними. -->
+          <div id="antropediaReactionsBar" class="antropedia-reactions" data-target-type="article" data-target-id=""></div>
+          <button type="button" id="antropediaCommentsBtn" class="antropedia-engagement-btn" title="К комментариям">
+            <i class="far fa-comment"></i> <span id="antropediaCommentsCount">0</span>
+          </button>
+          <!-- Жалоба на статью — уходит в "Обращения" (тип 'article', см.
+               src/services/feedback-store.js), модалка ниже. -->
+          <button type="button" id="antropediaReportBtn" class="antropedia-engagement-btn antropedia-report-btn" title="Пожаловаться на статью">
+            <i class="far fa-flag"></i>
+          </button>
+        </div>
+      </article>
+
+      <!-- Оглавление (по заголовкам статьи, как Навигация в Word) +
+           закладки текущей статьи — см. renderToc()/renderBookmarksPanel()
+           в antropedia.js. -->
+      <aside id="antropediaViewSidebar" class="antropedia-view-sidebar">
+        <div class="antropedia-sidebar-tabs">
+          <button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button>
+          <button type="button" class="antropedia-sidebar-tab" data-sidebar-tab="bookmarks"><i class="fas fa-bookmark"></i> Закладки</button>
+        </div>
+        <div id="antropediaTocPanel" class="antropedia-sidebar-panel"></div>
+        <div id="antropediaBookmarksPanel" class="antropedia-sidebar-panel" hidden></div>
+      </aside>
+    </div>
+
+    <!-- Работы галереи, привязанные к статье (см. galleryRenderArticleStrip в gallery.js) -->
+    <div id="antropediaViewGallery" class="antropedia-view-gallery" hidden></div>
+
+    <div id="antropediaViewBacklinks" class="backlinks-panel antropedia-view-backlinks" hidden></div>
+
+    <!-- Комментарии — самый низ статьи: сюда прокручивает клик по значку
+         комментария в панели лайка/комментариев выше (см.
+         scrollToComments()/loadArticleComments() в antropedia.js). -->
+    <section id="antropediaViewComments" class="antropedia-comments">
+      <h3><i class="far fa-comment"></i> Комментарии <span id="antropediaCommentsHeaderCount"></span></h3>
+
+      <!-- Разметка формы — общий шаблон, что и у формы "Ответить" (генерится
+           динамически, см. toggleReplyComposer() в antropedia.js): поле ввода
+           .antropedia-comment-input — CONTENTEDITABLE, а не textarea, чтобы
+           вставленный стикер сразу было видно картинкой, а не текстом
+           шорткода (см. insertStickerChip()/serializeRichInput()). -->
+      <form id="antropediaCommentForm" class="antropedia-comment-form">
+        <div id="antropediaCommentInput" class="antropedia-comment-input" contenteditable="true" data-placeholder="Написать комментарий…"></div>
+        <div class="antropedia-comment-form-actions">
+          <button type="button" id="antropediaStickerPickerBtn" class="antropedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
+          <button type="submit" data-role="submit" class="btn btn-primary btn-sm">Отправить</button>
+        </div>
+        <div id="antropediaStickerPicker" class="antropedia-sticker-picker" hidden>
+          <div class="antropedia-sticker-picker-header">
+            Стикеры
+            <span class="antropedia-sticker-picker-links">
+              <a href="#" data-nav="/stickers">управлять наборами</a> ·
+              <a href="#" data-role="open-store">магазин наборов</a>
+            </span>
+          </div>
+          <div class="antropedia-sticker-picker-tabs"></div>
+          <div class="antropedia-sticker-picker-subtitle"></div>
+          <div id="antropediaStickerPickerBody" class="antropedia-sticker-picker-body"></div>
+        </div>
+      </form>
+
+      <div id="antropediaCommentsList" class="antropedia-comments-list"></div>
+      <div id="antropediaCommentsEmpty" class="antropedia-comments-empty" hidden>Комментариев пока нет — будьте первым.</div>
+    </section>
+
+    <!-- Подложка модального окна закладки — ТОЛЬКО на тач-устройствах (см.
+         @media (hover:none) в antropedia.css и openBookmarkPopover в
+         antropedia.js): затемняет статью позади, но клик по ней НЕ закрывает
+         попап — закрыть можно только явно (Сохранить/Отмена/×), чтобы
+         случайный тап мимо не сбрасывал уже начатую закладку. На
+         устройствах с мышью не показывается — там попап остаётся обычной
+         всплывающей панелью у хвостика. -->
+    <div id="antropediaBookmarkModalBackdrop" class="antropedia-bookmark-modal-backdrop" hidden></div>
+
+    <!-- Попап "Закладка" — открывается кликом по хвостику-переключателю
+         слева от блока текста (см. .antropedia-bm-toggle/renderBookmarkGutter
+         в antropedia.js), а на тач-устройствах ещё и двойным тапом по самому
+         абзацу (см. handleContentDblClick): назвать закладку и выбрать цвет.
+         position: fixed (см. antropedia.css) — координаты на устройствах с
+         мышью выставляет positionFloating() в пикселях окна; на
+         тач-устройствах становится модальным окном по центру экрана —
+         координаты там не нужны, задаёт CSS. -->
+    <div id="antropediaBookmarkPopover" class="antropedia-bookmark-popover" hidden>
+      <button type="button" id="antropediaBookmarkPopoverClose" class="antropedia-bookmark-popover-close" title="Закрыть"><i class="fas fa-times"></i></button>
+      <label class="antropedia-bookmark-popover-label" for="antropediaBookmarkPopoverName">Название закладки</label>
+      <input type="text" id="antropediaBookmarkPopoverName" class="form-input" placeholder="Например: Важный момент" maxlength="100">
+      <div id="antropediaBookmarkPopoverColors" class="antropedia-bookmark-swatches"></div>
+      <div class="antropedia-bookmark-popover-actions">
+        <button type="button" id="antropediaBookmarkPopoverDelete" class="btn btn-danger btn-sm" title="Удалить закладку" hidden><i class="fas fa-trash"></i></button>
+        <div class="antropedia-bookmark-popover-actions-right">
+          <button type="button" id="antropediaBookmarkPopoverCancel" class="btn btn-secondary btn-sm">Отмена</button>
+          <button type="button" id="antropediaBookmarkPopoverSave" class="btn btn-primary btn-sm">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Жалоба на статью (см. openReportModal()/submitReport() в antropedia.js) ===== -->
+  <div class="modal-overlay" id="antropediaReportModal" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Пожаловаться на статью</h3>
+        <button type="button" class="modal-close" data-close-report-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> <span>Жалоба на «<b id="antropediaReportArticleTitle"></b>» попадёт в раздел «Обращения» — модераторы проверят её, статус будет виден там же.</span></p>
+        <div class="form-group">
+          <label class="form-label" for="antropediaReportReason">Причина *</label>
+          <select id="antropediaReportReason" class="form-select">
+            <option value="">— выберите —</option>
+            <option value="inaccurate">Недостоверная информация</option>
+            <option value="outdated">Устарело</option>
+            <option value="offensive">Оскорбления / нарушение правил</option>
+            <option value="plagiarism">Плагиат</option>
+            <option value="spam">Спам / реклама</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="antropediaReportDescription">Что не так со статьёй *</label>
+          <textarea id="antropediaReportDescription" class="form-textarea" maxlength="5000" placeholder="Какой фрагмент, что в нём неверно, как должно быть"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="antropediaReportComment">Источники / комментарий</label>
+          <textarea id="antropediaReportComment" class="form-textarea" maxlength="2000" placeholder="Ссылки, подтверждающие вашу правоту, и всё, что поможет модератору"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-report-modal>Отмена</button>
+        <button type="button" class="btn btn-primary" id="antropediaReportSubmitBtn">Отправить</button>
+      </div>
+    </div>
+  </div>
+
+</div>

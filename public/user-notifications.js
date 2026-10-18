@@ -39,14 +39,14 @@
     return window.apiClient.makeAuthenticatedRequest(path, method, body);
   }
 
-  // Переход к комментарию: статья — в Ibripedia, работа — просмотр галереи.
+  // Переход к комментарию: статья — в Antropedia, работа — просмотр галереи.
   async function openNotification(n) {
     if (n.targetType === 'gallery') {
       await window.galleryViewer?.openWork(n.targetId);
       if (n.commentId) window.galleryViewer?.focusComment(n.commentId);
     } else {
-      await window.spaRouter?.openIbripediaArticle(n.targetId, { jumpToComments: true });
-      if (n.commentId) window.ibripediaManager?.focusComment(n.commentId);
+      await window.spaRouter?.openAntropediaArticle(n.targetId, { jumpToComments: true });
+      if (n.commentId) window.antropediaManager?.focusComment(n.commentId);
     }
   }
 

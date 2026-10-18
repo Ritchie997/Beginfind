@@ -1,5 +1,5 @@
 // gallery-store.js — Галерея (аналог Pinterest): работы, их страницы и
-// вариации страниц, ассоциированные работы, привязка к статьям Ibripedia,
+// вариации страниц, ассоциированные работы, привязка к статьям Antropedia,
 // лайки/просмотры/комментарии (см. таблицы gallery_* в src/db/connections.js).
 //
 // Страница и вариация — разные вещи:
@@ -266,7 +266,7 @@ async function getCoversForWorks(works, ctx) {
 }
 
 // ===== Лайки / просмотры / комментарии — копия логики social-store.js
-// (статьи Ibripedia), только на своих таблицах gallery_* =====
+// (статьи Antropedia), только на своих таблицах gallery_* =====
 
 async function getCountsForWorks(userId, workIds) {
   const result = new Map();

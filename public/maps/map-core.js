@@ -274,7 +274,7 @@
     return { ...s, fillOpacity: Math.min(1, s.fillOpacity + 0.25), opacity: 1 };
   }
 
-  const SOLID_ZONES_KEY = 'beginfind_map_solid_zones';
+  const SOLID_ZONES_KEY = 'alltell_map_solid_zones';
 
   const FALLBACK_MARKER_TYPE ={ id: null, name: 'Метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 };
 
@@ -1470,11 +1470,11 @@
   function openZoneArticle(zone) {
     if (zone.locked) return;
     if (zone.article && !zone.articleMissing) {
-      window.spaRouter?.openIbripediaArticle(zone.article);
+      window.spaRouter?.openAntropediaArticle(zone.article);
       return;
     }
     if (zone.articleMissing || zone.article) {
-      window.ibripediaManager?.createArticleWithTitle(zone.title || zone.article || '');
+      window.antropediaManager?.createArticleWithTitle(zone.title || zone.article || '');
     }
   }
 

@@ -79,7 +79,7 @@
 .editor-panes[data-mode="preview"] .preview-pane { flex: 1 1 100%; }
 
 /* Телефон: превью В РЕДАКТОРЕ — меньше отступ и текст, больше места под
-   содержимое. Только внутри .editor-panes: .preview-pane общий с Ibripedia, а
+   содержимое. Только внутри .editor-panes: .preview-pane общий с Antropedia, а
    читательский вид статьи на телефоне трогать не нужно. */
 @media (max-width: 640px) {
   .editor-panes .preview-pane {
@@ -565,8 +565,8 @@
 
 /* === Блочная модель статьи (см. src/services/blocks.js,
    public/blocks-renderer.js) — стили для .preview-pane, общего "как
-   выглядит показанная статья" контейнера что в редакторе, что на Ibripedia
-   (см. class="preview-pane" на #ibripediaViewContent). === */
+   выглядит показанная статья" контейнера что в редакторе, что на Antropedia
+   (см. class="preview-pane" на #antropediaViewContent). === */
 
 /* --- новый инлайн-синтаксис: ++подчёркнутый++ / ==выделение== / ||спойлер|| --- */
 .preview-pane .mk-u {
@@ -611,7 +611,7 @@
   box-sizing: border-box;
 }
 /* Высокий арт не выше 70% экрана (как в мобильной раскладке, см.
-   ibripedia.css) — картинка ужимается по высоте с сохранением пропорций и
+   antropedia.css) — картинка ужимается по высоте с сохранением пропорций и
    встаёт по центру своей рамки; меньше рамки — не растягивается. */
 .preview-pane figure.blk-image img {
   display: block;

@@ -1,7 +1,7 @@
-// bookmarks-store.js — закладки статей Ibripedia, привязанные к профилю
+// bookmarks-store.js — закладки статей Antropedia, привязанные к профилю
 // (user_id). Пользователь кликает по хвостику закладки слева от абзаца
 // статьи и ставит на него именованную цветную закладку (см.
-// public/ibripedia.js — renderBookmarkGutter/openBookmarkPopover) — не
+// public/antropedia.js — renderBookmarkGutter/openBookmarkPopover) — не
 // более одной закладки на блок (клиент сам следит за этим), закладок на
 // статью может быть сколько угодно. Каждая хранит блок, к которому
 // привязана (block_id — id узла в дереве блоков, см. src/services/blocks.js),

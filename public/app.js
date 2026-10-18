@@ -201,7 +201,7 @@ class ApiClient {
   }
 
   // Засчитать просмотр статьи текущим пользователем (один на пользователя —
-  // см. src/services/social-store.js) — вызывается из читалки Ibripedia
+  // см. src/services/social-store.js) — вызывается из читалки Antropedia
   // сразу после открытия статьи, не из редактора.
   async recordArticleView(id) {
     return this.makeAuthenticatedRequest(`/api/articles/${id}/view`, 'POST');
@@ -219,7 +219,7 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/articles/${id}`, 'DELETE');
   }
 
-  // Витрина статей (Ibripedia) — поиск + фильтры + сортировка + постраничная
+  // Витрина статей (Antropedia) — поиск + фильтры + сортировка + постраничная
   // подгрузка, см. GET /api/articles/browse. filters — любое подмножество
   // {q, tag, server, locked, dateFrom, dateTo, sort}; tag принимает массив
   // (склеивается через запятую) или готовую CSV-строку.
@@ -264,7 +264,7 @@ class ApiClient {
     }
   }
 
-  // Закладки статей (Ibripedia) — привязаны к профилю (req.user.id на
+  // Закладки статей (Antropedia) — привязаны к профилю (req.user.id на
   // сервере, см. src/routes/bookmarks.routes.js). slug опционален — без
   // него отдаёт все закладки текущего пользователя по всем статьям.
   async getBookmarks(slug = null) {
@@ -284,8 +284,8 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/bookmarks/${id}`, 'DELETE');
   }
 
-  // Лайки и комментарии статей (Ibripedia) — см. панель под статьёй в
-  // public/ibripedia.js и src/routes/articles.routes.js.
+  // Лайки и комментарии статей (Antropedia) — см. панель под статьёй в
+  // public/antropedia.js и src/routes/articles.routes.js.
   async getArticleLikes(slug) {
     return this.makeAuthenticatedRequest(`/api/articles/${slug}/likes`);
   }
@@ -298,7 +298,7 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments`);
   }
 
-  // parentId — ответ на комментарий (см. "Ответить" в public/ibripedia.js);
+  // parentId — ответ на комментарий (см. "Ответить" в public/antropedia.js);
   // без него — обычный комментарий верхнего уровня.
   async addArticleComment(slug, content, parentId = null) {
     return this.makeAuthenticatedRequest(`/api/articles/${slug}/comments`, 'POST', { content, parentId });
@@ -309,7 +309,7 @@ class ApiClient {
   }
 
   // Реакции эмодзи/стикером — на статью целиком и на отдельный комментарий
-  // (см. панель реакций рядом с лайком/под комментарием в ibripedia.js).
+  // (см. панель реакций рядом с лайком/под комментарием в antropedia.js).
   async getArticleReactions(slug) {
     return this.makeAuthenticatedRequest(`/api/articles/${slug}/reactions`);
   }
@@ -389,7 +389,7 @@ class ApiClient {
   }
 
   // Наборы стикеров (см. src/routes/stickers.routes.js) — вкладка "Стикеры"
-  // в public/stickers-manager.js и пикер стикеров в комментариях Ibripedia.
+  // в public/stickers-manager.js и пикер стикеров в комментариях Antropedia.
   async getMyStickerPacks() {
     return this.makeAuthenticatedRequest('/api/stickers/mine');
   }
@@ -560,7 +560,7 @@ class ApiClient {
   }
 
   // Глобальный список всех тегов без дублей: [{tag, count}] — вкладка "Теги"
-  // и подсказки фильтра Ibripedia (см. GET /api/tags в articles.routes.js).
+  // и подсказки фильтра Antropedia (см. GET /api/tags в articles.routes.js).
   async getTags() {
     return this.makeAuthenticatedRequest('/api/tags');
   }
@@ -594,7 +594,7 @@ class ApiClient {
   }
 
   // Сводка дашборда: пользователи, сообщения (мессенджер + комментарии
-  // Ibripedia) и свежие события для ленты активности
+  // Antropedia) и свежие события для ленты активности
   async getDashboardSummary() {
     return this.makeAuthenticatedRequest('/api/dashboard-summary');
   }
@@ -972,7 +972,7 @@ const NOTIF_BADGE_TARGETS = {
 
 // Счётчики "последнего увиденного" прежней схемы больше не нужны.
 ['users', 'stickers', 'sticker_collabs', 'feedback_triage', 'feedback_cases', 'feedback_decide'].forEach((k) => {
-  try { localStorage.removeItem(`beginfind_notif_seen_${k}`); } catch (e) { /* нет доступа — не страшно */ }
+  try { localStorage.removeItem(`alltell_notif_seen_${k}`); } catch (e) { /* нет доступа — не страшно */ }
 });
 
 function renderNavBadge(elementId, count) {

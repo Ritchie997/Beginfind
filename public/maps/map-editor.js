@@ -21,10 +21,10 @@
   const MC = () => window.MapCore;
   const esc = (s) => window.MapCore.escapeHtml(s);
   const POLYGON_CLIPPING_SRC = 'https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js';
-  const DRAFT_PREFIX = 'beginfind.mapDraft.';
+  const DRAFT_PREFIX = 'alltell.mapDraft.';
   // Недорисованный многоугольник — отдельно от черновика карты: пишется на
   // каждую точку, переживает перезагрузку страницы и закрытие вкладки.
-  const DRAWING_PREFIX = 'beginfind.mapDrawing.';
+  const DRAWING_PREFIX = 'alltell.mapDrawing.';
   const HISTORY_LIMIT = 80;
   const MAX_HANDLES = 700;
 
@@ -85,10 +85,10 @@
 
   // Прилипание к границам: радиус в экранных пикселях.
   const SNAP_PX = 10;
-  const NEIGHBOR_CUT_KEY = 'beginfind.mapNeighborCut';
-  const FOG_PREVIEW_KEY = 'beginfind.mapFogPreview';
+  const NEIGHBOR_CUT_KEY = 'alltell.mapNeighborCut';
+  const FOG_PREVIEW_KEY = 'alltell.mapFogPreview';
   // Кисть: диаметр в экранных пикселях, число сторон круга на концах мазка.
-  const BRUSH_KEY = 'beginfind.mapBrushPx';
+  const BRUSH_KEY = 'alltell.mapBrushPx';
   const BRUSH_MIN = 4;
   const BRUSH_MAX = 200;
   const BRUSH_SIDES = 12;
@@ -367,7 +367,7 @@
       // («Просмотр», «Сохранить»…) срабатывали бы и у прежнего редактора.
       this._onRootClick = (e) => this.onRootClick(e);
       this.root.addEventListener('click', this._onRootClick);
-      MC().makePanelResizable(this.root.querySelector('.me-side'), 'beginfind_map_editor_side_w', { def: 340, min: 260 });
+      MC().makePanelResizable(this.root.querySelector('.me-side'), 'alltell_map_editor_side_w', { def: 340, min: 260 });
       this.root.querySelector('.me-title-input').addEventListener('focus', () => this.pushHistory());
       this.root.querySelector('.me-title-input').addEventListener('input', (e) => { this.doc.title = e.target.value; this.markDirty(); });
       this.el('basemap-select').addEventListener('change', (e) => this.setBasemap(e.target.value));

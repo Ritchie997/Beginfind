@@ -62,7 +62,7 @@ class SPARouter {
     this.routes = {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
-      '/ibripedia': this.loadIbripedia,
+      '/antropedia': this.loadAntropedia,
       // /gallery/:id — та же страница + сразу открытый просмотр работы
       // (см. resolveRouteKey, id кладётся в this.galleryWorkId).
       '/gallery': this.loadGallery,
@@ -442,28 +442,28 @@ class SPARouter {
   // Update page title
   updatePageTitle(path) {
     const titles = {
-      '/': 'Аналитика - Админ-панель BeginFind',
-      '/dashboard': 'Аналитика - Админ-панель BeginFind',
-      '/ibripedia': 'Ibripedia - Админ-панель BeginFind',
-      '/gallery': 'Галерея - Админ-панель BeginFind',
-      '/articles': 'Редактор - Админ-панель BeginFind',
-      '/tags': 'Теги - Админ-панель BeginFind',
-      '/servers': 'Сервера - Админ-панель BeginFind',
-      '/pending-users': 'Заявки - Админ-панель BeginFind',
-      '/users': 'Пользователи - Админ-панель BeginFind',
-      '/settings': 'Настройки - Админ-панель BeginFind',
-      '/profile': 'Профиль - Админ-панель BeginFind',
-      '/maps': 'Карты - Админ-панель BeginFind',
-      '/map': 'Карта - Админ-панель BeginFind',
-      '/map-edit': 'Редактор карты - Админ-панель BeginFind'
+      '/': 'Аналитика - Админ-панель AllTell',
+      '/dashboard': 'Аналитика - Админ-панель AllTell',
+      '/antropedia': 'Antropedia - Админ-панель AllTell',
+      '/gallery': 'Галерея - Админ-панель AllTell',
+      '/articles': 'Редактор - Админ-панель AllTell',
+      '/tags': 'Теги - Админ-панель AllTell',
+      '/servers': 'Сервера - Админ-панель AllTell',
+      '/pending-users': 'Заявки - Админ-панель AllTell',
+      '/users': 'Пользователи - Админ-панель AllTell',
+      '/settings': 'Настройки - Админ-панель AllTell',
+      '/profile': 'Профиль - Админ-панель AllTell',
+      '/maps': 'Карты - Админ-панель AllTell',
+      '/map': 'Карта - Админ-панель AllTell',
+      '/map-edit': 'Редактор карты - Админ-панель AllTell'
     };
 
     const titleElement = document.getElementById('page-title');
     if (titleElement) {
-      titleElement.textContent = titles[path] || 'Админ-панель BeginFind';
+      titleElement.textContent = titles[path] || 'Админ-панель AllTell';
     }
 
-    document.title = titles[path] || 'Админ-панель BeginFind';
+    document.title = titles[path] || 'Админ-панель AllTell';
   }
 
   // Load dashboard content
@@ -503,12 +503,12 @@ class SPARouter {
     }
   }
 
-  // Load Ibripedia (article browsing/showcase page)
-  async loadIbripedia() {
+  // Load Antropedia (article browsing/showcase page)
+  async loadAntropedia() {
     this.showLoader();
 
     try {
-      const response = await fetch('/views/ibripedia.html');
+      const response = await fetch('/views/antropedia.html');
       const html = await response.text();
 
       const appContent = document.getElementById('app-content');
@@ -516,13 +516,13 @@ class SPARouter {
         appContent.innerHTML = html;
 
         const titleElement = document.getElementById('page-title');
-        if (titleElement) titleElement.textContent = 'Ibripedia';
+        if (titleElement) titleElement.textContent = 'Antropedia';
       }
 
-      await window.ibripediaManager?.init();
+      await window.antropediaManager?.init();
     } catch (error) {
-      console.error('Error loading Ibripedia:', error);
-      showMessage('Ошибка при загрузке Ibripedia', 'error');
+      console.error('Error loading Antropedia:', error);
+      showMessage('Ошибка при загрузке Antropedia', 'error');
     } finally {
       this.hideLoader();
     }
@@ -2876,7 +2876,7 @@ class SPARouter {
 
   // ===== Окно "Мои черновики" =====
   //
-  // Мини-витрина в духе Ибрипедии (те же .ibripedia-card*, только
+  // Мини-витрина в духе Ибрипедии (те же .antropedia-card*, только
   // компактнее — см. .drafts-modal в global-styles.css): обложка, название,
   // кусок текста, теги и время последней правки, плюс поиск по названию,
   // тексту и тегам. Модалка создаётся лениво один раз и живёт в body —
@@ -3811,10 +3811,10 @@ class SPARouter {
     }
 
     return `
-      <article class="ibripedia-card drafts-card${isCurrent ? ' is-current' : ''}" data-id="${esc(d.id)}" tabindex="0" draggable="true" title="Открыть черновик">
+      <article class="antropedia-card drafts-card${isCurrent ? ' is-current' : ''}" data-id="${esc(d.id)}" tabindex="0" draggable="true" title="Открыть черновик">
         ${d.image
-          ? `<div class="ibripedia-card-cover"><img src="${esc(d.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.parentElement.innerHTML='<i class=&quot;fas fa-file-alt&quot;></i>'"></div>`
-          : '<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>'}
+          ? `<div class="antropedia-card-cover"><img src="${esc(d.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('antropedia-card-cover-empty');this.parentElement.innerHTML='<i class=&quot;fas fa-file-alt&quot;></i>'"></div>`
+          : '<div class="antropedia-card-cover antropedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>'}
         <div class="drafts-card-check" aria-hidden="true"><i class="fas fa-check"></i></div>
         <div class="drafts-card-badges">
           ${isCurrent ? '<span class="drafts-card-badge is-current"><i class="fas fa-pen"></i> Открыт</span>' : ''}
@@ -3827,13 +3827,13 @@ class SPARouter {
         <button type="button" class="drafts-card-delete" data-action="delete-draft" data-id="${esc(d.id)}" title="Удалить черновик" aria-label="Удалить черновик">
           <i class="fas fa-trash"></i>
         </button>
-        <div class="ibripedia-card-body">
-          <h3 class="ibripedia-card-title">${d.title ? this.highlightDraftText(d.title, terms) : '<span class="drafts-card-untitled">Без названия</span>'}</h3>
-          ${excerpt ? `<p class="ibripedia-card-excerpt">${this.highlightDraftText(excerpt, terms)}</p>` : '<p class="ibripedia-card-excerpt drafts-card-no-text">Текста пока нет</p>'}
-          ${shownTags.length ? `<div class="ibripedia-card-tags">${shownTags.map((t) =>
-            `<span class="ibripedia-tag-pill" data-action="filter-tag" data-value="${esc(t)}" title="Искать по тегу">#${this.highlightDraftText(t, terms)}</span>`
-          ).join('')}${tags.length > shownTags.length ? `<span class="ibripedia-tag-pill drafts-card-more-tags">+${tags.length - shownTags.length}</span>` : ''}</div>` : ''}
-          <div class="ibripedia-card-meta">
+        <div class="antropedia-card-body">
+          <h3 class="antropedia-card-title">${d.title ? this.highlightDraftText(d.title, terms) : '<span class="drafts-card-untitled">Без названия</span>'}</h3>
+          ${excerpt ? `<p class="antropedia-card-excerpt">${this.highlightDraftText(excerpt, terms)}</p>` : '<p class="antropedia-card-excerpt drafts-card-no-text">Текста пока нет</p>'}
+          ${shownTags.length ? `<div class="antropedia-card-tags">${shownTags.map((t) =>
+            `<span class="antropedia-tag-pill" data-action="filter-tag" data-value="${esc(t)}" title="Искать по тегу">#${this.highlightDraftText(t, terms)}</span>`
+          ).join('')}${tags.length > shownTags.length ? `<span class="antropedia-tag-pill drafts-card-more-tags">+${tags.length - shownTags.length}</span>` : ''}</div>` : ''}
+          <div class="antropedia-card-meta">
             <span title="Изменён ${esc(fullDate(d.updatedAt))}${d.createdAt ? ` · создан ${esc(fullDate(d.createdAt))}` : ''}"><i class="fas fa-clock"></i> ${esc(this.formatDraftTime(d.updatedAt))}</span>
             ${folderName ? `<span class="drafts-card-folder" title="Папка"><i class="fas fa-folder"></i> ${esc(folderName)}</span>` : ''}
           </div>
@@ -4295,7 +4295,7 @@ class SPARouter {
     `).join('');
 
     gridEl.querySelectorAll('[data-open-tag]').forEach((btn) => {
-      btn.addEventListener('click', () => this.openTagInIbripedia(btn.closest('.tag-card').dataset.tag));
+      btn.addEventListener('click', () => this.openTagInAntropedia(btn.closest('.tag-card').dataset.tag));
     });
     gridEl.querySelectorAll('[data-open-tag-color]').forEach((btn) => {
       btn.addEventListener('click', () => this.showTagColorModal(btn.dataset.openTagColor));
@@ -4310,10 +4310,10 @@ class SPARouter {
     if (swatch) swatch.style.background = color;
   }
 
-  // Клик по тегу — витрина Ibripedia с уже включённым фильтром по нему.
-  async openTagInIbripedia(tag) {
-    await this.navigateTo('/ibripedia');
-    window.ibripediaManager?.filterByTag(tag);
+  // Клик по тегу — витрина Antropedia с уже включённым фильтром по нему.
+  async openTagInAntropedia(tag) {
+    await this.navigateTo('/antropedia');
+    window.antropediaManager?.filterByTag(tag);
   }
 
   // === Модалка "Цвет тега" — тот же .modal-overlay/.modal-box, что у
@@ -5490,7 +5490,7 @@ class SPARouter {
         console.error('Error loading servers count:', error);
       }
 
-      // Пользователи, сообщения мессенджера и комментарии статей Ibripedia —
+      // Пользователи, сообщения мессенджера и комментарии статей Antropedia —
       // одной сводкой с сервера (см. dashboard-stats.js); заодно приходят
       // свежие события для ленты активности.
       let summary = null;
@@ -5562,9 +5562,9 @@ class SPARouter {
   }
 
   // Лента "Последняя активность": новые статьи, серверы, регистрации,
-  // комментарии в Ibripedia и сообщения. Записи, у которых есть куда
+  // комментарии в Antropedia и сообщения. Записи, у которых есть куда
   // перейти, кликабельны (см. openActivityTarget): статья/комментарий —
-  // в Ibripedia, сервер — во вкладку "Сервера", пользователь — в профиль.
+  // в Antropedia, сервер — во вкладку "Сервера", пользователь — в профиль.
   // Сообщение мессенджера открывать некуда — остаётся обычной строкой.
   loadActivityList({ articles = [], servers = [], summary = null } = {}) {
     const activityList = document.getElementById('activity-list');
@@ -5589,7 +5589,7 @@ class SPARouter {
         title: `Добавлена статья: ${article.title}`,
         description: clip(article.excerpt) || 'Новая статья опубликована',
         target: { action: 'article', slug: article.slug || article.id },
-        hint: 'Открыть статью в Ibripedia'
+        hint: 'Открыть статью в Antropedia'
       });
     });
 
@@ -5624,7 +5624,7 @@ class SPARouter {
         title: `${comment.authorName} прокомментировал(а) «${comment.articleTitle}»`,
         description: clip(comment.content),
         target: { action: 'article', slug: comment.slug, jumpToComments: '1' },
-        hint: 'Открыть комментарии в Ibripedia'
+        hint: 'Открыть комментарии в Antropedia'
       });
     });
 
@@ -5685,7 +5685,7 @@ class SPARouter {
   async openActivityTarget(data) {
     switch (data.action) {
       case 'article':
-        return this.openIbripediaArticle(data.slug, { jumpToComments: data.jumpToComments === '1' });
+        return this.openAntropediaArticle(data.slug, { jumpToComments: data.jumpToComments === '1' });
       case 'server':
         return this.openServerByName(data.name);
       case 'user':
@@ -5695,11 +5695,11 @@ class SPARouter {
     }
   }
 
-  // Открывает статью в Ibripedia (опционально — сразу на комментариях).
-  async openIbripediaArticle(slug, { jumpToComments = false } = {}) {
+  // Открывает статью в Antropedia (опционально — сразу на комментариях).
+  async openAntropediaArticle(slug, { jumpToComments = false } = {}) {
     if (!slug) return;
-    await this.navigateTo('/ibripedia');
-    await window.ibripediaManager?.openArticleView(slug, { jumpToComments });
+    await this.navigateTo('/antropedia');
+    await window.antropediaManager?.openArticleView(slug, { jumpToComments });
   }
 
   // Открывает вкладку "Сервера" с названием сервера в строке поиска —
@@ -5861,14 +5861,14 @@ window.spaRouter = {
     return spaRouter ? spaRouter.currentServerWorkspaceTab : null;
   },
 
-  openIbripediaArticle: async (slug, opts) => {
+  openAntropediaArticle: async (slug, opts) => {
     if (spaRouter) {
-      await spaRouter.openIbripediaArticle(slug, opts);
+      await spaRouter.openAntropediaArticle(slug, opts);
     }
   },
 
   // async + await (не просто "вызвать и забыть") — вызывающий код (graph-view.js,
-  // ibripedia.js) переходит на страницу редактора, а затем сразу открывает
+  // antropedia.js) переходит на страницу редактора, а затем сразу открывает
   // конкретную статью через editArticle(); без ожидания реальной навигации
   // (fetch партиала, инициализация формы/редактора) editArticle() запускался
   // бы до того, как нужные элементы формы вообще появятся в DOM.
@@ -7304,7 +7304,7 @@ SPARouter.prototype.renderProfileAddedStickers = async function(targetId) {
   }
 };
 
-// Закладки Ibripedia (см. public/ibripedia.js) — личные, поэтому вкладка
+// Закладки Antropedia (см. public/antropedia.js) — личные, поэтому вкладка
 // видна только на СВОЁМ профиле (isSelf), не в чужом просмотре.
 SPARouter.prototype.setupProfileBookmarks = function(isSelf) {
   const tabBtn = document.getElementById('profile-bookmarks-tab-btn');
@@ -7317,8 +7317,8 @@ SPARouter.prototype.setupProfileBookmarks = function(isSelf) {
 };
 
 // Список закладок текущего пользователя по ВСЕМ статьям, сгруппированный
-// по статье — клик открывает статью в Ibripedia и скроллит к блоку
-// закладки (см. ibripediaManager.openArticleView/scrollToBlock).
+// по статье — клик открывает статью в Antropedia и скроллит к блоку
+// закладки (см. antropediaManager.openArticleView/scrollToBlock).
 SPARouter.prototype.renderProfileBookmarks = async function() {
   const loadingEl = document.getElementById('profile-bookmarks-loading');
   const emptyEl = document.getElementById('profile-bookmarks-empty');
@@ -7378,12 +7378,12 @@ SPARouter.prototype.renderProfileBookmarks = async function() {
 
 SPARouter.prototype.openBookmarkedArticle = async function(slug, blockId) {
   if (!slug) return;
-  await this.navigateTo('/ibripedia');
-  await window.ibripediaManager?.openArticleView(slug);
+  await this.navigateTo('/antropedia');
+  await window.antropediaManager?.openArticleView(slug);
   if (blockId) {
     // Панель/контент статьи дорисовываются асинхронно (блоки, закладки,
     // оглавление) — небольшая задержка перед скроллом надёжнее, чем гонка
     // с ещё не отрисованными data-block-id.
-    setTimeout(() => window.ibripediaManager?.scrollToBlock(blockId), 350);
+    setTimeout(() => window.antropediaManager?.scrollToBlock(blockId), 350);
   }
 };

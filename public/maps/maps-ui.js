@@ -156,7 +156,7 @@
         <div class="map-fs-zone-list"></div>
       </div>`;
     // Ручку ширины — после innerHTML выше (иначе он бы её стёр).
-    window.MapCore.makePanelResizable(panel, 'beginfind_map_panel_w', { def: 300 });
+    window.MapCore.makePanelResizable(panel, 'alltell_map_panel_w', { def: 300 });
     if (viewer) viewer.mountLayersInto(panel.querySelector('.map-fs-layers'));
     const list = panel.querySelector('.map-fs-zone-list');
     const input = panel.querySelector('.map-fs-search');
@@ -347,7 +347,7 @@
   // Создают карту во вкладке «Карты» своего сервера — там же календарь мира;
   // здесь — только общий список и переход к карте.
 
-  const MAPS_FILTER_KEY = 'beginfind_maps_world_filter';
+  const MAPS_FILTER_KEY = 'alltell_maps_world_filter';
 
   async function loadMapsIndex() {
     const appContent = document.getElementById('app-content');

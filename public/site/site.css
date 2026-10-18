@@ -1,6 +1,6 @@
 /* ============================================================
-   site.css — публичная витрина Beginfind (лендинг/Ibripedia/
-   Beginfind-сервера/Галерея).
+   site.css — публичная витрина AllTell (лендинг/Antropedia/
+   AllTell-сервера/Галерея).
 
    Это НЕ функциональный раздел — кликабельный макет для оценки
    внешнего вида. Опирается на палитру и переменные global-styles.css
@@ -574,12 +574,12 @@
 .hub-card:hover .hub-card-cta i { transform: translateX(4px); }
 .hub-card-cta i { transition: transform 0.25s ease; }
 
-.hub-card--ibripedia { --hub-color: var(--blurple); }
-.hub-card--beginfind { --hub-color: var(--accent-pink); }
+.hub-card--antropedia { --hub-color: var(--blurple); }
+.hub-card--alltell { --hub-color: var(--accent-pink); }
 .hub-card--gallery   { --hub-color: var(--accent-teal); }
 
 /* ============================================================
-   КАРТОЧКИ СТАТЕЙ (Ibripedia)
+   КАРТОЧКИ СТАТЕЙ (Antropedia)
    ============================================================ */
 
 .article-grid {
@@ -709,7 +709,7 @@
 .engage-item.is-comment:hover { color: var(--blurple); }
 
 /* ============================================================
-   IBRIPEDIA: чипы-фильтры + layout с сайдбаром
+   ANTROPEDIA: чипы-фильтры + layout с сайдбаром
    ============================================================ */
 
 .chip-row {
@@ -808,7 +808,7 @@
 }
 
 /* ============================================================
-   BEGINFIND: карточки серверов/сообществ
+   ALLTELL: карточки серверов/сообществ
    ============================================================ */
 
 .server-grid {
@@ -817,7 +817,7 @@
     gap: 20px;
 }
 
-.beginfind-card {
+.alltell-card {
     background: var(--background-secondary);
     border: 1px solid var(--background-accent);
     border-radius: var(--site-radius-lg);
@@ -825,24 +825,24 @@
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
-.beginfind-card:hover {
+.alltell-card:hover {
     transform: translateY(-5px);
     border-color: var(--accent-pink);
     box-shadow: 0 14px 30px rgba(255, 93, 143, 0.16);
 }
 
-.beginfind-card-banner {
+.alltell-card-banner {
     height: 84px;
     background: var(--banner-grad, linear-gradient(120deg, #5865f2, #ff5d8f));
     position: relative;
 }
 
-.beginfind-card-body {
+.alltell-card-body {
     padding: 0 18px 18px;
     margin-top: -30px;
 }
 
-.beginfind-card-avatar {
+.alltell-card-avatar {
     width: 60px;
     height: 60px;
     border-radius: 16px;
@@ -857,7 +857,7 @@
     margin-bottom: 10px;
 }
 
-.beginfind-card-name {
+.alltell-card-name {
     font-size: 16px;
     font-weight: 700;
     color: var(--header-primary);
@@ -875,7 +875,7 @@
     flex-shrink: 0;
 }
 
-.beginfind-card-desc {
+.alltell-card-desc {
     font-size: 12.5px;
     color: var(--text-muted);
     line-height: 1.5;
@@ -883,14 +883,14 @@
     min-height: 36px;
 }
 
-.beginfind-card-tags {
+.alltell-card-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 14px;
 }
 
-.beginfind-card-foot {
+.alltell-card-foot {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -904,7 +904,7 @@
     gap: 6px;
 }
 
-/* Шаги "как начать" на странице Beginfind */
+/* Шаги "как начать" на странице AllTell */
 .steps-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

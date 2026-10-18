@@ -1,9 +1,9 @@
 // gallery.routes.js — Галерея: /api/gallery/* (см. src/services/gallery-store.js).
 //
 // Лайки/просмотры/комментарии/реакции — те же эндпоинты и тот же формат
-// ответов, что у статей Ibripedia (articles.routes.js), только на своих
+// ответов, что у статей Antropedia (articles.routes.js), только на своих
 // таблицах: клиент переиспользует для работы галереи готовый UI читалки
-// (см. engagementApi в public/ibripedia.js и public/gallery.js).
+// (см. engagementApi в public/antropedia.js и public/gallery.js).
 
 const express = require('express');
 const fs = require('fs');
