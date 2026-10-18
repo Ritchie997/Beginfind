@@ -393,7 +393,11 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     // Арты, пересланные из галереи (image-блок с data.gallery): src — из
     // самой работы, закрытая для читателя работа не показывается.
     content: updateImageUrlsInContent(req && req.user ? await gallery.resolveEmbedsInDocument(viewLayer.content, req.user) : viewLayer.content, req),
-    image: formatImageUrl(viewLayer.image, req),
+    // Обложка слоя; если у слоя своей нет — обложка самой статьи. Редактор
+    // задаёт ОДНУ обложку на статью (поле article.image), а у слоёв image
+    // обычно пуст — без этого запасного значения у многослойной статьи
+    // обложки не было совсем.
+    image: formatImageUrl(viewLayer.image || article.image, req),
     layerIndex,
     layerCount,
     layerOptions,

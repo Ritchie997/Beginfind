@@ -173,6 +173,34 @@
         </div>
     </fieldset>
 
+    <fieldset class="fieldset-group">
+        <legend>Формат статей</legend>
+        <div class="setting-description">
+            Статьи, сохранённые старыми версиями сайта или импортированные вручную, могут
+            содержать устаревшие поля и битые значения (например, обложку, которая не является
+            путём к картинке). Здесь все статьи можно разом привести к актуальному формату.
+            Операция безопасна: сначала смотрите предпросмотр, а оригиналы изменённых статей
+            сохраняются в папке backups/articles-migration/.
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px;">
+            <div class="form-group">
+                <label class="checkbox-field"><input type="checkbox" id="migrationInheritLayerCover"> Подставлять обложку статьи в слои, у которых обложки нет</label>
+            </div>
+
+            <div class="button-group" style="margin-bottom: 15px;">
+                <button class="btn btn-secondary btn-sm" id="migration-preview-btn">
+                    <i class="fas fa-magnifying-glass"></i> Предпросмотр
+                </button>
+                <button class="btn btn-primary btn-sm" id="migration-run-btn">
+                    <i class="fas fa-wand-magic-sparkles"></i> Обновить формат статей
+                </button>
+            </div>
+
+            <div id="migration-report"></div>
+        </div>
+    </fieldset>
+
     <div class="button-group">
         <button class="btn btn-primary" id="save-settings-btn">Сохранить настройки</button>
         <button class="btn btn-secondary" id="reset-settings-btn">Сбросить настройки</button>

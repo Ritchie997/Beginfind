@@ -123,7 +123,10 @@ function parseArticleFile(filePath, slug) {
     co_author_ids: Array.isArray(fm.co_author_ids)
       ? fm.co_author_ids.map((id) => parseInt(id, 10)).filter((id) => !isNaN(id))
       : [],
-    image: fm.image || null,
+    // Обложка при чтении проходит ту же проверку, что и при записи: битое
+    // значение (не путь к картинке) в памяти превращается в null и не
+    // ломает отображение; сам файл исправляет миграция (article-migrate.js).
+    image: blocks.sanitizeCoverPath(fm.image),
     attachments: Array.isArray(fm.attachments) ? fm.attachments : [],
     server: fm.server ?? null,
     excerpt: fm.excerpt || '',
@@ -275,7 +278,7 @@ function importArticle(slug, fields) {
     tags: fields.tags || [],
     author_id: fields.author_id ?? null,
     co_author_ids: Array.isArray(fields.co_author_ids) ? fields.co_author_ids : [],
-    image: fields.image || null,
+    image: normalizeImagePath(fields.image),
     attachments: fields.attachments || [],
     server: fields.server ?? null,
     excerpt: fields.excerpt || '',
@@ -758,28 +761,13 @@ function normalizeRoles(role, roles) {
   return [];
 }
 
+// Раньше для любого http(s)-адреса сохранялся только pathname: внешняя ссылка
+// "https://хост/gZfLhZTD" превращалась в "/gZfLhZTD" — значение, которое не
+// открывается и которое потом не принимал редактор. Теперь хост отбрасывается
+// только у своих /uploads/, внешние адреса остаются целыми, а то, что не
+// похоже на путь к картинке, не записывается вовсе (см. blocks.sanitizeCoverPath).
 function normalizeImagePath(imagePath) {
-  if (!imagePath) return null;
-
-  if (imagePath.startsWith('http')) {
-    try {
-      const url = new URL(imagePath);
-      return url.pathname;
-    } catch (e) {
-      console.warn('Could not parse image URL, saving as is:', imagePath);
-      return imagePath;
-    }
-  }
-
-  if (imagePath.includes('uploads') && !imagePath.startsWith('/')) {
-    return '/' + imagePath;
-  }
-
-  if (!imagePath.startsWith('/') && !imagePath.includes('/')) {
-    return `/uploads/${imagePath}`;
-  }
-
-  return imagePath;
+  return blocks.sanitizeCoverPath(imagePath);
 }
 
 module.exports = {
