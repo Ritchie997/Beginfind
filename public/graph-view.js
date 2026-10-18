@@ -1656,16 +1656,16 @@
   }
 
   // Клик по узлу на странице графа — открывает статью на ПРОСМОТР во вкладке
-  // Ibripedia (а не в редакторе): граф — это навигация по знаниям, править
+  // Antropedia (а не в редакторе): граф — это навигация по знаниям, править
   // статью можно оттуда кнопкой "Редактировать". Тот же путь, что и у
   // закладок профиля (см. openBookmarkedArticle в spa-router.js): сначала
-  // дожидаемся загрузки страницы Ibripedia, затем открываем статью.
+  // дожидаемся загрузки страницы Antropedia, затем открываем статью.
   // Локальная панель графа внутри редактора (editor-manager.js) этим не
   // пользуется — у неё свой onNodeClick.
   async function navigateToArticle(slug) {
     if (!slug || !window.spaRouter) return;
-    await window.spaRouter.navigateTo('/ibripedia');
-    await window.ibripediaManager?.openArticleView(slug);
+    await window.spaRouter.navigateTo('/antropedia');
+    await window.antropediaManager?.openArticleView(slug);
   }
 
   // Экспорт текущего вида графа (с учётом применённого зума/панорамирования)
@@ -1847,7 +1847,7 @@
     }
 
     // Космос по умолчанию включён; выбор пользователя помним между визитами.
-    const COSMOS_STORAGE_KEY = 'beginfind.graphCosmos';
+    const COSMOS_STORAGE_KEY = 'alltell.graphCosmos';
     if (cosmosEl) {
       try { cosmosEl.checked = localStorage.getItem(COSMOS_STORAGE_KEY) !== '0'; } catch (_) { /* storage недоступен — остаётся значение из разметки */ }
     }

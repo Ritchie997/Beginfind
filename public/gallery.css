@@ -176,7 +176,7 @@
 }
 body.gallery-viewer-open { overflow: hidden; }
 /* Пикеры стикеров/превью — над просмотром (у них 1500/2000 для статей). */
-body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
+body.gallery-viewer-open .antropedia-sticker-picker { z-index: 1900; }
 
 .gv-shell {
   display: flex;
@@ -381,7 +381,7 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 .gv-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .gv-badges:empty { display: none; }
 .gv-author { margin-bottom: 8px; }
-.gv-author .ibripedia-person { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }
+.gv-author .antropedia-person { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--text-normal); }
 .gv-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: 13px; margin-bottom: 12px; }
 /* Описание рендерится как текст статьи (.preview-pane — ради стилей
    wiki-ссылок/тегов/спойлеров), но без отступов и рамки панели превью. */
@@ -390,7 +390,7 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 .gv-desc.preview-pane p:last-child { margin-bottom: 0; }
 .gv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .gv-tags:empty { display: none; }
-.gv-tags .ibripedia-tag-pill { cursor: pointer; }
+.gv-tags .antropedia-tag-pill { cursor: pointer; }
 .gv-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .gv-engagement { margin: 14px 20px 6px !important; }
 .gv-section { margin-top: 18px; }
@@ -643,8 +643,8 @@ body.gallery-viewer-open .ibripedia-sticker-picker { z-index: 1900; }
 
 /* === Полоса «Из галереи» под статьёй и арт в тексте статьи === */
 
-.ibripedia-view-gallery { margin: 0 0 20px; }
-.ibripedia-view-gallery h3 { margin: 0 0 12px; font-size: 16px; color: var(--header-primary); }
+.antropedia-view-gallery { margin: 0 0 20px; }
+.antropedia-view-gallery h3 { margin: 0 0 12px; font-size: 16px; color: var(--header-primary); }
 .gallery-strip {
   display: grid;
   grid-auto-flow: column;

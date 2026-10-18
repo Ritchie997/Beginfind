@@ -34,7 +34,7 @@
 //
 // Синтаксис использования — ОДИН и тот же шорткод ":slug:alias:" в двух
 // режимах, различаемых по контексту на клиенте при рендере (см.
-// hasOnlyOneShortcode ниже и public/ibripedia.js):
+// hasOnlyOneShortcode ниже и public/antropedia.js):
 //   - внутри текста среди прочих слов — маленькая инлайн-картинка ("эмодзи");
 //   - когда это ВЕСЬ комментарий (после trim) — крупная отдельная картинка
 //     ("стикер"), как отдельное сообщение-стикер в Telegram.
@@ -304,7 +304,7 @@ async function unsubscribe(userId, packId) {
   await run('DELETE FROM sticker_subscriptions WHERE user_id = ? AND pack_id = ?', [userId, packId]);
 }
 
-// ===== Избранные стикеры (звёздочка в пикере — public/ibripedia.js) =====
+// ===== Избранные стикеры (звёздочка в пикере — public/antropedia.js) =====
 //
 // В избранное можно добавить только стикер из набора, который пользователь
 // уже добавил себе (см. вопрос "Источник избранного" — по решению владельца,
@@ -843,7 +843,7 @@ function extractShortcodes(content) {
 
 // Ровно один шорткод, занимающий ВЕСЬ текст (после trim) — признак "это
 // стикер, а не эмодзи в тексте" на клиенте (см. formatCommentContent в
-// public/ibripedia.js). Экспортируем ту же проверку и на сервер, вдруг
+// public/antropedia.js). Экспортируем ту же проверку и на сервер, вдруг
 // понадобится (например, для будущих чатов) — незачем дублировать regex.
 function isStandaloneShortcode(content) {
   const trimmed = String(content || '').trim();
@@ -889,7 +889,7 @@ async function canUseShortcode(userId, code) {
 // для текста (см. resolveShortcodesInTexts ниже), и напрямую для реакций
 // (см. GET .../reactions в articles.routes.js — там шорткоды уже готовым
 // списком, а не спрятаны в тексте). packId нужен клиенту (см.
-// public/ibripedia.js), чтобы по клику на стикер открыть его набор целиком
+// public/antropedia.js), чтобы по клику на стикер открыть его набор целиком
 // (просмотр + добавить/убрать себе — public/sticker-pack-view.js).
 async function resolveCodes(codes) {
   const list = [...new Set(codes)].filter(Boolean);

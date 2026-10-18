@@ -12,8 +12,8 @@ const DATABASE_FILES = [
   'messenger.db',
   'servers.db',
   'users.db',
-  'bookmarks.db', // закладки статей Ibripedia, привязанные к профилю — см. src/db/connections.js
-  'social.db', // лайки и комментарии статей Ibripedia — см. src/db/connections.js
+  'bookmarks.db', // закладки статей Antropedia, привязанные к профилю — см. src/db/connections.js
+  'social.db', // лайки и комментарии статей Antropedia — см. src/db/connections.js
   'stickers.db', // наборы стикеров, подписки, избранное — см. src/db/connections.js
   'drafts.db', // черновики статей редактора, привязанные к профилю — см. src/db/connections.js
   'feedback.db', // обращения (баги/предложения) и кейсы модерации — см. src/services/feedback-store.js

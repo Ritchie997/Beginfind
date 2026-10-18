@@ -1,6 +1,6 @@
-# BeginFind Server
+# AllTell Server
 
-Серверная часть приложения BeginFind: мессенджер, система "серверов" (каналы/роли/участники, по образцу Discord) и Ibripedia — вики-модуль со статьями.
+Серверная часть приложения AllTell: мессенджер, система "серверов" (каналы/роли/участники, по образцу Discord) и Antropedia — вики-модуль со статьями.
 
 ## Структура проекта
 
@@ -33,7 +33,7 @@ src/
     pages.routes.js            — раздача index.html для "красивых" URL SPA
     auth.routes.js              — /api/register, /api/login, /api/profile, заявки на вход
     messages.routes.js          — /api/messages
-    articles.routes.js          — /api/articles*, /api/search-articles (Ibripedia)
+    articles.routes.js          — /api/articles*, /api/search-articles (Antropedia)
     taxonomy.routes.js          — /api/categories, /api/roles
     servers.routes.js           — /api/servers*, /api/users
     uploads.routes.js           — /api/upload-image
@@ -113,18 +113,18 @@ nodemon, а тот — новую запись, что приводило к б�
 - `GET /api/dashboard-summary` — сводка для страницы "Аналитика" (`src/services/dashboard-stats.js`):
   `users` (подтверждённые пользователи: всего и за 7 дней), `messages` (только сообщения мессенджера:
   всего, за 7 дней и `daily` — счётчики по дням для спарклайна), `comments` (комментарии статей
-  Ibripedia: всего, за 7 дней и `articles` — в скольких статьях есть обсуждение; комментарии
+  Antropedia: всего, за 7 дней и `articles` — в скольких статьях есть обсуждение; комментарии
   удалённых статей не считаются) и
   `recent` — свежие регистрации, комментарии и сообщения для ленты "Последняя активность"
   (комментарии к недоступным пользователю закрытым статьям отсеиваются). Статьи и серверы дашборд
   берёт из `/api/articles` и `/api/servers`.
 
 Записи ленты "Последняя активность" кликабельны: статья и комментарий — открывают статью в
-Ibripedia (комментарий — сразу на блоке комментариев), сервер — вкладку "Сервера" с его именем в
+Antropedia (комментарий — сразу на блоке комментариев), сервер — вкладку "Сервера" с его именем в
 строке поиска, регистрация — профиль пользователя (`/profile/:id`). Сообщения мессенджера — просто
 строка, открывать нечего.
 
-### Ibripedia (вики)
+### Antropedia (вики)
 - `GET /api/articles` — список статей (закрытые по ролям статьи видны только тем, у кого есть доступ);
   фильтры `?since=`, `?server=`, `?tag=`
 - `GET /api/articles/:slug` — статья по slug (раньше был числовой id, см. "Хранение статей")
@@ -166,7 +166,7 @@ Ibripedia (комментарий — сразу на блоке коммент�
 
 ## Хранение статей (content/)
 
-С Этапа 3 статьи Ibripedia хранятся не в БД, а как Markdown-файлы:
+С Этапа 3 статьи Antropedia хранятся не в БД, а как Markdown-файлы:
 `content/<slug>.md`, где `slug` — транслитерированный заголовок
 (`src/services/slugify.js`), он же id статьи в URL и цель wiki-ссылок
 `[текст]((slug))`. Каждый файл — YAML-frontmatter + тело в Markdown:

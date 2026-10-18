@@ -220,7 +220,7 @@
           <input type="file" id="articleImageFileInput" class="form-input" accept="image/*" style="display: none;" onchange="window.spaRouter.handleCoverFileSelect(this)">
           <input type="hidden" id="articleImageFile" value="">
         </div>
-        <div class="form-hint">Чтобы обложка идеально смотрелась на Ibripedia, используйте изображение с соотношением сторон 16:9 (например, 1200×675 px) — оно не обрежется ни в карточке списка, ни на странице статьи.</div>
+        <div class="form-hint">Чтобы обложка идеально смотрелась на Antropedia, используйте изображение с соотношением сторон 16:9 (например, 1200×675 px) — оно не обрежется ни в карточке списка, ни на странице статьи.</div>
       </div>
 
     </div>
@@ -352,7 +352,7 @@
 <!-- Панели редактора, привязанные к текущей открытой статье (обратные
      ссылки, локальный граф связей, результаты клика по #тегу) — заполняются
      editor-manager.js. Список статей и поиск по нему переехали на отдельную
-     страницу Ibripedia (см. sidebar), поэтому здесь остался только якорь
+     страницу Antropedia (см. sidebar), поэтому здесь остался только якорь
      для этих панелей. -->
 <div id="editorSidePanels" class="editor-side-panels"></div>
 
@@ -531,7 +531,7 @@
 
 /* Стили самого .chip-field (Доступ для/Теги) переехали в
    global-styles.css без привязки к .articles-page — этот компонент теперь
-   используется и на странице Ibripedia (фильтры), см. public/chip-field.js. */
+   используется и на странице Antropedia (фильтры), см. public/chip-field.js. */
 
 /* === Автор / соавторы === */
 .articles-page .author-field {
@@ -801,7 +801,7 @@
   position: sticky;
   /* top:0 — .header не зафиксирован и уходит со страницей при скролле,
      отступ здесь оставлял бы пустое место над панелью (тот же фикс, что и
-     у панели фильтров Ibripedia, см. ibripedia.css). */
+     у панели фильтров Antropedia, см. antropedia.css). */
   top: 0;
   z-index: 100;
   background: var(--background-secondary);
@@ -1040,7 +1040,7 @@
 }
 
 /* Комфортные касания на тач-экранах — по указателю, а не по ширине экрана
-   (см. тот же приём в ibripedia.css/mobile-menu.css): планшет в альбомной
+   (см. тот же приём в antropedia.css/mobile-menu.css): планшет в альбомной
    ориентации шириной как у десктопа, но палец всё равно толще курсора. */
 @media (hover: none) and (pointer: coarse) {
   .articles-page .toolbar-button {

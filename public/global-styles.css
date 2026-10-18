@@ -2103,8 +2103,8 @@ html {
 
 /* ========================================
    ОКНО "МОИ ЧЕРНОВИКИ" (редактор статей)
-   Мини-витрина в духе Ибрипедии: карточки — те же .ibripedia-card*
-   (ibripedia.css подключён глобально), здесь только компактные размеры
+   Мини-витрина в духе Ибрипедии: карточки — те же .antropedia-card*
+   (antropedia.css подключён глобально), здесь только компактные размеры
    и то, чего у витрины нет (бейджи синхронизации, удаление, поиск).
    Разметка — spa-router.js, ensureDraftsModal()/buildDraftCardHtml().
    ======================================== */
@@ -2250,17 +2250,17 @@ html {
     color: var(--text-muted);
 }
 
-/* --- Карточка черновика (поверх .ibripedia-card) --- */
+/* --- Карточка черновика (поверх .antropedia-card) --- */
 
 .drafts-card { outline: none; }
 .drafts-card:focus-visible { border-color: var(--blurple); box-shadow: 0 0 0 2px var(--blurple); }
 .drafts-card.is-current { border-color: var(--blurple); }
 
-.drafts-card .ibripedia-card-cover { aspect-ratio: auto; height: 92px; }
-.drafts-card .ibripedia-card-body { gap: 6px; padding: 10px 12px 12px; }
-.drafts-card .ibripedia-card-title { font-size: 14px; }
-.drafts-card .ibripedia-card-excerpt { font-size: 12px; -webkit-line-clamp: 3; }
-.drafts-card .ibripedia-card-meta { font-size: 11px; }
+.drafts-card .antropedia-card-cover { aspect-ratio: auto; height: 92px; }
+.drafts-card .antropedia-card-body { gap: 6px; padding: 10px 12px 12px; }
+.drafts-card .antropedia-card-title { font-size: 14px; }
+.drafts-card .antropedia-card-excerpt { font-size: 12px; -webkit-line-clamp: 3; }
+.drafts-card .antropedia-card-meta { font-size: 11px; }
 .drafts-card mark {
     background: rgba(88, 101, 242, 0.35);
     color: inherit;
@@ -2573,11 +2573,11 @@ html {
     .drafts-modal-body { padding: 12px; }
     .drafts-modal-grid { grid-template-columns: 1fr; gap: 10px; }
     /* На телефоне — строкой: обложка слева, текст справа, как список
-       Ибрипедии (.ibripedia-grid--list). */
+       Ибрипедии (.antropedia-grid--list). */
     .drafts-card { flex-direction: row; align-items: stretch; }
-    .drafts-card .ibripedia-card-cover { width: 88px; height: auto; min-height: 96px; }
+    .drafts-card .antropedia-card-cover { width: 88px; height: auto; min-height: 96px; }
     .drafts-card-badges { left: 96px; }
-    .drafts-card:has(.drafts-card-badge) .ibripedia-card-body { padding-top: 38px; }
+    .drafts-card:has(.drafts-card-badge) .antropedia-card-body { padding-top: 38px; }
 }
 
 /* ========================================
@@ -3803,7 +3803,7 @@ body.articles-page .content-body {
 /* === Чиповый мультивыбор (public/chip-field.js) ===
    Раньше эти стили жили только под .articles-page (форма статьи: 
    Доступ для/Теги) — вынесены сюда без привязки к странице, т.к. компонент
-   общий и используется также фильтрами страницы Ibripedia. */
+   общий и используется также фильтрами страницы Antropedia. */
 .chip-field {
   position: relative;
   width: 100%;
@@ -3824,7 +3824,7 @@ body.articles-page .content-body {
   min-height: 38px;
   /* Раньше блок рос по высоте без ограничений вместе с числом выбранных
      чипов — при большом количестве тегов/ролей это раздвигало и
-     ломало окружающую вёрстку (форму статьи, панель фильтров Ibripedia).
+     ломало окружающую вёрстку (форму статьи, панель фильтров Antropedia).
      Теперь после ~2 строк чипов появляется свой внутренний скролл, а
      высота самого поля больше не растёт — окружающий layout стабилен. */
   max-height: 84px;

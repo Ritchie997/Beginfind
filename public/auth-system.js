@@ -1,11 +1,11 @@
-// auth-system.js - Система аутентификации BeginFind Admin Panel
+// auth-system.js - Система аутентификации AllTell Admin Panel
 
 class AuthManager {
   constructor() {
     this.token = null;
     this.user = null;
-    this.tokenKey = 'beginfind_auth_token';
-    this.userKey = 'beginfind_user_info';
+    this.tokenKey = 'alltell_auth_token';
+    this.userKey = 'alltell_user_info';
     this.init();
   }
 

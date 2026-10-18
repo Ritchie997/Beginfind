@@ -1,7 +1,7 @@
 {
-  "name": "beginfind-server",
+  "name": "alltell-server",
   "version": "1.0.0",
-  "description": "Server for BeginFind application",
+  "description": "Server for AllTell application",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

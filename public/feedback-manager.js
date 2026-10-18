@@ -342,7 +342,7 @@
         if (!link) return;
         e.preventDefault();
         e.stopPropagation();
-        window.spaRouter?.openIbripediaArticle(link.dataset.openArticle);
+        window.spaRouter?.openAntropediaArticle(link.dataset.openArticle);
       });
     }
 

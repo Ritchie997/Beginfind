@@ -1,7 +1,7 @@
-// ibripedia.js — витрина статей (страница Ibripedia): фильтры + сортировка +
+// antropedia.js — витрина статей (страница Antropedia): фильтры + сортировка +
 // сетка/список карточек с бесконечной подгрузкой, и отдельный экран
 // просмотра одной статьи (редактирование открывается по кнопке, а не по
-// клику на карточку — см. public/views/ibripedia.html).
+// клику на карточку — см. public/views/antropedia.html).
 //
 // Раньше это был раздел "Управление статьями" под формой редактора —
 // один плоский список БЕЗ пагинации (GET /api/articles отдавал все статьи
@@ -13,14 +13,14 @@
 // модулем public/blocks-renderer.js — тем же, что использует панель
 // "Просмотр" в редакторе — картинки/колонки/инфобоксы/wiki-ссылки/#теги
 // выглядят и ведут себя одинаково в обоих местах. editor-manager.js для
-// одного лишь чтения статьи не требуется — ibripedia.js от него не зависит.
+// одного лишь чтения статьи не требуется — antropedia.js от него не зависит.
 
 (function () {
   'use strict';
 
   const PAGE_SIZE = 24;
   // Сколько строк инфобокса видно на телефоне до "Показать все" (см.
-  // setupInfoboxCollapse и .blk-infobox.is-collapsed в ibripedia.css).
+  // setupInfoboxCollapse и .blk-infobox.is-collapsed в antropedia.css).
   const INFOBOX_COLLAPSED_ROWS = 6;
 
   // Палитра цветов для закладок (попап "Установить закладку?") — те же
@@ -57,7 +57,7 @@
   // приходит с сервера вместе с комментарием (см. attachStickersToItems в
   // src/services/stickers-store.js), ключ — "slug:alias".
   //   - комментарий, ЦЕЛИКОМ состоящий из одного шорткода (после trim) —
-  //     отдельный крупный "стикер" (см. .ibripedia-comment-sticker-only);
+  //     отдельный крупный "стикер" (см. .antropedia-comment-sticker-only);
   //   - шорткод(ы) среди прочего текста — маленькая инлайн-картинка;
   //   - шорткод без соответствия в stickersMap (набор удалён/отклонён после
   //     публикации комментария) — остаётся как обычный текст.
@@ -96,7 +96,7 @@
         // и обработчик клика в initEngagement() ниже.
         return {
           standalone: true,
-          html: `<img class="ibripedia-standalone-sticker" data-pack-id="${escapeHtml(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(code)}" title="${escapeHtml(code)}">`
+          html: `<img class="antropedia-standalone-sticker" data-pack-id="${escapeHtml(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(code)}" title="${escapeHtml(code)}">`
         };
       }
     }
@@ -105,7 +105,7 @@
       const code = `${pack.toLowerCase()}:${alias.toLowerCase()}`;
       const sticker = stickersMap && stickersMap[code];
       if (!sticker) return match;
-      return `<img class="ibripedia-inline-sticker" data-pack-id="${escapeHtml(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(code)}" title="${escapeHtml(code)}">`;
+      return `<img class="antropedia-inline-sticker" data-pack-id="${escapeHtml(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(code)}" title="${escapeHtml(code)}">`;
     });
     return { standalone: false, html };
   }
@@ -164,7 +164,7 @@
     const range = getEditableRange(el);
     range.deleteContents();
     const img = document.createElement('img');
-    img.className = 'ibripedia-inline-sticker-chip';
+    img.className = 'antropedia-inline-sticker-chip';
     img.src = thumbUrl;
     img.alt = shortcode;
     img.contentEditable = 'false';
@@ -188,14 +188,14 @@
 
   function reactionsBarInnerHtml(reactions) {
     const pills = (reactions || []).map((r) => `
-      <button type="button" class="ibripedia-reaction-pill${r.reacted ? ' active' : ''}" data-shortcode="${escapeHtml(r.shortcode)}" title="${escapeHtml(r.packTitle || r.shortcode)}">
+      <button type="button" class="antropedia-reaction-pill${r.reacted ? ' active' : ''}" data-shortcode="${escapeHtml(r.shortcode)}" title="${escapeHtml(r.packTitle || r.shortcode)}">
         <img src="${escapeHtml(r.url)}" alt=""><span>${r.count}</span>
       </button>`).join('');
     // data-sticker-picker-trigger — тот же общий маркер "это кнопка-триггер
-    // пикера стикеров", что и .ibripedia-sticker-picker-btn у формы
+    // пикера стикеров", что и .antropedia-sticker-picker-btn у формы
     // комментария (см. STICKER_PICKER_MARKUP/closeAllStickerPickers ниже) —
     // пикер реакции переиспользует ТОТ ЖЕ компонент, а не отдельную модалку.
-    return `${pills}<button type="button" class="ibripedia-reaction-add" data-sticker-picker-trigger title="Добавить реакцию"><i class="far fa-face-smile"></i></button>`;
+    return `${pills}<button type="button" class="antropedia-reaction-add" data-sticker-picker-trigger title="Добавить реакцию"><i class="far fa-face-smile"></i></button>`;
   }
 
   // Разметка пикера стикеров — общая для формы комментария/ответа (см.
@@ -208,29 +208,29 @@
   // строка с названием/описанием активной вкладки, а сама прокручиваемая
   // сетка стикеров — только для НЕЁ (не все наборы разом, как было раньше).
   const STICKER_PICKER_MARKUP = `
-    <div class="ibripedia-sticker-picker" hidden>
-      <div class="ibripedia-sticker-picker-header">
+    <div class="antropedia-sticker-picker" hidden>
+      <div class="antropedia-sticker-picker-header">
         Стикеры
-        <span class="ibripedia-sticker-picker-links">
+        <span class="antropedia-sticker-picker-links">
           <a href="#" data-nav="/stickers">управлять наборами</a> ·
           <a href="#" data-role="open-store">магазин наборов</a>
         </span>
       </div>
-      <div class="ibripedia-sticker-picker-tabs"></div>
-      <div class="ibripedia-sticker-picker-subtitle"></div>
-      <div class="ibripedia-sticker-picker-body"></div>
+      <div class="antropedia-sticker-picker-tabs"></div>
+      <div class="antropedia-sticker-picker-subtitle"></div>
+      <div class="antropedia-sticker-picker-body"></div>
     </div>`;
 
   // position: fixed (см. CSS) — top/left считаем сами, а не полагаемся на
   // bottom/right относительно родителя: якорем бывает как широкая форма
   // комментария, так и узкая полоска реакций, которая может стоять не у
   // самого края своего контейнера — position:absolute в таком случае обрезал
-  // бы popup ближайшим overflow:hidden предком (см. .ibripedia-view-article).
+  // бы popup ближайшим overflow:hidden предком (см. .antropedia-view-article).
   // По умолчанию показываем НАД кнопкой (справа выровняв правый край с её
   // правым краем — привычно для выпадающих меню), но если сверху не хватает
   // места — под кнопкой; и зажимаем в границы окна по горизонтали.
   // STICKER_PICKER_MAX_HEIGHT — держим в JS ровно то же число, что и
-  // max-height у .ibripedia-sticker-picker в ibripedia.css: эта функция сама
+  // max-height у .antropedia-sticker-picker в antropedia.css: эта функция сама
   // не умеет читать CSS max-height (offsetHeight/scrollHeight ещё не
   // финальны на первом рендере с пустым телом), поэтому число задано здесь
   // явно — при изменении высоты в CSS поменяйте и это.
@@ -242,7 +242,7 @@
   // отзывчивее и не конфликтует с обычным тапом при чуть менее твёрдой руке.
   const STICKER_LONG_PRESS_MS = 450;
 
-  // Тот же брейкпоинт, что и у донного листа в ibripedia.css (@media
+  // Тот же брейкпоинт, что и у донного листа в antropedia.css (@media
   // max-width:640px) — единое место, откуда JS решает "мобильная раскладка
   // пикера или нет": донный лист снизу (см. positionStickerPicker) и то,
   // остаётся ли пикер открытым после выбора стикера (см. onSelect в
@@ -254,7 +254,7 @@
   function positionStickerPicker(pickerEl, triggerEl) {
     if (isMobilePickerLayout()) {
       // Донный лист — целиком на CSS (left/right/bottom/width, см.
-      // ibripedia.css), инлайн top/left тут не нужны и перебили бы его —
+      // antropedia.css), инлайн top/left тут не нужны и перебили бы его —
       // на всякий случай снимаем, если остались от десктопного расчёта
       // (например, окно растянули/сжали, пока пикер уже был открыт).
       pickerEl.style.left = '';
@@ -328,7 +328,7 @@
     return window.blocksToExcerptText ? window.blocksToExcerptText(article.content, 180, articlesIndexBySlug) : '';
   }
 
-  class IbripediaManager {
+  class AntropediaManager {
     constructor() {
       // Куда ходят лайки/реакции/комментарии открытого объекта (this.currentSlug
       // — его id). У статьи — /api/articles/:slug/*; галерея (public/gallery.js)
@@ -409,25 +409,25 @@
     async init() {
       this.cleanup();
 
-      this.browseEl = document.getElementById('ibripediaBrowse');
-      this.viewEl = document.getElementById('ibripediaView');
-      this.gridEl = document.getElementById('ibripediaGrid');
-      this.emptyEl = document.getElementById('ibripediaEmpty');
-      this.loadingMoreEl = document.getElementById('ibripediaLoadingMore');
-      this.sentinelEl = document.getElementById('ibripediaSentinel');
-      this.countEl = document.getElementById('ibripediaCount');
-      this.searchEl = document.getElementById('ibripediaSearch');
-      this.serverFilterEl = document.getElementById('ibripediaServerFilter');
-      this.statusFilterEl = document.getElementById('ibripediaStatusFilter');
-      this.dateFromEl = document.getElementById('ibripediaDateFrom');
-      this.dateToEl = document.getElementById('ibripediaDateTo');
-      this.sortEl = document.getElementById('ibripediaSort');
-      this.filtersToggleBtn = document.getElementById('ibripediaFiltersToggleBtn');
-      this.filtersPanelEl = document.getElementById('ibripediaFiltersPanel');
-      this.filtersCountEl = document.getElementById('ibripediaFiltersCount');
-      this.selectBtn = document.getElementById('ibripediaSelectBtn');
-      this.selectBarEl = document.getElementById('ibripediaSelectBar');
-      this.selectCountEl = document.getElementById('ibripediaSelectCount');
+      this.browseEl = document.getElementById('antropediaBrowse');
+      this.viewEl = document.getElementById('antropediaView');
+      this.gridEl = document.getElementById('antropediaGrid');
+      this.emptyEl = document.getElementById('antropediaEmpty');
+      this.loadingMoreEl = document.getElementById('antropediaLoadingMore');
+      this.sentinelEl = document.getElementById('antropediaSentinel');
+      this.countEl = document.getElementById('antropediaCount');
+      this.searchEl = document.getElementById('antropediaSearch');
+      this.serverFilterEl = document.getElementById('antropediaServerFilter');
+      this.statusFilterEl = document.getElementById('antropediaStatusFilter');
+      this.dateFromEl = document.getElementById('antropediaDateFrom');
+      this.dateToEl = document.getElementById('antropediaDateTo');
+      this.sortEl = document.getElementById('antropediaSort');
+      this.filtersToggleBtn = document.getElementById('antropediaFiltersToggleBtn');
+      this.filtersPanelEl = document.getElementById('antropediaFiltersPanel');
+      this.filtersCountEl = document.getElementById('antropediaFiltersCount');
+      this.selectBtn = document.getElementById('antropediaSelectBtn');
+      this.selectBarEl = document.getElementById('antropediaSelectBar');
+      this.selectCountEl = document.getElementById('antropediaSelectCount');
       this.selectMode = false;
       this.selectedSlugs.clear();
       // Массовое удаление — только владелец (is_root) и доверенный админ
@@ -437,44 +437,44 @@
       if (this.selectBtn) this.selectBtn.hidden = !this.canBulkDelete;
 
       // Просмотр статьи: оглавление/закладки/поиск по тексту
-      this.contentEl = document.getElementById('ibripediaViewContent');
-      this.viewArticleEl = document.getElementById('ibripediaViewArticle');
-      this.bookmarkGutterEl = document.getElementById('ibripediaBookmarkGutter');
-      this.sidebarEl = document.getElementById('ibripediaViewSidebar');
-      this.tocPanelEl = document.getElementById('ibripediaTocPanel');
-      this.bookmarksPanelEl = document.getElementById('ibripediaBookmarksPanel');
-      this.sidebarToggleBtn = document.getElementById('ibripediaSidebarToggleBtn');
-      this.inlineSearchEl = document.getElementById('ibripediaInlineSearch');
-      this.inlineSearchCountEl = document.getElementById('ibripediaInlineSearchCount');
-      this.inlineSearchPrevBtn = document.getElementById('ibripediaInlineSearchPrev');
-      this.inlineSearchNextBtn = document.getElementById('ibripediaInlineSearchNext');
-      this.inlineSearchClearBtn = document.getElementById('ibripediaInlineSearchClear');
-      this.bookmarkPopoverEl = document.getElementById('ibripediaBookmarkPopover');
-      this.bookmarkPopoverNameEl = document.getElementById('ibripediaBookmarkPopoverName');
-      this.bookmarkPopoverColorsEl = document.getElementById('ibripediaBookmarkPopoverColors');
-      this.bookmarkPopoverDeleteBtn = document.getElementById('ibripediaBookmarkPopoverDelete');
-      this.bookmarkPopoverCloseBtn = document.getElementById('ibripediaBookmarkPopoverClose');
-      this.bookmarkModalBackdropEl = document.getElementById('ibripediaBookmarkModalBackdrop');
+      this.contentEl = document.getElementById('antropediaViewContent');
+      this.viewArticleEl = document.getElementById('antropediaViewArticle');
+      this.bookmarkGutterEl = document.getElementById('antropediaBookmarkGutter');
+      this.sidebarEl = document.getElementById('antropediaViewSidebar');
+      this.tocPanelEl = document.getElementById('antropediaTocPanel');
+      this.bookmarksPanelEl = document.getElementById('antropediaBookmarksPanel');
+      this.sidebarToggleBtn = document.getElementById('antropediaSidebarToggleBtn');
+      this.inlineSearchEl = document.getElementById('antropediaInlineSearch');
+      this.inlineSearchCountEl = document.getElementById('antropediaInlineSearchCount');
+      this.inlineSearchPrevBtn = document.getElementById('antropediaInlineSearchPrev');
+      this.inlineSearchNextBtn = document.getElementById('antropediaInlineSearchNext');
+      this.inlineSearchClearBtn = document.getElementById('antropediaInlineSearchClear');
+      this.bookmarkPopoverEl = document.getElementById('antropediaBookmarkPopover');
+      this.bookmarkPopoverNameEl = document.getElementById('antropediaBookmarkPopoverName');
+      this.bookmarkPopoverColorsEl = document.getElementById('antropediaBookmarkPopoverColors');
+      this.bookmarkPopoverDeleteBtn = document.getElementById('antropediaBookmarkPopoverDelete');
+      this.bookmarkPopoverCloseBtn = document.getElementById('antropediaBookmarkPopoverClose');
+      this.bookmarkModalBackdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
 
       // Лайк + комментарии под статьёй
-      this.likeBtn = document.getElementById('ibripediaLikeBtn');
-      this.likeCountEl = document.getElementById('ibripediaLikeCount');
-      this.commentsBtn = document.getElementById('ibripediaCommentsBtn');
-      this.commentsCountEl = document.getElementById('ibripediaCommentsCount');
-      this.commentsSectionEl = document.getElementById('ibripediaViewComments');
-      this.commentsHeaderCountEl = document.getElementById('ibripediaCommentsHeaderCount');
-      this.commentsListEl = document.getElementById('ibripediaCommentsList');
-      this.commentsEmptyEl = document.getElementById('ibripediaCommentsEmpty');
-      this.commentFormEl = document.getElementById('ibripediaCommentForm');
-      this.commentInputEl = document.getElementById('ibripediaCommentInput');
-      this.reactionsBarEl = document.getElementById('ibripediaReactionsBar');
+      this.likeBtn = document.getElementById('antropediaLikeBtn');
+      this.likeCountEl = document.getElementById('antropediaLikeCount');
+      this.commentsBtn = document.getElementById('antropediaCommentsBtn');
+      this.commentsCountEl = document.getElementById('antropediaCommentsCount');
+      this.commentsSectionEl = document.getElementById('antropediaViewComments');
+      this.commentsHeaderCountEl = document.getElementById('antropediaCommentsHeaderCount');
+      this.commentsListEl = document.getElementById('antropediaCommentsList');
+      this.commentsEmptyEl = document.getElementById('antropediaCommentsEmpty');
+      this.commentFormEl = document.getElementById('antropediaCommentForm');
+      this.commentInputEl = document.getElementById('antropediaCommentInput');
+      this.reactionsBarEl = document.getElementById('antropediaReactionsBar');
 
       if (!this.browseEl || !this.gridEl) return; // партиал ещё не в DOM
 
       this.initFiltersCollapse();
 
       this.viewMode = (() => {
-        try { return localStorage.getItem('ibripediaViewMode') === 'list' ? 'list' : 'grid'; }
+        try { return localStorage.getItem('antropediaViewMode') === 'list' ? 'list' : 'grid'; }
         catch (e) { return 'grid'; }
       })();
       this.applyViewMode();
@@ -497,7 +497,7 @@
     }
 
     // Вызывается перед каждой новой инициализацией (повторный заход на
-    // /ibripedia) — партиал перезагружается через fetch, старые DOM-узлы
+    // /antropedia) — партиал перезагружается через fetch, старые DOM-узлы
     // заменяются новыми, но document-level слушатели (keydown, клик "мимо
     // меню") и IntersectionObserver сами не исчезают, если их не снять явно.
     cleanup() {
@@ -512,7 +512,7 @@
     }
 
     initChipFields() {
-      const tagRoot = document.getElementById('ibripediaTagField');
+      const tagRoot = document.getElementById('antropediaTagField');
       this.tagField = tagRoot ? new ChipField(tagRoot, {
         freeText: false,
         placeholder: 'Все теги...',
@@ -577,13 +577,13 @@
       this.dateFromEl?.addEventListener('change', () => this.resetAndLoad());
       this.dateToEl?.addEventListener('change', () => this.resetAndLoad());
 
-      document.getElementById('ibripediaResetFiltersBtn')?.addEventListener('click', () => this.resetFilters());
-      document.getElementById('ibripediaEmptyResetBtn')?.addEventListener('click', () => this.resetFilters());
+      document.getElementById('antropediaResetFiltersBtn')?.addEventListener('click', () => this.resetFilters());
+      document.getElementById('antropediaEmptyResetBtn')?.addEventListener('click', () => this.resetFilters());
 
-      document.getElementById('ibripediaNewBtn')?.addEventListener('click', () => window.spaRouter?.navigateTo('/articles'));
-      document.getElementById('ibripediaRandomBtn')?.addEventListener('click', () => this.openRandomArticle());
+      document.getElementById('antropediaNewBtn')?.addEventListener('click', () => window.spaRouter?.navigateTo('/articles'));
+      document.getElementById('antropediaRandomBtn')?.addEventListener('click', () => this.openRandomArticle());
 
-      document.querySelectorAll('.ibripedia-view-btn').forEach((btn) => {
+      document.querySelectorAll('.antropedia-view-btn').forEach((btn) => {
         btn.addEventListener('click', () => this.setViewMode(btn.getAttribute('data-view')));
       });
 
@@ -597,18 +597,18 @@
         else if (act === 'cancel') this.setSelectMode(false);
       });
 
-      document.getElementById('ibripediaBackBtn')?.addEventListener('click', () => this.closeArticleView());
-      document.getElementById('ibripediaEditBtn')?.addEventListener('click', () => this.editCurrentArticle());
-      document.getElementById('ibripediaDeleteBtn')?.addEventListener('click', () => this.deleteArticle(this.currentSlug));
+      document.getElementById('antropediaBackBtn')?.addEventListener('click', () => this.closeArticleView());
+      document.getElementById('antropediaEditBtn')?.addEventListener('click', () => this.editCurrentArticle());
+      document.getElementById('antropediaDeleteBtn')?.addEventListener('click', () => this.deleteArticle(this.currentSlug));
 
       this.gridEl?.addEventListener('click', (e) => this.handleGridClick(e));
-      document.getElementById('ibripediaViewContent')?.addEventListener('click', (e) => this.handleViewContentClick(e));
-      // Переключатель слоя — отдельный элемент СНАРУЖИ #ibripediaViewContent
+      document.getElementById('antropediaViewContent')?.addEventListener('click', (e) => this.handleViewContentClick(e));
+      // Переключатель слоя — отдельный элемент СНАРУЖИ #antropediaViewContent
       // (см. renderLayerSwitcher), поэтому его клики туда не всплывают и
       // нужен свой обработчик; handleViewContentClick сам проверяет
-      // .ibripedia-layer-btn первым делом, переиспользуем ту же функцию.
-      document.getElementById('ibripediaViewLayerSwitcher')?.addEventListener('click', (e) => this.handleViewContentClick(e));
-      document.getElementById('ibripediaViewMeta')?.addEventListener('click', (e) => {
+      // .antropedia-layer-btn первым делом, переиспользуем ту же функцию.
+      document.getElementById('antropediaViewLayerSwitcher')?.addEventListener('click', (e) => this.handleViewContentClick(e));
+      document.getElementById('antropediaViewMeta')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (!btn) return;
         window.spaRouter?.navigateTo(`/profile/${btn.getAttribute('data-value')}`);
@@ -643,12 +643,12 @@
         // document.body, а не внутри самого пикера) и закрылся бы сам, даже
         // не трогая видимый на экране оверлей. Закрыть превью — явно,
         // крестиком (см. ensureStickerPreviewOverlay).
-        if (e.target.closest('.ibripedia-sticker-preview-overlay')) return;
+        if (e.target.closest('.antropedia-sticker-preview-overlay')) return;
 
-        document.querySelectorAll('.ibripedia-card-menu-dropdown').forEach((dd) => {
+        document.querySelectorAll('.antropedia-card-menu-dropdown').forEach((dd) => {
           if (!dd.hidden && !dd.parentElement.contains(e.target)) dd.hidden = true;
         });
-        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.ibripedia-bm-toggle, .ibripedia-bm-tab')) {
+        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.antropedia-bm-toggle, .antropedia-bm-tab')) {
           this.closeBookmarkPopover();
         }
         // Пикеры стикеров (форма комментария/ответа И полоска реакций — один
@@ -665,7 +665,7 @@
         // узле всегда false — пикер закрывался бы сам на себе при каждом
         // переключении вкладки. composedPath() — снимок пути на момент
         // диспатча, до всех этих мутаций, поэтому не подвержен ошибке.
-        document.querySelectorAll('.ibripedia-sticker-picker').forEach((picker) => {
+        document.querySelectorAll('.antropedia-sticker-picker').forEach((picker) => {
           if (picker.hidden) return;
           const trigger = picker._triggerEl || picker.parentElement?.querySelector('[data-sticker-picker-trigger]');
           const path = e.composedPath ? e.composedPath() : [];
@@ -689,13 +689,13 @@
       if (window.visualViewport && !this._vvResizeHandlerBound) {
         this._vvResizeHandlerBound = true;
         window.visualViewport.addEventListener('resize', () => {
-          const openPicker = document.querySelector('.ibripedia-sticker-picker:not([hidden])');
+          const openPicker = document.querySelector('.antropedia-sticker-picker:not([hidden])');
           if (openPicker && openPicker._triggerEl) positionStickerPicker(openPicker, openPicker._triggerEl);
         });
       }
     }
 
-    // Кнопка "Фильтры" видна только на телефоне (см. ibripedia.css) — на
+    // Кнопка "Фильтры" видна только на телефоне (см. antropedia.css) — на
     // планшете/десктопе панель всегда показана независимо от this.filtersOpen.
     // Начальное состояние — открыто везде, кроме телефона; дальше человек
     // сам решает кликом по кнопке. Проверяем ширину только при заходе на
@@ -746,15 +746,15 @@
 
     setViewMode(mode) {
       this.viewMode = mode === 'list' ? 'list' : 'grid';
-      try { localStorage.setItem('ibripediaViewMode', this.viewMode); } catch (e) { /* приватный режим и т.п. — просто не запомнится */ }
+      try { localStorage.setItem('antropediaViewMode', this.viewMode); } catch (e) { /* приватный режим и т.п. — просто не запомнится */ }
       this.applyViewMode();
     }
 
     applyViewMode() {
-      document.querySelectorAll('.ibripedia-view-btn').forEach((btn) => {
+      document.querySelectorAll('.antropedia-view-btn').forEach((btn) => {
         btn.classList.toggle('active', btn.getAttribute('data-view') === this.viewMode);
       });
-      this.gridEl?.classList.toggle('ibripedia-grid--list', this.viewMode === 'list');
+      this.gridEl?.classList.toggle('antropedia-grid--list', this.viewMode === 'list');
     }
 
     getFilters() {
@@ -787,13 +787,13 @@
     renderSkeletons() {
       for (let i = 0; i < 6; i++) {
         const el = document.createElement('div');
-        el.className = 'ibripedia-skeleton-card ibripedia-skeleton-placeholder';
+        el.className = 'antropedia-skeleton-card antropedia-skeleton-placeholder';
         this.gridEl.appendChild(el);
       }
     }
 
     clearSkeletons() {
-      this.gridEl.querySelectorAll('.ibripedia-skeleton-placeholder').forEach((el) => el.remove());
+      this.gridEl.querySelectorAll('.antropedia-skeleton-placeholder').forEach((el) => el.remove());
     }
 
     async loadMore() {
@@ -837,7 +837,7 @@
 
     renderCount() {
       if (!this.countEl) return;
-      const shown = this.gridEl.querySelectorAll('.ibripedia-card').length;
+      const shown = this.gridEl.querySelectorAll('.antropedia-card').length;
       this.countEl.textContent = this.total > 0 ? `Показано ${shown} из ${this.total}` : '';
     }
 
@@ -851,7 +851,7 @@
 
     buildCard(article) {
       const el = document.createElement('article');
-      el.className = 'ibripedia-card';
+      el.className = 'antropedia-card';
       el.dataset.slug = article.slug || article.id;
       if (article.can_delete) el.dataset.canDelete = '1';
 
@@ -860,44 +860,44 @@
 
       el.innerHTML = `
         ${article.image
-          ? `<div class="ibripedia-card-cover"><img src="${escapeHtml(article.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('ibripedia-card-cover-empty');this.remove()"></div>`
-          : `<div class="ibripedia-card-cover ibripedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>`}
-        ${article.can_delete ? `<div class="ibripedia-card-check" aria-hidden="true"><i class="fas fa-check"></i></div>` : ''}
-        ${article.locked ? `<div class="ibripedia-card-lock" title="Закрытая статья"><i class="fas fa-lock"></i></div>` : ''}
-        ${article.can_edit || article.can_delete ? `<div class="ibripedia-card-menu">
-          <button type="button" class="ibripedia-card-menu-btn" title="Действия">&#8942;</button>
-          <div class="ibripedia-card-menu-dropdown" hidden>
+          ? `<div class="antropedia-card-cover"><img src="${escapeHtml(article.image)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('antropedia-card-cover-empty');this.remove()"></div>`
+          : `<div class="antropedia-card-cover antropedia-card-cover-empty"><i class="fas fa-file-alt"></i></div>`}
+        ${article.can_delete ? `<div class="antropedia-card-check" aria-hidden="true"><i class="fas fa-check"></i></div>` : ''}
+        ${article.locked ? `<div class="antropedia-card-lock" title="Закрытая статья"><i class="fas fa-lock"></i></div>` : ''}
+        ${article.can_edit || article.can_delete ? `<div class="antropedia-card-menu">
+          <button type="button" class="antropedia-card-menu-btn" title="Действия">&#8942;</button>
+          <div class="antropedia-card-menu-dropdown" hidden>
             ${article.can_edit ? `<button type="button" data-action="edit"><i class="fas fa-pen"></i> Редактировать</button>` : ''}
-            ${article.can_delete ? `<button type="button" data-action="delete" class="ibripedia-danger"><i class="fas fa-trash"></i> Удалить</button>` : ''}
+            ${article.can_delete ? `<button type="button" data-action="delete" class="antropedia-danger"><i class="fas fa-trash"></i> Удалить</button>` : ''}
           </div>
         </div>` : ''}
-        <div class="ibripedia-card-body">
-          <h3 class="ibripedia-card-title">${escapeHtml(article.title)}</h3>
-          <p class="ibripedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>
-          ${tags.length ? `<div class="ibripedia-card-tags">${tags.map((t) =>
-            `<span class="ibripedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
+        <div class="antropedia-card-body">
+          <h3 class="antropedia-card-title">${escapeHtml(article.title)}</h3>
+          <p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>
+          ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) =>
+            `<span class="antropedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
           ).join('')}</div>` : ''}
-          <div class="ibripedia-card-meta">
+          <div class="antropedia-card-meta">
             <span${article.author && article.author.id ? ` data-action="open-profile" data-value="${article.author.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: authorName, avatar: article.author && article.author.avatar }, 18)} ${escapeHtml(authorName)}</span>
             <span><i class="fas fa-calendar"></i> ${formatDate(article.created_at)}</span>
           </div>
           <!-- Тот же язык "пилюль", что и панель лайка/комментариев внутри
-               открытой статьи (см. .ibripedia-engagement-btn) — на карточке
+               открытой статьи (см. .antropedia-engagement-btn) — на карточке
                витрины раньше это были голые мелкие иконки вперемешку с
                автором/датой, визуально терялись. -->
-          <div class="ibripedia-card-engagement">
-            <span class="ibripedia-card-pill" title="Просмотров"><i class="fas fa-eye"></i> ${article.viewsCount ?? article.views ?? 0}</span>
-            <button type="button" class="ibripedia-card-pill${article.liked ? ' is-liked' : ''}" data-action="toggle-like" title="Нравится">
-              <i class="${article.liked ? 'fas' : 'far'} fa-heart"></i> <span class="ibripedia-card-pill-count">${article.likesCount || 0}</span>
+          <div class="antropedia-card-engagement">
+            <span class="antropedia-card-pill" title="Просмотров"><i class="fas fa-eye"></i> ${article.viewsCount ?? article.views ?? 0}</span>
+            <button type="button" class="antropedia-card-pill${article.liked ? ' is-liked' : ''}" data-action="toggle-like" title="Нравится">
+              <i class="${article.liked ? 'fas' : 'far'} fa-heart"></i> <span class="antropedia-card-pill-count">${article.likesCount || 0}</span>
             </button>
             <!-- Реакции эмодзи/стикером — сразу рядом с лайком (тот же
                  компонент, что и под открытой статьёй, см.
                  reactionsBarInnerHtml()/handleReactionsClick() выше): лайк
                  ведь тоже своего рода реакция, комментарии между ними не
                  нужны. -->
-            <div class="ibripedia-reactions" data-target-type="article" data-target-id="${escapeHtml(article.slug || article.id)}">${reactionsBarInnerHtml(article.reactions)}</div>
-            <button type="button" class="ibripedia-card-pill" data-action="goto-comments" title="Перейти к комментариям">
-              <i class="far fa-comment"></i> <span class="ibripedia-card-pill-count">${article.commentsCount || 0}</span>
+            <div class="antropedia-reactions" data-target-type="article" data-target-id="${escapeHtml(article.slug || article.id)}">${reactionsBarInnerHtml(article.reactions)}</div>
+            <button type="button" class="antropedia-card-pill" data-action="goto-comments" title="Перейти к комментариям">
+              <i class="far fa-comment"></i> <span class="antropedia-card-pill-count">${article.commentsCount || 0}</span>
             </button>
           </div>
         </div>
@@ -909,7 +909,7 @@
       // В режиме выбора клик по карточке только отмечает её — не открывает
       // статью, не ставит лайк и т.п.
       if (this.selectMode) {
-        const card = e.target.closest('.ibripedia-card');
+        const card = e.target.closest('.antropedia-card');
         if (!card) return;
         e.preventDefault();
         e.stopPropagation();
@@ -925,16 +925,16 @@
         return;
       }
 
-      const menuBtn = e.target.closest('.ibripedia-card-menu-btn');
+      const menuBtn = e.target.closest('.antropedia-card-menu-btn');
       if (menuBtn) {
         e.stopPropagation();
         const dropdown = menuBtn.nextElementSibling;
-        document.querySelectorAll('.ibripedia-card-menu-dropdown').forEach((dd) => { if (dd !== dropdown) dd.hidden = true; });
+        document.querySelectorAll('.antropedia-card-menu-dropdown').forEach((dd) => { if (dd !== dropdown) dd.hidden = true; });
         dropdown.hidden = !dropdown.hidden;
         return;
       }
 
-      const card = e.target.closest('.ibripedia-card');
+      const card = e.target.closest('.antropedia-card');
       if (!card) return;
       const slug = card.dataset.slug;
 
@@ -943,7 +943,7 @@
       // переиспользуется тот же обработчик, что и внутри статьи) — клик
       // здесь не должен открывать статью, поэтому проверяем ДО общего
       // fallthrough в конец метода.
-      if (e.target.closest('.ibripedia-reactions')) {
+      if (e.target.closest('.antropedia-reactions')) {
         this.handleReactionsClick(e);
         return;
       }
@@ -967,7 +967,7 @@
     filterByTag(name) { this.tagField?.addValue(name); }
 
     // Лайк прямо с карточки витрины — без открытия статьи (см. кнопку
-    // .ibripedia-card-pill[data-action="toggle-like"] в buildCard).
+    // .antropedia-card-pill[data-action="toggle-like"] в buildCard).
     // Обновляет только эту карточку, не весь список.
     async toggleCardLike(btn, slug) {
       if (!slug || btn.disabled) return;
@@ -979,7 +979,7 @@
           btn.classList.toggle('is-liked', liked);
           const icon = btn.querySelector('i');
           if (icon) icon.className = liked ? 'fas fa-heart' : 'far fa-heart';
-          const countEl = btn.querySelector('.ibripedia-card-pill-count');
+          const countEl = btn.querySelector('.antropedia-card-pill-count');
           if (countEl) countEl.textContent = String(result.data.count || 0);
         } else {
           showMessage(`Не удалось поставить лайк: ${result.data?.error || result.error || ''}`, 'error');
@@ -1011,7 +1011,7 @@
 
     async deleteArticle(slug) {
       if (!slug) return;
-      document.querySelectorAll('.ibripedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
+      document.querySelectorAll('.antropedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
       if (!confirm('Вы уверены, что хотите удалить эту статью?')) return;
 
       try {
@@ -1033,9 +1033,9 @@
     setSelectMode(on) {
       this.selectMode = !!on && !!this.canBulkDelete;
       this.selectedSlugs.clear();
-      document.querySelectorAll('.ibripedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
+      document.querySelectorAll('.antropedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
       this.gridEl?.classList.toggle('is-selecting', this.selectMode);
-      this.gridEl?.querySelectorAll('.ibripedia-card.is-selected').forEach((c) => c.classList.remove('is-selected'));
+      this.gridEl?.querySelectorAll('.antropedia-card.is-selected').forEach((c) => c.classList.remove('is-selected'));
       if (this.selectBtn) {
         this.selectBtn.classList.toggle('active', this.selectMode);
         this.selectBtn.querySelector('span').textContent = this.selectMode ? 'Отмена' : 'Выбрать';
@@ -1044,7 +1044,7 @@
     }
 
     selectAllCards() {
-      this.gridEl?.querySelectorAll('.ibripedia-card[data-can-delete]').forEach((card) => {
+      this.gridEl?.querySelectorAll('.antropedia-card[data-can-delete]').forEach((card) => {
         this.selectedSlugs.add(card.dataset.slug);
         card.classList.add('is-selected');
       });
@@ -1126,11 +1126,11 @@
 
         // Кнопки прав приходят с сервера (can_edit/can_delete, см.
         // getArticlePermissions в articles.routes.js) — нет права, нет кнопки.
-        const editBtn = document.getElementById('ibripediaEditBtn');
-        const deleteBtn = document.getElementById('ibripediaDeleteBtn');
+        const editBtn = document.getElementById('antropediaEditBtn');
+        const deleteBtn = document.getElementById('antropediaDeleteBtn');
         if (editBtn) editBtn.hidden = !article.can_edit;
         if (deleteBtn) deleteBtn.hidden = !article.can_delete;
-        const actionsEl = document.querySelector('.ibripedia-view-actions');
+        const actionsEl = document.querySelector('.antropedia-view-actions');
         if (actionsEl) actionsEl.hidden = !article.can_edit && !article.can_delete;
 
         await this.renderArticleView(article);
@@ -1147,7 +1147,7 @@
 
         // Работы галереи, привязанные к статье (см. public/gallery.js) — не
         // await: полоса появится, когда придёт ответ.
-        const galleryEl = document.getElementById('ibripediaViewGallery');
+        const galleryEl = document.getElementById('antropediaViewGallery');
         if (galleryEl) {
           galleryEl.dataset.slug = String(this.currentSlug);
           window.galleryRenderArticleStrip?.(galleryEl, this.currentSlug);
@@ -1178,7 +1178,7 @@
       try {
         const result = await window.apiClient.recordArticleView(slug);
         if (result.success && this.currentSlug === slug) {
-          const viewsEl = document.getElementById('ibripediaViewViewsCount');
+          const viewsEl = document.getElementById('antropediaViewViewsCount');
           if (viewsEl) viewsEl.textContent = String(result.data.viewsCount ?? 0);
         }
       } catch (e) {
@@ -1187,8 +1187,8 @@
     }
 
     async renderArticleView(article) {
-      const coverEl = document.getElementById('ibripediaViewCover');
-      const coverImg = document.getElementById('ibripediaViewCoverImg');
+      const coverEl = document.getElementById('antropediaViewCover');
+      const coverImg = document.getElementById('antropediaViewCoverImg');
       if (article.image && coverEl && coverImg) {
         coverImg.src = article.image;
         coverEl.hidden = false;
@@ -1196,33 +1196,33 @@
         coverEl.hidden = true;
       }
 
-      const titleEl = document.getElementById('ibripediaViewTitle');
+      const titleEl = document.getElementById('antropediaViewTitle');
       if (titleEl) titleEl.textContent = article.title;
 
       const authorName = article.author ? article.author.display_name : 'Не указан';
       // Автор и соавторы — каждый с аватаркой и ссылкой на свой профиль.
-      const personChip = (p) => `<span class="ibripedia-person"${p.id ? ` data-action="open-profile" data-value="${p.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: p.display_name, avatar: p.avatar }, 22)} ${escapeHtml(p.display_name)}</span>`;
+      const personChip = (p) => `<span class="antropedia-person"${p.id ? ` data-action="open-profile" data-value="${p.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: p.display_name, avatar: p.avatar }, 22)} ${escapeHtml(p.display_name)}</span>`;
       const people = [
         personChip(article.author || { display_name: authorName }),
         ...(article.co_authors || []).map(personChip)
       ];
       const metaParts = [
-        `<span class="ibripedia-people">${people.join('<span class="ibripedia-people-plus">+</span>')}</span>`,
+        `<span class="antropedia-people">${people.join('<span class="antropedia-people-plus">+</span>')}</span>`,
         `<span><i class="fas fa-calendar"></i> ${formatDate(article.created_at)}</span>`,
-        `<span><i class="fas fa-eye"></i> <span id="ibripediaViewViewsCount">${article.viewsCount ?? 0}</span> просмотров</span>`
+        `<span><i class="fas fa-eye"></i> <span id="antropediaViewViewsCount">${article.viewsCount ?? 0}</span> просмотров</span>`
       ];
       if (article.server) metaParts.push(`<span><i class="fas fa-server"></i> ${escapeHtml(article.server)}</span>`);
-      const metaEl = document.getElementById('ibripediaViewMeta');
+      const metaEl = document.getElementById('antropediaViewMeta');
       if (metaEl) metaEl.innerHTML = metaParts.join('');
 
       const badges = [];
-      if (article.locked) badges.push('<span class="ibripedia-badge" style="background:var(--yellow-hover)"><i class="fas fa-lock"></i> Закрытая</span>');
-      const badgesEl = document.getElementById('ibripediaViewBadges');
+      if (article.locked) badges.push('<span class="antropedia-badge" style="background:var(--yellow-hover)"><i class="fas fa-lock"></i> Закрытая</span>');
+      const badgesEl = document.getElementById('antropediaViewBadges');
       if (badgesEl) badgesEl.innerHTML = badges.join('');
 
       this.renderLayerSwitcher(article);
 
-      const contentEl = document.getElementById('ibripediaViewContent');
+      const contentEl = document.getElementById('antropediaViewContent');
       if (!contentEl) return;
       if (window.renderArticleBlocks) {
         contentEl.innerHTML = await window.renderArticleBlocks(article.content, this.articlesIndexBySlug, this.restrictedSlugs);
@@ -1231,7 +1231,7 @@
       } else {
         contentEl.textContent = '';
       }
-      // Хвостики закладок не строим здесь — .ibripedia-view ещё hidden
+      // Хвостики закладок не строим здесь — .antropedia-view ещё hidden
       // (viewEl.hidden снимается позже в openArticleView), у скрытых
       // элементов getBoundingClientRect() нулевой, координаты были бы
       // неверными. Строятся после показа секции — см. openArticleView.
@@ -1245,7 +1245,7 @@
     }
 
     // Длинный инфобокс на телефоне сворачивается до первых строк с кнопкой
-    // "Показать все (N)" (см. .blk-infobox.is-collapsed в ibripedia.css —
+    // "Показать все (N)" (см. .blk-infobox.is-collapsed в antropedia.css —
     // строки прячет только @media телефона, на ПК кнопки и сворачивания
     // нет). Без этого карточка из 25 строк занимала два экрана, и текст
     // статьи начинался только на третьем.
@@ -1282,14 +1282,14 @@
     // и любой более нижний — сама кнопка просто перезапрашивает статью с
     // ?layer=N, сервер сам не пустит выше положенного.
     renderLayerSwitcher(article) {
-      const el = document.getElementById('ibripediaViewLayerSwitcher');
+      const el = document.getElementById('antropediaViewLayerSwitcher');
       if (!el) return;
       const options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
       if (options.length < 2) { el.hidden = true; el.innerHTML = ''; return; }
 
       el.hidden = false;
       el.innerHTML = `<i class="fas fa-layer-group" title="Слои статьи"></i>` + options.map((opt) => (
-        `<button type="button" class="ibripedia-layer-btn${opt.index === article.layerIndex ? ' active' : ''}" data-layer-index="${opt.index}">${escapeHtml(opt.title)}</button>`
+        `<button type="button" class="antropedia-layer-btn${opt.index === article.layerIndex ? ' active' : ''}" data-layer-index="${opt.index}">${escapeHtml(opt.title)}</button>`
       )).join('');
     }
 
@@ -1319,7 +1319,7 @@
         return;
       }
 
-      const layerBtn = e.target.closest('.ibripedia-layer-btn');
+      const layerBtn = e.target.closest('.antropedia-layer-btn');
       if (layerBtn) {
         e.preventDefault();
         this.switchArticleLayer(parseInt(layerBtn.dataset.layerIndex, 10));
@@ -1355,7 +1355,7 @@
     }
 
     async renderBacklinksView(slug) {
-      const panel = document.getElementById('ibripediaViewBacklinks');
+      const panel = document.getElementById('antropediaViewBacklinks');
       if (!panel) return;
       panel.hidden = false;
       panel.innerHTML = '<h3>Ссылки на эту статью</h3><div class="backlinks-empty">Загрузка…</div>';
@@ -1379,9 +1379,9 @@
     }
 
     // ========================================
-    // Лайк + комментарии под статьёй — панель ibripediaViewEngagement (счётчик
-    // лайков + переход к комментариям) и секция ibripediaViewComments в самом
-    // низу статьи (см. public/views/ibripedia.html). Комментарии — публичные
+    // Лайк + комментарии под статьёй — панель antropediaViewEngagement (счётчик
+    // лайков + переход к комментариям) и секция antropediaViewComments в самом
+    // низу статьи (см. public/views/antropedia.html). Комментарии — публичные
     // данные (видит любой, кому доступна сама статья), в отличие от закладок.
     // ========================================
 
@@ -1406,15 +1406,15 @@
     // ========================================
 
     initReportModal() {
-      this.reportModalEl = document.getElementById('ibripediaReportModal');
+      this.reportModalEl = document.getElementById('antropediaReportModal');
       if (!this.reportModalEl) return;
-      document.getElementById('ibripediaReportBtn')?.addEventListener('click', () => this.openReportModal());
+      document.getElementById('antropediaReportBtn')?.addEventListener('click', () => this.openReportModal());
       this.reportModalEl.querySelectorAll('[data-close-report-modal]').forEach((btn) => {
         btn.addEventListener('click', () => this.closeReportModal());
       });
       // Клик мимо окна не закрывает его — чтобы случайно не потерять
       // уже набранный текст жалобы.
-      document.getElementById('ibripediaReportSubmitBtn')?.addEventListener('click', (e) => {
+      document.getElementById('antropediaReportSubmitBtn')?.addEventListener('click', (e) => {
         runExclusive(e.currentTarget, () => this.submitReport());
       });
     }
@@ -1422,13 +1422,13 @@
     openReportModal() {
       if (!this.currentSlug || !this.reportModalEl) return;
       this._reportSlug = this.currentSlug;
-      document.getElementById('ibripediaReportArticleTitle').textContent =
-        document.getElementById('ibripediaViewTitle')?.textContent || this.currentSlug;
-      document.getElementById('ibripediaReportReason').value = '';
-      document.getElementById('ibripediaReportDescription').value = '';
-      document.getElementById('ibripediaReportComment').value = '';
+      document.getElementById('antropediaReportArticleTitle').textContent =
+        document.getElementById('antropediaViewTitle')?.textContent || this.currentSlug;
+      document.getElementById('antropediaReportReason').value = '';
+      document.getElementById('antropediaReportDescription').value = '';
+      document.getElementById('antropediaReportComment').value = '';
       this.reportModalEl.hidden = false;
-      document.getElementById('ibripediaReportReason').focus();
+      document.getElementById('antropediaReportReason').focus();
     }
 
     closeReportModal() {
@@ -1436,8 +1436,8 @@
     }
 
     async submitReport() {
-      const articleReason = document.getElementById('ibripediaReportReason').value;
-      const description = document.getElementById('ibripediaReportDescription').value.trim();
+      const articleReason = document.getElementById('antropediaReportReason').value;
+      const description = document.getElementById('antropediaReportDescription').value.trim();
       if (!articleReason) {
         showMessage('Выберите причину жалобы', 'error');
         return;
@@ -1451,7 +1451,7 @@
         articleSlug: this._reportSlug,
         articleReason,
         description,
-        comment: document.getElementById('ibripediaReportComment').value
+        comment: document.getElementById('antropediaReportComment').value
       });
       if (!result.success) {
         showMessage(result.data?.error || result.error || 'Не удалось отправить жалобу', 'error');
@@ -1493,13 +1493,13 @@
     // rootEl — либо this.commentFormEl (реальный <form>, есть событие
     // submit), либо динамически созданный <div> формы ответа (тогда шлём по
     // клику на кнопку с data-role="submit"). Оба варианта используют один и
-    // тот же набор классов/data-role, см. разметку в public/views/ibripedia.html
+    // тот же набор классов/data-role, см. разметку в public/views/antropedia.html
     // и toggleReplyComposer().
     wireComposer(rootEl, { onSubmit, onCancel }) {
       if (!rootEl) return null;
-      const inputEl = rootEl.querySelector('.ibripedia-comment-input');
-      const pickerBtn = rootEl.querySelector('.ibripedia-sticker-picker-btn');
-      const pickerEl = rootEl.querySelector('.ibripedia-sticker-picker');
+      const inputEl = rootEl.querySelector('.antropedia-comment-input');
+      const pickerBtn = rootEl.querySelector('.antropedia-sticker-picker-btn');
+      const pickerEl = rootEl.querySelector('.antropedia-sticker-picker');
       const submitBtn = rootEl.querySelector('[data-role="submit"]');
       const cancelBtn = rootEl.querySelector('[data-role="cancel"]');
       const storeLink = rootEl.querySelector('[data-role="open-store"]');
@@ -1697,9 +1697,9 @@
     // ответ, спрятанный под "Показать ещё ответы", раскрываем.
     async focusComment(commentId) {
       for (let attempt = 0; attempt < 40; attempt++) {
-        const el = this.commentsListEl?.querySelector(`.ibripedia-comment[data-id="${commentId}"]`);
+        const el = this.commentsListEl?.querySelector(`.antropedia-comment[data-id="${commentId}"]`);
         if (el) {
-          const extra = el.closest('.ibripedia-replies-extra');
+          const extra = el.closest('.antropedia-replies-extra');
           if (extra && extra.hidden) {
             const toggle = extra.parentElement.querySelector('[data-action="toggle-replies"]');
             if (toggle) this.toggleReplies(toggle);
@@ -1735,7 +1735,7 @@
         return;
       }
 
-      pickerEl.querySelector('.ibripedia-sticker-picker-body').innerHTML = `<div class="ibripedia-sticker-picker-empty">Загрузка…</div>`;
+      pickerEl.querySelector('.antropedia-sticker-picker-body').innerHTML = `<div class="antropedia-sticker-picker-empty">Загрузка…</div>`;
       await this.loadStickerPickerData();
       this.renderStickerPicker(pickerEl, onSelect);
       // Реальная высота стала известна только после наполнения — пересчитываем
@@ -1764,16 +1764,16 @@
     // (см. requirement). Активная вкладка запоминается между открытиями
     // (this._activeStickerTab), пока сам набор/избранное ещё существует.
     renderStickerPicker(pickerEl, onSelect) {
-      const tabsEl = pickerEl.querySelector('.ibripedia-sticker-picker-tabs');
-      const subtitleEl = pickerEl.querySelector('.ibripedia-sticker-picker-subtitle');
-      const bodyEl = pickerEl.querySelector('.ibripedia-sticker-picker-body');
+      const tabsEl = pickerEl.querySelector('.antropedia-sticker-picker-tabs');
+      const subtitleEl = pickerEl.querySelector('.antropedia-sticker-picker-subtitle');
+      const bodyEl = pickerEl.querySelector('.antropedia-sticker-picker-body');
       const packs = (this._subscribedStickerPacks || []).filter((p) => (p.stickers || []).length);
       const favorites = this._favoriteStickers || [];
 
       if (!packs.length) {
         tabsEl.innerHTML = '';
         subtitleEl.textContent = '';
-        bodyEl.innerHTML = `<div class="ibripedia-sticker-picker-empty">Нет добавленных наборов стикеров. Откройте «Магазин наборов», чтобы добавить себе одобренный набор.</div>`;
+        bodyEl.innerHTML = `<div class="antropedia-sticker-picker-empty">Нет добавленных наборов стикеров. Откройте «Магазин наборов», чтобы добавить себе одобренный набор.</div>`;
         return;
       }
 
@@ -1783,11 +1783,11 @@
       }
 
       tabsEl.innerHTML = `
-        <button type="button" class="ibripedia-sticker-picker-tab ibripedia-sticker-picker-tab-fav${this._activeStickerTab === 'favorites' ? ' active' : ''}" data-tab="favorites" title="Избранное">
+        <button type="button" class="antropedia-sticker-picker-tab antropedia-sticker-picker-tab-fav${this._activeStickerTab === 'favorites' ? ' active' : ''}" data-tab="favorites" title="Избранное">
           <i class="fas fa-star"></i>
         </button>
         ${packs.map((p) => `
-          <button type="button" class="ibripedia-sticker-picker-tab${this._activeStickerTab === p.slug ? ' active' : ''}" data-tab="${escapeHtml(p.slug)}" title="${escapeHtml(p.title)}${p.description ? ' — ' + escapeHtml(p.description) : ''}">
+          <button type="button" class="antropedia-sticker-picker-tab${this._activeStickerTab === p.slug ? ' active' : ''}" data-tab="${escapeHtml(p.slug)}" title="${escapeHtml(p.title)}${p.description ? ' — ' + escapeHtml(p.description) : ''}">
             <img src="${escapeHtml(p.stickers[0].fileUrl)}" alt="">
           </button>
         `).join('')}
@@ -1806,13 +1806,13 @@
       if (this._activeStickerTab === 'favorites') {
         subtitleEl.textContent = favorites.length ? 'Избранное' : '';
         bodyEl.innerHTML = favorites.length
-          ? `<div class="ibripedia-sticker-picker-grid">${favorites.map((s) => this.renderStickerPickerItem(s.packSlug, s)).join('')}</div>`
-          : `<div class="ibripedia-sticker-picker-empty">Пока нет избранных стикеров — зажмите стикер в любом наборе, чтобы добавить.</div>`;
+          ? `<div class="antropedia-sticker-picker-grid">${favorites.map((s) => this.renderStickerPickerItem(s.packSlug, s)).join('')}</div>`
+          : `<div class="antropedia-sticker-picker-empty">Пока нет избранных стикеров — зажмите стикер в любом наборе, чтобы добавить.</div>`;
       } else {
         const pack = packs.find((p) => p.slug === this._activeStickerTab);
         subtitleEl.textContent = pack ? (pack.description ? `${pack.title} — ${pack.description}` : pack.title) : '';
         bodyEl.innerHTML = pack
-          ? `<div class="ibripedia-sticker-picker-grid">${pack.stickers.map((s) => this.renderStickerPickerItem(pack.slug, s)).join('')}</div>`
+          ? `<div class="antropedia-sticker-picker-grid">${pack.stickers.map((s) => this.renderStickerPickerItem(pack.slug, s)).join('')}</div>`
           : '';
       }
     }
@@ -1820,7 +1820,7 @@
     renderStickerPickerItem(packSlug, s) {
       const isFav = this._favoriteStickerIds && this._favoriteStickerIds.has(String(s.id));
       return `
-        <button type="button" class="ibripedia-sticker-picker-item${isFav ? ' is-favorite' : ''}" data-shortcode=":${packSlug}:${s.alias}:" data-file-url="${escapeHtml(s.fileUrl)}" data-sticker-id="${s.id}" title="${escapeHtml(s.alias)}">
+        <button type="button" class="antropedia-sticker-picker-item${isFav ? ' is-favorite' : ''}" data-shortcode=":${packSlug}:${s.alias}:" data-file-url="${escapeHtml(s.fileUrl)}" data-sticker-id="${s.id}" title="${escapeHtml(s.alias)}">
           <img src="${escapeHtml(s.fileUrl)}" alt="${escapeHtml(s.alias)}">
         </button>`;
     }
@@ -1835,7 +1835,7 @@
     // через innerHTML, но сам bodyEl как узел не пересоздаётся, так что
     // делегированный обработчик переживает любые перерисовки.
     wireStickerPickerGestures(pickerEl, onSelect) {
-      const bodyEl = pickerEl.querySelector('.ibripedia-sticker-picker-body');
+      const bodyEl = pickerEl.querySelector('.antropedia-sticker-picker-body');
       if (!bodyEl || bodyEl.dataset.gesturesWired) return;
       bodyEl.dataset.gesturesWired = '1';
 
@@ -1844,7 +1844,7 @@
       const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
 
       bodyEl.addEventListener('mousedown', (e) => {
-        const item = e.target.closest('.ibripedia-sticker-picker-item');
+        const item = e.target.closest('.antropedia-sticker-picker-item');
         if (!item) return;
         // См. комментарий у pickerBtn в wireComposer — иначе выбор стикера
         // (даже коротким тапом) снимает фокус с поля ввода и на мобильном
@@ -1860,7 +1860,7 @@
         }, STICKER_LONG_PRESS_MS);
       });
       bodyEl.addEventListener('touchstart', (e) => {
-        const item = e.target.closest('.ibripedia-sticker-picker-item');
+        const item = e.target.closest('.antropedia-sticker-picker-item');
         if (!item) return;
         clearTimer();
         timer = setTimeout(() => {
@@ -1889,14 +1889,14 @@
     ensureStickerPreviewOverlay() {
       if (this._stickerPreviewEls) return this._stickerPreviewEls;
       const overlay = document.createElement('div');
-      overlay.className = 'ibripedia-sticker-preview-overlay';
+      overlay.className = 'antropedia-sticker-preview-overlay';
       overlay.hidden = true;
       overlay.innerHTML = `
-        <div class="ibripedia-sticker-preview-box">
-          <button type="button" class="modal-close ibripedia-sticker-preview-close">&times;</button>
-          <img class="ibripedia-sticker-preview-img" src="" alt="">
-          <div class="ibripedia-sticker-preview-actions">
-            <button type="button" class="btn btn-secondary ibripedia-sticker-preview-fav"><i class="far fa-star"></i> <span>В избранное</span></button>
+        <div class="antropedia-sticker-preview-box">
+          <button type="button" class="modal-close antropedia-sticker-preview-close">&times;</button>
+          <img class="antropedia-sticker-preview-img" src="" alt="">
+          <div class="antropedia-sticker-preview-actions">
+            <button type="button" class="btn btn-secondary antropedia-sticker-preview-fav"><i class="far fa-star"></i> <span>В избранное</span></button>
             <button type="button" class="btn btn-primary" data-role="send">Отправить</button>
           </div>
         </div>
@@ -1905,19 +1905,19 @@
       // Клик по пустому месту (по подложке) — ничего не закрывает, ни само
       // превью, ни пикер под ним (см. requirement "нажатие в пустое место
       // не закрывает окно"); закрыть можно только явно — крестиком или
-      // отправкой стикера. См. также исключение для .ibripedia-sticker-
+      // отправкой стикера. См. также исключение для .antropedia-sticker-
       // preview-overlay в глобальном обработчике клика вне пикера (иначе ТОТ
       // обработчик закрыл бы пикер под превью, даже не трогая сам оверлей).
-      overlay.querySelector('.ibripedia-sticker-preview-close').addEventListener('click', () => this.closeStickerPreviewOverlay());
+      overlay.querySelector('.antropedia-sticker-preview-close').addEventListener('click', () => this.closeStickerPreviewOverlay());
       // См. комментарий у pickerBtn в wireComposer — кнопки превью тоже не
       // должны снимать фокус с поля ввода на мобильном.
       overlay.querySelectorAll('button').forEach((btn) => btn.addEventListener('mousedown', (e) => e.preventDefault()));
       this._stickerPreviewEls = {
         overlay,
-        img: overlay.querySelector('.ibripedia-sticker-preview-img'),
-        favBtn: overlay.querySelector('.ibripedia-sticker-preview-fav'),
-        favIcon: overlay.querySelector('.ibripedia-sticker-preview-fav i'),
-        favLabel: overlay.querySelector('.ibripedia-sticker-preview-fav span'),
+        img: overlay.querySelector('.antropedia-sticker-preview-img'),
+        favBtn: overlay.querySelector('.antropedia-sticker-preview-fav'),
+        favIcon: overlay.querySelector('.antropedia-sticker-preview-fav i'),
+        favLabel: overlay.querySelector('.antropedia-sticker-preview-fav span'),
         sendBtn: overlay.querySelector('[data-role="send"]')
       };
       return this._stickerPreviewEls;
@@ -1973,7 +1973,7 @@
         this._favoriteStickers = null;
         this._favoriteStickerIds = null;
         await this.loadStickerPickerData();
-        const openPicker = item.closest('.ibripedia-sticker-picker');
+        const openPicker = item.closest('.antropedia-sticker-picker');
         if (openPicker && !openPicker.hidden) this.renderStickerPicker(openPicker, openPicker._onSelect);
       } catch (e) {
         showMessage('Неожиданная ошибка при изменении избранного', 'error');
@@ -1987,7 +1987,7 @@
       // DOM целиком — они создаются заново на каждое открытие; встроенные в
       // форму комментария/ответа — просто прячутся (та же форма ещё
       // пригодится, пересоздавать её незачем).
-      document.querySelectorAll('.ibripedia-sticker-picker').forEach((el) => {
+      document.querySelectorAll('.antropedia-sticker-picker').forEach((el) => {
         if (el.dataset.detached) el.remove(); else el.hidden = true;
       });
       document.querySelectorAll('[data-sticker-picker-trigger].active').forEach((btn) => btn.classList.remove('active'));
@@ -2001,7 +2001,7 @@
       this._subscribedStickerPacks = null;
       this._favoriteStickers = null;
       this._favoriteStickerIds = null;
-      const openPicker = document.querySelector('.ibripedia-sticker-picker:not([hidden])');
+      const openPicker = document.querySelector('.antropedia-sticker-picker:not([hidden])');
       if (!openPicker) return;
       await this.loadStickerPickerData();
       this.renderStickerPicker(openPicker, openPicker._onSelect);
@@ -2017,8 +2017,8 @@
     // ========================================
 
     handleReactionsClick(e) {
-      const addBtn = e.target.closest('.ibripedia-reaction-add');
-      const pill = e.target.closest('.ibripedia-reaction-pill');
+      const addBtn = e.target.closest('.antropedia-reaction-add');
+      const pill = e.target.closest('.antropedia-reaction-pill');
       if (!addBtn && !pill) return;
       const bar = e.target.closest('[data-target-type]');
       if (!bar) return;
@@ -2034,7 +2034,7 @@
     // ВСЕГДА создаётся заново и кладётся прямо в document.body, а при
     // закрытии удаляется из DOM целиком (см. closeAllStickerPickers) —
     // причины две: во-первых, полоска реакций на карточке витрины лежит
-    // внутри .ibripedia-card, у которого есть transform при :hover — а
+    // внутри .antropedia-card, у которого есть transform при :hover — а
     // transform на предке делает ЕГО контейнером для position:fixed
     // потомков (см. CSS-спеку), тогда left/top считались бы от карточки, а
     // не от окна; во-вторых, .innerHTML полоски реакций целиком
@@ -2101,12 +2101,12 @@
           }
           // Карточка той же статьи на витрине (сетка/список) — если сейчас
           // видна именно она (а не открытая статья).
-          const cardBar = this.gridEl?.querySelector(`.ibripedia-card[data-slug="${targetId}"] .ibripedia-reactions`);
+          const cardBar = this.gridEl?.querySelector(`.antropedia-card[data-slug="${targetId}"] .antropedia-reactions`);
           if (cardBar) cardBar.innerHTML = reactionsBarInnerHtml(reactions);
         } else {
           const comment = this._commentsById.get(Number(targetId));
           if (comment) comment.reactions = reactions;
-          const bar = this.commentsListEl?.querySelector(`.ibripedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
+          const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
           if (bar) bar.innerHTML = reactionsBarInnerHtml(reactions);
         }
       } catch (e) {
@@ -2225,25 +2225,25 @@
     renderCommentHtml(comment, replies, me, canModerate, isReply, topParentId) {
       const canDelete = canModerate || (me && me.id === comment.userId);
       const { html, standalone } = formatCommentContent(comment.content, comment.stickers, comment.mentions);
-      const reactionsBar = `<div class="ibripedia-reactions" data-target-type="comment" data-target-id="${comment.id}">${reactionsBarInnerHtml(comment.reactions)}</div>`;
+      const reactionsBar = `<div class="antropedia-reactions" data-target-type="comment" data-target-id="${comment.id}">${reactionsBarInnerHtml(comment.reactions)}</div>`;
 
       return `
-        <div class="ibripedia-comment${isReply ? ' ibripedia-comment-reply' : ''}" data-id="${comment.id}">
-          <div class="ibripedia-comment-head">
-            <span class="ibripedia-comment-person" data-action="open-profile" data-value="${comment.userId}" title="Открыть профиль">
+        <div class="antropedia-comment${isReply ? ' antropedia-comment-reply' : ''}" data-id="${comment.id}">
+          <div class="antropedia-comment-head">
+            <span class="antropedia-comment-person" data-action="open-profile" data-value="${comment.userId}" title="Открыть профиль">
               ${window.avatarHtml({ name: comment.authorName, avatar: comment.authorAvatar }, isReply ? 22 : 28)}
-              <span class="ibripedia-comment-author">${escapeHtml(comment.authorName)}</span>
+              <span class="antropedia-comment-author">${escapeHtml(comment.authorName)}</span>
             </span>
-            <span class="ibripedia-comment-date">${formatDate(comment.createdAt)}</span>
-            ${canDelete ? `<button type="button" class="ibripedia-comment-delete" data-action="delete-comment" data-id="${comment.id}" title="Удалить комментарий"><i class="fas fa-trash"></i></button>` : ''}
+            <span class="antropedia-comment-date">${formatDate(comment.createdAt)}</span>
+            ${canDelete ? `<button type="button" class="antropedia-comment-delete" data-action="delete-comment" data-id="${comment.id}" title="Удалить комментарий"><i class="fas fa-trash"></i></button>` : ''}
           </div>
-          <div class="ibripedia-comment-body${standalone ? ' ibripedia-comment-sticker-only' : ''}">${html}</div>
-          <div class="ibripedia-comment-actions">
+          <div class="antropedia-comment-body${standalone ? ' antropedia-comment-sticker-only' : ''}">${html}</div>
+          <div class="antropedia-comment-actions">
             ${reactionsBar}
-            <button type="button" class="ibripedia-comment-reply-btn" data-action="reply" data-id="${topParentId}" data-mention="${escapeHtml(comment.authorName)}"><i class="far fa-message"></i> Ответить</button>
+            <button type="button" class="antropedia-comment-reply-btn" data-action="reply" data-id="${topParentId}" data-mention="${escapeHtml(comment.authorName)}"><i class="far fa-message"></i> Ответить</button>
           </div>
           ${isReply ? '' : this.renderRepliesHtml(comment.id, replies, me, canModerate)}
-          ${isReply ? '' : `<div class="ibripedia-reply-compose-mount" data-reply-mount="${comment.id}"></div>`}
+          ${isReply ? '' : `<div class="antropedia-reply-compose-mount" data-reply-mount="${comment.id}"></div>`}
         </div>
       `;
     }
@@ -2268,16 +2268,16 @@
       const shownHtml = shown.map((r) => this.renderCommentHtml(r, [], me, canModerate, true, parentId)).join('');
       const extraHtml = extra.map((r) => this.renderCommentHtml(r, [], me, canModerate, true, parentId)).join('');
       const toggle = extra.length
-        ? `<button type="button" class="ibripedia-replies-toggle" data-action="toggle-replies" data-id="${parentId}">
+        ? `<button type="button" class="antropedia-replies-toggle" data-action="toggle-replies" data-id="${parentId}">
              ${expanded
                ? `<i class="fas fa-caret-up"></i> Скрыть ответы`
                : `<i class="fas fa-caret-down"></i> Показать ещё ${extra.length} ${pluralizeReplies(extra.length)}`}
            </button>`
         : '';
       return `
-        <div class="ibripedia-replies" data-replies-for="${parentId}">
+        <div class="antropedia-replies" data-replies-for="${parentId}">
           ${shownHtml}
-          ${extra.length ? `<div class="ibripedia-replies-extra"${expanded ? '' : ' hidden'}>${extraHtml}</div>` : ''}
+          ${extra.length ? `<div class="antropedia-replies-extra"${expanded ? '' : ' hidden'}>${extraHtml}</div>` : ''}
           ${toggle}
         </div>`;
     }
@@ -2312,8 +2312,8 @@
     }
 
     toggleReplies(btn) {
-      const wrap = btn.closest('.ibripedia-replies');
-      const extra = wrap?.querySelector('.ibripedia-replies-extra');
+      const wrap = btn.closest('.antropedia-replies');
+      const extra = wrap?.querySelector('.antropedia-replies-extra');
       if (!extra) return;
       const parentId = btn.getAttribute('data-id');
       const expand = extra.hidden;
@@ -2339,7 +2339,7 @@
       if (!mount) return;
 
       if (this._activeReplyParentId === String(parentId)) {
-        mount.querySelector('.ibripedia-comment-input')?.focus();
+        mount.querySelector('.antropedia-comment-input')?.focus();
         return;
       }
       if (this._activeReplyParentId) {
@@ -2349,10 +2349,10 @@
       this._activeReplyParentId = String(parentId);
 
       mount.innerHTML = `
-        <div class="ibripedia-comment-form ibripedia-reply-form">
-          <div class="ibripedia-comment-input" contenteditable="true" data-placeholder="Ответить…"></div>
-          <div class="ibripedia-comment-form-actions">
-            <button type="button" class="ibripedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
+        <div class="antropedia-comment-form antropedia-reply-form">
+          <div class="antropedia-comment-input" contenteditable="true" data-placeholder="Ответить…"></div>
+          <div class="antropedia-comment-form-actions">
+            <button type="button" class="antropedia-sticker-picker-btn" data-sticker-picker-trigger title="Стикеры"><i class="far fa-face-smile"></i></button>
             <button type="button" class="btn btn-secondary btn-sm" data-role="cancel">Отмена</button>
             <button type="button" class="btn btn-primary btn-sm" data-role="submit">Ответить</button>
           </div>
@@ -2467,15 +2467,15 @@
       this._tocHeadings = headings;
 
       if (!headings.length) {
-        panel.innerHTML = '<div class="ibripedia-sidebar-empty">В этой статье нет заголовков.</div>';
+        panel.innerHTML = '<div class="antropedia-sidebar-empty">В этой статье нет заголовков.</div>';
         if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
         return;
       }
 
-      panel.innerHTML = `<ul class="ibripedia-toc-list">${headings.map((h) => {
+      panel.innerHTML = `<ul class="antropedia-toc-list">${headings.map((h) => {
         const level = parseInt(h.tagName.slice(1), 10) || 2;
         const blockId = h.getAttribute('data-block-id');
-        return `<li class="ibripedia-toc-item ibripedia-toc-level-${level}"><a href="javascript:void(0)" data-block-id="${escapeHtml(blockId)}">${escapeHtml(h.textContent)}</a></li>`;
+        return `<li class="antropedia-toc-item antropedia-toc-level-${level}"><a href="javascript:void(0)" data-block-id="${escapeHtml(blockId)}">${escapeHtml(h.textContent)}</a></li>`;
       }).join('')}</ul>`;
 
       this.setupTocScrollSpy();
@@ -2507,20 +2507,20 @@
       try { el = this.contentEl.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`); } catch (e) { el = null; }
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.remove('ibripedia-block-flash');
+      el.classList.remove('antropedia-block-flash');
       // reflow — чтобы анимация переиграла, если кликнули по тому же блоку второй раз подряд
       void el.offsetWidth;
-      el.classList.add('ibripedia-block-flash');
-      setTimeout(() => el.classList.remove('ibripedia-block-flash'), 1600);
+      el.classList.add('antropedia-block-flash');
+      setTimeout(() => el.classList.remove('antropedia-block-flash'), 1600);
     }
 
     // ========================================
     // Вкладки боковой панели (Оглавление / Закладки) + сворачивание панели
-    // на телефоне/планшете (кнопка ibripediaSidebarToggleBtn).
+    // на телефоне/планшете (кнопка antropediaSidebarToggleBtn).
     // ========================================
 
     initSidebarTabs() {
-      document.querySelectorAll('.ibripedia-sidebar-tab').forEach((btn) => {
+      document.querySelectorAll('.antropedia-sidebar-tab').forEach((btn) => {
         btn.addEventListener('click', () => this.switchSidebarTab(btn.getAttribute('data-sidebar-tab')));
       });
       this.tocPanelEl?.addEventListener('click', (e) => {
@@ -2539,7 +2539,7 @@
     }
 
     switchSidebarTab(tab) {
-      document.querySelectorAll('.ibripedia-sidebar-tab').forEach((btn) => {
+      document.querySelectorAll('.antropedia-sidebar-tab').forEach((btn) => {
         btn.classList.toggle('active', btn.getAttribute('data-sidebar-tab') === tab);
       });
       if (this.tocPanelEl) this.tocPanelEl.hidden = tab !== 'toc';
@@ -2607,7 +2607,7 @@
         while (idx !== -1) {
           if (idx > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
           const mark = document.createElement('mark');
-          mark.className = 'ibripedia-search-hit';
+          mark.className = 'antropedia-search-hit';
           mark.textContent = text.slice(idx, idx + q.length);
           frag.appendChild(mark);
           lastIndex = idx + q.length;
@@ -2617,7 +2617,7 @@
         node.parentNode.replaceChild(frag, node);
       });
 
-      this._searchHits = Array.from(this.contentEl.querySelectorAll('mark.ibripedia-search-hit'));
+      this._searchHits = Array.from(this.contentEl.querySelectorAll('mark.antropedia-search-hit'));
       this._searchIndex = -1;
       this.updateSearchCount();
       if (this._searchHits.length) this.gotoSearchHit(1);
@@ -2627,7 +2627,7 @@
     // mark.mk-hl — постоянное выделение из markdown ==текст==).
     clearSearchHighlights() {
       if (!this.contentEl) return;
-      this.contentEl.querySelectorAll('mark.ibripedia-search-hit').forEach((mark) => {
+      this.contentEl.querySelectorAll('mark.antropedia-search-hit').forEach((mark) => {
         const parent = mark.parentNode;
         if (!parent) return;
         parent.replaceChild(document.createTextNode(mark.textContent), mark);
@@ -2653,19 +2653,19 @@
 
     gotoSearchHit(dir) {
       if (!this._searchHits.length) return;
-      if (this._searchIndex >= 0) this._searchHits[this._searchIndex].classList.remove('ibripedia-search-hit-current');
+      if (this._searchIndex >= 0) this._searchHits[this._searchIndex].classList.remove('antropedia-search-hit-current');
       this._searchIndex = (this._searchIndex + dir + this._searchHits.length) % this._searchHits.length;
       const hit = this._searchHits[this._searchIndex];
       // Совпадение в спрятанной строке свёрнутого инфобокса — разворачиваем.
       hit.closest('.blk-infobox.is-collapsed')?.querySelector('.blk-infobox-more')?.click();
-      hit.classList.add('ibripedia-search-hit-current');
+      hit.classList.add('antropedia-search-hit-current');
       hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
       this.updateSearchCount();
     }
 
     // ========================================
-    // Закладки: хвостик-переключатель слева от блока (см. .ibripedia-bm-toggle
-    // в ibripedia.css и renderBookmarkGutter ниже) -> попап "название + цвет"
+    // Закладки: хвостик-переключатель слева от блока (см. .antropedia-bm-toggle
+    // в antropedia.css и renderBookmarkGutter ниже) -> попап "название + цвет"
     // -> POST/PUT /api/bookmarks. Одна закладка на блок — повторный клик по
     // хвостику уже отмеченного блока открывает попап на РЕДАКТИРОВАНИЕ
     // существующей закладки, а не создаёт вторую. Привязка к профилю —
@@ -2674,7 +2674,7 @@
     // ========================================
 
     // Минимальная ширина поля страницы слева от карточки статьи (px), при
-    // которой стикеру-флажку (.ibripedia-bm-tab, ~150-170px + отступ) есть
+    // которой стикеру-флажку (.antropedia-bm-tab, ~150-170px + отступ) есть
     // где торчать, не наезжая на сайдбар/край окна — см. hasWideGutterSpace.
     static get BOOKMARK_TAB_MIN_SPACE() { return 190; }
 
@@ -2685,7 +2685,7 @@
       // захламляя статью значком на каждом абзаце. На тач-экранах наведения
       // не бывает вообще — там вместо него двойной тап по абзацу (см.
       // handleContentDblClick), открывающий попап как модальное окно
-      // (см. openBookmarkPopover/ibripedia.css). Постоянного значка-
+      // (см. openBookmarkPopover/antropedia.css). Постоянного значка-
       // приглашения на неотмеченных блоках там больше нет — только
       // цветной значок у уже поставленных закладок.
       this._bmHoverCapable = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
@@ -2699,14 +2699,14 @@
       this.bookmarkGhostEl.hidden = true;
 
       this.contentEl?.addEventListener('click', (e) => {
-        const toggle = e.target.closest('.ibripedia-bm-toggle');
+        const toggle = e.target.closest('.antropedia-bm-toggle');
         if (!toggle) return;
         e.preventDefault();
         e.stopPropagation();
         this.toggleBookmarkPopover(toggle);
       });
       this.bookmarkGutterEl?.addEventListener('click', (e) => {
-        const tab = e.target.closest('.ibripedia-bm-tab');
+        const tab = e.target.closest('.antropedia-bm-tab');
         if (!tab) return;
         e.preventDefault();
         e.stopPropagation();
@@ -2725,13 +2725,13 @@
         });
       } else {
         // Тач-устройство — двойной тап по абзацу открывает попап (как
-        // модальное окно, см. ibripedia.css) сразу на редактирование, если
+        // модальное окно, см. antropedia.css) сразу на редактирование, если
         // на блоке уже есть закладка, или на создание новой.
         this.contentEl?.addEventListener('dblclick', (e) => this.handleContentDblClick(e));
       }
 
-      document.getElementById('ibripediaBookmarkPopoverCancel')?.addEventListener('click', () => this.closeBookmarkPopover());
-      document.getElementById('ibripediaBookmarkPopoverSave')?.addEventListener('click', () => this.saveBookmarkFromPopover());
+      document.getElementById('antropediaBookmarkPopoverCancel')?.addEventListener('click', () => this.closeBookmarkPopover());
+      document.getElementById('antropediaBookmarkPopoverSave')?.addEventListener('click', () => this.saveBookmarkFromPopover());
       this.bookmarkPopoverDeleteBtn?.addEventListener('click', () => this.deleteBookmarkFromPopover());
       this.bookmarkPopoverCloseBtn?.addEventListener('click', () => this.closeBookmarkPopover());
       this.bookmarkPopoverNameEl?.addEventListener('keydown', (e) => {
@@ -2754,12 +2754,12 @@
     }
 
     // Есть ли слева от карточки статьи достаточно места для стикера,
-    // торчащего ЗА её краем (см. .ibripedia-bm-tab в ibripedia.css) — само
+    // торчащего ЗА её краем (см. .antropedia-bm-tab в antropedia.css) — само
     // поле уже учитывает сайдбар приложения слева и центрирование карточки,
     // т.к. измеряется её реальное положение на экране, а не ширина окна.
     hasWideGutterSpace() {
       if (!this.viewArticleEl) return false;
-      return this.viewArticleEl.getBoundingClientRect().left >= IbripediaManager.BOOKMARK_TAB_MIN_SPACE;
+      return this.viewArticleEl.getBoundingClientRect().left >= AntropediaManager.BOOKMARK_TAB_MIN_SPACE;
     }
 
     // Стикеры закладок: у каждого отмеченного блока — свой (всегда виден,
@@ -2772,7 +2772,7 @@
     renderBookmarkGutter() {
       if (!this.contentEl) return;
       this.hideBookmarkGhost();
-      this.contentEl.querySelectorAll('.ibripedia-bm-toggle, .ibripedia-bm-hover-zone').forEach((el) => el.remove());
+      this.contentEl.querySelectorAll('.antropedia-bm-toggle, .antropedia-bm-hover-zone').forEach((el) => el.remove());
       if (this.bookmarkGutterEl) this.bookmarkGutterEl.innerHTML = '';
       this.bookmarkGutterHoverEl = null;
       this.bookmarkCompactHoverEl = null;
@@ -2808,12 +2808,12 @@
         // Зона наведения — ДО стикеров/значков в DOM, чтобы те красились
         // поверх неё и оставались кликабельными там, где перекрываются с ней.
         if (this._bmWideMode && this.bookmarkGutterEl) {
-          this.bookmarkGutterHoverEl = this.createHoverZone('ibripedia-bm-hover-zone');
+          this.bookmarkGutterHoverEl = this.createHoverZone('antropedia-bm-hover-zone');
           this.bookmarkGutterHoverEl.style.top = `${this._bmBlocks[0].top}px`;
           this.bookmarkGutterHoverEl.style.height = `${Math.max(...this._bmBlocks.map((b) => b.bottom)) - this._bmBlocks[0].top}px`;
           this.bookmarkGutterEl.appendChild(this.bookmarkGutterHoverEl);
         } else {
-          this.bookmarkCompactHoverEl = this.createHoverZone('ibripedia-bm-hover-zone ibripedia-bm-hover-zone-compact');
+          this.bookmarkCompactHoverEl = this.createHoverZone('antropedia-bm-hover-zone antropedia-bm-hover-zone-compact');
           this.contentEl.appendChild(this.bookmarkCompactHoverEl);
         }
       }
@@ -2896,12 +2896,12 @@
     }
 
     // Флажок за левым краем карточки, с именем закладки текстом (см.
-    // .ibripedia-bm-tab в ibripedia.css) — широкий режим.
+    // .antropedia-bm-tab в antropedia.css) — широкий режим.
     createBookmarkTab(blockEl, blockId, bookmark, layoutRect) {
       const blockRect = blockEl.getBoundingClientRect();
       const tab = document.createElement('button');
       tab.type = 'button';
-      tab.className = 'ibripedia-bm-tab';
+      tab.className = 'antropedia-bm-tab';
       tab.style.top = `${blockRect.top - layoutRect.top}px`;
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
@@ -2910,14 +2910,14 @@
       return tab;
     }
 
-    // Компактный значок внутри поля статьи (см. .ibripedia-bm-toggle в
-    // ibripedia.css) — узкий экран/нет места справа ИЛИ приглашение на
+    // Компактный значок внутри поля статьи (см. .antropedia-bm-toggle в
+    // antropedia.css) — узкий экран/нет места справа ИЛИ приглашение на
     // тач-устройстве, где показать флажок только по ховеру нельзя.
     createCompactToggle(blockEl, blockId, bookmark, contentRect) {
       const blockRect = blockEl.getBoundingClientRect();
       const toggle = document.createElement('button');
       toggle.type = 'button';
-      toggle.className = 'ibripedia-bm-toggle' + (bookmark ? ' is-active' : '');
+      toggle.className = 'antropedia-bm-toggle' + (bookmark ? ' is-active' : '');
       toggle.style.top = `${blockRect.top - contentRect.top}px`;
       toggle.setAttribute('data-block-id', blockId);
       toggle.title = bookmark ? bookmark.name : 'Добавить закладку';
@@ -2935,7 +2935,7 @@
       const blockRect = blockEl.getBoundingClientRect();
 
       if (this._bmWideMode && this.bookmarkGutterEl) {
-        this.bookmarkGhostEl.className = 'ibripedia-bm-tab is-ghost';
+        this.bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         this.bookmarkGhostEl.style.removeProperty('--bm-color');
         this.bookmarkGhostEl.title = '';
         this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i> Добавить';
@@ -2943,7 +2943,7 @@
         this.bookmarkGhostEl.style.top = `${blockRect.top - layoutRect.top}px`;
         this.bookmarkGutterEl.appendChild(this.bookmarkGhostEl);
       } else if (this.contentEl) {
-        this.bookmarkGhostEl.className = 'ibripedia-bm-toggle is-ghost';
+        this.bookmarkGhostEl.className = 'antropedia-bm-toggle is-ghost';
         this.bookmarkGhostEl.title = 'Добавить закладку';
         this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i>';
         const contentRect = this.contentEl.getBoundingClientRect();
@@ -2973,7 +2973,7 @@
     // пропускаем ссылки/хэштеги/значок закладки: у них своя реакция на тап,
     // не нужно, чтобы двойной тап по ним ЕЩЁ и открывал попап закладки.
     handleContentDblClick(e) {
-      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .ibripedia-bm-toggle')) return;
+      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle')) return;
       const blockEl = e.target.closest('[data-block-id]');
       if (!blockEl) return;
       e.preventDefault();
@@ -2997,7 +2997,7 @@
           this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
         } else {
           // Тач-устройство — модальное окно по центру экрана (см. @media
-          // (hover:none) в ibripedia.css) — свои inline-координаты только
+          // (hover:none) в antropedia.css) — свои inline-координаты только
           // мешали бы, а подложка явно показывает, что это модалка, а не
           // всплывающая панель, которая пропадёт от любого тапа мимо.
           this.bookmarkPopoverEl.style.removeProperty('left');
@@ -3023,12 +3023,12 @@
     renderBookmarkColorSwatches() {
       if (!this.bookmarkPopoverColorsEl) return;
       this.bookmarkPopoverColorsEl.innerHTML = BOOKMARK_COLORS.map((c) =>
-        `<button type="button" class="ibripedia-bookmark-swatch${c === this.selectedBookmarkColor ? ' active' : ''}" data-color="${c}" style="background:${c}" title="${c}"></button>`
+        `<button type="button" class="antropedia-bookmark-swatch${c === this.selectedBookmarkColor ? ' active' : ''}" data-color="${c}" style="background:${c}" title="${c}"></button>`
       ).join('');
-      this.bookmarkPopoverColorsEl.querySelectorAll('.ibripedia-bookmark-swatch').forEach((btn) => {
+      this.bookmarkPopoverColorsEl.querySelectorAll('.antropedia-bookmark-swatch').forEach((btn) => {
         btn.addEventListener('click', () => {
           this.selectedBookmarkColor = btn.getAttribute('data-color');
-          this.bookmarkPopoverColorsEl.querySelectorAll('.ibripedia-bookmark-swatch').forEach((b) => b.classList.toggle('active', b === btn));
+          this.bookmarkPopoverColorsEl.querySelectorAll('.antropedia-bookmark-swatch').forEach((b) => b.classList.toggle('active', b === btn));
         });
       });
     }
@@ -3054,7 +3054,7 @@
         if (this._pendingBookmark.id) {
           result = await window.apiClient.updateBookmark(this._pendingBookmark.id, { name, color });
         } else {
-          const titleEl = document.getElementById('ibripediaViewTitle');
+          const titleEl = document.getElementById('antropediaViewTitle');
           let blockEl;
           try { blockEl = this.contentEl?.querySelector(`[data-block-id="${CSS.escape(this._pendingBookmark.blockId)}"]`); } catch (e) { blockEl = null; }
           result = await window.apiClient.createBookmark({
@@ -3105,25 +3105,25 @@
       if (!panel) return;
 
       if (!this.currentArticleBookmarks.length) {
-        panel.innerHTML = '<div class="ibripedia-sidebar-empty">Закладок пока нет — нажмите на хвостик закладки слева от нужного абзаца, чтобы добавить.</div>';
+        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — нажмите на хвостик закладки слева от нужного абзаца, чтобы добавить.</div>';
         return;
       }
 
       panel.innerHTML = this.currentArticleBookmarks.map((b) => `
-        <div class="ibripedia-bookmark-item" data-id="${b.id}" data-block-id="${escapeHtml(b.blockId || '')}">
-          <span class="ibripedia-bookmark-dot" style="background:${escapeHtml(b.color)}"></span>
-          <div class="ibripedia-bookmark-item-body">
-            <div class="ibripedia-bookmark-item-name">${escapeHtml(b.name)}</div>
-            ${b.quote ? `<div class="ibripedia-bookmark-item-quote">${escapeHtml(b.quote)}</div>` : ''}
+        <div class="antropedia-bookmark-item" data-id="${b.id}" data-block-id="${escapeHtml(b.blockId || '')}">
+          <span class="antropedia-bookmark-dot" style="background:${escapeHtml(b.color)}"></span>
+          <div class="antropedia-bookmark-item-body">
+            <div class="antropedia-bookmark-item-name">${escapeHtml(b.name)}</div>
+            ${b.quote ? `<div class="antropedia-bookmark-item-quote">${escapeHtml(b.quote)}</div>` : ''}
           </div>
-          <button type="button" class="ibripedia-bookmark-item-del" data-action="delete-bookmark" title="Удалить закладку"><i class="fas fa-trash"></i></button>
+          <button type="button" class="antropedia-bookmark-item-del" data-action="delete-bookmark" title="Удалить закладку"><i class="fas fa-trash"></i></button>
         </div>
       `).join('');
     }
 
     handleBookmarksPanelClick(e) {
       const delBtn = e.target.closest('[data-action="delete-bookmark"]');
-      const item = e.target.closest('.ibripedia-bookmark-item');
+      const item = e.target.closest('.antropedia-bookmark-item');
       if (!item) return;
       const id = item.getAttribute('data-id');
 
@@ -3142,9 +3142,9 @@
     }
 
     handleBookmarksPanelDblClick(e) {
-      const nameEl = e.target.closest('.ibripedia-bookmark-item-name');
+      const nameEl = e.target.closest('.antropedia-bookmark-item-name');
       if (!nameEl) return;
-      const item = nameEl.closest('.ibripedia-bookmark-item');
+      const item = nameEl.closest('.antropedia-bookmark-item');
       const id = item?.getAttribute('data-id');
       const bookmark = this.currentArticleBookmarks.find((b) => String(b.id) === String(id));
       if (!bookmark) return;
@@ -3181,6 +3181,6 @@
     }
   }
 
-  window.IbripediaManager = IbripediaManager;
-  window.ibripediaManager = new IbripediaManager();
+  window.AntropediaManager = AntropediaManager;
+  window.antropediaManager = new AntropediaManager();
 })();
