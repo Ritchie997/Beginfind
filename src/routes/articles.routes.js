@@ -1002,7 +1002,7 @@ router.post('/articles/:id/reactions/toggle', auth.authenticateToken, auth.check
     }
     const shortcode = String(req.body.shortcode || '');
     if (!(await stickers.canUseShortcode(req.user.id, shortcode))) {
-      return res.status(400).json({ error: 'Этот стикер вам недоступен — добавьте набор себе во вкладке «Стикеры»' });
+      return res.status(400).json({ error: 'Этот стикер недоступен — набор не найден или ещё не подтверждён модератором' });
     }
     await social.toggleReaction(req.user.id, 'article', req.params.id, shortcode);
     res.json({ reactions: await getArticleReactions(req.params.id, req.user.id) });
@@ -1114,7 +1114,7 @@ router.post('/articles/:id/comments/:commentId/reactions/toggle', auth.authentic
     }
     const shortcode = String(req.body.shortcode || '');
     if (!(await stickers.canUseShortcode(req.user.id, shortcode))) {
-      return res.status(400).json({ error: 'Этот стикер вам недоступен — добавьте набор себе во вкладке «Стикеры»' });
+      return res.status(400).json({ error: 'Этот стикер недоступен — набор не найден или ещё не подтверждён модератором' });
     }
     await social.toggleReaction(req.user.id, 'comment', req.params.commentId, shortcode);
     const map = await social.getReactionsForTargets('comment', [req.params.commentId], req.user.id);

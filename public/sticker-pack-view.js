@@ -39,6 +39,10 @@
     .spv-tile img { width: 100%; height: 64px; object-fit: contain; }
     .spv-tile-alias { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
     .spv-empty { grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0; }
+    .spv-tile.spv-pickable { cursor: pointer; transition: border-color 0.12s, transform 0.12s; }
+    .spv-tile.spv-pickable:hover { border-color: var(--blurple); transform: translateY(-1px); }
+    .spv-reply-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--text-muted); }
+    .spv-reply-bar select { background: var(--background-tertiary); color: var(--text-normal); border: 1px solid var(--background-accent); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
     .spv-own-hint { color: var(--text-muted); font-size: 13px; }
     .spv-own-hint a { color: var(--blurple); text-decoration: none; }
     .spv-own-hint a:hover { text-decoration: underline; }
@@ -72,6 +76,7 @@
             <div class="spv-meta" id="stickerPackViewMeta"></div>
             <div class="spv-description" id="stickerPackViewDescription"></div>
             <div id="stickerPackViewRejectBox"></div>
+            <div class="spv-reply-bar" id="stickerPackViewReplyBar" hidden></div>
             <div class="spv-grid" id="stickerPackViewGrid"></div>
           </div>
           <div class="modal-footer" id="stickerPackViewFooter"></div>
@@ -90,14 +95,22 @@
         meta: overlay.querySelector('#stickerPackViewMeta'),
         description: overlay.querySelector('#stickerPackViewDescription'),
         rejectBox: overlay.querySelector('#stickerPackViewRejectBox'),
+        replyBar: overlay.querySelector('#stickerPackViewReplyBar'),
         grid: overlay.querySelector('#stickerPackViewGrid'),
         footer: overlay.querySelector('#stickerPackViewFooter')
       };
       return this._els;
     }
 
-    async open(packId) {
+    // options.replyTargets — необязательный список способов ответить стикером
+    // из этого набора БЕЗ добавления набора себе:
+    //   [{ label: 'Реакция на комментарий', send: async (shortcode) => bool }, ...]
+    // shortcode приходит как ":slug:alias:" (как в тексте комментария).
+    // Если send вернул true — модалка закрывается. Без options окно работает
+    // как раньше (только просмотр + "добавить себе").
+    async open(packId, options = {}) {
       if (!packId) return;
+      this.replyTargets = Array.isArray(options.replyTargets) ? options.replyTargets : [];
       const els = this.ensureModal();
       els.overlay.hidden = false;
       els.grid.innerHTML = `<div class="spv-empty">Загрузка…</div>`;
@@ -141,16 +154,52 @@
         ? `<div class="spv-reject-box"><i class="fas fa-triangle-exclamation"></i> Причина отклонения: ${escapeHtml(pack.rejectReason)}</div>`
         : '';
 
+      // Ответить стикером можно только из подтверждённого набора (сервер
+      // проверяет то же самое) и только когда окно открыли из контекста
+      // статьи/комментария (см. replyTargets в open()).
+      const canReply = pack.status === 'approved' && this.replyTargets.length > 0;
+
+      els.replyBar.hidden = !canReply;
+      els.replyBar.innerHTML = canReply
+        ? `<span>Нажмите на стикер, чтобы ответить им — набор добавлять не нужно:</span>
+           <select id="stickerPackViewTargetSelect">
+             ${this.replyTargets.map((t, i) => `<option value="${i}">${escapeHtml(t.label)}</option>`).join('')}
+           </select>`
+        : '';
+
       els.grid.innerHTML = pack.stickers.length
         ? pack.stickers.map((s) => `
-            <div class="spv-tile" title="${escapeHtml(s.alias)}">
+            <div class="spv-tile${canReply ? ' spv-pickable' : ''}" data-alias="${escapeHtml(s.alias)}" title="${escapeHtml(s.alias)}">
               <img src="${escapeHtml(s.fileUrl)}" alt="${escapeHtml(s.alias)}">
               <div class="spv-tile-alias">${escapeHtml(s.alias)}</div>
             </div>`).join('')
         : `<div class="spv-empty">В наборе пока нет стикеров</div>`;
 
+      if (canReply) this.bindReplyTiles(pack);
+
       els.footer.innerHTML = this.renderFooter(pack);
       this.bindFooter(pack);
+    }
+
+    bindReplyTiles(pack) {
+      const els = this._els;
+      const select = els.replyBar.querySelector('#stickerPackViewTargetSelect');
+      els.grid.querySelectorAll('.spv-tile.spv-pickable').forEach((tile) => {
+        tile.addEventListener('click', async () => {
+          const target = this.replyTargets[Number(select?.value || 0)];
+          if (!target || tile.dataset.busy) return;
+          tile.dataset.busy = '1';
+          try {
+            const shortcode = `:${pack.slug}:${tile.dataset.alias}:`;
+            const done = await target.send(shortcode);
+            if (done) this.close();
+          } catch (err) {
+            showMessage('Не удалось отправить стикер', 'error');
+          } finally {
+            delete tile.dataset.busy;
+          }
+        });
+      });
     }
 
     renderFooter(pack) {

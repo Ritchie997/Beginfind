@@ -2091,7 +2091,7 @@
           : await this.engagementApi.toggleCommentReaction(this.currentSlug, targetId, shortcode);
         if (!result.success) {
           showMessage(`Не удалось изменить реакцию: ${result.data?.error || result.error || ''}`, 'error');
-          return;
+          return false;
         }
         const reactions = result.data.reactions || [];
         if (targetType !== 'comment') {
@@ -2109,8 +2109,10 @@
           const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
           if (bar) bar.innerHTML = reactionsBarInnerHtml(reactions);
         }
+        return true;
       } catch (e) {
         showMessage('Неожиданная ошибка при изменении реакции', 'error');
+        return false;
       }
     }
 
@@ -2289,7 +2291,12 @@
     handleCommentsListClick(e) {
       const stickerImg = e.target.closest('[data-pack-id]');
       if (stickerImg) {
-        window.stickerPackView?.open(stickerImg.getAttribute('data-pack-id'));
+        // Из окна набора можно ответить стикером на этот комментарий или на
+        // статью, не добавляя набор себе (сервер требует только, чтобы набор
+        // был подтверждён — см. canUseShortcode в stickers-store.js).
+        window.stickerPackView?.open(stickerImg.getAttribute('data-pack-id'), {
+          replyTargets: this.buildStickerReplyTargets(stickerImg.closest('.antropedia-comment'))
+        });
         return;
       }
 
@@ -2309,6 +2316,35 @@
       }
 
       this.handleReactionsClick(e);
+    }
+
+    // Способы ответить стикером из окна просмотра набора (см. open() в
+    // public/sticker-pack-view.js). commentEl — DOM-блок комментария, по
+    // стикеру из которого кликнули; shortcode приходит с двоеточиями
+    // (":slug:alias:") — реакции их не принимают, комментарий-стикер — да.
+    buildStickerReplyTargets(commentEl) {
+      const targets = [];
+      const commentId = commentEl ? Number(commentEl.dataset.id) : null;
+      const comment = commentId ? this._commentsById.get(commentId) : null;
+      const stripColons = (code) => code.replace(/^:+|:+$/g, '');
+
+      if (comment) {
+        targets.push({
+          label: 'Реакция на этот комментарий',
+          send: (code) => this.toggleReaction('comment', comment.id, stripColons(code))
+        });
+        targets.push({
+          label: 'Ответ на комментарий — стикером',
+          send: (code) => this.submitReply(comment.parentId || comment.id, code)
+        });
+      }
+      if (this.currentSlug) {
+        targets.push({
+          label: 'Реакция на статью',
+          send: (code) => this.toggleReaction('article', this.currentSlug, stripColons(code))
+        });
+      }
+      return targets;
     }
 
     toggleReplies(btn) {
@@ -2391,11 +2427,13 @@
           // перерисовки, а не только по клику на "Показать ещё ответов".
           this._expandedReplyThreads.add(String(parentId));
           await this.loadComments();
-        } else {
-          showMessage(`Не удалось отправить ответ: ${result.data?.error || result.error || ''}`, 'error');
+          return true;
         }
+        showMessage(`Не удалось отправить ответ: ${result.data?.error || result.error || ''}`, 'error');
+        return false;
       } catch (e) {
         showMessage('Неожиданная ошибка при отправке ответа', 'error');
+        return false;
       }
     }
 
