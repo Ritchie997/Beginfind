@@ -851,26 +851,21 @@ function isStandaloneShortcode(content) {
   return !!match;
 }
 
-async function getSubscribedAliasSet(userId) {
-  const rows = await all(
-    `SELECT p.slug as packSlug, s.alias as alias FROM stickers s
-     JOIN sticker_packs p ON p.id = s.pack_id
-     JOIN sticker_subscriptions sub ON sub.pack_id = p.id AND sub.user_id = ?
-     WHERE p.status = 'approved'`,
-    [userId]
-  );
-  return new Set(rows.map((r) => `${r.packSlug}:${r.alias}`));
-}
-
 // Проверка ПЕРЕД сохранением комментария/сообщения: каждый использованный
-// шорткод должен вести на одобренный набор, который автор добавил себе —
-// иначе можно было бы вписать шорткод чужого/ещё не подтверждённого набора
-// руками, не проходя через пикер.
+// шорткод должен вести на ОДОБРЕННЫЙ набор — иначе можно было бы вписать
+// шорткод ещё не подтверждённого/отклонённого набора руками.
+//
+// Подписка ("добавить себе") для отправки больше не нужна: стикером из
+// любого подтверждённого набора можно ответить прямо из окна просмотра
+// набора (см. public/sticker-pack-view.js), не добавляя набор к себе.
+// Подписка по-прежнему определяет только то, что показывает пикер и
+// избранное (см. listSubscribedWithStickers/listFavoritesWithStickers).
+// userId оставлен в сигнатуре, чтобы не менять вызывающий код.
 async function validateContentForPosting(userId, content) {
   const codes = extractShortcodes(content);
   if (!codes.length) return;
-  const allowed = await getSubscribedAliasSet(userId);
-  const invalid = codes.filter((c) => !allowed.has(c));
+  const resolved = await resolveCodes(codes);
+  const invalid = codes.filter((c) => !resolved.has(c));
   if (invalid.length) {
     throw new Error(`Неизвестный или недоступный стикер: ${invalid.map((c) => `:${c}:`).join(', ')}`);
   }
@@ -879,9 +874,13 @@ async function validateContentForPosting(userId, content) {
 // Та же проверка, что validateContentForPosting, но для ОДНОГО шорткода
 // вне текста — реакция на статью/комментарий (см. POST .../reactions/toggle
 // в articles.routes.js) хранит голый шорткод, а не текст с ним внутри.
+// Шорткод — строго строчный "slug:alias", ровно как хранится в БД и как
+// ключ resolveCodes: реакция сохраняется в том же виде, что пришёл.
 async function canUseShortcode(userId, code) {
-  const allowed = await getSubscribedAliasSet(userId);
-  return allowed.has(code);
+  const value = String(code || '');
+  if (!/^[a-z0-9-]{1,80}:[a-z0-9-]{1,80}$/.test(value)) return false;
+  const resolved = await resolveCodes([value]);
+  return resolved.has(value);
 }
 
 // Разрешает список шорткодов ("slug:alias") ОДНИМ запросом в
