@@ -6,6 +6,7 @@
 <title>Antropedia — энциклопедия вселенной AllTell</title>
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="/editor-obsidian.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body data-page="antropedia">
@@ -13,10 +14,10 @@
 <header class="site-header">
   <div class="site-header-inner">
     <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
-    <a href="/site/index.html" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+    <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
     <nav class="site-nav" id="siteNav">
-      <a href="/site/index.html" class="site-nav-link" data-page="home">Главная</a>
-      <a href="/site/antropedia.html" class="site-nav-link" data-page="antropedia">Antropedia</a>
+      <a href="/" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
       <a href="/site/alltell.html" class="site-nav-link" data-page="alltell">AllTell</a>
       <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
     </nav>
@@ -49,7 +50,8 @@
   </div>
 </section>
 
-<main class="site-main">
+<noscript><p class="public-article-message">Для загрузки публичной Antropedia требуется JavaScript.</p></noscript>
+<main class="site-main" hidden>
   <section class="site-section" style="padding-top:32px;">
 
     <div class="chip-row" style="margin-bottom:28px;">
@@ -279,6 +281,7 @@
   </div>
 </footer>
 
+<script src="/blocks-renderer.js"></script>
 <script src="/site/site.js"></script>
 </body>
 </html>

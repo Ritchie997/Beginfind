@@ -56,5 +56,5 @@ test('public and admin entry points remain separated with legacy URLs', async (t
 
   const staticAsset = await get('/site/site.js');
   assert.equal(staticAsset.response.status, 200);
-  assert.match(staticAsset.body, /только визуальное поведение/);
+  assert.match(staticAsset.body, /api\/public\/articles/);
 });

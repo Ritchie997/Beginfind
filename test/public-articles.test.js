@@ -151,6 +151,9 @@ test('guest endpoints only list/search/read public content and expose no write r
   const list = await listResponse.json();
   assert.equal(list.total, 2);
   assert.deepEqual(list.data.map((article) => article.slug), ['guest-open', 'guest-mixed']);
+  assert.equal('content' in list.data[0], false);
+  assert.equal('attachments' in list.data[0], false);
+  assert.equal(JSON.stringify(list).includes('Secret'), false);
 
   const secretSearch = await fetch(`${base}?q=Secret%20search%20phrase`);
   assert.deepEqual(await secretSearch.json(), {

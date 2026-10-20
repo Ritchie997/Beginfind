@@ -34,6 +34,7 @@ src/server.js
 | Загрузки | `src/uploads/multer-config.js`, `src/routes/uploads.routes.js` | Приём и ограничения файлов |
 | API | `src/routes/*.routes.js` | Границы HTTP API по доменным областям |
 | Клиентская оболочка | `public/index.html`, `public/app.js`, `public/spa-router.js` | Загрузка приложения, состояние и переключение экранов |
+| Публичный сайт | `public/site/*.html`, `public/site/site.js`, `public/site/site.css` | Публичные страницы; Antropedia использует гостевые read-only API и renderer блоков |
 | Разметка экранов | `public/views/*.html` | Фрагменты страниц SPA |
 
 Порядок middleware в `src/server.js` значим: middleware API и маршруты нельзя
@@ -45,7 +46,7 @@ src/server.js
 | --- | --- | --- |
 | Вход, профиль, пользователи | `auth.routes.js`, `middleware/auth.js` | `auth-system.js`, `spa-router.js`, `views/profile.html`, `views/pending-users.html`, `views/users-list.html` |
 | Сообщения и серверы | `messages.routes.js`, `servers.routes.js`, `server-system-logic.js`, `server-permissions.js` | `app.js`, `spa-router.js`, `views/servers.html` |
-| Статьи Antropedia | `articles.routes.js`, `articles-store.js`, `blocks.js`, `article-layers.js`, `mentions.js` | `editor-manager.js`, `blocks-renderer.js`, `antropedia.js`, `spa-router.js`, `views/articles.html`, `views/antropedia.html` |
+| Статьи Antropedia | `articles.routes.js`, `public-articles.routes.js`, `articles-store.js`, `public-articles.js`, `blocks.js`, `article-layers.js`, `mentions.js` | `editor-manager.js`, `blocks-renderer.js`, `antropedia.js`, `site/site.js`, `spa-router.js`, `views/articles.html`, `views/antropedia.html` |
 | Граф статей и теги | `articles.routes.js`, `tag-colors.js` | `graph-view.js`, `antropedia.js`, `views/tags.html`, `views/dashboard.html` |
 | Карты и миры | `maps.routes.js`, `maps-store.js`, `worlds-store.js`, `map-access.js`, `map-tiler.js` | `maps/map-core.js`, `map-editor.js`, `maps-ui.js`, `map-calendar.js` |
 | Галерея | `gallery.routes.js`, `gallery-store.js` | `gallery.js`, `gallery.css`, `views/gallery.html` |

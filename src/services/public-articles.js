@@ -52,6 +52,20 @@ function toPublicArticle(article, resolved) {
   };
 }
 
+function toPublicArticleSummary(article, resolved) {
+  const layer = resolved.layer;
+  const isLegacy = !Array.isArray(article.layers) || article.layers.length === 0;
+  return {
+    slug: article.slug,
+    title: layer.title || (isLegacy ? article.title : article.slug),
+    excerpt: layer.excerpt || (isLegacy ? article.excerpt : ''),
+    image: layer.image || (isLegacy ? article.image : null),
+    tags: Array.isArray(layer.tags) ? layer.tags : [],
+    created_at: article.created_at,
+    updated_at: article.updated_at
+  };
+}
+
 function getPublicArticle(article) {
   const resolved = articleLayers.resolvePublicArticleLayers(article);
   if (!resolved) return null;
@@ -97,13 +111,12 @@ function listPublicArticles(articles, { q = '', tag = '', limit = 30, offset = 0
   );
   const total = visible.length;
   const page = visible.slice(offset, offset + limit)
-    .map(({ article, resolved }) => toPublicArticle(article, resolved));
+    .map(({ article, resolved }) => toPublicArticleSummary(article, resolved));
 
   return { data: page, total, limit, offset };
 }
 
 module.exports = {
   getPublicArticle,
-  listPublicArticles,
-  sanitizePublicDocument
+  listPublicArticles
 };
