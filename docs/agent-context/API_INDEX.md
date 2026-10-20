@@ -188,6 +188,11 @@
 - `GET /notifications`
 - `POST /notifications/read`
 
+## `public-articles.routes.js`
+
+- `GET /public/articles`
+- `GET /public/articles/:slug`
+
 ## `servers.routes.js`
 
 - `GET /servers`

@@ -29,6 +29,7 @@ const pages = require('./routes/pages.routes');
 const authRoutes = require('./routes/auth.routes');
 const messagesRoutes = require('./routes/messages.routes');
 const articlesRoutes = require('./routes/articles.routes');
+const publicArticlesRoutes = require('./routes/public-articles.routes');
 const taxonomyRoutes = require('./routes/taxonomy.routes');
 const serversRoutes = require('./routes/servers.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
@@ -110,6 +111,7 @@ app.use('/api/*', dedupeRequests);
 // Маршруты API
 app.use('/api', authRoutes);
 app.use('/api', messagesRoutes);
+app.use('/api', publicArticlesRoutes.createPublicArticlesRouter());
 app.use('/api', articlesRoutes);
 app.use('/api', taxonomyRoutes);
 app.use('/api', serversRoutes);

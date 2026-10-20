@@ -273,6 +273,32 @@ async function resolveArticleLayer(article, user) {
 }
 
 /**
+ * Возвращает только явно публичные слои, не запрашивая роли пользователя.
+ * Если статья смешивает ролевые и открытые слои, открытый слой должен иметь
+ * явный маркер public:true; это не позволяет старым/повреждённым данным
+ * случайно раскрыть слой рядом с закрытым.
+ */
+function resolvePublicArticleLayers(article) {
+  const layers = getEffectiveLayers(article);
+  if (!layers.length) return null;
+
+  const hasRestrictedLayers = layers.some((layer) =>
+    layer.lockedNoRoles || (Array.isArray(layer.roles) && layer.roles.length > 0)
+  );
+  const accessible = [];
+  layers.forEach((layer, index) => {
+    const hasRoles = Array.isArray(layer.roles) && layer.roles.length > 0;
+    if (layer.lockedNoRoles || hasRoles) return;
+    if (hasRestrictedLayers && layer.public !== true) return;
+    accessible.push(index);
+  });
+
+  if (!accessible.length) return null;
+  const index = accessible[accessible.length - 1];
+  return { index, layer: layers[index], layers, accessible };
+}
+
+/**
  * Булев короткий путь — замена прежнего canAccessArticle: есть доступ хотя
  * бы к одному (самому нижнему) слою статьи.
  */
@@ -377,6 +403,7 @@ module.exports = {
   readerTags,
   normalizeTagList,
   resolveArticleLayer,
+  resolvePublicArticleLayers,
   hasArticleAccess,
   canAccessLayerIndex,
   canCreateLayerWithRoles,
