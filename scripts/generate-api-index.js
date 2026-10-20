@@ -39,5 +39,5 @@ for (const file of routeFiles) {
 }
 
 if (!count) throw new Error('No API route declarations found; refusing to write an empty index.');
-fs.writeFileSync(outputFile, `${lines.join('\n')}\n`);
+fs.writeFileSync(outputFile, `${lines.join('\n').trimEnd()}\n`);
 console.log(`Wrote ${count} routes to ${path.relative(root, outputFile)}.`);
