@@ -449,7 +449,7 @@ function showModalLogin() {
         modal.remove();
         showMessageOnPage(result.message, 'success');
         if (typeof updateUserInfo === 'function') updateUserInfo();
-        if (window.location.pathname === '/' || window.location.pathname === '/index.html' || window.location.pathname === '/admin-panel') {
+        if (window.location.pathname === '/' || window.location.pathname === '/index.html' || window.location.pathname.startsWith('/admin-panel')) {
           setTimeout(() => { window.location.reload(); }, 800);
         }
       } else {

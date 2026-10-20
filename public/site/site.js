@@ -101,6 +101,18 @@
       }
     }
 
+    function updateAdminLinks(slug) {
+      var destination = '/admin-panel';
+      if (slug) {
+        destination += '?editArticle=' + encodeURIComponent(slug);
+      }
+      document.querySelectorAll('[data-mode-switch]').forEach(function (link) {
+        link.href = destination;
+      });
+    }
+
+    updateAdminLinks(state.slug);
+
     function updateSearchUrl() {
       var next = new URL(window.location.href);
       if (state.query) next.searchParams.set('q', state.query);
@@ -247,6 +259,7 @@
       listView.hidden = true;
       detail.hidden = false;
       detail.replaceChildren();
+      updateAdminLinks(article.slug);
 
       var back = document.createElement('a');
       back.className = 'public-article-back';

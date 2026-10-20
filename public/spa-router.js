@@ -155,8 +155,13 @@ class SPARouter {
     this.setupNavigation();
     this.setupHistoryHandling();
 
-    // Load current route
-    this.navigateTo(window.location.pathname);
+    // Load current route, then continue a public article's edit request.
+    const requestedEditSlug = new URLSearchParams(window.location.search).get('editArticle');
+    this.navigateTo(window.location.pathname).then(async () => {
+      if (!requestedEditSlug || !/^[a-zA-Z0-9_-]{1,100}$/.test(requestedEditSlug)) return;
+      await this.navigateTo('/articles');
+      await this.editArticle(requestedEditSlug);
+    });
 
     // Update user info display
     if (typeof updateUserInfo === 'function') updateUserInfo();
@@ -297,6 +302,7 @@ class SPARouter {
         }
 
         this.shownPath = normalizedPath;
+        this.updatePublicSiteToggle();
 
         // Update page title
         this.updatePageTitle(routeKey);
@@ -328,6 +334,13 @@ class SPARouter {
   // сам вместе с окнами прошлой страницы.
   afterNavigate(fn) {
     (this._afterNavigate || (this._afterNavigate = [])).push(fn);
+  }
+
+  updatePublicSiteToggle() {
+    const toggle = document.getElementById('public-site-toggle');
+    if (!toggle) return;
+    const articleMatch = window.location.pathname.match(/^\/admin-panel\/antropedia\/([^/]+)\/?$/);
+    toggle.href = articleMatch ? `/antropedia/${articleMatch[1]}` : '/';
   }
 
   // Helper function to normalize paths for routing

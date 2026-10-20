@@ -36,6 +36,7 @@ test('public and admin entry points remain separated with legacy URLs', async (t
 
   for (const pathname of [
     '/admin-panel',
+    '/admin-panel?editArticle=example-article',
     '/admin-panel/antropedia',
     '/admin-panel/antropedia/example-article',
     '/admin-panel.html',
@@ -57,4 +58,8 @@ test('public and admin entry points remain separated with legacy URLs', async (t
   const staticAsset = await get('/site/site.js');
   assert.equal(staticAsset.response.status, 200);
   assert.match(staticAsset.body, /api\/public\/articles/);
+  assert.match(staticAsset.body, /editArticle=/);
+
+  const adminShell = await get('/admin-panel');
+  assert.match(adminShell.body, /id="public-site-toggle"/);
 });
