@@ -1664,7 +1664,7 @@
   // пользуется — у неё свой onNodeClick.
   async function navigateToArticle(slug) {
     if (!slug || !window.spaRouter) return;
-    await window.spaRouter.navigateTo('/antropedia');
+    await window.spaRouter.navigateTo('/admin-panel/antropedia');
     await window.antropediaManager?.openArticleView(slug);
   }
 

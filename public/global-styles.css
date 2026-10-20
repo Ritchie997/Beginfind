@@ -340,6 +340,24 @@ body {
     color: var(--header-primary);
 }
 
+.mode-switch-link {
+    color: var(--text-normal);
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.mode-switch-link:hover {
+    color: #fff;
+    border-color: var(--blurple);
+    background: rgba(88, 101, 242, 0.18);
+}
+
 .user-info {
     display: flex;
     align-items: center;

@@ -105,8 +105,18 @@ const bookmarksDb = new sqlite3.Database(dbPath('bookmarks.db'), (err) => {
       name TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#5865f2',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    bookmarksDb.run('CREATE INDEX IF NOT EXISTS idx_bookmarks_user_article ON bookmarks (user_id, article_slug)');
+    )`, (tableErr) => {
+      if (tableErr) {
+        console.error('Error creating bookmarks table:', tableErr);
+        return;
+      }
+      bookmarksDb.run(
+        'CREATE INDEX IF NOT EXISTS idx_bookmarks_user_article ON bookmarks (user_id, article_slug)',
+        (indexErr) => {
+          if (indexErr) console.error('Error creating bookmarks index:', indexErr);
+        }
+      );
+    });
   }
 });
 

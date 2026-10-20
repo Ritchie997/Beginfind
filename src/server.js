@@ -29,6 +29,7 @@ const pages = require('./routes/pages.routes');
 const authRoutes = require('./routes/auth.routes');
 const messagesRoutes = require('./routes/messages.routes');
 const articlesRoutes = require('./routes/articles.routes');
+const publicArticlesRoutes = require('./routes/public-articles.routes');
 const taxonomyRoutes = require('./routes/taxonomy.routes');
 const serversRoutes = require('./routes/servers.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
@@ -55,11 +56,12 @@ app.use(/\.js$/, (req, res, next) => {
   next();
 });
 
-// Статические файлы
-app.use(express.static(PUBLIC_DIR));
+// Статические файлы. index:false позволяет маршруту pages.routes.js отдавать
+// публичную основу на /, не меняя прямой legacy-доступ к /index.html (админка).
+app.use(express.static(PUBLIC_DIR, { index: false }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// "Красивые" URL SPA (/, /articles.html, /dashboard.html и т.д.)
+// Совместимые URL SPA админки (/articles.html, /dashboard.html и т.д.).
 app.use(pages.router);
 
 // Поддержка CORS для разных IP-адресов
@@ -109,6 +111,7 @@ app.use('/api/*', dedupeRequests);
 // Маршруты API
 app.use('/api', authRoutes);
 app.use('/api', messagesRoutes);
+app.use('/api', publicArticlesRoutes.createPublicArticlesRouter());
 app.use('/api', articlesRoutes);
 app.use('/api', taxonomyRoutes);
 app.use('/api', serversRoutes);

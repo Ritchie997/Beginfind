@@ -64,6 +64,8 @@ class SPARouter {
     this.routes = {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
+      '/admin-panel': this.loadDashboard,
+      '/admin-panel/antropedia': this.loadAntropedia,
       '/antropedia': this.loadAntropedia,
       // /gallery/:id — та же страница + сразу открытый просмотр работы
       // (см. resolveRouteKey, id кладётся в this.galleryWorkId).
@@ -153,8 +155,13 @@ class SPARouter {
     this.setupNavigation();
     this.setupHistoryHandling();
 
-    // Load current route
-    this.navigateTo(window.location.pathname);
+    // Load current route, then continue a public article's edit request.
+    const requestedEditSlug = new URLSearchParams(window.location.search).get('editArticle');
+    this.navigateTo(window.location.pathname).then(async () => {
+      if (!requestedEditSlug || !/^[a-zA-Z0-9_-]{1,100}$/.test(requestedEditSlug)) return;
+      await this.navigateTo('/articles');
+      await this.editArticle(requestedEditSlug);
+    });
 
     // Update user info display
     if (typeof updateUserInfo === 'function') updateUserInfo();
@@ -295,6 +302,7 @@ class SPARouter {
         }
 
         this.shownPath = normalizedPath;
+        this.updatePublicSiteToggle();
 
         // Update page title
         this.updatePageTitle(routeKey);
@@ -326,6 +334,13 @@ class SPARouter {
   // сам вместе с окнами прошлой страницы.
   afterNavigate(fn) {
     (this._afterNavigate || (this._afterNavigate = [])).push(fn);
+  }
+
+  updatePublicSiteToggle() {
+    const toggle = document.getElementById('public-site-toggle');
+    if (!toggle) return;
+    const articleMatch = window.location.pathname.match(/^\/admin-panel\/antropedia\/([^/]+)\/?$/);
+    toggle.href = articleMatch ? `/antropedia/${articleMatch[1]}` : '/';
   }
 
   // Helper function to normalize paths for routing
@@ -365,11 +380,11 @@ class SPARouter {
     }
     // /antropedia/:slug — та же страница Antropedia + сразу открытая статья
     // (ссылку на статью можно скопировать кнопкой «Поделиться»).
-    const articleMatch = normalizedPath.match(/^\/antropedia\/([^/]+)$/);
+    const articleMatch = normalizedPath.match(/^\/(?:admin-panel\/)?antropedia\/([^/]+)$/);
     if (articleMatch) {
       try { this.articleRouteSlug = decodeURIComponent(articleMatch[1]); }
       catch (e) { this.articleRouteSlug = articleMatch[1]; }
-      return '/antropedia';
+      return normalizedPath.startsWith('/admin-panel/') ? '/admin-panel/antropedia' : '/antropedia';
     }
     const galleryMatch = normalizedPath.match(/^\/gallery(?:\/(\d+))?$/);
     if (galleryMatch) {
@@ -455,6 +470,8 @@ class SPARouter {
     const titles = {
       '/': 'Аналитика - Админ-панель AllTell',
       '/dashboard': 'Аналитика - Админ-панель AllTell',
+      '/admin-panel': 'Аналитика - Админ-панель AllTell',
+      '/admin-panel/antropedia': 'Antropedia - Админ-панель AllTell',
       '/antropedia': 'Antropedia - Админ-панель AllTell',
       '/gallery': 'Галерея - Админ-панель AllTell',
       '/articles': 'Редактор - Админ-панель AllTell',
@@ -4335,7 +4352,7 @@ class SPARouter {
 
   // Клик по тегу — витрина Antropedia с уже включённым фильтром по нему.
   async openTagInAntropedia(tag) {
-    await this.navigateTo('/antropedia');
+    await this.navigateTo('/admin-panel/antropedia');
     window.antropediaManager?.filterByTag(tag);
   }
 
@@ -5721,7 +5738,7 @@ class SPARouter {
   // Открывает статью в Antropedia (опционально — сразу на комментариях).
   async openAntropediaArticle(slug, { jumpToComments = false } = {}) {
     if (!slug) return;
-    await this.navigateTo('/antropedia');
+    await this.navigateTo('/admin-panel/antropedia');
     await window.antropediaManager?.openArticleView(slug, { jumpToComments });
   }
 
@@ -7407,7 +7424,7 @@ SPARouter.prototype.renderProfileBookmarks = async function() {
 
 SPARouter.prototype.openBookmarkedArticle = async function(slug, blockId) {
   if (!slug) return;
-  await this.navigateTo('/antropedia');
+  await this.navigateTo('/admin-panel/antropedia');
   await window.antropediaManager?.openArticleView(slug);
   if (blockId) {
     // Панель/контент статьи дорисовываются асинхронно (блоки, закладки,
