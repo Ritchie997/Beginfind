@@ -64,6 +64,8 @@ class SPARouter {
     this.routes = {
       '/': this.loadDashboard,
       '/dashboard': this.loadDashboard,
+      '/admin-panel': this.loadDashboard,
+      '/admin-panel/antropedia': this.loadAntropedia,
       '/antropedia': this.loadAntropedia,
       // /gallery/:id — та же страница + сразу открытый просмотр работы
       // (см. resolveRouteKey, id кладётся в this.galleryWorkId).
@@ -365,11 +367,11 @@ class SPARouter {
     }
     // /antropedia/:slug — та же страница Antropedia + сразу открытая статья
     // (ссылку на статью можно скопировать кнопкой «Поделиться»).
-    const articleMatch = normalizedPath.match(/^\/antropedia\/([^/]+)$/);
+    const articleMatch = normalizedPath.match(/^\/(?:admin-panel\/)?antropedia\/([^/]+)$/);
     if (articleMatch) {
       try { this.articleRouteSlug = decodeURIComponent(articleMatch[1]); }
       catch (e) { this.articleRouteSlug = articleMatch[1]; }
-      return '/antropedia';
+      return normalizedPath.startsWith('/admin-panel/') ? '/admin-panel/antropedia' : '/antropedia';
     }
     const galleryMatch = normalizedPath.match(/^\/gallery(?:\/(\d+))?$/);
     if (galleryMatch) {
@@ -455,6 +457,8 @@ class SPARouter {
     const titles = {
       '/': 'Аналитика - Админ-панель AllTell',
       '/dashboard': 'Аналитика - Админ-панель AllTell',
+      '/admin-panel': 'Аналитика - Админ-панель AllTell',
+      '/admin-panel/antropedia': 'Antropedia - Админ-панель AllTell',
       '/antropedia': 'Antropedia - Админ-панель AllTell',
       '/gallery': 'Галерея - Админ-панель AllTell',
       '/articles': 'Редактор - Админ-панель AllTell',
@@ -4335,7 +4339,7 @@ class SPARouter {
 
   // Клик по тегу — витрина Antropedia с уже включённым фильтром по нему.
   async openTagInAntropedia(tag) {
-    await this.navigateTo('/antropedia');
+    await this.navigateTo('/admin-panel/antropedia');
     window.antropediaManager?.filterByTag(tag);
   }
 
@@ -5721,7 +5725,7 @@ class SPARouter {
   // Открывает статью в Antropedia (опционально — сразу на комментариях).
   async openAntropediaArticle(slug, { jumpToComments = false } = {}) {
     if (!slug) return;
-    await this.navigateTo('/antropedia');
+    await this.navigateTo('/admin-panel/antropedia');
     await window.antropediaManager?.openArticleView(slug, { jumpToComments });
   }
 
@@ -7407,7 +7411,7 @@ SPARouter.prototype.renderProfileBookmarks = async function() {
 
 SPARouter.prototype.openBookmarkedArticle = async function(slug, blockId) {
   if (!slug) return;
-  await this.navigateTo('/antropedia');
+  await this.navigateTo('/admin-panel/antropedia');
   await window.antropediaManager?.openArticleView(slug);
   if (blockId) {
     // Панель/контент статьи дорисовываются асинхронно (блоки, закладки,

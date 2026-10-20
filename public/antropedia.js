@@ -1113,14 +1113,18 @@
       }
     }
 
-    // Адрес страницы в духе /antropedia/<slug> — по нему статью можно
-    // отправить ссылкой (см. resolveRouteKey в spa-router.js).
+    // Публичный URL статьи для пересылки/внешнего просмотра.
     getArticleUrlPath(slug) {
       return slug ? `/antropedia/${encodeURIComponent(slug)}` : '/antropedia';
     }
 
+    // Внутренний URL статьи в авторизованной Antropedia админ-панели.
+    getAdminArticleUrlPath(slug) {
+      return slug ? `/admin-panel/antropedia/${encodeURIComponent(slug)}` : '/admin-panel/antropedia';
+    }
+
     syncArticleUrl(slug) {
-      const path = this.getArticleUrlPath(slug);
+      const path = this.getAdminArticleUrlPath(slug);
       if (window.location.pathname !== path) history.pushState({}, '', path);
       window.spaRouter?.setShownPath?.(path);
     }

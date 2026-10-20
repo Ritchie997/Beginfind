@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test": "node --test",
     "make-owner": "node scripts/make-owner.js",
     "migrate-articles": "node scripts/migrate-articles.js",
     "docs:api-index": "node scripts/generate-api-index.js"
@@ -29,5 +30,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
+  },
+  "allowScripts": {
+    "sqlite3@5.1.7": true
   }
 }

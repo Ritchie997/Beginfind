@@ -55,11 +55,12 @@ app.use(/\.js$/, (req, res, next) => {
   next();
 });
 
-// Статические файлы
-app.use(express.static(PUBLIC_DIR));
+// Статические файлы. index:false позволяет маршруту pages.routes.js отдавать
+// публичную основу на /, не меняя прямой legacy-доступ к /index.html (админка).
+app.use(express.static(PUBLIC_DIR, { index: false }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// "Красивые" URL SPA (/, /articles.html, /dashboard.html и т.д.)
+// Совместимые URL SPA админки (/articles.html, /dashboard.html и т.д.).
 app.use(pages.router);
 
 // Поддержка CORS для разных IP-адресов

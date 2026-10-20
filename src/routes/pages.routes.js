@@ -1,6 +1,5 @@
-// pages.routes.js — отдаёт index.html для всех "красивых" путей SPA.
-// Сама SPA (public/spa-router.js) разбирает URL на клиенте, серверу тут
-// достаточно всегда отдавать одну и ту же страницу с нужным заголовком.
+// pages.routes.js — публичные страницы и совместимые входы в SPA админ-панели.
+// Конкретные маршруты регистрируются до общего SPA fallback в server.js.
 
 const express = require('express');
 const path = require('path');
@@ -8,8 +7,20 @@ const { PUBLIC_DIR } = require('../config/paths');
 
 const router = express.Router();
 
-const SPA_PAGES = [
-  '/',
+function sendPage(file) {
+  return (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.sendFile(path.join(PUBLIC_DIR, file));
+  };
+}
+
+router.get('/', sendPage('site/index.html'));
+router.get('/antropedia', sendPage('site/antropedia.html'));
+router.get('/antropedia/:slug', sendPage('site/antropedia.html'));
+router.get('/admin-panel', sendPage('index.html'));
+router.get('/admin-panel/antropedia', sendPage('index.html'));
+
+const LEGACY_ADMIN_PAGES = [
   '/test.html',
   '/admin-panel.html',
   '/dashboard.html',
@@ -19,12 +30,7 @@ const SPA_PAGES = [
   '/settings.html'
 ];
 
-SPA_PAGES.forEach((route) => {
-  router.get(route, (req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-  });
-});
+LEGACY_ADMIN_PAGES.forEach((route) => router.get(route, sendPage('index.html')));
 
 // Catch-all для остальных "красивых" путей SPA (например /server/:id) —
 // должен быть подключён в server.js последним, после всех /api/* маршрутов
