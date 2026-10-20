@@ -96,6 +96,7 @@
 
     const actions = root.querySelector('.map-fs-actions');
     actions.innerHTML = `
+      <button type="button" class="map-fs-btn" data-act="share" title="Скопировать ссылку на карту"><i class="fas fa-link"></i><span class="map-fs-btn-label"> Поделиться</span></button>
       <button type="button" class="map-fs-btn" data-act="zones" title="Что показывать и список зон и меток"><i class="fas fa-layer-group"></i><span class="map-fs-btn-label"> Слои</span></button>
       ${data.can_edit ? '<button type="button" class="map-fs-btn" data-act="edit" title="Редактировать карту"><i class="fas fa-pen"></i><span class="map-fs-btn-label"> Редактировать</span></button>' : ''}`;
 
@@ -121,7 +122,24 @@
     bindPageActions(root, viewer, data);
   }
 
+  async function shareMap(data) {
+    const mapId = data.id || window.location.pathname.split('/')[2];
+    const url = `${window.location.origin}/map/${mapId}`;
+    try {
+      if (navigator.share && window.matchMedia('(hover: none)').matches) {
+        await navigator.share({ title: data.title, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      showMessage('Ссылка на карту скопирована', 'success');
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      window.prompt('Ссылка на карту:', url);
+    }
+  }
+
   function bindPageActions(root, viewer, data) {
+    root.querySelector('[data-act="share"]')?.addEventListener('click', () => shareMap(data));
     root.querySelector('[data-act="edit"]')?.addEventListener('click', async () => {
       if (window.MapCore.isTouchUi()) {
         const msg = 'Редактор карт сейчас рассчитан на компьютер (мышь и клавиатура). Открыть всё равно?';

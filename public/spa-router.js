@@ -83,6 +83,7 @@ class SPARouter {
     };
     this.mapRouteId = null;
     this.galleryWorkId = null;
+    this.articleRouteSlug = null; // slug из "/antropedia/:slug" (см. resolveRouteKey)
 
     // id из "/profile/123" — единственный маршрут с динамическим сегментом,
     // поэтому отдельного mini-роутера не заводим (см. normalizePathForRouting
@@ -360,6 +361,14 @@ class SPARouter {
       this.mapRouteId = mapMatch[1];
       return mapMatch[2] ? '/map-edit' : '/map';
     }
+    // /antropedia/:slug — та же страница Antropedia + сразу открытая статья
+    // (ссылку на статью можно скопировать кнопкой «Поделиться»).
+    const articleMatch = normalizedPath.match(/^\/antropedia\/([^/]+)$/);
+    if (articleMatch) {
+      try { this.articleRouteSlug = decodeURIComponent(articleMatch[1]); }
+      catch (e) { this.articleRouteSlug = articleMatch[1]; }
+      return '/antropedia';
+    }
     const galleryMatch = normalizedPath.match(/^\/gallery(?:\/(\d+))?$/);
     if (galleryMatch) {
       this.galleryWorkId = galleryMatch[1] || null;
@@ -506,6 +515,8 @@ class SPARouter {
   // Load Antropedia (article browsing/showcase page)
   async loadAntropedia() {
     this.showLoader();
+    const articleSlug = this.articleRouteSlug;
+    this.articleRouteSlug = null;
 
     try {
       const response = await fetch('/views/antropedia.html');
@@ -520,6 +531,18 @@ class SPARouter {
       }
 
       await window.antropediaManager?.init();
+      // Статью открываем после перехода (адрес /antropedia/:slug уже
+      // выставлен самим навигатором). Не удалось открыть (нет статьи или
+      // доступа) — возвращаем адрес списка, чтобы он не врал.
+      if (articleSlug) {
+        this.afterNavigate(async () => {
+          const opened = await window.antropediaManager?.openArticleView(articleSlug, { updateUrl: false });
+          if (!opened) {
+            history.replaceState(history.state || {}, '', '/antropedia');
+            this.shownPath = '/antropedia';
+          }
+        });
+      }
     } catch (error) {
       console.error('Error loading Antropedia:', error);
       showMessage('Ошибка при загрузке Antropedia', 'error');
@@ -5848,6 +5871,12 @@ window.spaRouter = {
   // области сервера и переход в статью Ибрипедии из зоны карты.
   get currentServerWorkspaceTab() {
     return spaRouter ? spaRouter.currentServerWorkspaceTab : null;
+  },
+
+  // Антропедия сама меняет адрес при открытии/закрытии статьи — сообщаем
+  // навигатору, какой адрес сейчас показан (см. navigateTo/shownPath).
+  setShownPath: (path) => {
+    if (spaRouter) spaRouter.shownPath = path;
   },
 
   openAntropediaArticle: async (slug, opts) => {

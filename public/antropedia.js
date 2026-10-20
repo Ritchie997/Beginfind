@@ -598,6 +598,7 @@
       });
 
       document.getElementById('antropediaBackBtn')?.addEventListener('click', () => this.closeArticleView());
+      document.getElementById('antropediaShareBtn')?.addEventListener('click', () => this.shareCurrentArticle());
       document.getElementById('antropediaEditBtn')?.addEventListener('click', () => this.editCurrentArticle());
       document.getElementById('antropediaDeleteBtn')?.addEventListener('click', () => this.deleteArticle(this.currentSlug));
 
@@ -1112,13 +1113,43 @@
       }
     }
 
-    async openArticleView(slug, { jumpToComments = false, layer } = {}) {
-      if (!slug) return;
+    // Адрес страницы в духе /antropedia/<slug> — по нему статью можно
+    // отправить ссылкой (см. resolveRouteKey в spa-router.js).
+    getArticleUrlPath(slug) {
+      return slug ? `/antropedia/${encodeURIComponent(slug)}` : '/antropedia';
+    }
+
+    syncArticleUrl(slug) {
+      const path = this.getArticleUrlPath(slug);
+      if (window.location.pathname !== path) history.pushState({}, '', path);
+      window.spaRouter?.setShownPath?.(path);
+    }
+
+    async shareCurrentArticle() {
+      if (!this.currentSlug) return;
+      const url = `${window.location.origin}${this.getArticleUrlPath(this.currentSlug)}`;
+      const title = document.getElementById('antropediaViewTitle')?.textContent || 'Статья';
+      try {
+        if (navigator.share && window.matchMedia('(hover: none)').matches) {
+          await navigator.share({ title, url });
+          return;
+        }
+        await navigator.clipboard.writeText(url);
+        showMessage('Ссылка на статью скопирована', 'success');
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        window.prompt('Ссылка на статью:', url);
+      }
+    }
+
+    // Возвращает true, если статья открылась.
+    async openArticleView(slug, { jumpToComments = false, layer, updateUrl = true } = {}) {
+      if (!slug) return false;
       try {
         const result = await window.apiClient.getArticle(slug, layer != null ? { layer } : undefined);
         if (!result.success) {
           showMessage(`Не удалось открыть статью: ${result.data?.error || result.error || ''}`, 'error');
-          return;
+          return false;
         }
         const article = result.data;
         this.currentSlug = article.slug || article.id;
@@ -1144,6 +1175,7 @@
         this.viewEl.hidden = false;
         window.scrollTo(0, 0);
         this.renderBookmarkGutter();
+        if (updateUrl) this.syncArticleUrl(this.currentSlug);
 
         // Работы галереи, привязанные к статье (см. public/gallery.js) — не
         // await: полоса появится, когда придёт ответ.
@@ -1163,8 +1195,10 @@
         // handleGridClick/buildCard) — статья уже открыта, докручиваем до
         // комментариев в самом низу, как и по клику на значок внутри статьи.
         if (jumpToComments) this.scrollToComments();
+        return true;
       } catch (e) {
         showMessage('Неожиданная ошибка при открытии статьи', 'error');
+        return false;
       }
     }
 
@@ -2474,6 +2508,7 @@
     }
 
     closeArticleView() {
+      if (this.currentSlug) this.syncArticleUrl(null);
       this.currentSlug = null;
       this.currentArticleBookmarks = [];
       this.resetEngagementUI();
