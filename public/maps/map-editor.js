@@ -253,6 +253,7 @@
       this.mtypes = MC().typeMap(this.markerTypes);
       this.doc = { title: data.title, roles: data.roles || [], zones: data.zones || [], markers: data.markers || [], markerGroups: data.markerGroups || [], events: data.events || [], timeline: data.timeline || { initial: null } };
       this.hiddenGroupsEd = new Set(); // группы, скрытые на карте редактора («глазик»)
+      this.hiddenZonesEd = new Set(); // зоны, скрытые на карте редактора («глазик»); у читателя не меняют ничего
       this.newMarkerGroupId = null; // в какую группу пойдут новые метки
       this.calendar = data.calendar || null;
       this.selectedEventId = null;
@@ -698,7 +699,7 @@
       this.zoneLayers.clear();
       const depths = MC().zoneDepths(this.doc.zones);
       const ordered = this.doc.zones
-        .filter((z) => this.zonePoly(z).length)
+        .filter((z) => this.zonePoly(z).length && !this.hiddenZonesEd.has(z.id))
         .map((z) => ({ z, d: depths.get(z.id) || 0, a: MC().polygonArea(this.zonePoly(z)) }))
         .sort((p, q) => (p.d - q.d) || (q.a - p.a))
         .map((p) => p.z);
@@ -759,7 +760,7 @@
       this.fogLayer.clearLayers();
       if (!this.fogPreview) return;
       this.doc.zones.forEach((z) => {
-        if (!(z.roles || []).length || !this.existsNow(z)) return;
+        if (!(z.roles || []).length || !this.existsNow(z) || this.hiddenZonesEd.has(z.id)) return;
         const poly = this.zonePoly(z);
         if (!poly.length) return;
         L.polygon(MC().polygonToLatLngs(poly), {
@@ -1731,10 +1732,13 @@
       const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', 'ru');
       const zoneRow = (z, depth, hasKids) => {
         const t = this.types.get(z.typeId) || MC().FALLBACK_TYPE;
+        const zHidden = this.hiddenZonesEd.has(z.id);
+        const eye = `<button type="button" class="me-tree-caret me-zone-eye${zHidden ? ' is-off' : ''}" data-zone-eye="${esc(z.id)}" title="${zHidden ? 'Показать зону на карте редактора' : 'Скрыть зону на карте редактора (у читателя она останется)'}"><i class="fas fa-eye${zHidden ? '-slash' : ''}"></i></button>`;
         const caret = hasKids
           ? `<button type="button" class="me-tree-caret" data-toggle-zone="${esc(z.id)}" title="${this._collapsed.has(z.id) ? 'Развернуть' : 'Свернуть'}"><i class="fas fa-caret-${this._collapsed.has(z.id) ? 'right' : 'down'}"></i></button>`
           : '<span class="me-tree-caret-space"></span>';
-        return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
+        return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}${zHidden ? ' is-zone-hidden' : ''}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
+          ${eye}
           ${caret}
           <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
           <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
@@ -1829,6 +1833,14 @@
       });
       tree.onclick = (e) => {
         if (this.onGroupClick(e)) return;
+        const zEye = e.target.closest('[data-zone-eye]');
+        if (zEye) {
+          const id = zEye.dataset.zoneEye;
+          if (this.hiddenZonesEd.has(id)) this.hiddenZonesEd.delete(id); else this.hiddenZonesEd.add(id);
+          this.renderZoneLayers();
+          this.renderTree();
+          return;
+        }
         const caret = e.target.closest('[data-toggle-zone]');
         if (caret) {
           const id = caret.dataset.toggleZone;

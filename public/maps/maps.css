@@ -1106,6 +1106,9 @@ body.map-fs-open { overflow: hidden; }
 .me-tree-caret:hover { color: var(--text-normal); }
 .me-tree-caret-space { flex: 0 0 auto; width: 18px; }
 .me-tree-item.is-absent { opacity: .5; }
+.me-tree-item.is-zone-hidden .me-tree-name, .me-tree-item.is-zone-hidden .map-fs-zone-dot { opacity: .45; }
+.me-tree-item.is-zone-hidden .me-tree-name { text-decoration: line-through; }
+.me-zone-eye.is-off { color: var(--text-muted); }
 
 /* Сворачиваемые блоки свойств */
 .me-props-details { margin: 10px 0; border: 1px solid var(--background-accent); border-radius: 8px; padding: 0 10px; }
