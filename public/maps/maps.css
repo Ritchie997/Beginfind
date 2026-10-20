@@ -1532,3 +1532,5 @@ body.map-panel-resizing .leaflet-container { pointer-events: none; }
 .me-ctx button i { width: 14px; text-align: center; }
 
 .map-zone-label-anchor.is-fogged { display: none; }
+
+.world-type-range { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--text-muted); }

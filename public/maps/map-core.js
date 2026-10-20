@@ -18,9 +18,9 @@
   // Предел приближения (зум 0 — пиксель в пиксель с исходником, +1 — ×2…).
   // Почти впритык — чтобы на гигантских картах можно было раскрыть все
   // метки, — но не бесконечно: дальше ×32 (×64 в редакторе) смотреть не на что.
-  const MAX_VIEW_ZOOM = 5;
-  const MAX_EDITOR_ZOOM = 6;
-  const TILE_MAX_ZOOM = 8; // тайловый слой не должен пропадать раньше карты
+  const MAX_VIEW_ZOOM = 8; // с запасом под многоуровневые слои (вселенная → … → мир)
+  const MAX_EDITOR_ZOOM = 9;
+  const TILE_MAX_ZOOM = 12; // тайловый слой не должен пропадать раньше карты
 
   // Сильнее ×2 картинка растянута: показываем чёткие пиксели, а не муть.
   function bindPixelZoom(map, container) {
@@ -277,6 +277,13 @@
   const SOLID_ZONES_KEY = 'alltell_map_solid_zones';
 
   const FALLBACK_MARKER_TYPE ={ id: null, name: 'Метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 };
+
+  // Скрыта ли зона типа type на масштабе zoom (fullZoom — вид всей карты).
+  function zoneHiddenByMaxZoom(type, zoom, fullZoom) {
+    const max = type && type.maxZoomRel;
+    if (!max || zoom == null || fullZoom == null) return false;
+    return zoom >= fullZoom + max;
+  }
 
   function zoneDepths(zones) {
     const byId = new Map(zones.map((z) => [z.id, z]));
@@ -737,7 +744,13 @@
       if (zone.id === this.selectedId) return true;
       if (this.isZoneExcluded(zone)) return false;
       const t = this.types.get(zone.typeId);
-      return this.isVisibleAtZoom(t ? t.minZoomRel : 0);
+      return this.isVisibleAtZoom(t ? t.minZoomRel : 0) && !this.isHiddenByMaxZoom(t);
+    }
+
+    // «Скрывать с приближения» у типа зоны: крупная зона гаснет, когда
+    // приблизились настолько, что поверх неё работают зоны помельче.
+    isHiddenByMaxZoom(type) {
+      return zoneHiddenByMaxZoom(type, this.map && this.map.getZoom(), this.fullZoom);
     }
 
     // Скрытая по масштабу зона плавно гаснет и не ловит мышь — клик
@@ -1615,6 +1628,7 @@
     effectiveType,
     FALLBACK_MARKER_TYPE,
     zoneDepths,
+    zoneHiddenByMaxZoom,
     makeTileLayer,
     loadScript,
     MapViewer,

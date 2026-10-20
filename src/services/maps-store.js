@@ -249,7 +249,7 @@ function normalizeMarker(raw) {
     lockedMode: LOCKED_MODES.includes(raw.lockedMode) ? raw.lockedMode : 'lock',
     // Важность метки поверх её типа: с какого приближения видна (null — как
     // у типа) и можно ли прятать её в группу на отдалении (null — как у типа).
-    minZoomRel: raw.minZoomRel === null || raw.minZoomRel === undefined || raw.minZoomRel === '' ? null : Math.min(8, Math.max(0, parseInt(raw.minZoomRel, 10) || 0)),
+    minZoomRel: raw.minZoomRel === null || raw.minZoomRel === undefined || raw.minZoomRel === '' ? null : Math.round(Math.min(24, Math.max(0, parseFloat(raw.minZoomRel) || 0)) * 100) / 100,
     noCluster: typeof raw.noCluster === 'boolean' ? raw.noCluster : null,
     ...normalizeInterval(raw),
     pos: [round1(x), round1(y)]

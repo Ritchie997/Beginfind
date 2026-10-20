@@ -87,6 +87,7 @@
   const SNAP_PX = 10;
   const NEIGHBOR_CUT_KEY = 'alltell.mapNeighborCut';
   const FOG_PREVIEW_KEY = 'alltell.mapFogPreview';
+  const ZOOM_LAYERS_KEY = 'alltell.mapZoomLayers';
   // Кисть: диаметр в экранных пикселях, число сторон круга на концах мазка.
   const BRUSH_KEY = 'alltell.mapBrushPx';
   const BRUSH_MIN = 4;
@@ -289,6 +290,9 @@
       let fogPreview = false;
       try { fogPreview = localStorage.getItem(FOG_PREVIEW_KEY) === '1'; } catch (e) { /* нет доступа */ }
       this.setFogPreview(fogPreview);
+      let zoomLayers = false;
+      try { zoomLayers = localStorage.getItem(ZOOM_LAYERS_KEY) === '1'; } catch (e) { /* нет доступа */ }
+      this.setZoomLayers(zoomLayers);
       this.bindCalendarSection();
       this.bindGlobal();
       this.initMap();
@@ -323,6 +327,7 @@
               <span class="me-tools-sep"></span>
               <button type="button" class="me-tool me-tool-toggle" data-act="toggle-neighbors" title=""><i class="fas fa-object-ungroup"></i></button>
               <button type="button" class="me-tool me-tool-toggle" data-act="toggle-fog" title=""><i class="fas fa-cloud"></i></button>
+              <button type="button" class="me-tool me-tool-toggle" data-act="toggle-zoomlayers" title=""><i class="fas fa-layer-group"></i></button>
               <button type="button" class="me-tool me-tool-toggle me-tool-eraser" data-act="toggle-eraser" title=""><i class="fas fa-eraser"></i></button>
             </div>
             <div class="me-canvas-wrap">
@@ -389,6 +394,7 @@
         case 'preview': this.preview(); break;
         case 'toggle-neighbors': this.setNeighborCut(!this.neighborCut); break;
         case 'toggle-fog': this.setFogPreview(!this.fogPreview); break;
+        case 'toggle-zoomlayers': this.setZoomLayers(!this.zoomLayers); break;
         case 'toggle-eraser': this.setEraser(!this.eraser); break;
       }
     }
@@ -610,6 +616,7 @@
       this.map.on('mousedown', (e) => this.onMapMouseDown(e));
       this.map.on('mouseout', () => { if (!this.draw || this.draw.kind !== 'brush') this.hideBrushCursor(); });
       this.map.on('moveend zoomend', () => { if (this.tool === 'vertex') this.renderHandles(); });
+      this.map.on('zoomend', () => this.updateZoneZoomVisibility());
       this._resizeObserver = new ResizeObserver(() => this.map.invalidateSize());
       this._resizeObserver.observe(this.wrapEl);
     }
@@ -636,7 +643,7 @@
       const bounds = MC().imageBounds(this.size);
       this.boundsRect = L.rectangle(bounds, { color: '#72767d', weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(this.map);
       this.map.setMaxBounds(bounds.pad(0.6));
-      if (!this._fitted) { this.map.fitBounds(bounds, { animate: false }); this._fitted = true; }
+      if (!this._fitted) { this.map.fitBounds(bounds, { animate: false }); this._fitted = true; this.fullZoom = this.map.getZoom(); }
       this.refreshBasemapSelect();
     }
 
@@ -730,7 +737,46 @@
         this.zoneLayers.set(zone.id, layer);
       });
       this.highlightEventZones && this.highlightEventZones();
+      this.updateZoneZoomVisibility();
       this.renderFogPreview();
+    }
+
+    // ----- Слои по масштабу -----
+    // Как у читателя: «Видно с приближения» / «Скрывать с приближения» у типа
+    // зоны (страны → регионы → города). Выключено — видны все зоны сразу,
+    // чтобы их можно было править на любом масштабе. Выбранная зона видна
+    // всегда.
+
+    setZoomLayers(on) {
+      this.zoomLayers = !!on;
+      try { localStorage.setItem(ZOOM_LAYERS_KEY, this.zoomLayers ? '1' : '0'); } catch (e) { /* нет доступа */ }
+      this.root.querySelectorAll('[data-act="toggle-zoomlayers"]').forEach((btn) => {
+        btn.classList.toggle('active', this.zoomLayers);
+        btn.title = this.zoomLayers
+          ? 'Слои по масштабу: ВКЛ — зоны показываются и гаснут при приближении, как у читателя (настройка — «Видно»/«Скрывать» у типа зоны)'
+          : 'Слои по масштабу: ВЫКЛ — видны все зоны сразу';
+      });
+      this.updateZoneZoomVisibility();
+    }
+
+    zoneHiddenByZoom(zone) {
+      if (!this.zoomLayers || !this.map || zone.id === this.selectedId) return false;
+      const t = this.types.get(zone.typeId);
+      const zoom = this.map.getZoom();
+      const full = this.fullZoom;
+      if (full == null) return false;
+      const min = t && t.minZoomRel;
+      if (min && zoom < Math.min(full + min, this.map.getMaxZoom())) return true;
+      return MC().zoneHiddenByMaxZoom(t, zoom, full);
+    }
+
+    updateZoneZoomVisibility() {
+      if (!this.zoneLayers) return;
+      this.zoneLayers.forEach((layer, id) => {
+        const zone = this.zoneById(id);
+        const el = layer.getElement && layer.getElement();
+        if (zone && el) el.classList.toggle('map-zone-zoomhidden', this.zoneHiddenByZoom(zone));
+      });
     }
 
     // ----- Предпросмотр тумана войны -----
@@ -804,6 +850,7 @@
       const prev = this.selectedId;
       this.selectedId = id && this.zoneById(id) ? id : null;
       [prev, this.selectedId].forEach((zid) => { const z = zid && this.zoneById(zid); if (z) this.refreshZoneLayer(z); });
+      this.updateZoneZoomVisibility();
       if (fly && this.selectedId) {
         const bbox = MC().polygonBBox(this.zonePoly(this.zoneById(this.selectedId)));
         if (bbox) this.map.flyToBounds(MC().bboxToLatLngBounds(bbox), { padding: [60, 60], maxZoom: 1, duration: 0.5 });
@@ -2309,18 +2356,14 @@
 
     renderMarkerVisibilitySection(m) {
       const t = this.markerType(m);
-      const levels = ['Всегда', 'С приближения ×2', '×4', '×8', '×16', '×32', '×64'];
-      const typeLevel = levels[t.minZoomRel || 0] || 'Всегда';
+      const typeLevel = t.minZoomRel ? `с уровня ${t.minZoomRel} (×${Math.round(Math.pow(2, t.minZoomRel) * 10) / 10})` : 'всегда';
       const own = m.minZoomRel !== null && m.minZoomRel !== undefined;
       const clusterOwn = m.noCluster !== null && m.noCluster !== undefined;
       return `
         <details class="me-props-details" data-sec="visibility" ${this.secOpen('visibility', own || clusterOwn) ? 'open' : ''}>
         <summary>Важность и видимость${own || clusterOwn ? ' <span class="me-sec-badge">своя</span>' : ''}</summary>
-        <label class="me-field"><span>Видно</span>
-          <select class="form-select" data-mvis="minZoomRel">
-            <option value=""${own ? '' : ' selected'}>Как у типа — ${esc(typeLevel)}</option>
-            ${levels.map((l, i) => `<option value="${i}"${own && m.minZoomRel === i ? ' selected' : ''}>${l}</option>`).join('')}
-          </select>
+        <label class="me-field"><span>Видно с уровня</span>
+          <input type="number" class="form-input" min="0" max="24" step="1" data-mvis="minZoomRel" value="${own ? m.minZoomRel : ''}" placeholder="Как у типа — ${esc(typeLevel)}" title="Уровень приближения: 0 — всегда, 1 = ×2, 2 = ×4, 3 = ×8… Пусто — как у типа метки">
         </label>
         <label class="me-field"><span>На отдалении</span>
           <select class="form-select" data-mvis="noCluster">
