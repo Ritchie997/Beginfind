@@ -440,10 +440,10 @@
       this.ensureDom();
       const seq = ++this._openSeq;
       const result = await window.apiClient.getGalleryWork(id);
-      if (seq !== this._openSeq) return;
+      if (seq !== this._openSeq) return false;
       if (!result.success) {
         showMessage(errorText(result, 'Не удалось открыть работу'), 'error');
-        return;
+        return false;
       }
       const work = result.data;
       this.work = work;
@@ -462,10 +462,14 @@
         });
       }
 
+      // Адрес работы — /gallery/:id (его можно скопировать из строки браузера).
+      const workPath = `/gallery/${work.id}`;
       if (this.el.hidden) {
         this.el.hidden = false;
         document.body.classList.add('gallery-viewer-open');
-        this._histId = window.modalHistory ? window.modalHistory.open(() => this.close({ fromHistory: true })) : null;
+        this._histId = window.modalHistory ? window.modalHistory.open(() => this.close({ fromHistory: true }), workPath) : null;
+      } else if (window.location.pathname !== workPath) {
+        history.replaceState(history.state || {}, '', workPath);
       }
       this.el.scrollTop = 0;
       this.el.querySelector('.gv-panel').scrollTop = 0;
@@ -481,6 +485,7 @@
           if (viewsEl) viewsEl.textContent = String(r.data.viewsCount);
         }
       }).catch(() => {});
+      return true;
     }
 
     async close({ fromHistory = false } = {}) {

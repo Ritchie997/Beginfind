@@ -9,12 +9,14 @@ window.modalHistory = {
   stack: [],
   ignorePops: 0,
   _popWaiters: [],
-  open(close) {
+  // url — адрес, который окно показывает в строке браузера (например,
+  // /gallery/:id для просмотра работы); «Назад» вернёт прежний адрес.
+  open(close, url) {
     const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     this.stack.push({ id, close });
     const push = () => {
       if (!this.stack.some((m) => m.id === id)) return; // окно уже закрыли
-      history.pushState({ ...(history.state || {}), modalId: id }, '', window.location.href);
+      history.pushState({ ...(history.state || {}), modalId: id }, '', url || window.location.href);
     };
     // Окно открыли, пока идёт переход (например, редактор карты при загрузке
     // спрашивает про черновик): адрес новой страницы роутер запишет только
@@ -569,7 +571,16 @@ class SPARouter {
       await window.galleryManager?.init();
       // Просмотр — после перехода: его запись в истории («Назад» закрывает
       // просмотр) должна лечь поверх адреса страницы (см. modalHistory.open).
-      if (workId) this.afterNavigate(() => window.galleryViewer?.openWork(workId));
+      if (workId) {
+        this.afterNavigate(async () => {
+          const opened = await window.galleryViewer?.openWork(workId);
+          // Работы нет или нет доступа — возвращаем адрес списка.
+          if (!opened) {
+            history.replaceState(history.state || {}, '', '/gallery');
+            this.shownPath = '/gallery';
+          }
+        });
+      }
     } catch (error) {
       console.error('Error loading gallery:', error);
       showMessage('Ошибка при загрузке галереи', 'error');
