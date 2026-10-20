@@ -252,7 +252,10 @@
       this.basemaps = data.basemaps || [];
       this.markerTypes = data.markerTypes || [];
       this.mtypes = MC().typeMap(this.markerTypes);
-      this.doc = { title: data.title, roles: data.roles || [], zones: data.zones || [], markers: data.markers || [], markerGroups: data.markerGroups || [], events: data.events || [], timeline: data.timeline || { initial: null } };
+      this.doc = { title: data.title, roles: data.roles || [], zones: data.zones || [], markers: data.markers || [], markerGroups: data.markerGroups || [], layers: data.layers || [], events: data.events || [], timeline: data.timeline || { initial: null } };
+      this.ensureLayers();
+      this.hiddenLayersEd = new Set(); // слои, скрытые на карте редактора («глазик»)
+      this.activeLayerId = this.doc.layers[0].id; // в какой слой попадут новые зоны
       this.hiddenGroupsEd = new Set(); // группы, скрытые на карте редактора («глазик»)
       this.hiddenZonesEd = new Set(); // зоны, скрытые на карте редактора («глазик»); у читателя не меняют ничего
       this.newMarkerGroupId = null; // в какую группу пойдут новые метки
@@ -409,19 +412,19 @@
       if (btn) {
         btn.classList.toggle('active', this.neighborCut);
         btn.title = this.neighborCut
-          ? 'Не заходить на соседние зоны: ВКЛ — новая зона обрезается по зонам того же уровня (N)'
+          ? 'Не заходить на соседние зоны: ВКЛ — новая зона обрезается по зонам того же слоя (N)'
           : 'Не заходить на соседние зоны: ВЫКЛ — зоны могут накладываться (N)';
       }
     }
 
-    // Вычесть из формы зоны того же уровня (те же parentId), существующие
+    // Вычесть из формы зоны того же слоя, существующие
     // сейчас; excludeId — сама зона, к которой добавляем. null — вычитать
     // нечего или выключено; [] — от формы ничего не осталось.
-    cutByNeighbors(multi, parentId, excludeId) {
+    cutByNeighbors(multi, layerId, excludeId) {
       const clip = this.clip();
       if (!this.neighborCut || !clip) return null;
       const bb = MC().polygonBBox(multi);
-      const others = this.doc.zones.filter((z) => z.id !== excludeId && (z.parentId || null) === (parentId || null) && this.existsNow(z))
+      const others = this.doc.zones.filter((z) => z.id !== excludeId && (z.layerId || null) === (layerId || null) && this.existsNow(z))
         .map((z) => this.zonePoly(z))
         .filter((p) => {
           if (!p.length || !bb) return false;
@@ -704,9 +707,9 @@
     renderZoneLayers() {
       this.zoneLayers.forEach((l) => l.remove());
       this.zoneLayers.clear();
-      const depths = MC().zoneDepths(this.doc.zones);
+      const depths = MC().zoneDepths(this.doc.zones, this.doc.layers);
       const ordered = this.doc.zones
-        .filter((z) => this.zonePoly(z).length && !this.hiddenZonesEd.has(z.id))
+        .filter((z) => this.zonePoly(z).length && !this.hiddenZonesEd.has(z.id) && !this.hiddenLayersEd.has(z.layerId))
         .map((z) => ({ z, d: depths.get(z.id) || 0, a: MC().polygonArea(this.zonePoly(z)) }))
         .sort((p, q) => (p.d - q.d) || (q.a - p.a))
         .map((p) => p.z);
@@ -741,11 +744,10 @@
       this.renderFogPreview();
     }
 
-    // ----- Слои по масштабу -----
-    // Как у читателя: «Видно с приближения» / «Скрывать с приближения» у типа
-    // зоны (страны → регионы → города). Выключено — видны все зоны сразу,
-    // чтобы их можно было править на любом масштабе. Выбранная зона видна
-    // всегда.
+    // ----- Просмотр слоёв по масштабу -----
+    // Как у читателя: слой виден от «с» до «до» (уровни приближения от вида
+    // всей карты). Выключено — видны все зоны сразу, чтобы их можно было
+    // править на любом масштабе. Выбранная зона видна всегда.
 
     setZoomLayers(on) {
       this.zoomLayers = !!on;
@@ -753,21 +755,16 @@
       this.root.querySelectorAll('[data-act="toggle-zoomlayers"]').forEach((btn) => {
         btn.classList.toggle('active', this.zoomLayers);
         btn.title = this.zoomLayers
-          ? 'Слои по масштабу: ВКЛ — зоны показываются и гаснут при приближении, как у читателя (настройка — «Видно»/«Скрывать» у типа зоны)'
+          ? 'Слои по масштабу: ВКЛ — зоны показываются и гаснут при приближении, как у читателя (диапазон — «с»/«до» у слоя в списке)'
           : 'Слои по масштабу: ВЫКЛ — видны все зоны сразу';
       });
       this.updateZoneZoomVisibility();
     }
 
     zoneHiddenByZoom(zone) {
-      if (!this.zoomLayers || !this.map || zone.id === this.selectedId) return false;
-      const t = this.types.get(zone.typeId);
-      const zoom = this.map.getZoom();
-      const full = this.fullZoom;
-      if (full == null) return false;
-      const min = t && t.minZoomRel;
-      if (min && zoom < Math.min(full + min, this.map.getMaxZoom())) return true;
-      return MC().zoneHiddenByMaxZoom(t, zoom, full);
+      if (!this.zoomLayers || !this.map || zone.id === this.selectedId || this.fullZoom == null) return false;
+      const layer = this.layerById(zone.layerId) || this.doc.layers[0];
+      return !MC().layerVisibleAtZoom(layer, this.map.getZoom(), this.fullZoom, this.map.getMaxZoom());
     }
 
     updateZoneZoomVisibility() {
@@ -806,7 +803,7 @@
       this.fogLayer.clearLayers();
       if (!this.fogPreview) return;
       this.doc.zones.forEach((z) => {
-        if (!(z.roles || []).length || !this.existsNow(z) || this.hiddenZonesEd.has(z.id)) return;
+        if (!(z.roles || []).length || !this.existsNow(z) || this.hiddenZonesEd.has(z.id) || this.hiddenLayersEd.has(z.layerId)) return;
         const poly = this.zonePoly(z);
         if (!poly.length) return;
         L.polygon(MC().polygonToLatLngs(poly), {
@@ -849,6 +846,8 @@
       }
       const prev = this.selectedId;
       this.selectedId = id && this.zoneById(id) ? id : null;
+      const sel = this.selectedId && this.zoneById(this.selectedId);
+      if (sel && sel.layerId) this.activeLayerId = sel.layerId;
       [prev, this.selectedId].forEach((zid) => { const z = zid && this.zoneById(zid); if (z) this.refreshZoneLayer(z); });
       this.updateZoneZoomVisibility();
       if (fly && this.selectedId) {
@@ -1052,7 +1051,7 @@
     // Самая глубокая зона, в которой стоит точка: метка скрытой зоны
     // скрывается у читателя вместе с ней.
     zoneForPoint(pt) {
-      const depths = MC().zoneDepths(this.doc.zones);
+      const depths = MC().zoneDepths(this.doc.zones, this.doc.layers);
       let best = null;
       this.doc.zones.forEach((z) => {
         if (!this.existsNow(z) || !MC().pointInMulti(pt, this.zonePoly(z))) return;
@@ -1528,7 +1527,7 @@
       if ((op === 'add' || op === 'cut') && selected) {
         if (!clip) { this.toast('Библиотека операций с контурами не загрузилась'); return false; }
         if (op === 'add') {
-          const cut = this.cutByNeighbors(multi, selected.parentId, selected.id);
+          const cut = this.cutByNeighbors(multi, selected.layerId, selected.id);
           if (cut && !cut.length) { this.toast('Эта область целиком занята соседними зонами (выключить: кнопка «Не заходить на соседей», N)'); return false; }
           if (cut) multi = cut;
         }
@@ -1544,27 +1543,20 @@
         return true;
       }
 
-      const parent = this.findParentFor(multi);
-      const type = this.pickType(parent);
-      let polygon = multi;
-      if (parent && type && type.clipToParent && clip) {
-        try {
-          const inter = cleanMulti(clip.intersection(this.zonePoly(parent), multi));
-          if (inter.length) polygon = inter;
-        } catch (err) { /* оставим как нарисовано */ }
-      } else {
-        polygon = cleanMulti(clip ? clip.union(multi) : multi); // самопересечения лассо → корректный контур
-        if (!polygon.length) polygon = multi;
-      }
-      const cut = this.cutByNeighbors(polygon, parent ? parent.id : null, null);
-      if (cut && !cut.length) { this.toast('Эта область целиком занята соседними зонами (выключить: кнопка «Не заходить на соседей», N)'); return false; }
+      const type = this.pickType();
+      let polygon = cleanMulti(clip ? clip.union(multi) : multi); // самопересечения лассо → корректный контур
+      if (!polygon.length) polygon = multi;
+      const layerId = this.activeLayer().id;
+      const cut = this.cutByNeighbors(polygon, layerId, null);
+      if (cut && !cut.length) { this.toast('Эта область целиком занята соседними зонами слоя (выключить: кнопка «Не заходить на соседей», N)'); return false; }
       if (cut) polygon = cut;
 
       this.pushHistory();
       const sameType = this.doc.zones.filter((z) => z.typeId === (type && type.id)).length + 1;
       const zone = {
         id: genId('z'),
-        parentId: parent ? parent.id : null,
+        parentId: null,
+        layerId,
         typeId: type ? type.id : null,
         title: `${type ? type.name : 'Зона'} ${sameType}`,
         article: null,
@@ -1633,31 +1625,9 @@
       return true;
     }
 
-    // Родитель — самая глубокая зона, внутри которой лежит большая часть
-    // точек новой формы.
-    findParentFor(multi) {
-      const pts = (multi[0] && multi[0][0]) || [];
-      if (!pts.length) return null;
-      const depths = MC().zoneDepths(this.doc.zones);
-      let best = null;
-      this.doc.zones.forEach((z) => {
-        if (!this.existsNow(z)) return;
-        const poly = this.zonePoly(z);
-        const inside = pts.filter((p) => MC().pointInMulti(p, poly)).length;
-        if (inside / pts.length < 0.6) return;
-        const d = depths.get(z.id) || 0;
-        const a = MC().polygonArea(poly);
-        if (!best || d > best.d || (d === best.d && a < best.a)) best = { z, d, a };
-      });
-      return best ? best.z : null;
-    }
-
-    pickType(parent) {
-      if (parent) {
-        const allowed = this.zoneTypes.find((t) => t.parents.includes(parent.typeId));
-        if (allowed) return allowed;
-      }
-      return this.zoneTypes.find((t) => t.topLevel) || this.zoneTypes[0] || null;
+    // Тип новой зоны — тот, что автор выбирал последним (иначе первый тип).
+    pickType() {
+      return this.zoneTypes.find((t) => t.id === this._lastTypeId) || this.zoneTypes[0] || null;
     }
 
     // ----- Правка точек -----
@@ -1761,32 +1731,15 @@
       const norm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е');
       const q = norm(this._treeQuery).trim();
 
-      // Выбранная зона всегда видна: разворачиваем её предков.
-      if (this.selectedId) {
-        let p = this.zoneById(this.selectedId)?.parentId;
-        let guard = 0;
-        while (p && guard++ < 64) { this._collapsed.delete(p); p = this.zoneById(p)?.parentId; }
-      }
-
       const zones = this.doc.zones;
-      const ids = new Set(zones.map((z) => z.id));
-      const children = new Map();
-      zones.forEach((z) => {
-        const key = z.parentId && ids.has(z.parentId) ? z.parentId : '';
-        if (!children.has(key)) children.set(key, []);
-        children.get(key).push(z);
-      });
+      const layers = this.doc.layers;
       const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', 'ru');
-      const zoneRow = (z, depth, hasKids) => {
+      const zoneRow = (z) => {
         const t = this.types.get(z.typeId) || MC().FALLBACK_TYPE;
         const zHidden = this.hiddenZonesEd.has(z.id);
         const eye = `<button type="button" class="me-tree-caret me-zone-eye${zHidden ? ' is-off' : ''}" data-zone-eye="${esc(z.id)}" title="${zHidden ? 'Показать зону на карте редактора' : 'Скрыть зону на карте редактора (у читателя она останется)'}"><i class="fas fa-eye${zHidden ? '-slash' : ''}"></i></button>`;
-        const caret = hasKids
-          ? `<button type="button" class="me-tree-caret" data-toggle-zone="${esc(z.id)}" title="${this._collapsed.has(z.id) ? 'Развернуть' : 'Свернуть'}"><i class="fas fa-caret-${this._collapsed.has(z.id) ? 'right' : 'down'}"></i></button>`
-          : '<span class="me-tree-caret-space"></span>';
-        return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}${zHidden ? ' is-zone-hidden' : ''}" draggable="true" data-zone-id="${esc(z.id)}" style="padding-left:${4 + depth * 14}px">
+        return `<div class="me-tree-item${z.id === this.selectedId ? ' active' : ''}${this.existsNow(z) ? '' : ' is-absent'}${zHidden || this.hiddenLayersEd.has(z.layerId) ? ' is-zone-hidden' : ''}" draggable="true" data-zone-id="${esc(z.id)}" data-layer-id="${esc(z.layerId || '')}" style="padding-left:4px">
           ${eye}
-          ${caret}
           <span class="map-fs-zone-dot" style="background:${esc(t.color)}"></span>
           <span class="me-tree-name">${esc(z.title || 'Без названия')}</span>
           <span class="me-tree-type">${esc(t.name)}</span>
@@ -1794,16 +1747,32 @@
           ${z.article ? '<i class="fas fa-book me-tree-flag" title="Привязана статья"></i>' : ''}
         </div>`;
       };
+      // Зоны по слоям: заголовок слоя — «глазик» (скрыть слой на карте
+      // редактора), название, диапазон приближения «с … до …», порядок,
+      // удалить. Клик по слою делает его активным — новые зоны идут в него.
+      // Зону можно перетащить на заголовок слоя. При поиске — плоский список.
       const rows = [];
+      let zoneRowsCount = 0;
       if (q) {
-        zones.filter((z) => norm(z.title).includes(q)).sort(byTitle).forEach((z) => rows.push(zoneRow(z, 0, false)));
+        zones.filter((z) => norm(z.title).includes(q)).sort(byTitle).forEach((z) => { rows.push(zoneRow(z)); zoneRowsCount++; });
       } else {
-        const walk = (key, depth) => (children.get(key) || []).sort(byTitle).forEach((z) => {
-          const kids = (children.get(z.id) || []).length > 0;
-          rows.push(zoneRow(z, depth, kids));
-          if (kids && !this._collapsed.has(z.id)) walk(z.id, depth + 1);
+        layers.forEach((l, i) => {
+          const list = zones.filter((z) => z.layerId === l.id).sort(byTitle);
+          const hidden = this.hiddenLayersEd.has(l.id);
+          rows.push(`<div class="me-group-head me-layer-head${hidden ? ' is-hidden' : ''}${l.id === this.activeLayer().id ? ' is-active' : ''}" data-layer-head="${esc(l.id)}" data-layer-drop="${esc(l.id)}" title="Клик — сделать слой активным: новые зоны попадут в него">
+            <button type="button" class="me-tree-caret" data-layer-eye="${esc(l.id)}" title="${hidden ? 'Показать слой на карте редактора' : 'Скрыть слой на карте редактора'}"><i class="fas fa-eye${hidden ? '-slash' : ''}"></i></button>
+            <input type="text" class="me-group-name" data-layer-name="${esc(l.id)}" value="${esc(l.name)}" maxlength="60" title="Название слоя">
+            <span class="me-tree-type">${list.length}</span>
+            <span class="me-layer-zoom" title="Диапазон приближения слоя. «с» — с какого уровня виден (0 — с вида всей карты; 1 = ×2, 2 = ×4, 3 = ×8…). «до» — с какого уровня гаснет (0 — не гаснет)">
+              с <input type="number" min="0" max="24" step="1" data-layer-min="${esc(l.id)}" value="${l.minZoomRel || 0}">
+              до <input type="number" min="0" max="24" step="1" data-layer-max="${esc(l.id)}" value="${l.maxZoomRel || 0}">
+            </span>
+            <button type="button" class="me-tree-caret" data-layer-up="${esc(l.id)}" title="Выше (рисуется под соседним)" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+            <button type="button" class="me-tree-caret" data-layer-down="${esc(l.id)}" title="Ниже (рисуется поверх соседнего)" ${i === layers.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+            <button type="button" class="me-tree-caret is-danger" data-layer-del="${esc(l.id)}" title="Удалить слой (зоны перейдут в другой слой)" ${layers.length < 2 ? 'disabled' : ''}><i class="fas fa-trash"></i></button>
+          </div>`);
+          list.forEach((z) => { rows.push(zoneRow(z)); zoneRowsCount++; });
         });
-        walk('', 0);
       }
 
       const markers = (this.doc.markers || []).filter((m) => !q || this.markerMatches(m, q)).sort(byTitle);
@@ -1847,13 +1816,12 @@
         markerRows.push('<div class="me-group-head me-group-loose" data-group-drop=""><span class="me-tree-caret-space"></span><span class="me-tree-name">Без группы</span><span class="me-tree-type">' + loose.length + '</span></div>');
         loose.forEach((m) => markerRows.push(markerRow(m)));
       }
-      const zoneCount = q ? `${rows.length} из ${zones.length}` : zones.length;
+      const zoneCount = q ? `${zoneRowsCount} из ${zones.length}` : zones.length;
       const markerCount = q ? `${markers.length} из ${(this.doc.markers || []).length}` : markers.length;
       body.innerHTML = `
         <details class="me-tree-section" data-section="zones" ${this._treeOpen.zones || q ? 'open' : ''}>
-          <summary>Зоны (${zoneCount})${!q && zones.some((z) => (children.get(z.id) || []).length) ? '<span class="me-tree-bulk"><button type="button" data-tree-bulk="collapse" title="Свернуть все ветки"><i class="fas fa-compress"></i></button><button type="button" data-tree-bulk="expand" title="Развернуть все ветки"><i class="fas fa-expand"></i></button></span>' : ''}</summary>
+          <summary>Зоны (${zoneCount})<span class="me-tree-bulk"><button type="button" data-layer-add title="Новый слой по масштабу (Слой 1, 2, 3…)"><i class="fas fa-layer-group"></i> <i class="fas fa-plus"></i></button></span></summary>
           <div class="me-tree-list">${rows.join('') || `<div class="me-tree-empty">${q ? 'Ничего не найдено' : 'Нарисуйте первую зону инструментом «Лассо» или «Многоугольник»'}</div>`}</div>
-          <div class="me-tree-root-drop" data-root-drop>Перетащите сюда — сделать зоной верхнего уровня</div>
         </details>
         <details class="me-tree-section" data-section="markers" ${this._treeOpen.markers || q ? 'open' : ''}>
           <summary>Метки (${markerCount})<span class="me-tree-bulk"><button type="button" data-group-add title="Новая группа меток"><i class="fas fa-folder-plus"></i></button></span></summary>
@@ -1869,6 +1837,12 @@
 
     bindTreeEvents(tree) {
       tree.addEventListener('change', (e) => {
+        const lName = e.target.closest('[data-layer-name]');
+        if (lName) { this.setLayerField(lName.dataset.layerName, 'name', lName.value); return; }
+        const lMin = e.target.closest('[data-layer-min]');
+        if (lMin) { this.setLayerField(lMin.dataset.layerMin, 'minZoomRel', lMin.value); return; }
+        const lMax = e.target.closest('[data-layer-max]');
+        if (lMax) { this.setLayerField(lMax.dataset.layerMax, 'maxZoomRel', lMax.value); return; }
         const nameIn = e.target.closest('[data-group-name]');
         if (!nameIn) return;
         const g = this.doc.markerGroups.find((x) => x.id === nameIn.dataset.groupName);
@@ -1879,6 +1853,7 @@
         this.renderMarkerPalette();
       });
       tree.onclick = (e) => {
+        if (this.onLayerClick(e)) return;
         if (this.onGroupClick(e)) return;
         const zEye = e.target.closest('[data-zone-eye]');
         if (zEye) {
@@ -1955,13 +1930,14 @@
           head.classList.add('drop-target');
           return;
         }
-        const target = e.target.closest('[data-zone-id], [data-root-drop]');
+        const target = e.target.closest('[data-layer-drop], [data-zone-id]');
         if (!target || !this._dragZoneId) return;
-        const targetId = target.dataset.zoneId;
-        if (targetId && (targetId === this._dragZoneId || this.descendants(this._dragZoneId).has(targetId))) return;
+        const lid = target.dataset.layerDrop || target.dataset.layerId;
+        const dragged = this.zoneById(this._dragZoneId);
+        if (!lid || !dragged || dragged.layerId === lid) return;
         e.preventDefault();
         tree.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
-        target.classList.add('drop-target');
+        (target.dataset.layerDrop !== undefined ? target : tree.querySelector(`[data-layer-drop="${CSS.escape(lid)}"]`))?.classList.add('drop-target');
       };
       tree.ondrop = (e) => {
         if (this._dragMarkerId) {
@@ -1973,27 +1949,27 @@
           this.moveMarkerToGroup(id, head.dataset.groupDrop || null);
           return;
         }
-        const target = e.target.closest('[data-zone-id], [data-root-drop]');
+        const target = e.target.closest('[data-layer-drop], [data-zone-id]');
         const dragId = this._dragZoneId;
         this._dragZoneId = null;
         if (!target || !dragId) return;
+        const lid = target.dataset.layerDrop || target.dataset.layerId;
+        if (!lid) return;
         e.preventDefault();
-        this.reparent(dragId, target.dataset.zoneId || null);
+        this.moveZoneToLayer(dragId, lid);
       };
     }
 
     // ----- Контекстное меню зоны (ПКМ в списке или на карте) -----
 
-    // Зона ниже в списке — следующая по порядку дерева среди зон того же
-    // уровня (тот же родитель, та же сортировка по названию). У последней
+    // Зона ниже в списке — следующая среди зон того же слоя (та же
+    // сортировка по названию). У последней
     // в ветке её нет.
     zoneBelow(id) {
       const z = this.zoneById(id);
       if (!z) return null;
-      const ids = new Set(this.doc.zones.map((x) => x.id));
-      const parentKey = z.parentId && ids.has(z.parentId) ? z.parentId : '';
       const siblings = this.doc.zones
-        .filter((x) => (x.parentId && ids.has(x.parentId) ? x.parentId : '') === parentKey)
+        .filter((x) => x.layerId === z.layerId)
         .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
       const i = siblings.findIndex((x) => x.id === id);
       return i >= 0 && i < siblings.length - 1 ? siblings[i + 1] : null;
@@ -2173,34 +2149,122 @@
       return !!e.target.closest('[data-group-name]'); // клик в поле названия — не выбор
     }
 
-    // Смена родителя. Если тип зоны обрезается по родителю — обрезаем по
-    // новому; если пересечения нет — оставляем форму и предупреждаем.
-    reparent(zoneId, parentId) {
-      const zone = this.zoneById(zoneId);
-      if (!zone || zone.parentId === parentId) return;
-      if (parentId && (parentId === zoneId || this.descendants(zoneId).has(parentId))) return;
-      this.pushHistory();
-      zone.parentId = parentId;
-      const parent = this.zoneById(parentId);
-      const type = this.types.get(zone.typeId);
-      if (parent && type && !type.parents.includes(parent.typeId)) {
-        this.toast(`Тип «${type.name}» обычно не лежит внутри «${(this.types.get(parent.typeId) || {}).name || 'этой зоны'}» — проверьте тип зоны`);
+    // ----- Слои зон -----
+    // Слой 1, Слой 2, Слой 3… — «этажи» карты по масштабу (вселенная →
+    // созвездие → планета → мир…). Сколько слоёв — решает автор; у каждого
+    // свой диапазон приближения (с какого уровня виден и с какого гаснет).
+
+    // Слои есть всегда (минимум один), у каждой зоны есть слой.
+    ensureLayers() {
+      if (!Array.isArray(this.doc.layers) || !this.doc.layers.length) {
+        this.doc.layers = [{ id: 'l1', name: 'Слой 1', minZoomRel: 0, maxZoomRel: null }];
       }
-      if (parent && type && type.clipToParent) this.clipToParent(zone, { silent: true, history: false });
+      const ids = new Set(this.doc.layers.map((l) => l.id));
+      (this.doc.zones || []).forEach((z) => { if (!z.layerId || !ids.has(z.layerId)) z.layerId = this.doc.layers[0].id; });
+      if (this.activeLayerId && !ids.has(this.activeLayerId)) this.activeLayerId = this.doc.layers[0].id;
+    }
+
+    layerById(id) { return this.doc.layers.find((l) => l.id === id) || null; }
+
+    // Слой, в который идут новые зоны (выбирается кликом по слою в списке
+    // или выбором зоны).
+    activeLayer() { return this.layerById(this.activeLayerId) || this.doc.layers[0]; }
+
+    layerName(l) { return l.name || `Слой ${this.doc.layers.indexOf(l) + 1}`; }
+
+    addLayer() {
+      this.pushHistory();
+      const last = this.doc.layers[this.doc.layers.length - 1];
+      const layer = { id: genId('l'), name: `Слой ${this.doc.layers.length + 1}`, minZoomRel: Math.min(24, (last ? last.minZoomRel || 0 : 0) + 1), maxZoomRel: null };
+      this.doc.layers.push(layer);
+      this.activeLayerId = layer.id;
+      this.markDirty();
+      this.renderTree();
+      this.toast(`${layer.name}: виден с уровня ${layer.minZoomRel} (×${Math.pow(2, layer.minZoomRel)}). Настройте «с» и «до» в списке слоёв.`);
+    }
+
+    moveZoneToLayer(zoneId, layerId) {
+      const zone = this.zoneById(zoneId);
+      if (!zone || !this.layerById(layerId) || zone.layerId === layerId) return;
+      this.pushHistory();
+      zone.layerId = layerId;
+      this.activeLayerId = layerId;
+      this.markDirty();
+      this.afterZonesChanged({ keepLayers: false });
+      this.toast(`Зона перенесена в «${this.layerName(this.layerById(layerId))}»`);
+    }
+
+    // Настройка слоя: имя, «с» (minZoomRel), «до» (maxZoomRel, 0 — не гаснет).
+    setLayerField(id, field, value) {
+      const l = this.layerById(id);
+      if (!l) return;
+      this.pushHistory();
+      if (field === 'name') {
+        l.name = String(value).trim().slice(0, 60) || l.name;
+      } else if (field === 'minZoomRel') {
+        l.minZoomRel = Math.min(24, Math.max(0, parseInt(value, 10) || 0));
+        if (l.maxZoomRel && l.maxZoomRel <= l.minZoomRel) l.maxZoomRel = null;
+      } else if (field === 'maxZoomRel') {
+        const n = Math.min(24, Math.max(0, parseInt(value, 10) || 0));
+        if (n && n <= (l.minZoomRel || 0)) { this.toast('«До» должно быть больше, чем «с» — слой остаётся без верхней границы'); l.maxZoomRel = null; } else l.maxZoomRel = n || null;
+      }
+      this.markDirty();
+      this.updateZoneZoomVisibility();
+      this.renderTree();
+    }
+
+    moveLayer(id, delta) {
+      const i = this.doc.layers.findIndex((l) => l.id === id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= this.doc.layers.length) return;
+      this.pushHistory();
+      const [l] = this.doc.layers.splice(i, 1);
+      this.doc.layers.splice(j, 0, l);
+      this.markDirty();
+      this.renderZoneLayers(); // порядок слоёв = порядок отрисовки
+      this.renderTree();
+    }
+
+    async deleteLayer(id) {
+      const l = this.layerById(id);
+      if (!l || this.doc.layers.length < 2) return;
+      const target = this.doc.layers.find((x) => x.id !== id);
+      const count = this.doc.zones.filter((z) => z.layerId === id).length;
+      const msg = count
+        ? `Слой «${this.layerName(l)}» будет удалён. Его зоны (${count}) перейдут в «${this.layerName(target)}».`
+        : `Слой «${this.layerName(l)}» будет удалён.`;
+      if (!(await this.askDelete(msg, 'Удалить слой?'))) return;
+      this.pushHistory();
+      this.doc.zones.forEach((z) => { if (z.layerId === id) z.layerId = target.id; });
+      this.doc.layers = this.doc.layers.filter((x) => x.id !== id);
+      this.hiddenLayersEd.delete(id);
+      this.ensureLayers();
+      this.markDirty();
       this.afterZonesChanged({ keepLayers: false });
     }
 
-    clipToParent(zone, { silent = false, history = true } = {}) {
-      const parent = this.zoneById(zone.parentId);
-      const clip = this.clip();
-      if (!parent || !clip) { if (!silent) this.toast('У зоны нет родителя'); return false; }
-      let inter;
-      try { inter = cleanMulti(clip.intersection(this.zonePoly(parent), this.zonePoly(zone))); } catch (e) { inter = []; }
-      if (!inter.length) { this.toast('Зона целиком вне родителя — форма оставлена как есть'); return false; }
-      if (history) this.pushHistory();
-      this.setZonePoly(zone, inter);
-      if (history) this.afterZonesChanged({ keepLayers: false });
-      return true;
+    // Кнопки слоёв в списке. true — клик обработан.
+    onLayerClick(e) {
+      const add = e.target.closest('[data-layer-add]');
+      if (add) { e.preventDefault(); this.addLayer(); return true; }
+      const eye = e.target.closest('[data-layer-eye]');
+      if (eye) {
+        const id = eye.dataset.layerEye;
+        if (this.hiddenLayersEd.has(id)) this.hiddenLayersEd.delete(id); else this.hiddenLayersEd.add(id);
+        this.renderZoneLayers();
+        this.renderTree();
+        return true;
+      }
+      const up = e.target.closest('[data-layer-up]');
+      if (up) { this.moveLayer(up.dataset.layerUp, -1); return true; }
+      const down = e.target.closest('[data-layer-down]');
+      if (down) { this.moveLayer(down.dataset.layerDown, 1); return true; }
+      const del = e.target.closest('[data-layer-del]');
+      if (del) { this.deleteLayer(del.dataset.layerDel); return true; }
+      if (e.target.closest('[data-layer-name], [data-layer-min], [data-layer-max]')) return true; // клик в поле — не выбор
+      const head = e.target.closest('[data-layer-head]');
+      if (head) { this.activeLayerId = head.dataset.layerHead; this.renderTree(); return true; }
+      return false;
     }
 
     // ----- Свойства выбранной зоны -----
@@ -2215,15 +2279,7 @@
         this.propsRolesField = null;
         return;
       }
-      const all = this.doc.zones;
-      const banned = this.descendants(zone.id);
-      banned.add(zone.id);
-      const depths = MC().zoneDepths(all);
-      const parentOptions = all
-        .filter((z) => !banned.has(z.id))
-        .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
-        .map((z) => `<option value="${esc(z.id)}"${z.id === zone.parentId ? ' selected' : ''}>${'— '.repeat(depths.get(z.id) || 0)}${esc(z.title || 'Без названия')}</option>`)
-        .join('');
+      const layerOptions = this.doc.layers.map((l, i) => `<option value="${esc(l.id)}"${l.id === zone.layerId ? ' selected' : ''}>${esc(l.name || `Слой ${i + 1}`)}</option>`).join('');
       const typeOptions = this.zoneTypes.map((t) => `<option value="${esc(t.id)}"${t.id === zone.typeId ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
       const articleTitle = zone.article ? (this.articles.find((a) => a.slug === zone.article)?.title || zone.article) : '';
 
@@ -2231,7 +2287,7 @@
         <div class="me-props-head">Свойства зоны</div>
         <label class="me-field"><span>Название</span><input type="text" class="form-input" data-prop="title" value="${esc(zone.title)}" maxlength="120"></label>
         <div class="me-field"><span>Тип</span><div class="me-type-row"><select class="form-select" data-prop="typeId">${typeOptions || '<option value="">—</option>'}</select><button type="button" class="map-icon-btn" data-type-settings="zone" title="Настроить этот тип: цвет, эффект, видимость"><i class="fas fa-gear"></i></button></div></div>
-        <label class="me-field"><span>Внутри зоны</span><select class="form-select" data-prop="parentId"><option value="">— верхний уровень —</option>${parentOptions}</select></label>
+        <label class="me-field"><span>Слой</span><select class="form-select" data-prop="layerId">${layerOptions}</select></label>
         <label class="me-field"><span>Статья</span>
           <input type="text" class="form-input" data-prop="article" list="me-articles-list" value="${esc(articleTitle)}" placeholder="Название статьи…">
           <small class="me-field-note" data-el="article-note">${this.articleNote(zone)}</small>
@@ -2254,7 +2310,6 @@
         <div class="me-props-info">Точек в контуре: ${pointCount(this.zonePoly(zone))}</div>
         <div class="me-props-actions">
           <button type="button" class="btn btn-secondary btn-sm" data-prop-act="vertex"><i class="fas fa-bezier-curve"></i> Править точки</button>
-          <button type="button" class="btn btn-secondary btn-sm" data-prop-act="clip" ${zone.parentId ? '' : 'disabled'}><i class="fas fa-crop-simple"></i> Обрезать по родителю</button>
           <button type="button" class="btn btn-danger btn-sm" data-prop-act="delete"><i class="fas fa-trash"></i> Удалить</button>
         </div>`;
 
@@ -2269,7 +2324,6 @@
       this.bindItemTimeSection(box, zone, true);
       this.bindSections(box);
       box.querySelector('[data-prop-act="vertex"]').onclick = () => this.setTool('vertex');
-      box.querySelector('[data-prop-act="clip"]').onclick = () => this.clipToParent(zone);
       box.querySelector('[data-prop-act="delete"]').onclick = () => this.deleteZone(zone.id);
 
       if (window.ChipField) {
@@ -2356,14 +2410,18 @@
 
     renderMarkerVisibilitySection(m) {
       const t = this.markerType(m);
-      const typeLevel = t.minZoomRel ? `с уровня ${t.minZoomRel} (×${Math.round(Math.pow(2, t.minZoomRel) * 10) / 10})` : 'всегда';
+      const levels = ['Всегда', 'С приближения ×2', '×4', '×8', '×16', '×32', '×64'];
+      const typeLevel = levels[t.minZoomRel || 0] || 'Всегда';
       const own = m.minZoomRel !== null && m.minZoomRel !== undefined;
       const clusterOwn = m.noCluster !== null && m.noCluster !== undefined;
       return `
         <details class="me-props-details" data-sec="visibility" ${this.secOpen('visibility', own || clusterOwn) ? 'open' : ''}>
         <summary>Важность и видимость${own || clusterOwn ? ' <span class="me-sec-badge">своя</span>' : ''}</summary>
-        <label class="me-field"><span>Видно с уровня</span>
-          <input type="number" class="form-input" min="0" max="24" step="1" data-mvis="minZoomRel" value="${own ? m.minZoomRel : ''}" placeholder="Как у типа — ${esc(typeLevel)}" title="Уровень приближения: 0 — всегда, 1 = ×2, 2 = ×4, 3 = ×8… Пусто — как у типа метки">
+        <label class="me-field"><span>Видно</span>
+          <select class="form-select" data-mvis="minZoomRel">
+            <option value=""${own ? '' : ' selected'}>Как у типа — ${esc(typeLevel)}</option>
+            ${levels.map((l, i) => `<option value="${i}"${own && m.minZoomRel === i ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
         </label>
         <label class="me-field"><span>На отдалении</span>
           <select class="form-select" data-mvis="noCluster">
@@ -2490,8 +2548,8 @@
       const f = input.dataset.prop;
       const v = input.value;
       if (f === 'title') { zone.title = v; this.updateTreeItemTitle(zone); }
-      else if (f === 'typeId') { zone.typeId = v || null; this.refreshZoneLayer(zone); this.renderTree(); }
-      else if (f === 'parentId') { this.undoStack.pop(); this.reparent(zone.id, v || null); return; }
+      else if (f === 'typeId') { zone.typeId = v || null; this._lastTypeId = zone.typeId; this.refreshZoneLayer(zone); this.renderTree(); }
+      else if (f === 'layerId') { this.undoStack.pop(); this.moveZoneToLayer(zone.id, v); return; }
       else if (f === 'lockedMode') zone.lockedMode = v === 'hide' ? 'hide' : 'lock';
       else if (f === 'article') {
         const text = v.trim();
@@ -3522,7 +3580,7 @@
     // ----- История, черновик, сохранение -----
 
     snapshot() {
-      return JSON.stringify({ title: this.doc.title, roles: this.doc.roles, zones: this.doc.zones, markers: this.doc.markers, markerGroups: this.doc.markerGroups, events: this.doc.events, timeline: this.doc.timeline });
+      return JSON.stringify({ title: this.doc.title, roles: this.doc.roles, zones: this.doc.zones, markers: this.doc.markers, markerGroups: this.doc.markerGroups, layers: this.doc.layers, events: this.doc.events, timeline: this.doc.timeline });
     }
 
     pushHistory() {
@@ -3535,7 +3593,8 @@
 
     restore(snap) {
       const s = JSON.parse(snap);
-      this.doc = { title: s.title, roles: s.roles, zones: s.zones, markers: s.markers || [], markerGroups: s.markerGroups || [], events: s.events || [], timeline: s.timeline || { initial: null } };
+      this.doc = { title: s.title, roles: s.roles, zones: s.zones, markers: s.markers || [], markerGroups: s.markerGroups || [], layers: s.layers || [], events: s.events || [], timeline: s.timeline || { initial: null } };
+      this.ensureLayers();
       if (!this.eventById(this.selectedEventId)) this.selectedEventId = null;
       if (!this.markerById(this.selectedMarkerId)) this.selectedMarkerId = null;
       this.root.querySelector('.me-title-input').value = this.doc.title;
@@ -3629,6 +3688,7 @@
           zones: this.doc.zones,
           markers: this.doc.markers,
           markerGroups: this.doc.markerGroups,
+          layers: this.doc.layers,
           events: this.doc.events,
           timeline: this.doc.timeline,
           basemaps: this.basemaps.map((b) => ({ id: b.id, title: b.title, from: b.from ?? null, to: b.to ?? null }))
@@ -3659,7 +3719,8 @@
       if (choice === 'drop') { this.clearDraft(); return; }
       if (choice !== 'restore') return;
       this.pushHistory();
-      this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline, markerGroups: draft.markerGroups || this.doc.markerGroups || [] };
+      this.doc = { title: draft.title, roles: draft.roles || [], zones: draft.zones, markers: draft.markers || this.doc.markers || [], events: draft.events || this.doc.events || [], timeline: draft.timeline || this.doc.timeline, markerGroups: draft.markerGroups || this.doc.markerGroups || [], layers: draft.layers || this.doc.layers || [] };
+      this.ensureLayers();
       const CAL = window.MapCalendar;
       const draftCal = { months: draft.calendarMonths || null };
       if (CAL.signature(draftCal) !== CAL.signature(this.cal())) {
@@ -3709,6 +3770,7 @@
         zones: this.doc.zones,
         markers: this.doc.markers,
         markerGroups: this.doc.markerGroups,
+        layers: this.doc.layers,
         events: this.doc.events,
         timeline: this.doc.timeline,
         basemaps: this.basemaps.map((b) => ({ id: b.id, title: b.title, from: b.from ?? null, to: b.to ?? null })),
@@ -3759,7 +3821,7 @@
     verifySaved(body, saved) {
       if (!saved) return 'сервер не подтвердил запись';
       const parts = [
-        ['zones', 'зон'], ['markers', 'меток'], ['events', 'событий'], ['markerGroups', 'групп меток']
+        ['zones', 'зон'], ['markers', 'меток'], ['events', 'событий'], ['markerGroups', 'групп меток'], ['layers', 'слоёв']
       ].filter(([key]) => (saved[key] ?? 0) < (body[key] || []).length)
         .map(([key, label]) => `${label} ${saved[key] ?? 0} из ${body[key].length}`);
       return parts.length ? parts.join(', ') : null;

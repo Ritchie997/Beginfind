@@ -278,25 +278,25 @@
 
   const FALLBACK_MARKER_TYPE ={ id: null, name: 'Метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0 };
 
-  // Скрыта ли зона типа type на масштабе zoom (fullZoom — вид всей карты).
-  function zoneHiddenByMaxZoom(type, zoom, fullZoom) {
-    const max = type && type.maxZoomRel;
-    if (!max || zoom == null || fullZoom == null) return false;
-    return zoom >= fullZoom + max;
+  // «Глубина» зоны — номер её слоя (0 — Слой 1): задаёт порядок отрисовки
+  // (верхние слои поверх) и размер подписи. Вложенности зон больше нет.
+  function zoneDepths(zones, layers) {
+    const index = new Map((layers || []).map((l, i) => [l.id, i]));
+    const out = new Map();
+    zones.forEach((z) => out.set(z.id, index.get(z.layerId) || 0));
+    return out;
   }
 
-  function zoneDepths(zones) {
-    const byId = new Map(zones.map((z) => [z.id, z]));
-    const cache = new Map();
-    const depth = (z, guard = 0) => {
-      if (cache.has(z.id)) return cache.get(z.id);
-      const p = z.parentId && byId.get(z.parentId);
-      const d = p && guard < 64 ? depth(p, guard + 1) + 1 : 0;
-      cache.set(z.id, d);
-      return d;
-    };
-    zones.forEach((z) => depth(z));
-    return cache;
+  // Виден ли слой на масштабе zoom (fullZoom — вид всей карты, maxZoom —
+  // предел приближения карты). Порог «с какого видно» не выше предела
+  // приближения, иначе слой не был бы виден никогда.
+  function layerVisibleAtZoom(layer, zoom, fullZoom, maxZoom) {
+    if (!layer || zoom == null || fullZoom == null) return true;
+    const min = layer.minZoomRel || 0;
+    if (min && zoom < Math.min(fullZoom + min, maxZoom == null ? Infinity : maxZoom)) return false;
+    const max = layer.maxZoomRel;
+    if (max && zoom >= fullZoom + max) return false;
+    return true;
   }
 
   // ===== Подложки =====
@@ -368,6 +368,7 @@
       this._morphs = new Map();
       // Группы меток: скрытые читателем (изначально — «скрыта по умолчанию»).
       this.markerGroups = this.data.markerGroups || [];
+      this.layers = this.data.layers || []; // слои зон по масштабу
       this.hiddenGroups = new Set(this.markerGroups.filter((g) => g.hiddenByDefault).map((g) => g.id));
       // Скрытые читателем типы зон и меток («Слои»); '__none' — без типа.
       this.hiddenZoneTypes = new Set();
@@ -545,7 +546,7 @@
     // Порядок отрисовки: глубина по возрастанию, внутри уровня — крупные
     // раньше. Поздний слой в SVG лежит выше и первым ловит мышь/палец.
     orderedZones() {
-      const depths = zoneDepths(this.data.zones);
+      const depths = zoneDepths(this.data.zones, this.layers);
       return this.data.zones
         .filter((z) => z.polygon && z.polygon.length)
         .map((z) => ({ z, d: depths.get(z.id) || 0, a: polygonArea(z.polygon) }))
@@ -622,7 +623,7 @@
     renderLabels() {
       this.labels.forEach((l) => l.marker.remove());
       this.labels.clear();
-      const depths = zoneDepths(this.data.zones);
+      const depths = zoneDepths(this.data.zones, this.layers);
       this.data.zones.forEach((zone) => {
         const text = (zone.title || '').trim();
         if (!text || !zone.polygon || !zone.polygon.length) return;
@@ -743,14 +744,14 @@
       if (!existsAt(zone, this.time)) return false; // зоны ещё/уже нет в этот момент
       if (zone.id === this.selectedId) return true;
       if (this.isZoneExcluded(zone)) return false;
-      const t = this.types.get(zone.typeId);
-      return this.isVisibleAtZoom(t ? t.minZoomRel : 0) && !this.isHiddenByMaxZoom(t);
+      return this.layerVisibleForZone(zone);
     }
 
-    // «Скрывать с приближения» у типа зоны: крупная зона гаснет, когда
-    // приблизились настолько, что поверх неё работают зоны помельче.
-    isHiddenByMaxZoom(type) {
-      return zoneHiddenByMaxZoom(type, this.map && this.map.getZoom(), this.fullZoom);
+    // Слой зоны («Видно с…» / «Скрывать с…» у слоя). Зоны без слоя — всегда.
+    layerVisibleForZone(zone) {
+      if (!this.map || !this.layers.length) return true;
+      const layer = this.layers.find((l) => l.id === zone.layerId) || this.layers[0];
+      return layerVisibleAtZoom(layer, this.map.getZoom(), this.fullZoom, this.map.getMaxZoom());
     }
 
     // Скрытая по масштабу зона плавно гаснет и не ловит мышь — клик
@@ -1628,7 +1629,7 @@
     effectiveType,
     FALLBACK_MARKER_TYPE,
     zoneDepths,
-    zoneHiddenByMaxZoom,
+    layerVisibleAtZoom,
     makeTileLayer,
     loadScript,
     MapViewer,

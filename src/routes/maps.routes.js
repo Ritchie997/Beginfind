@@ -197,6 +197,7 @@ router.get('/maps/:id', auth.authenticateToken, auth.checkApproved, async (req, 
       // ролями, как их видит читатель без этих ролей. Остальным не отдаём.
       fogPreview: canEdit ? map.zones.filter((z) => z.roles.length).map((z) => ({ id: z.id, from: z.from, to: z.to, shapes: z.shapes })) : [],
       markerGroups: map.markerGroups,
+      layers: map.layers,
       events: visible.events,
       timeline: map.timeline,
       zoneTypes: world.zoneTypes,
@@ -234,6 +235,7 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
       if (markers) m.markers = markers; // нормализуются при записи (writeMap → normalizeMap)
       if (events) m.events = events;
       if (Array.isArray(body.markerGroups)) m.markerGroups = body.markerGroups;
+      if (Array.isArray(body.layers)) m.layers = body.layers; // нормализуются при записи
       if (body.timeline && typeof body.timeline === 'object') m.timeline = body.timeline; // нормализуется при записи
       // Подложки: только порядок и названия существующих — статусы/файлы
       // ведёт сервер.
@@ -266,7 +268,8 @@ router.put('/maps/:id', auth.authenticateToken, auth.checkApproved, auth.checkNo
         zones: onDisk.zones.length,
         markers: onDisk.markers.length,
         events: onDisk.events.length,
-        markerGroups: onDisk.markerGroups.length
+        markerGroups: onDisk.markerGroups.length,
+        layers: onDisk.layers.length
       }
     });
   } catch (err) {

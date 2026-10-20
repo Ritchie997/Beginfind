@@ -167,6 +167,7 @@ async function buildViewerMap(user, map) {
     out.push({
       id: z.id,
       parentId: z.parentId,
+      layerId: z.layerId,
       typeId: z.typeId,
       title: z.title,
       article,

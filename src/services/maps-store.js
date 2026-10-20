@@ -213,7 +213,8 @@ function normalizeZone(raw, budget) {
   const interval = normalizeInterval(raw);
   return {
     id: validId(raw.id) ? raw.id : genId('z'),
-    parentId: validId(raw.parentId) ? raw.parentId : null,
+    parentId: validId(raw.parentId) ? raw.parentId : null, // устарело: вложенность зон в интерфейсе больше не используется
+    layerId: validId(raw.layerId) ? raw.layerId : null, // слой зоны (см. normalizeLayers)
     typeId: validId(raw.typeId) ? raw.typeId : null,
     title: str(raw.title, 120),
     article: str(raw.article, 120) || null,
@@ -249,7 +250,7 @@ function normalizeMarker(raw) {
     lockedMode: LOCKED_MODES.includes(raw.lockedMode) ? raw.lockedMode : 'lock',
     // Важность метки поверх её типа: с какого приближения видна (null — как
     // у типа) и можно ли прятать её в группу на отдалении (null — как у типа).
-    minZoomRel: raw.minZoomRel === null || raw.minZoomRel === undefined || raw.minZoomRel === '' ? null : Math.round(Math.min(24, Math.max(0, parseFloat(raw.minZoomRel) || 0)) * 100) / 100,
+    minZoomRel: raw.minZoomRel === null || raw.minZoomRel === undefined || raw.minZoomRel === '' ? null : Math.min(8, Math.max(0, parseInt(raw.minZoomRel, 10) || 0)),
     noCluster: typeof raw.noCluster === 'boolean' ? raw.noCluster : null,
     ...normalizeInterval(raw),
     pos: [round1(x), round1(y)]
@@ -303,6 +304,38 @@ function normalizeMarkerGroups(raw) {
     // смешиваясь с остальными (города отдельно, руины отдельно).
     return { id: validId(g.id) ? g.id : genId('g'), name, hiddenByDefault: !!g.hiddenByDefault, ownCluster: !!g.ownCluster };
   }).filter((g) => g && !seen.has(g.id) && seen.add(g.id));
+}
+
+// ===== Слои зон =====
+// Слой — простая «этажность» карты по масштабу: Слой 1, Слой 2, Слой 3…
+// (вселенная → созвездие → планета → мир…). Сколько слоёв — решает автор.
+// У слоя свой диапазон приближения: minZoomRel — с какого уровня виден
+// (0 — с вида всей карты, 1 = ×2, 2 = ×4…), maxZoomRel — с какого уровня
+// гаснет (null — не гаснет; строго больше minZoomRel). Зона всегда лежит
+// ровно в одном слое.
+
+const MAX_LAYERS = 200;
+const ZOOM_REL_MAX = 24;
+
+function zoomLevel(v) {
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) ? Math.min(ZOOM_REL_MAX, Math.max(0, n)) : 0;
+}
+
+function normalizeLayers(raw) {
+  const seen = new Set();
+  const layers = (Array.isArray(raw) ? raw : []).slice(0, MAX_LAYERS).map((l, i) => {
+    if (!isPlainObject(l)) return null;
+    const min = zoomLevel(l.minZoomRel);
+    const maxRaw = l.maxZoomRel === null || l.maxZoomRel === undefined || l.maxZoomRel === '' ? null : zoomLevel(l.maxZoomRel);
+    return {
+      id: validId(l.id) ? l.id : genId('l'),
+      name: str(l.name, 60) || `Слой ${i + 1}`,
+      minZoomRel: min,
+      maxZoomRel: maxRaw !== null && maxRaw > min ? maxRaw : null
+    };
+  }).filter((l) => l && !seen.has(l.id) && seen.add(l.id));
+  return layers.length ? layers : [{ id: 'l1', name: 'Слой 1', minZoomRel: 0, maxZoomRel: null }];
 }
 
 function normalizeMarkers(raw, zones, groups) {
@@ -406,6 +439,10 @@ function normalizeMap(raw) {
     created_at: str(data.created_at, 40) || new Date().toISOString(),
     updated_at: str(data.updated_at, 40) || new Date().toISOString()
   };
+  map.layers = normalizeLayers(data.layers);
+  // Зона без (или с несуществующим) слоя — в первый слой.
+  const layerIds = new Set(map.layers.map((l) => l.id));
+  map.zones.forEach((z) => { if (!z.layerId || !layerIds.has(z.layerId)) z.layerId = map.layers[0].id; });
   map.markerGroups = normalizeMarkerGroups(data.markerGroups);
   map.markers = normalizeMarkers(data.markers, map.zones, map.markerGroups);
   map.events = normalizeEvents(data.events, map.zones, map.markers);

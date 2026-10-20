@@ -184,7 +184,7 @@
       const q = input.value.trim().toLowerCase().replace(/ё/g, 'е');
       const t = viewer ? viewer.time : null;
       const exists = (o) => window.MapCore.existsAt(o, t);
-      const html = renderZoneTree(data.zones.filter(exists), types, q, viewer) + renderMarkerList((data.markers || []).filter(exists), markerTypes, q, data.markerGroups || [], viewer);
+      const html = renderZoneTree(data.zones.filter(exists), types, q, viewer, data.layers || []) + renderMarkerList((data.markers || []).filter(exists), markerTypes, q, data.markerGroups || [], viewer);
       list.innerHTML = html || '<div class="map-fs-zone-empty">Ничего не найдено</div>';
       if (viewer) highlightInPanel(root, viewer.selectedMarkerId || viewer.selectedId, viewer.selectedMarkerId ? 'marker' : 'zone');
     };
@@ -211,7 +211,7 @@
     if (!window.MapCore.isTouchUi()) input.focus();
   }
 
-  function renderZoneTree(zones, types, query, viewer = null) {
+  function renderZoneTree(zones, types, query, viewer = null, layers = []) {
     if (!zones.length) return query ? '' : '<div class="map-fs-zone-empty">На карте пока нет зон</div>';
     const item = (z, depth) => {
       const t = types.get(z.typeId) || window.MapCore.FALLBACK_TYPE;
@@ -228,16 +228,15 @@
       const found = zones.filter((z) => (z.title || '').toLowerCase().replace(/ё/g, 'е').includes(query)).sort(byTitle);
       return found.map((z) => item(z, 0)).join('');
     }
-    const ids = new Set(zones.map((z) => z.id));
-    const children = new Map();
-    zones.forEach((z) => {
-      const key = z.parentId && ids.has(z.parentId) ? z.parentId : '';
-      if (!children.has(key)) children.set(key, []);
-      children.get(key).push(z);
-    });
+    // Зоны по слоям (Слой 1, 2, 3…); при единственном слое — плоский список.
+    if (layers.length < 2) return [...zones].sort(byTitle).map((z) => item(z, 0)).join('');
     const out = [];
-    const walk = (key, depth) => (children.get(key) || []).sort(byTitle).forEach((z) => { out.push(item(z, depth)); walk(z.id, depth + 1); });
-    walk('', 0);
+    layers.forEach((l, i) => {
+      const list = zones.filter((z) => (z.layerId || layers[0].id) === l.id).sort(byTitle);
+      if (!list.length) return;
+      out.push(`<div class="map-fs-list-head">${escapeHtml(l.name || `Слой ${i + 1}`)}</div>`);
+      list.forEach((z) => out.push(item(z, 0)));
+    });
     return out.join('');
   }
 
@@ -468,6 +467,7 @@
 
   const HOVER_LABELS = { fill: 'Заливка ярче', outline: 'Толще граница', glow: 'Свечение', pulse: 'Пульсация' };
   // «Видно с приближения» — от вида всей карты (см. isVisibleAtZoom в map-core.js).
+  const MIN_ZOOM_LABELS = ['Всегда', 'С приближения ×2', '×4', '×8', '×16', '×32', '×64'];
   // Тот же список, что MARKER_ICONS в src/services/worlds-store.js.
   const MARKER_ICONS = {
     'location-dot': 'Точка', star: 'Звезда', crown: 'Корона', 'chess-rook': 'Крепость', 'shield-halved': 'Щит',
@@ -477,30 +477,8 @@
     horse: 'Конь', 'circle-info': 'Пояснение'
   };
 
-  // Уровни приближения — любое число 0…24: 0 = вид всей карты,
-  // 1 = ×2, 2 = ×4, 3 = ×8… Слоёв может быть сколько угодно (вселенная →
-  // созвездие → планета → мир → …) — каждому слою свой уровень.
-  function zoomX(level) {
-    const x = Math.pow(2, Number(level) || 0);
-    return x >= 100 ? Math.round(x) : Math.round(x * 10) / 10;
-  }
-
-  // Подсказка под полями: в каком диапазоне приближения виден слой.
-  function typeRangeText(t) {
-    const min = Number(t.minZoomRel) || 0;
-    const max = Number(t.maxZoomRel) || 0;
-    const from = min ? `от ×${zoomX(min)}` : 'с вида всей карты';
-    const to = max > min ? ` до ×${zoomX(max)}` : ' и до самого большого приближения';
-    return `Видна ${from}${to}`;
-  }
-
   function minZoomSelect(value, dis) {
-    return `<input type="number" min="0" max="24" step="1" data-field="minZoomRel" value="${Number(value) || 0}" ${dis} title="Уровень приближения, с которого зона/метка видна. 0 — всегда; 1 = ×2, 2 = ×4, 3 = ×8…">`;
-  }
-
-  // «Скрывать с приближения»: 0 / пусто — не скрывать.
-  function maxZoomSelect(value, dis) {
-    return `<input type="number" min="0" max="24" step="1" data-field="maxZoomRel" value="${value ? Number(value) : 0}" ${dis} title="Уровень приближения, с которого зона гаснет. 0 — не скрывать; должен быть больше, чем «Видно». 1 = ×2, 2 = ×4, 3 = ×8…">`;
+    return `<select data-field="minZoomRel" ${dis}>${MIN_ZOOM_LABELS.map((l, v) => `<option value="${v}"${Number(value || 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   }
 
   // Редактор мира (мир = сервер): типы зон и типы меток. Живёт во вкладке
@@ -579,8 +557,6 @@
         const pid = e.target.value;
         t.parents = e.target.checked ? [...new Set([...t.parents, pid])] : t.parents.filter((p) => p !== pid);
       } else if (e.target.type === 'checkbox') t[f] = e.target.checked;
-      else if (f === 'maxZoomRel') t[f] = Number(e.target.value) || null; // 0 — «Не скрывать»
-      else if (f === 'minZoomRel') t[f] = Math.max(0, Number(e.target.value) || 0);
       else if (e.target.type === 'number' || e.target.type === 'range' || f === 'minZoomRel') t[f] = Number(e.target.value);
       else t[f] = e.target.value;
       if (f === 'color') {
@@ -589,7 +565,6 @@
       }
       if (f === 'icon') r.row.querySelectorAll('.world-icon-preview i').forEach((i) => { i.className = `fas fa-${t.icon}`; });
       if (f === 'name') { const nm = r.row.querySelector('.world-type-title'); if (nm) nm.textContent = t.name; }
-      if (f === 'minZoomRel' || f === 'maxZoomRel') { const rg = r.row.querySelector('.world-type-range'); if (rg) rg.textContent = typeRangeText(t); }
       markDirty();
       if (f === 'name' && e.type === 'change') render(); // имена в списках «может лежать внутри»
     };
@@ -604,7 +579,7 @@
           const kind = btn.dataset.kind;
           const id = `${kind === 'marker' ? 'k' : 't'}${Date.now().toString(36)}`;
           if (kind === 'marker') state.marker.push({ id, name: 'Новая метка', icon: 'location-dot', color: '#5865f2', minZoomRel: 0, noCluster: false });
-          else state.zone.push({ id, name: 'Новый тип', topLevel: false, parents: [], color: '#5865f2', fillOpacity: 0.15, weight: 2, dashed: false, hoverEffect: 'fill', clipToParent: true, minZoomRel: 0, maxZoomRel: null });
+          else state.zone.push({ id, name: 'Новый тип', topLevel: false, parents: [], color: '#5865f2', fillOpacity: 0.15, weight: 2, dashed: false, hoverEffect: 'fill', clipToParent: true, minZoomRel: 0 });
           state.openSections[kind] = true;
           state.openRows.add(`${kind}:${id}`);
           render();
@@ -774,7 +749,6 @@
 
   function renderZoneTypeRow(t, i, state) {
     const dis = state.canEdit ? '' : 'disabled';
-    const others = state.zone.filter((o) => o.id !== t.id);
     return `
       <details class="world-type" data-kind="zone" data-type-index="${i}" data-type-id="${escapeHtml(t.id)}" style="--zone-color:${escapeHtml(t.color)}" ${state.openRows.has(`zone:${t.id}`) ? 'open' : ''}>
         <summary class="world-type-summary">
@@ -787,19 +761,10 @@
           <input type="text" class="form-input" data-field="name" value="${escapeHtml(t.name)}" maxlength="60" ${dis}>
         </div>
         <div class="world-type-grid">
-          <label class="checkbox-field"><input type="checkbox" data-field="topLevel" ${t.topLevel ? 'checked' : ''} ${dis}> Может быть на верхнем уровне</label>
-          <label class="checkbox-field"><input type="checkbox" data-field="clipToParent" ${t.clipToParent ? 'checked' : ''} ${dis}> Обрезать по родителю</label>
           <label class="checkbox-field"><input type="checkbox" data-field="dashed" ${t.dashed ? 'checked' : ''} ${dis}> Пунктирная граница</label>
           <label>Толщина границы <input type="number" min="0" max="10" step="0.5" data-field="weight" value="${t.weight}" ${dis}></label>
           <label>Прозрачность заливки <input type="range" min="0" max="1" step="0.05" data-field="fillOpacity" value="${t.fillOpacity}" ${dis}></label>
           <label>При наведении <select data-field="hoverEffect" ${dis}>${Object.entries(HOVER_LABELS).map(([v, l]) => `<option value="${v}"${t.hoverEffect === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-          <label>Видно с уровня ${minZoomSelect(t.minZoomRel, dis)}</label>
-          <label title="Крупные зоны (страны) гаснут при приближении, чтобы не перекрывать зоны помельче (регионы, города). Должно быть больше, чем «Видно».">Скрывать с уровня ${maxZoomSelect(t.maxZoomRel, dis)}</label>
-          <p class="world-type-range">${typeRangeText(t)}</p>
-        </div>
-        <div class="world-type-parents">
-          <span>Может лежать внутри:</span>
-          ${others.length ? others.map((o) => `<label class="checkbox-field"><input type="checkbox" data-field="parent" value="${escapeHtml(o.id)}" ${t.parents.includes(o.id) ? 'checked' : ''} ${dis}> ${escapeHtml(o.name)}</label>`).join('') : '<em>других типов нет</em>'}
         </div>
       </details>`;
   }
@@ -819,7 +784,7 @@
         </div>
         <div class="world-type-grid">
           <label>Иконка <select data-field="icon" ${dis}>${Object.entries(MARKER_ICONS).map(([v, l]) => `<option value="${v}"${t.icon === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-          <label>Видно с уровня ${minZoomSelect(t.minZoomRel, dis)}</label>
+          <label>Видно ${minZoomSelect(t.minZoomRel, dis)}</label>
           <label class="checkbox-field"><input type="checkbox" data-field="noCluster" ${t.noCluster ? 'checked' : ''} ${dis}> Не прятать в группу (важные)</label>
         </div>
       </details>`;

@@ -16,7 +16,7 @@ const crypto = require('crypto');
 const { WORLDS_DIR } = require('../config/paths');
 const MapCalendar = require('../../public/maps/map-calendar');
 
-const MAX_TYPES = 200;
+const MAX_TYPES = 50;
 const HOVER_EFFECTS = ['outline', 'fill', 'glow', 'pulse'];
 
 // Иконки меток — только из этого списка (Font Awesome 6 Free, solid):
@@ -30,30 +30,9 @@ const MARKER_ICONS = [
 // «Видно с приближения»: 0 — всегда, 1 — с приближения ×2 от вида всей
 // карты, 2 — ×4 и т.д. Считается от вида всей карты, поэтому одинаково
 // работает на картах любого размера.
-//
-// Уровень — любое число от 0 до ZOOM_REL_MAX с шагом до сотых (1 = ×2,
-// 2 = ×4, 0.5 ≈ ×1.4), так что слоёв («вселенная → созвездие → планета →
-// мир → …») может быть сколько угодно: их границы можно расставлять
-// плотнее, чем целые уровни приближения.
-const ZOOM_REL_MAX = 24;
-
-function zoomRel(v) {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? Math.round(Math.min(ZOOM_REL_MAX, Math.max(0, n)) * 100) / 100 : 0;
-}
-
 function minZoomRel(v) {
-  return zoomRel(v);
-}
-
-// «Скрывать с приближения»: null — не скрывать, иначе уровень (как у
-// minZoomRel), с которого зона гаснет — чтобы крупные зоны (страны) не
-// перекрывали мелкие (регионы, города) при приближении. Должен быть строго
-// больше «Видно с приближения», иначе зона не была бы видна никогда.
-function maxZoomRel(v, min) {
-  if (v === null || v === undefined || v === '') return null;
-  const n = zoomRel(v);
-  return n > min ? n : null;
+  const n = parseInt(v, 10);
+  return Number.isInteger(n) ? Math.min(8, Math.max(0, n)) : 0;
 }
 
 function genId() {
@@ -127,8 +106,7 @@ function normalizeZoneType(raw) {
     dashed: !!raw.dashed,
     hoverEffect: HOVER_EFFECTS.includes(raw.hoverEffect) ? raw.hoverEffect : 'fill',
     clipToParent: raw.clipToParent !== false,
-    minZoomRel: minZoomRel(raw.minZoomRel),
-    maxZoomRel: maxZoomRel(raw.maxZoomRel, minZoomRel(raw.minZoomRel))
+    minZoomRel: minZoomRel(raw.minZoomRel)
   };
 }
 
