@@ -113,5 +113,7 @@ src/server.js
   хранилища и важные циклы записи/восстановления.
 - [`agent-context/FRONTEND.md`](agent-context/FRONTEND.md) — загрузка скриптов,
   экраны SPA и клиентские модули.
+- [`agent-context/CLIENT_SITE_PLAN.md`](agent-context/CLIENT_SITE_PLAN.md) —
+  план публичной основы, гостевого чтения статей и переключения с админкой.
 - [`README.md`](../README.md) — установка, команды и ориентиры пользователя.
 - [`DEVLOG.md`](../DEVLOG.md) — отобранные вехи истории коммитов.

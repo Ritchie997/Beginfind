@@ -27,6 +27,9 @@
 | Аналитика | `src/services/dashboard-stats.js`, endpoint в `src/routes/articles.routes.js` | `public/views/dashboard.html`, `public/spa-router.js`, `public/graph-view.js` |
 | Загрузка изображений | `src/routes/uploads.routes.js`, `src/uploads/multer-config.js` | `public/editor-manager.js`, `public/spa-router.js` |
 
+План реализации пользовательской (публичной) версии и правила для гостевого
+доступа к Antropedia: [`CLIENT_SITE_PLAN.md`](CLIENT_SITE_PLAN.md).
+
 ## Междоменные связи
 
 - Пользовательский id используется в статьях, черновиках, закладках, социальной

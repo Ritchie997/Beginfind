@@ -12,6 +12,7 @@
 | API, метод, маршрут или доступ | [`API_INDEX.md`](API_INDEX.md), затем соответствующий `src/routes/*.routes.js` |
 | Хранение, формат данных, миграция, бэкап | [`DATA_AND_FLOWS.md`](DATA_AND_FLOWS.md) |
 | Экран, браузерная логика или статические ресурсы | [`FRONTEND.md`](FRONTEND.md) |
+| Публичная клиентская версия, гостевой доступ к статьям или ссылки | [`CLIENT_SITE_PLAN.md`](CLIENT_SITE_PLAN.md) |
 | Порядок запуска, middleware, общая архитектура | [`../PROJECT_MAP.md`](../PROJECT_MAP.md) и `src/server.js` |
 
 ## Типовые цепочки

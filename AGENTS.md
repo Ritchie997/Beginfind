@@ -29,6 +29,8 @@
 - Структура и быстрый поиск: [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md).
 - Подробные домены, API, данные, потоки и клиентские модули:
   [`docs/agent-context/`](docs/agent-context/README.md).
+- План публичной основы и гостевого чтения Antropedia:
+  [`CLIENT_SITE_PLAN.md`](docs/agent-context/CLIENT_SITE_PLAN.md).
 
 ## Правила работы
 
