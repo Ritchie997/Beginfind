@@ -29,6 +29,29 @@
     }
   }
 
+  function setMetaContent(selector, attribute, content) {
+    var meta = document.head.querySelector(selector);
+    if (meta) meta.setAttribute(attribute, content);
+  }
+
+  function updateArticleMetadata(article) {
+    var title = (article.title || article.slug) + ' — Antropedia';
+    var description = String(article.excerpt || 'Открытая статья Antropedia — энциклопедии AllTell.').slice(0, 300);
+    var canonical = new URL('/antropedia/' + encodeURIComponent(article.slug), window.location.origin).href;
+    var image = safePublicImageUrl(article.image);
+    document.title = title;
+    setMetaContent('meta[name="description"]', 'content', description);
+    setMetaContent('meta[property="og:title"]', 'content', title);
+    setMetaContent('meta[property="og:description"]', 'content', description);
+    setMetaContent('meta[property="og:url"]', 'content', canonical);
+    setMetaContent('meta[property="og:image"]', 'content', image);
+    setMetaContent('meta[name="twitter:title"]', 'content', title);
+    setMetaContent('meta[name="twitter:description"]', 'content', description);
+    setMetaContent('meta[name="twitter:image"]', 'content', image);
+    var canonicalLink = document.head.querySelector('link[rel="canonical"]');
+    if (canonicalLink) canonicalLink.href = canonical;
+  }
+
   function initPublicAntropedia() {
     if (document.body.getAttribute('data-page') !== 'antropedia') return;
     var section = document.querySelector('.site-main .site-section');
@@ -302,6 +325,9 @@
         return window.renderArticleBlocks(article.content, index);
       }).then(function (html) {
         content.innerHTML = html;
+        content.querySelectorAll('a[data-slug]').forEach(function (link) {
+          link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
+        });
         content.addEventListener('click', function (event) {
           var wikiLink = event.target.closest('a[data-slug]');
           if (wikiLink) {
@@ -317,7 +343,7 @@
       }).catch(function () {
         content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
       });
-      document.title = (article.title || article.slug) + ' — Antropedia';
+      updateArticleMetadata(article);
     }
 
     async function loadDetail() {
