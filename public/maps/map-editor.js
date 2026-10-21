@@ -31,8 +31,8 @@
   const TOOLS = [
     { id: 'select', key: 'v', icon: 'fa-arrow-pointer', label: 'Выбор', hint: 'Клик по зоне — выбрать. Двойной клик — править её точки.' },
     { id: 'polygon', key: 'p', icon: 'fa-draw-polygon', label: 'Многоугольник', hint: 'Клик — точка. Двойной клик, Enter или клик по первой точке — готово. Backspace — убрать точку, Esc — отмена. Shift — добавить к выбранной, Alt — вырезать. Точки прилипают к границам других зон (зелёный кружок); две точки подряд на границе одной зоны — контур пройдёт вдоль неё, Ctrl при клике — в обход с другой стороны.' },
-    { id: 'lasso', key: 'l', icon: 'fa-signature', label: 'Лассо', hint: 'Зажмите кнопку мыши и обведите область. Shift — добавить к выбранной зоне, Alt — вырезать из неё. Пробел — двигать карту.' },
-    { id: 'brush', key: 'b', icon: 'fa-paintbrush', label: 'Кисть', hint: 'Зажмите кнопку мыши и ведите — мазок заданной ширины. Выбрана зона — мазок добавляется к ней, Alt — вырезается из неё; не выбрана — мазок становится новой зоной. [ и ] — размер кисти. Пробел — двигать карту.' },
+    { id: 'lasso', key: 'l', icon: 'fa-signature', label: 'Лассо', hint: 'Зажмите кнопку мыши и обведите область. Тип новой зоны — в палитре слева сверху. Shift — добавить к выбранной зоне, Alt — вырезать из неё. Пробел — двигать карту.' },
+    { id: 'brush', key: 'b', icon: 'fa-paintbrush', label: 'Кисть', hint: 'Зажмите кнопку мыши и ведите — мазок заданной ширины. Выбрана зона — мазок добавляется к ней, Alt — вырезается из неё; не выбрана — мазок становится новой зоной выбранного в палитре типа (слева сверху). [ и ] — размер кисти. Пробел — двигать карту.' },
     { id: 'vertex', key: 'e', icon: 'fa-bezier-curve', label: 'Правка точек', hint: 'Тяните точку — у границы другой зоны она прилипнет к ней. Промежуточная точка между двумя — добавить новую. Правый клик по точке — удалить.' },
     { id: 'marker', key: 'm', icon: 'fa-location-dot', label: 'Метка', hint: 'Клик — поставить метку. Метки перетаскиваются мышью; тип, описание и статья — в свойствах справа.' }
   ];
@@ -337,6 +337,7 @@
               <div class="me-canvas"></div>
               <div class="me-hint" data-el="hint"></div>
               <div class="me-marker-palette" data-el="marker-palette" hidden></div>
+              <div class="me-marker-palette me-zone-palette" data-el="zone-palette" hidden></div>
               <div class="me-overlay" data-el="overlay" hidden></div>
               <div class="map-timeline me-timeline" data-el="timeline"></div>
             </div>
@@ -572,6 +573,7 @@
       this.renderZoneLayers();
       this.renderMarkerLayers();
       this.renderMarkerPalette();
+      this.renderZonePalette();
       this.renderTree();
       if (!live) this.renderProps();
     }
@@ -886,9 +888,36 @@
       if (tool === 'vertex' && !this.selectedId) this.toast('Сначала выберите зону — её точки появятся для правки');
       this.renderHandles();
       this.renderMarkerPalette();
+      this.renderZonePalette();
       if (this.draw && this.draw.kind === 'polygon') this.renderDraft();
       this.updateHint();
       this.updateUndoButtons();
+    }
+
+    // Палитра типов для инструментов рисования зон (многоугольник, лассо,
+    // кисть): какой тип получит следующая НОВАЯ зона — страна, регион, город…
+    // Выбор общий с «Типом» в свойствах зоны (_lastTypeId) и запоминается,
+    // пока открыт редактор. Ластик зон не создаёт — палитра скрыта.
+    renderZonePalette() {
+      const el = this.el('zone-palette');
+      if (!el) return;
+      const drawing = this.tool === 'polygon' || this.tool === 'lasso' || this.tool === 'brush';
+      el.hidden = !drawing || this.eraser;
+      if (el.hidden) return;
+      const current = this.pickType();
+      el.innerHTML = `<div class="me-palette-head">Новая зона — тип:</div>` + (this.zoneTypes.length
+        ? this.zoneTypes.map((t) => `<button type="button" class="me-palette-item${current && t.id === current.id ? ' active' : ''}" data-new-zone-type="${esc(t.id)}" title="Новые зоны будут типа «${esc(t.name)}»">
+            <span class="me-zone-swatch${t.dashed ? ' is-dashed' : ''}" style="--zone-color:${esc(t.color)}"></span>${esc(t.name)}
+          </button>`).join('')
+        : '<div class="me-palette-empty">Нет типов зон — добавьте их в «Типы зон и меток мира»</div>');
+      el.onclick = (e) => {
+        const b = e.target.closest('[data-new-zone-type]');
+        if (!b) return;
+        this._lastTypeId = b.dataset.newZoneType;
+        this.renderZonePalette();
+      };
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
     }
 
     // Палитра типов для инструмента «Метка»: какой тип получит следующая
@@ -1590,6 +1619,7 @@
           : 'Ластик: ВЫКЛ (X)';
       }
       this.wrapEl.classList.toggle('me-erasing', this.eraser);
+      this.renderZonePalette();
       if (this._brushCursor) this._brushCursor.setStyle({ color: this.eraser ? '#ed4245' : '#ffffff' });
       this.updateHint();
     }
@@ -2548,7 +2578,7 @@
       const f = input.dataset.prop;
       const v = input.value;
       if (f === 'title') { zone.title = v; this.updateTreeItemTitle(zone); }
-      else if (f === 'typeId') { zone.typeId = v || null; this._lastTypeId = zone.typeId; this.refreshZoneLayer(zone); this.renderTree(); }
+      else if (f === 'typeId') { zone.typeId = v || null; this._lastTypeId = zone.typeId; this.refreshZoneLayer(zone); this.renderTree(); this.renderZonePalette(); }
       else if (f === 'layerId') { this.undoStack.pop(); this.moveZoneToLayer(zone.id, v); return; }
       else if (f === 'lockedMode') zone.lockedMode = v === 'hide' ? 'hide' : 'lock';
       else if (f === 'article') {

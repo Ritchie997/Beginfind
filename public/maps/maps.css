@@ -1079,6 +1079,17 @@ body.map-fs-open { overflow: hidden; }
 .me-palette-item.active { border-color: var(--blurple); background: rgba(88, 101, 242, .2); }
 .me-palette-item .map-marker { width: 24px; height: 24px; flex: 0 0 auto; font-size: 11px; animation: none; }
 .me-palette-empty { padding: 6px; font-size: 12px; color: var(--text-muted); }
+/* Образец типа зоны в палитре: цвет и вид границы (пунктир) как на карте */
+.me-zone-swatch {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 2px solid var(--zone-color, #5865f2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--zone-color, #5865f2) 25%, transparent);
+}
+.me-zone-swatch.is-dashed { border-style: dashed; }
 
 /* ===== Список зон и меток: поиск, разделы, ветки ===== */
 .me-tree-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
