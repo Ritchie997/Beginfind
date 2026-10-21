@@ -296,6 +296,10 @@
       let zoomLayers = false;
       try { zoomLayers = localStorage.getItem(ZOOM_LAYERS_KEY) === '1'; } catch (e) { /* нет доступа */ }
       this.setZoomLayers(zoomLayers);
+      // Диапазоны приближения слоёв в редакторе больше не задаются; кнопка
+      // предпросмотра нужна только картам, где они остались от прежних версий.
+      const hasZoomRanges = this.doc.layers.some((l) => l.minZoomRel || l.maxZoomRel);
+      this.root.querySelectorAll('[data-act="toggle-zoomlayers"]').forEach((btn) => { btn.style.display = hasZoomRanges ? '' : 'none'; });
       this.bindCalendarSection();
       this.bindGlobal();
       this.initMap();
@@ -713,7 +717,8 @@
       const ordered = this.doc.zones
         .filter((z) => this.zonePoly(z).length && !this.hiddenZonesEd.has(z.id) && !this.hiddenLayersEd.has(z.layerId))
         .map((z) => ({ z, d: depths.get(z.id) || 0, a: MC().polygonArea(this.zonePoly(z)) }))
-        .sort((p, q) => (p.d - q.d) || (q.a - p.a))
+        // Верх списка слоёв — поверх: нижние слои рисуются первыми.
+        .sort((p, q) => (q.d - p.d) || (q.a - p.a))
         .map((p) => p.z);
       ordered.forEach((zone) => {
         const layer = L.polygon(MC().polygonToLatLngs(this.zonePoly(zone)), { ...this.zoneStyle(zone), renderer: this.renderer, className: 'map-zone' });
@@ -1793,12 +1798,8 @@
             <button type="button" class="me-tree-caret" data-layer-eye="${esc(l.id)}" title="${hidden ? 'Показать слой на карте редактора' : 'Скрыть слой на карте редактора'}"><i class="fas fa-eye${hidden ? '-slash' : ''}"></i></button>
             <input type="text" class="me-group-name" data-layer-name="${esc(l.id)}" value="${esc(l.name)}" maxlength="60" title="Название слоя">
             <span class="me-tree-type">${list.length}</span>
-            <span class="me-layer-zoom" title="Диапазон приближения слоя. «с» — с какого уровня виден (0 — с вида всей карты; 1 = ×2, 2 = ×4, 3 = ×8…). «до» — с какого уровня гаснет (0 — не гаснет)">
-              с <input type="number" min="0" max="24" step="1" data-layer-min="${esc(l.id)}" value="${l.minZoomRel || 0}">
-              до <input type="number" min="0" max="24" step="1" data-layer-max="${esc(l.id)}" value="${l.maxZoomRel || 0}">
-            </span>
-            <button type="button" class="me-tree-caret" data-layer-up="${esc(l.id)}" title="Выше (рисуется под соседним)" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
-            <button type="button" class="me-tree-caret" data-layer-down="${esc(l.id)}" title="Ниже (рисуется поверх соседнего)" ${i === layers.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+            <button type="button" class="me-tree-caret" data-layer-up="${esc(l.id)}" title="Выше — слой ляжет поверх соседнего" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+            <button type="button" class="me-tree-caret" data-layer-down="${esc(l.id)}" title="Ниже — слой уйдёт под соседний" ${i === layers.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
             <button type="button" class="me-tree-caret is-danger" data-layer-del="${esc(l.id)}" title="Удалить слой (зоны перейдут в другой слой)" ${layers.length < 2 ? 'disabled' : ''}><i class="fas fa-trash"></i></button>
           </div>`);
           list.forEach((z) => { rows.push(zoneRow(z)); zoneRowsCount++; });
@@ -1850,7 +1851,7 @@
       const markerCount = q ? `${markers.length} из ${(this.doc.markers || []).length}` : markers.length;
       body.innerHTML = `
         <details class="me-tree-section" data-section="zones" ${this._treeOpen.zones || q ? 'open' : ''}>
-          <summary>Зоны (${zoneCount})<span class="me-tree-bulk"><button type="button" data-layer-add title="Новый слой по масштабу (Слой 1, 2, 3…)"><i class="fas fa-layer-group"></i> <i class="fas fa-plus"></i></button></span></summary>
+          <summary>Зоны (${zoneCount})<span class="me-tree-bulk"><button type="button" data-layer-add title="Добавить слой. Чем выше слой в списке, тем выше он на карте"><i class="fas fa-layer-group"></i> <i class="fas fa-plus"></i></button></span></summary>
           <div class="me-tree-list">${rows.join('') || `<div class="me-tree-empty">${q ? 'Ничего не найдено' : 'Нарисуйте первую зону инструментом «Лассо» или «Многоугольник»'}</div>`}</div>
         </details>
         <details class="me-tree-section" data-section="markers" ${this._treeOpen.markers || q ? 'open' : ''}>
@@ -1869,10 +1870,6 @@
       tree.addEventListener('change', (e) => {
         const lName = e.target.closest('[data-layer-name]');
         if (lName) { this.setLayerField(lName.dataset.layerName, 'name', lName.value); return; }
-        const lMin = e.target.closest('[data-layer-min]');
-        if (lMin) { this.setLayerField(lMin.dataset.layerMin, 'minZoomRel', lMin.value); return; }
-        const lMax = e.target.closest('[data-layer-max]');
-        if (lMax) { this.setLayerField(lMax.dataset.layerMax, 'maxZoomRel', lMax.value); return; }
         const nameIn = e.target.closest('[data-group-name]');
         if (!nameIn) return;
         const g = this.doc.markerGroups.find((x) => x.id === nameIn.dataset.groupName);
@@ -2202,15 +2199,21 @@
 
     layerName(l) { return l.name || `Слой ${this.doc.layers.indexOf(l) + 1}`; }
 
+    // Новый слой — «Слой N» в конец списка (самый нижний по приоритету),
+    // виден на любом масштабе. Ничего вводить не нужно; название можно
+    // поменять в списке. Номер берётся первый свободный (после удаления
+    // слоёв названия не повторяются).
     addLayer() {
       this.pushHistory();
-      const last = this.doc.layers[this.doc.layers.length - 1];
-      const layer = { id: genId('l'), name: `Слой ${this.doc.layers.length + 1}`, minZoomRel: Math.min(24, (last ? last.minZoomRel || 0 : 0) + 1), maxZoomRel: null };
+      const names = new Set(this.doc.layers.map((l) => l.name));
+      let n = this.doc.layers.length + 1;
+      while (names.has(`Слой ${n}`)) n++;
+      const layer = { id: genId('l'), name: `Слой ${n}`, minZoomRel: 0, maxZoomRel: null };
       this.doc.layers.push(layer);
       this.activeLayerId = layer.id;
       this.markDirty();
       this.renderTree();
-      this.toast(`${layer.name}: виден с уровня ${layer.minZoomRel} (×${Math.pow(2, layer.minZoomRel)}). Настройте «с» и «до» в списке слоёв.`);
+      this.toast(`${layer.name} создан — новые зоны попадут в него`);
     }
 
     moveZoneToLayer(zoneId, layerId) {
@@ -2224,22 +2227,13 @@
       this.toast(`Зона перенесена в «${this.layerName(this.layerById(layerId))}»`);
     }
 
-    // Настройка слоя: имя, «с» (minZoomRel), «до» (maxZoomRel, 0 — не гаснет).
+    // Настройка слоя: только имя (диапазон приближения в редакторе не правится).
     setLayerField(id, field, value) {
       const l = this.layerById(id);
-      if (!l) return;
+      if (!l || field !== 'name') return;
       this.pushHistory();
-      if (field === 'name') {
-        l.name = String(value).trim().slice(0, 60) || l.name;
-      } else if (field === 'minZoomRel') {
-        l.minZoomRel = Math.min(24, Math.max(0, parseInt(value, 10) || 0));
-        if (l.maxZoomRel && l.maxZoomRel <= l.minZoomRel) l.maxZoomRel = null;
-      } else if (field === 'maxZoomRel') {
-        const n = Math.min(24, Math.max(0, parseInt(value, 10) || 0));
-        if (n && n <= (l.minZoomRel || 0)) { this.toast('«До» должно быть больше, чем «с» — слой остаётся без верхней границы'); l.maxZoomRel = null; } else l.maxZoomRel = n || null;
-      }
+      l.name = String(value).trim().slice(0, 60) || l.name;
       this.markDirty();
-      this.updateZoneZoomVisibility();
       this.renderTree();
     }
 
@@ -2251,7 +2245,7 @@
       const [l] = this.doc.layers.splice(i, 1);
       this.doc.layers.splice(j, 0, l);
       this.markDirty();
-      this.renderZoneLayers(); // порядок слоёв = порядок отрисовки
+      this.renderZoneLayers(); // порядок слоёв = приоритет: верх списка — поверх
       this.renderTree();
     }
 
@@ -2291,7 +2285,7 @@
       if (down) { this.moveLayer(down.dataset.layerDown, 1); return true; }
       const del = e.target.closest('[data-layer-del]');
       if (del) { this.deleteLayer(del.dataset.layerDel); return true; }
-      if (e.target.closest('[data-layer-name], [data-layer-min], [data-layer-max]')) return true; // клик в поле — не выбор
+      if (e.target.closest('[data-layer-name]')) return true; // клик в поле — не выбор
       const head = e.target.closest('[data-layer-head]');
       if (head) { this.activeLayerId = head.dataset.layerHead; this.renderTree(); return true; }
       return false;

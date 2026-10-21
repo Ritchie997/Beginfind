@@ -1549,6 +1549,4 @@ body.map-panel-resizing .leaflet-container { pointer-events: none; }
 .me-layer-head.is-active { box-shadow: inset 3px 0 0 var(--blurple); }
 .me-layer-head.is-hidden .me-group-name { opacity: .5; text-decoration: line-through; }
 .me-layer-head.drop-target { outline: 2px dashed var(--blurple); outline-offset: -2px; }
-.me-layer-zoom { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
-.me-layer-zoom input { width: 42px; padding: 2px 4px; font-size: 12px; }
 .me-tree-caret:disabled { opacity: .3; cursor: default; }
