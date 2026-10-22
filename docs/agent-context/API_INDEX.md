@@ -192,6 +192,7 @@
 
 - `GET /public/articles`
 - `GET /public/tags`
+- `GET /public/articles-index`
 - `GET /public/articles/:slug`
 
 ## `servers.routes.js`

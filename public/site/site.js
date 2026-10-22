@@ -501,6 +501,22 @@
 
     // ---------- Просмотр статьи ----------
 
+    async function loadPublicIndex(article) {
+      var index = new Map([[article.slug, { slug: article.slug, title: article.title || article.slug, tags: article.tags || [] }]]);
+      try {
+        var response = await fetch('/api/public/articles-index', { credentials: 'omit' });
+        if (response.ok) {
+          var result = await response.json();
+          (Array.isArray(result.data) ? result.data : []).forEach(function (item) {
+            if (item && item.slug && item.slug !== article.slug) index.set(item.slug, item);
+          });
+        }
+      } catch (error) {
+        // Без индекса ссылки покажутся как «Недоступно» — текст статьи не страдает.
+      }
+      return index;
+    }
+
     function renderDetail(article) {
       listView.hidden = true;
       detail.hidden = false;
@@ -542,10 +558,15 @@
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';
       detail.appendChild(content);
-      var index = new Map([[article.slug, { slug: article.slug, title: article.title || article.slug, tags: article.tags || [] }]]);
-      Promise.resolve().then(function () {
+      // Индекс открытых статей — по нему рендерер узнаёт цели вики-ссылок.
+      // Без него каждая ссылка на другую статью выглядела как «создать».
+      // Остальные цели (закрытые/несуществующие) для гостя одинаково
+      // «Недоступно», без приглашения создавать статью и без раскрытия
+      // того, существует ли она.
+      var allUnavailable = { has: function () { return true; } };
+      loadPublicIndex(article).then(function (index) {
         if (typeof window.renderArticleBlocks !== 'function') throw new Error('Block renderer is unavailable');
-        return window.renderArticleBlocks(article.content, index);
+        return window.renderArticleBlocks(article.content, index, allUnavailable);
       }).then(function (html) {
         content.innerHTML = html;
         content.querySelectorAll('a[data-slug]').forEach(function (link) {

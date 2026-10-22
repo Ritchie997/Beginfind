@@ -233,8 +233,22 @@ function listPublicTags(articles) {
   return [...counts.values()].sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag, 'ru'));
 }
 
+// Лёгкий индекс (slug/title/tags) всех открытых гостю статей — клиент по нему
+// отличает в тексте существующие вики-ссылки от недоступных/несуществующих.
+function listPublicIndex(articles) {
+  const index = [];
+  for (const article of articles) {
+    const resolved = articleLayers.resolvePublicArticleLayers(article);
+    if (!resolved) continue;
+    const { slug, title, tags } = toPublicArticleSummary(article, resolved);
+    index.push({ slug, title, tags });
+  }
+  return index;
+}
+
 module.exports = {
   getPublicArticle,
   listPublicArticles,
-  listPublicTags
+  listPublicTags,
+  listPublicIndex
 };

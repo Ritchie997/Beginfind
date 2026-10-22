@@ -63,6 +63,15 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null) {
     }
   });
 
+  router.get('/public/articles-index', (req, res) => {
+    try {
+      res.json({ data: publicArticles.listPublicIndex(articleStore.listArticles()) });
+    } catch (err) {
+      console.error('[public-articles] Failed to build public index:', err);
+      res.status(500).json({ error: 'Не удалось загрузить индекс статей' });
+    }
+  });
+
   router.get('/public/articles/:slug', (req, res) => {
     try {
       const article = articleStore.getArticle(req.params.slug);
