@@ -185,3 +185,55 @@ test('guest endpoints only list/search/read public content and expose no write r
   const writeResponse = await fetch(base, { method: 'POST' });
   assert.equal(writeResponse.status, 404);
 });
+
+test('guest list adds aggregate counters, supports sorting and exposes a tag list', async (t) => {
+  const make = (slug, title, tags, createdAt) => legacyArticle(slug, {
+    title,
+    tags,
+    created_at: createdAt,
+    updated_at: createdAt,
+    content: document({ type: 'paragraph', data: { markdown: `Text of ${slug}` } })
+  });
+  const items = [
+    make('first', 'Alpha', ['Heroes'], '2026-01-01T00:00:00.000Z'),
+    make('second', 'Bravo', ['Places'], '2026-02-01T00:00:00.000Z')
+  ];
+  const articleStore = {
+    listArticles: () => items,
+    getArticle: (slug) => items.find((article) => article.slug === slug) || null
+  };
+  const requestedUsers = [];
+  const socialStore = {
+    getAllViewCounts: async () => new Map([['first', 10], ['second', 2]]),
+    getCountsForSlugs: async (userId, slugs) => {
+      requestedUsers.push(userId);
+      return new Map(slugs.map((slug) => [slug, { likes: 3, comments: 2, views: slug === 'first' ? 10 : 2, liked: true }]));
+    }
+  };
+
+  const app = express();
+  app.use('/api', createPublicArticlesRouter(articleStore, socialStore));
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  }));
+  const base = `http://127.0.0.1:${server.address().port}/api/public`;
+
+  const byViews = await (await fetch(`${base}/articles?sort=views`)).json();
+  assert.deepEqual(byViews.data.map((article) => article.slug), ['first', 'second']);
+  assert.equal(byViews.data[0].likesCount, 3);
+  assert.equal(byViews.data[0].commentsCount, 2);
+  assert.equal(byViews.data[0].viewsCount, 10);
+  // Гость анонимен: личный флаг «лайкнул» не раскрывается и не запрашивается.
+  assert.deepEqual(requestedUsers, [null]);
+  assert.equal('liked' in byViews.data[0], false);
+
+  const oldest = await (await fetch(`${base}/articles?sort=oldest`)).json();
+  assert.deepEqual(oldest.data.map((article) => article.slug), ['first', 'second']);
+  const newest = await (await fetch(`${base}/articles`)).json();
+  assert.deepEqual(newest.data.map((article) => article.slug), ['second', 'first']);
+
+  const tags = await (await fetch(`${base}/tags`)).json();
+  assert.deepEqual(tags.data.map((item) => item.tag).sort(), ['Heroes', 'Places']);
+});

@@ -44,8 +44,8 @@
   <span class="site-hero-badge"><i class="fas fa-book-open"></i> Энциклопедия AllTell</span>
   <h1>Antropedia</h1>
   <p>Открытая база лора: персонажи, локации, фракции, механики и хроники событий вселенной. Всё связано ссылками, оглавлением и закладками.</p>
-  <div class="site-search" style="width:min(520px, 100%); margin:0 auto;">
-    <i class="fas fa-search"></i><input type="text" placeholder="Искать статью по названию или тексту…">
+  <div class="site-search" id="pubHeroSearch" style="width:min(520px, 100%); margin:0 auto;">
+    <i class="fas fa-search"></i><input type="search" id="publicArticleSearch" placeholder="Искать статью по названию или тексту… (нажмите /)" aria-label="Поиск по открытым статьям">
   </div>
 </section>
 
@@ -53,201 +53,75 @@
 <main class="site-main" hidden>
   <section class="site-section" style="padding-top:32px;">
 
-    <div class="chip-row" style="margin-bottom:28px;">
-      <span class="filter-chip active">Все статьи</span>
-      <span class="filter-chip">Лор</span>
-      <span class="filter-chip">Персонажи</span>
-      <span class="filter-chip">Локации</span>
-      <span class="filter-chip">Фракции</span>
-      <span class="filter-chip">Механики</span>
-      <span class="filter-chip">История</span>
-    </div>
-
-    <div class="wiki-layout">
-      <div>
-        <div class="article-grid">
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#5865f2,#8b93f8);"><span class="wiki-card-cat">Лор</span><i class="fas fa-scroll"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Хроники Ибри: от Раскола до наших дней</div>
-              <div class="wiki-card-excerpt">Главный таймлайн вселенной — ключевые эпохи, войны и переломные события мира.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">история</span><span class="wiki-tag">таймлайн</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>214</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>38</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 5.1k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#a78bfa,#ff5d8f);"><span class="wiki-card-cat">Персонажи</span><i class="fas fa-masks-theater"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Дом Ториан: правящая династия Севера</div>
-              <div class="wiki-card-excerpt">Родословная, союзы и конфликты одной из ключевых фракций континента.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">персонажи</span><span class="wiki-tag">фракции</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>176</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>22</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 3.4k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#2dd4bf,#5865f2);"><span class="wiki-card-cat">Механики</span><i class="fas fa-atom"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Магическая система: Эфирный поток</div>
-              <div class="wiki-card-excerpt">Как работает магия в мире AllTell — источники силы, ограничения и школы.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">механики</span><span class="wiki-tag">магия</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>301</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>54</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 6.7k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#ff9f5a,#ff5d8f);"><span class="wiki-card-cat">Локации</span><i class="fas fa-mountain-city"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Ибри-Порт: город тысячи флагов</div>
-              <div class="wiki-card-excerpt">Торговый узел континента — районы, гильдии и легенды о подземных доках.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">локации</span><span class="wiki-tag">города</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>142</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>17</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 2.9k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#5865f2,#2dd4bf);"><span class="wiki-card-cat">Фракции</span><i class="fas fa-shield-halved"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Тёмный Легион: культ Пепельного Пламени</div>
-              <div class="wiki-card-excerpt">Происхождение, иерархия и цели одной из самых загадочных фракций.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">фракции</span><span class="wiki-tag">антагонисты</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>98</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>12</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 1.8k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#ff5d8f,#a78bfa);"><span class="wiki-card-cat">Персонажи</span><i class="fas fa-user-astronaut"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Кайра Веста: капитан «Дальнего Рубежа»</div>
-              <div class="wiki-card-excerpt">Биография ключевой героини sci-fi ветки вселенной и её экипажа.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">персонажи</span><span class="wiki-tag">sci-fi</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>133</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>19</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 2.2k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#2dd4bf,#ff9f5a);"><span class="wiki-card-cat">История</span><i class="fas fa-landmark"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Война Трёх Флагов</div>
-              <div class="wiki-card-excerpt">Конфликт, изменивший политическую карту континента на столетия вперёд.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">история</span><span class="wiki-tag">война</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>87</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>9</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 1.4k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#a78bfa,#5865f2);"><span class="wiki-card-cat">Локации</span><i class="fas fa-tree-city"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Лес Шёпота: граница миров</div>
-              <div class="wiki-card-excerpt">Мистическая локация на стыке фэнтези- и sci-fi-веток сюжета.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">локации</span><span class="wiki-tag">мистика</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>119</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>15</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 2.0k</span>
-              </div>
-            </div>
-          </a>
-
-          <a href="#" class="wiki-card">
-            <div class="wiki-card-cover" style="--cover-grad:linear-gradient(135deg,#ff9f5a,#5865f2);"><span class="wiki-card-cat">Механики</span><i class="fas fa-dice-d20"></i></div>
-            <div class="wiki-card-body">
-              <div class="wiki-card-title">Система характеристик персонажа</div>
-              <div class="wiki-card-excerpt">Базовые правила для РП-листов: атрибуты, навыки и прогрессия.</div>
-              <div class="wiki-card-tags"><span class="wiki-tag">механики</span><span class="wiki-tag">правила</span></div>
-              <div class="wiki-card-foot">
-                <div class="engage-group">
-                  <span class="engage-item is-like"><i class="far fa-heart"></i><span>256</span></span>
-                  <span class="engage-item is-comment"><i class="far fa-comment"></i><span>41</span></span>
-                </div>
-                <span><i class="far fa-eye"></i> 4.6k</span>
-              </div>
-            </div>
-          </a>
-
+    <!-- ===== Каталог: панель поиска/фильтров + сетка статей ===== -->
+    <div id="publicArticleListView">
+      <div class="pub-toolbar">
+        <div class="pub-toolbar-row pub-toolbar-row-status">
+          <button type="button" id="pubFiltersToggle" class="pub-filters-toggle" aria-expanded="true" aria-controls="pubFiltersPanel">
+            <i class="fas fa-filter"></i> Фильтры
+            <span id="pubFiltersCount" class="pub-filters-count" hidden>0</span>
+            <i class="fas fa-chevron-down pub-filters-chev"></i>
+          </button>
+          <span id="publicArticleStatus" class="pub-count" role="status" aria-live="polite">Загружаем открытые статьи…</span>
+          <button type="button" id="pubRandomBtn" class="pub-icon-btn" title="Случайная статья"><i class="fas fa-dice"></i><span>Случайная</span></button>
+          <div class="pub-view-toggle" role="group" aria-label="Вид списка">
+            <button type="button" class="pub-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
+            <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
+          </div>
         </div>
 
-        <div class="load-more-wrap">
-          <button class="btn btn-secondary btn-lg" data-fake-load-more><i class="fas fa-arrow-down"></i> Загрузить ещё статьи</button>
+        <div class="pub-toolbar-row pub-toolbar-row-filters is-open" id="pubFiltersPanel">
+          <div class="pub-filter pub-filter-tags">
+            <label>Теги</label>
+            <div id="pubTagField" class="chip-field">
+              <div class="chip-field-box">
+                <div class="chip-field-chips"></div>
+                <input type="text" class="chip-field-input" placeholder="Все теги...">
+              </div>
+              <div class="chip-field-dropdown" hidden></div>
+              <input type="hidden" class="chip-field-hidden">
+            </div>
+          </div>
+
+          <div class="pub-filter pub-filter-dates">
+            <label>Дата создания</label>
+            <div class="pub-date-range">
+              <input type="date" id="pubDateFrom" class="form-input" aria-label="Создана от">
+              <span>—</span>
+              <input type="date" id="pubDateTo" class="form-input" aria-label="Создана до">
+            </div>
+          </div>
+
+          <div class="pub-filter">
+            <label for="pubSort">Сортировка</label>
+            <select id="pubSort" class="form-select">
+              <option value="newest">Сначала новые</option>
+              <option value="oldest">Сначала старые</option>
+              <option value="updated">Недавно обновлённые</option>
+              <option value="views">По просмотрам</option>
+              <option value="alpha">По алфавиту</option>
+            </select>
+          </div>
+
+          <button type="button" id="pubResetFilters" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
         </div>
       </div>
 
-      <aside class="wiki-sidebar">
-        <div class="side-card">
-          <h4>Категории</h4>
-          <div class="side-list">
-            <a href="#" class="side-list-item"><span>Лор</span><span class="side-count">214</span></a>
-            <a href="#" class="side-list-item"><span>Персонажи</span><span class="side-count">381</span></a>
-            <a href="#" class="side-list-item"><span>Локации</span><span class="side-count">156</span></a>
-            <a href="#" class="side-list-item"><span>Фракции</span><span class="side-count">64</span></a>
-            <a href="#" class="side-list-item"><span>Механики</span><span class="side-count">92</span></a>
-            <a href="#" class="side-list-item"><span>История</span><span class="side-count">128</span></a>
-          </div>
-        </div>
+      <div id="publicArticleGrid" class="article-grid"></div>
 
-        <div class="side-card">
-          <h4>Недавно обновлено</h4>
-          <div class="side-list">
-            <a href="#" class="side-list-item"><span>Кайра Веста</span><span class="side-count">2ч</span></a>
-            <a href="#" class="side-list-item"><span>Ибри-Порт</span><span class="side-count">6ч</span></a>
-            <a href="#" class="side-list-item"><span>Эфирный поток</span><span class="side-count">1д</span></a>
-            <a href="#" class="side-list-item"><span>Дом Ториан</span><span class="side-count">2д</span></a>
-          </div>
-        </div>
+      <div id="pubEmpty" class="pub-empty" hidden>
+        <i class="fas fa-inbox"></i>
+        <p>Ничего не найдено по текущим фильтрам.</p>
+        <button type="button" id="pubEmptyReset" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+      </div>
 
-        <div class="side-card side-card-cta">
-          <h4 style="margin-bottom:0;"><i class="fas fa-pen"></i> Внести свой вклад</h4>
-          <p>Знаете лор вселенной? Напишите статью или дополните существующую.</p>
-          <button class="btn btn-primary btn-sm" style="width:100%; justify-content:center;"><i class="fas fa-pen"></i> Написать статью</button>
-        </div>
-      </aside>
+      <div id="pubLoadingMore" class="pub-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
+      <div id="pubSentinel" class="pub-sentinel"></div>
+      <div class="load-more-wrap"><button type="button" id="pubLoadMore" class="btn btn-secondary btn-lg" hidden>Загрузить ещё</button></div>
     </div>
+
+    <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
+    <article class="public-article-detail" id="publicArticleDetail" hidden></article>
 
   </section>
 </main>
@@ -279,6 +153,7 @@
 </footer>
 
 <script src="/blocks-renderer.js"></script>
+<script src="/chip-field.js"></script>
 <script src="/site/site.js"></script>
 </body>
 </html>

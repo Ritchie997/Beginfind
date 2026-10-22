@@ -191,6 +191,7 @@
 ## `public-articles.routes.js`
 
 - `GET /public/articles`
+- `GET /public/tags`
 - `GET /public/articles/:slug`
 
 ## `servers.routes.js`
