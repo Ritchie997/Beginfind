@@ -23,6 +23,7 @@
 
 - `GET /articles`
 - `GET /articles/browse`
+- `GET /articles/social-summary`
 - `GET /articles/:id`
 - `GET /articles/:id/layers`
 - `POST /articles/:id/view`
@@ -194,6 +195,7 @@
 - `GET /public/tags`
 - `GET /public/articles-index`
 - `GET /public/articles/:slug`
+- `GET /public/articles/:slug/comments`
 
 ## `servers.routes.js`
 

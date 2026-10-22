@@ -7,6 +7,7 @@ const store = require('../services/articles-store');
 const publicArticles = require('../services/public-articles');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
+const stickers = require('../services/stickers-store');
 
 const usersDb = new sqlite3.Database(dbPath('users.db'));
 
@@ -65,8 +66,10 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null, de
       const offset = Math.max(0, Math.min(100000, parseInt(req.query.offset, 10) || 0));
       const sort = String(req.query.sort || '');
       const viewCounts = socialStore && sort === 'views' ? await socialStore.getAllViewCounts() : null;
+      const articles = articleStore.listArticles();
+      const articlesBySlug = new Map(articles.map((article) => [article.slug, article]));
 
-      const result = publicArticles.listPublicArticles(articleStore.listArticles(), {
+      const result = publicArticles.listPublicArticles(articles, {
         q: req.query.q,
         tag: req.query.tag,
         sort,
@@ -82,15 +85,25 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null, de
         const counts = socialStore
           ? await socialStore.getCountsForSlugs(null, result.data.map((item) => item.slug))
           : new Map();
-        result.data = result.data.map((item) => {
+        const reactionsBySlug = socialStore
+          ? await socialStore.getReactionsForTargets('article', result.data.map((item) => item.slug), null)
+          : new Map();
+        const stickerCodes = [...reactionsBySlug.values()].flat().map((reaction) => reaction.shortcode);
+        const stickerMeta = await stickers.resolveCodes(stickerCodes);
+        result.data = await Promise.all(result.data.map(async (item) => {
           const c = counts.get(item.slug) || {};
+          const reactions = (reactionsBySlug.get(String(item.slug)) || [])
+            .map((reaction) => ({ ...reaction, ...stickerMeta.get(reaction.shortcode) }))
+            .filter((reaction) => reaction.url);
           return {
             ...item,
+            author: await getPublicAuthor(articlesBySlug.get(item.slug) || {}),
+            reactions,
             likesCount: c.likes || 0,
             commentsCount: c.comments || 0,
             viewsCount: c.views || 0
           };
-        });
+        }));
       }
       res.json(result);
     } catch (err) {

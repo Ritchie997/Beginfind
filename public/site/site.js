@@ -350,6 +350,17 @@
       return item;
     }
 
+    function createCardReactionBar(article, user) {
+      var bar = createReactionBar(article.slug, 'article', article.slug, article.reactions || [], user, function (reactions) {
+        article.reactions = reactions;
+        var replacement = createCardReactionBar(article, user);
+        bar.replaceWith(replacement);
+        bar = replacement;
+      });
+      bar.classList.add('public-card-reactions');
+      return bar;
+    }
+
     function createArticleCard(article) {
       var href = '/antropedia/' + encodeURIComponent(article.slug);
       var card = document.createElement('article');
@@ -427,13 +438,41 @@
       }
 
       var date = formatDate(article.created_at);
-      if (date) {
+      if ((article.author && article.author.display_name) || date) {
         var meta = document.createElement('div');
-        meta.className = 'public-card-meta';
-        var calendar = document.createElement('i');
-        calendar.className = 'far fa-calendar';
-        calendar.setAttribute('aria-hidden', 'true');
-        meta.append(calendar, document.createTextNode(' ' + date));
+        meta.className = 'public-card-meta public-card-details';
+        if (article.author && article.author.display_name) {
+          var author = article.author;
+          var authorImage = safePublicImageUrl(author.avatar);
+          var authorLink = author.id != null ? document.createElement('a') : document.createElement('span');
+          authorLink.className = 'public-card-author';
+          if (author.id != null) {
+            authorLink.href = '/profile/' + encodeURIComponent(author.id);
+            authorLink.setAttribute('aria-label', 'Профиль: ' + author.display_name);
+          }
+          if (authorImage) {
+            var avatar = document.createElement('img');
+            avatar.src = authorImage;
+            avatar.alt = '';
+            avatar.width = 28;
+            avatar.height = 28;
+            avatar.loading = 'lazy';
+            avatar.decoding = 'async';
+            authorLink.appendChild(avatar);
+          } else {
+            authorLink.appendChild(makeEl('span', 'public-card-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
+          }
+          authorLink.appendChild(makeEl('span', 'public-card-author-name', author.display_name));
+          meta.appendChild(authorLink);
+        }
+        if (date) {
+          var dateMeta = makeEl('span', 'public-card-date');
+          var calendar = document.createElement('i');
+          calendar.className = 'far fa-calendar';
+          calendar.setAttribute('aria-hidden', 'true');
+          dateMeta.append(calendar, document.createTextNode(' ' + date));
+          meta.appendChild(dateMeta);
+        }
         body.appendChild(meta);
       }
 
@@ -442,6 +481,8 @@
       var group = document.createElement('div');
       group.className = 'engage-group';
       var likeButton = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
+      likeButton.classList.toggle('active', !!article.liked);
+      likeButton.querySelector('i').className = article.liked ? 'fas fa-heart' : 'far fa-heart';
       likeButton.addEventListener('click', async function (event) {
         event.preventDefault();
         event.stopPropagation();
@@ -472,6 +513,7 @@
       group.append(likeButton, commentsLink);
       foot.append(group, makeStat('far fa-eye', article.viewsCount, 'Просмотры'));
       body.appendChild(foot);
+      body.appendChild(createCardReactionBar(article, getAuthToken() ? {} : null));
 
       card.appendChild(body);
       return card;
@@ -541,9 +583,40 @@
         var articles = Array.isArray(result.data) ? result.data : [];
         if (!append) grid.replaceChildren();
         grid.querySelectorAll('.pub-skeleton').forEach(function (el) { el.remove(); });
+        var cardBySlug = new Map();
         articles.forEach(function (article) {
-          grid.appendChild(createArticleCard(article));
+          var card = createArticleCard(article);
+          cardBySlug.set(article.slug, card);
+          grid.appendChild(card);
         });
+        if (getAuthToken() && articles.length) {
+          var socialUrl = '/api/articles/social-summary?slugs=' + encodeURIComponent(articles.map(function (article) { return article.slug; }).join(','));
+          fetch(socialUrl, { headers: { Authorization: 'Bearer ' + getAuthToken() } })
+            .then(function (socialResponse) {
+              if (!socialResponse.ok) throw new Error('HTTP ' + socialResponse.status);
+              return socialResponse.json();
+            })
+            .then(function (socialResult) {
+              if (generation !== state.generation) return;
+              var summaries = socialResult && socialResult.data || {};
+              articles.forEach(function (article) {
+                var summary = summaries[article.slug];
+                var card = cardBySlug.get(article.slug);
+                if (!summary || !card) return;
+                var like = card.querySelector('.engage-item.is-like');
+                like.classList.toggle('active', !!summary.liked);
+                like.querySelector('i').className = summary.liked ? 'fas fa-heart' : 'far fa-heart';
+                like.querySelector('span').textContent = formatCount(summary.likesCount);
+                article.reactions = summary.reactions || [];
+                var currentBar = card.querySelector('.public-card-reactions');
+                if (!currentBar) return;
+                currentBar.replaceWith(createCardReactionBar(article, {}));
+              });
+            })
+            .catch(function (error) {
+              console.error('Не удалось загрузить личные реакции статей:', error);
+            });
+        }
         state.offset = (append ? state.offset : 0) + articles.length;
         state.total = Number(result.total) || 0;
         state.hasMore = articles.length > 0 && state.offset < state.total;
@@ -803,7 +876,10 @@
             var avatar = document.createElement('img');
             avatar.src = authorImage;
             avatar.alt = '';
+            avatar.width = 44;
+            avatar.height = 44;
             avatar.loading = 'lazy';
+            avatar.decoding = 'async';
             authorLink.appendChild(avatar);
           } else {
             authorLink.appendChild(makeEl('span', 'public-article-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
@@ -981,7 +1057,10 @@
         var img = document.createElement('img');
         img.src = src;
         img.alt = '';
+        img.width = size;
+        img.height = size;
         img.loading = 'lazy';
+        img.decoding = 'async';
         wrap.appendChild(img);
       } else {
         wrap.textContent = String(comment.authorName || '?').trim().charAt(0).toUpperCase() || '?';
@@ -1221,7 +1300,7 @@
         var authorId = comment.authorId != null ? comment.authorId : comment.userId;
         var person = authorId != null ? makeEl('a', 'pub-comment-person') : makeEl('span', 'pub-comment-person');
         if (authorId != null) person.href = '/profile/' + encodeURIComponent(authorId);
-        person.appendChild(makeAvatar(comment, isReply ? 24 : 32));
+        person.appendChild(makeAvatar(comment, isReply ? 32 : 40));
         person.appendChild(makeEl('span', 'pub-comment-author', comment.authorName || 'Аноним'));
         head.appendChild(person);
         head.appendChild(makeEl('span', 'pub-comment-date', formatDate(comment.createdAt)));
