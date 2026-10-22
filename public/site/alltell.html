@@ -23,6 +23,20 @@
     <div class="site-header-actions">
       <div class="site-search"><i class="fas fa-search"></i><input type="text" placeholder="Поиск по сайту..."></div>
       <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="site-user" id="siteUserMenu" hidden>
+        <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
+          <span class="site-user-avatar" id="siteUserAvatar"></span>
+          <span class="site-user-name" id="siteUserName"></span>
+          <i class="fas fa-chevron-down site-user-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
+          <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+          <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
+        </div>
+      </div>
+      <div class="site-auth-actions" id="siteGuestActions">
+        <button type="button" class="site-auth-button" data-auth-tab="login">Войти</button>
+      </div>
     </div>
   </div>
 </header>
@@ -235,6 +249,7 @@
   </div>
 </footer>
 
+<script src="/auth-system.js"></script>
 <script src="/site/site.js"></script>
 </body>
 </html>

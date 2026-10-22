@@ -273,8 +273,11 @@ const authManager = new AuthManager();
 // МОДАЛЬНОЕ ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ
 // ========================================
 
-function showModalLogin() {
-  if (document.getElementById('auth-modal')) return;
+function showModalLogin(initialTab = 'login') {
+  if (document.getElementById('auth-modal')) {
+    if (initialTab === 'register') document.getElementById('auth-register-link')?.click();
+    return;
+  }
 
   const modal = document.createElement('div');
   modal.id = 'auth-modal';
@@ -293,20 +296,6 @@ function showModalLogin() {
       border: 1px solid var(--background-accent, #4f545c);
       user-select: auto;
     ">
-      <!-- Вкладки -->
-      <div style="display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid var(--background-accent, #4f545c);">
-        <button id="tab-login" type="button" style="
-          flex: 1; padding: 10px; background: transparent; border: none;
-          color: var(--text-normal, #dcddde); font-size: 15px; font-weight: 600;
-          cursor: pointer; border-bottom: 2px solid #5865f2; margin-bottom: -2px;
-        ">Вход</button>
-        <button id="tab-register" type="button" style="
-          flex: 1; padding: 10px; background: transparent; border: none;
-          color: var(--text-muted, #b9bbbe); font-size: 15px; font-weight: 600;
-          cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
-        ">Регистрация</button>
-      </div>
-
       <!-- Форма входа -->
       <form id="auth-form" style="display: flex; flex-direction: column;">
         <div style="margin-bottom: 15px;">
@@ -331,6 +320,11 @@ function showModalLogin() {
           cursor:pointer; font-size:15px; font-weight:500; transition:background-color 0.2s;
         ">Войти</button>
       </form>
+      <button id="auth-register-link" type="button" style="
+        display: block; margin: 16px auto 0; padding: 4px 0;
+        background: transparent; border: none; color: #aeb5ff;
+        font-size: 13px; cursor: pointer;
+      ">Нет профиля? Зарегистрируйтесь</button>
 
       <!-- Форма регистрации (скрыта по умолчанию) -->
       <form id="register-form" style="display:none; flex-direction:column;">
@@ -374,6 +368,11 @@ function showModalLogin() {
           cursor:pointer; font-size:15px; font-weight:500; transition:background-color 0.2s;
         ">Отправить заявку</button>
       </form>
+      <button id="register-login-link" type="button" style="
+        display: none; margin: 16px auto 0; padding: 4px 0;
+        background: transparent; border: none; color: #aeb5ff;
+        font-size: 13px; cursor: pointer;
+      ">Уже есть профиль? Войти</button>
 
       <!-- Статус после регистрации -->
       <div id="reg-pending" style="display:none; text-align:center; padding:20px 0;">
@@ -390,11 +389,11 @@ function showModalLogin() {
 
   document.body.appendChild(modal);
 
-  // Переключение вкладок
-  const tabLogin = document.getElementById('tab-login');
-  const tabRegister = document.getElementById('tab-register');
+  // Переключение между входом и регистрацией
   const authForm = document.getElementById('auth-form');
   const registerForm = document.getElementById('register-form');
+  const registerLink = document.getElementById('auth-register-link');
+  const loginLink = document.getElementById('register-login-link');
   const regPending = document.getElementById('reg-pending');
 
   function showTab(tab) {
@@ -402,22 +401,18 @@ function showModalLogin() {
     if (tab === 'login') {
       authForm.style.display = 'flex';
       registerForm.style.display = 'none';
-      tabLogin.style.color = 'var(--text-normal, #dcddde)';
-      tabLogin.style.borderBottomColor = '#5865f2';
-      tabRegister.style.color = 'var(--text-muted, #b9bbbe)';
-      tabRegister.style.borderBottomColor = 'transparent';
+      registerLink.style.display = 'block';
+      loginLink.style.display = 'none';
     } else {
       authForm.style.display = 'none';
       registerForm.style.display = 'flex';
-      tabRegister.style.color = 'var(--text-normal, #dcddde)';
-      tabRegister.style.borderBottomColor = '#5865f2';
-      tabLogin.style.color = 'var(--text-muted, #b9bbbe)';
-      tabLogin.style.borderBottomColor = 'transparent';
+      registerLink.style.display = 'none';
+      loginLink.style.display = 'block';
     }
   }
 
-  tabLogin.addEventListener('click', () => showTab('login'));
-  tabRegister.addEventListener('click', () => showTab('register'));
+  registerLink.addEventListener('click', () => showTab('register'));
+  loginLink.addEventListener('click', () => showTab('login'));
 
   // ВХОД
   const loginForm = document.getElementById('auth-form');
@@ -513,6 +508,8 @@ function showModalLogin() {
   document.getElementById('reg-pending-back').addEventListener('click', () => {
     showTab('login');
   });
+
+  if (initialTab === 'register') showTab('register');
 
   // Нет кнопки закрытия — модалка остаётся пока пользователь не войдёт
 }

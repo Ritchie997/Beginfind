@@ -29,6 +29,106 @@
     }
   }
 
+  function initSiteUserMenu() {
+    var root = document.getElementById('siteUserMenu');
+    var guestActions = document.getElementById('siteGuestActions');
+    var trigger = document.getElementById('siteUserTrigger');
+    var avatar = document.getElementById('siteUserAvatar');
+    var name = document.getElementById('siteUserName');
+    var dropdown = document.getElementById('siteUserDropdown');
+    if (!root || !guestActions || !trigger || !avatar || !name || !dropdown) return;
+
+    var auth = window.authManager;
+
+    function closeDropdown() {
+      dropdown.classList.remove('show');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function renderUser(user) {
+      var isLoggedIn = !!(auth && user && auth.isAuthenticated());
+      root.hidden = !isLoggedIn;
+      guestActions.hidden = isLoggedIn;
+      closeDropdown();
+      if (!isLoggedIn) return;
+
+      var displayName = user.display_name || user.username || 'Пользователь';
+      name.textContent = displayName;
+      avatar.replaceChildren();
+      var avatarUrl = safePublicImageUrl(user.avatar);
+      if (avatarUrl) {
+        var image = document.createElement('img');
+        image.src = avatarUrl;
+        image.alt = '';
+        image.onerror = function () {
+          avatar.classList.remove('has-image');
+          avatar.textContent = displayName.trim().charAt(0).toUpperCase() || '?';
+        };
+        avatar.classList.add('has-image');
+        avatar.appendChild(image);
+      } else {
+        avatar.classList.remove('has-image');
+        avatar.textContent = displayName.trim().charAt(0).toUpperCase() || '?';
+      }
+    }
+
+    function refreshUser() {
+      if (!auth || !auth.getToken()) {
+        renderUser(null);
+        return;
+      }
+      renderUser(auth.getCurrentUser());
+      auth.validateToken().then(function (isValid) {
+        renderUser(isValid || auth.isAuthenticated() ? auth.getUser() : null);
+      }).catch(function (error) {
+        console.error('Не удалось проверить профиль пользователя:', error);
+      });
+    }
+
+    trigger.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var isOpen = dropdown.classList.toggle('show');
+      trigger.setAttribute('aria-expanded', String(isOpen));
+    });
+    document.addEventListener('click', closeDropdown);
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && dropdown.classList.contains('show')) {
+        closeDropdown();
+        trigger.focus();
+      }
+    });
+
+    guestActions.querySelectorAll('[data-auth-tab]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        if (typeof window.showModalLogin === 'function') {
+          window.showModalLogin(button.dataset.authTab);
+        } else {
+          window.location.href = '/admin-panel';
+        }
+      });
+    });
+
+    var logoutButton = document.getElementById('siteLogout');
+    if (logoutButton) {
+      logoutButton.addEventListener('click', function () {
+        closeDropdown();
+        if (auth) auth.logout();
+        renderUser(null);
+        window.location.reload();
+      });
+    }
+
+    if (auth) {
+      window.addEventListener('authChanged', function () {
+        renderUser(auth.getCurrentUser());
+      });
+      window.addEventListener('storage', function (event) {
+        if (event.key === auth.tokenKey || event.key === auth.userKey) refreshUser();
+      });
+    }
+    refreshUser();
+  }
+
   function setMetaContent(selector, attribute, content) {
     var meta = document.head.querySelector(selector);
     if (meta) meta.setAttribute(attribute, content);
@@ -1017,6 +1117,7 @@
 
   ready(function () {
     initPublicAntropedia();
+    initSiteUserMenu();
 
     // --- Мобильное меню ---
     var burger = document.getElementById('siteBurger');
@@ -1038,19 +1139,6 @@
     if (nav) {
       nav.querySelectorAll('a').forEach(function (a) {
         a.addEventListener('click', closeNav);
-      });
-    }
-
-    // --- Дропдаун профиля ---
-    var userBtn = document.getElementById('siteUser');
-    var userDropdown = document.getElementById('siteUserDropdown');
-    if (userBtn && userDropdown) {
-      userBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        userDropdown.classList.toggle('show');
-      });
-      document.addEventListener('click', function () {
-        userDropdown.classList.remove('show');
       });
     }
 
