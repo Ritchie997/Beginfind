@@ -23,7 +23,6 @@
 
 - `GET /articles`
 - `GET /articles/browse`
-- `GET /articles/social-summary`
 - `GET /articles/:id`
 - `GET /articles/:id/layers`
 - `POST /articles/:id/view`

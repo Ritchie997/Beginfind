@@ -571,10 +571,14 @@
       if (f.tags.length) query.set('tag', f.tags.join(','));
       if (f.from) query.set('dateFrom', f.from);
       if (f.to) query.set('dateTo', f.to);
+      var token = getAuthToken();
+      var authenticated = !!token;
+      var endpoint = authenticated ? '/api/articles/browse?' : PUBLIC_ARTICLES_API + '?';
 
       try {
-        var response = await fetch(PUBLIC_ARTICLES_API + '?' + query.toString(), {
+        var response = await fetch(endpoint + query.toString(), {
           credentials: 'omit',
+          headers: authenticated ? { Authorization: 'Bearer ' + token } : {},
           signal: controller.signal
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -583,40 +587,9 @@
         var articles = Array.isArray(result.data) ? result.data : [];
         if (!append) grid.replaceChildren();
         grid.querySelectorAll('.pub-skeleton').forEach(function (el) { el.remove(); });
-        var cardBySlug = new Map();
         articles.forEach(function (article) {
-          var card = createArticleCard(article);
-          cardBySlug.set(article.slug, card);
-          grid.appendChild(card);
+          grid.appendChild(createArticleCard(article));
         });
-        if (getAuthToken() && articles.length) {
-          var socialUrl = '/api/articles/social-summary?slugs=' + encodeURIComponent(articles.map(function (article) { return article.slug; }).join(','));
-          fetch(socialUrl, { headers: { Authorization: 'Bearer ' + getAuthToken() } })
-            .then(function (socialResponse) {
-              if (!socialResponse.ok) throw new Error('HTTP ' + socialResponse.status);
-              return socialResponse.json();
-            })
-            .then(function (socialResult) {
-              if (generation !== state.generation) return;
-              var summaries = socialResult && socialResult.data || {};
-              articles.forEach(function (article) {
-                var summary = summaries[article.slug];
-                var card = cardBySlug.get(article.slug);
-                if (!summary || !card) return;
-                var like = card.querySelector('.engage-item.is-like');
-                like.classList.toggle('active', !!summary.liked);
-                like.querySelector('i').className = summary.liked ? 'fas fa-heart' : 'far fa-heart';
-                like.querySelector('span').textContent = formatCount(summary.likesCount);
-                article.reactions = summary.reactions || [];
-                var currentBar = card.querySelector('.public-card-reactions');
-                if (!currentBar) return;
-                currentBar.replaceWith(createCardReactionBar(article, {}));
-              });
-            })
-            .catch(function (error) {
-              console.error('Не удалось загрузить личные реакции статей:', error);
-            });
-        }
         state.offset = (append ? state.offset : 0) + articles.length;
         state.total = Number(result.total) || 0;
         state.hasMore = articles.length > 0 && state.offset < state.total;
@@ -628,7 +601,7 @@
           var filtered = hasActiveFilters();
           emptyEl.querySelector('p').textContent = filtered
             ? 'Ничего не найдено по текущим фильтрам.'
-            : 'Публичных статей пока нет.';
+            : (authenticated ? 'Доступных статей пока нет.' : 'Публичных статей пока нет.');
           document.getElementById('pubEmptyReset').hidden = !filtered;
         }
       } catch (error) {
@@ -685,7 +658,11 @@
         if (f.tags.length) query.set('tag', f.tags.join(','));
         if (f.from) query.set('dateFrom', f.from);
         if (f.to) query.set('dateTo', f.to);
-        var response = await fetch(PUBLIC_ARTICLES_API + '?' + query.toString(), { credentials: 'omit' });
+        var token = getAuthToken();
+        var response = await fetch((token ? '/api/articles/browse?' : PUBLIC_ARTICLES_API + '?') + query.toString(), {
+          credentials: 'omit',
+          headers: token ? { Authorization: 'Bearer ' + token } : {}
+        });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         var result = await response.json();
         var pick = Array.isArray(result.data) && result.data[0];
@@ -699,10 +676,14 @@
 
     async function loadTagOptions() {
       try {
-        var response = await fetch('/api/public/tags', { credentials: 'omit' });
+        var token = getAuthToken();
+        var response = await fetch(token ? '/api/tags' : '/api/public/tags', {
+          credentials: 'omit',
+          headers: token ? { Authorization: 'Bearer ' + token } : {}
+        });
         if (!response.ok) return;
         var result = await response.json();
-        var tags = Array.isArray(result.data) ? result.data : [];
+        var tags = Array.isArray(result.data) ? result.data : Array.isArray(result) ? result : [];
         if (state.tagField) {
           state.tagField.setOptions(tags.map(function (item) { return { value: item.tag, label: item.tag }; }));
         }
@@ -715,18 +696,25 @@
 
     async function loadPublicIndex(article) {
       var index = new Map([[article.slug, { slug: article.slug, title: article.title || article.slug, tags: article.tags || [] }]]);
+      var restrictedSlugs = new Set();
       try {
-        var response = await fetch('/api/public/articles-index', { credentials: 'omit' });
+        var token = getAuthToken();
+        var response = await fetch(token ? '/api/articles-index' : '/api/public/articles-index', {
+          credentials: 'omit',
+          headers: token ? { Authorization: 'Bearer ' + token } : {}
+        });
         if (response.ok) {
           var result = await response.json();
-          (Array.isArray(result.data) ? result.data : []).forEach(function (item) {
+          var items = token ? result.accessible : result.data;
+          (Array.isArray(items) ? items : []).forEach(function (item) {
             if (item && item.slug && item.slug !== article.slug) index.set(item.slug, item);
           });
+          if (token && Array.isArray(result.restrictedSlugs)) restrictedSlugs = new Set(result.restrictedSlugs);
         }
       } catch (error) {
         // Без индекса ссылки покажутся как «Недоступно» — текст статьи не страдает.
       }
-      return index;
+      return { index: index, restrictedSlugs: restrictedSlugs, authenticated: !!getAuthToken() };
     }
 
     function createReactionBar(slug, targetType, targetId, reactions, user, onChange) {
@@ -927,10 +915,10 @@
       // Остальные цели (закрытые/несуществующие) для гостя одинаково
       // «Недоступно», без приглашения создавать статью и без раскрытия
       // того, существует ли она.
-      var allUnavailable = { has: function () { return true; } };
-      loadPublicIndex(article).then(function (index) {
+      loadPublicIndex(article).then(function (indexData) {
         if (typeof window.renderArticleBlocks !== 'function') throw new Error('Block renderer is unavailable');
-        return window.renderArticleBlocks(article.content, index, allUnavailable);
+        var restricted = indexData.authenticated ? indexData.restrictedSlugs : { has: function () { return true; } };
+        return window.renderArticleBlocks(article.content, indexData.index, restricted);
       }).then(function (html) {
         content.innerHTML = html;
         content.querySelectorAll('a[data-slug]').forEach(function (link) {
@@ -1415,7 +1403,14 @@
       detail.hidden = false;
       detail.replaceChildren(makePublicMessage('Загружаем статью…'));
       try {
-        var response = await fetch(PUBLIC_ARTICLES_API + '/' + encodeURIComponent(state.slug), { credentials: 'omit' });
+        var token = getAuthToken();
+        var response = await fetch(
+          (token ? '/api/articles/' : PUBLIC_ARTICLES_API + '/') + encodeURIComponent(state.slug),
+          {
+            credentials: 'omit',
+            headers: token ? { Authorization: 'Bearer ' + token } : {}
+          }
+        );
         if (response.status === 404) {
           detail.replaceChildren(makePublicMessage('Статья не найдена или недоступна для публичного чтения.'));
           return;

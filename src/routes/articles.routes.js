@@ -550,36 +550,6 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
   }
 });
 
-router.get('/articles/social-summary', auth.authenticateToken, auth.checkApproved, async (req, res) => {
-  try {
-    const slugs = [...new Set(String(req.query.slugs || '')
-      .split(',')
-      .map((slug) => slug.trim())
-      .filter((slug) => slug.length > 0 && slug.length <= 120))].slice(0, 100);
-    const accessibleSlugs = [];
-    for (const slug of slugs) {
-      const article = store.getArticle(slug);
-      if (article && await canAccessArticle(req.user, article)) accessibleSlugs.push(slug);
-    }
-    const [counts, reactionsBySlug] = await Promise.all([
-      social.getCountsForSlugs(req.user.id, accessibleSlugs),
-      getArticleReactionsForSlugs(accessibleSlugs, req.user.id)
-    ]);
-    const data = {};
-    accessibleSlugs.forEach((slug) => {
-      const summary = counts.get(slug) || {};
-      data[slug] = {
-        liked: !!summary.liked,
-        likesCount: summary.likes || 0,
-        reactions: reactionsBySlug.get(slug) || []
-      };
-    });
-    res.json({ data });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 router.get('/articles/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const article = store.getArticle(req.params.id);
