@@ -587,7 +587,346 @@
       }).catch(function () {
         content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
       });
+      initComments(article, detail).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
+    }
+
+    // ---------- Комментарии ----------
+    // Читать комментарии открытой статьи может любой (гостевой endpoint).
+    // Поле ввода, «Ответить» и удаление появляются только у залогиненного
+    // пользователя: токен берётся из localStorage (тот же, что у админ-панели) и
+    // проверяется запросом /api/profile. Сами записи идут через авторизованные
+    // /api/articles/:slug/comments — права, мут и доступ проверяет сервер.
+
+    var AUTH_TOKEN_KEY = 'alltell_auth_token';
+    var COMMENT_MAX_LEN = 2000;
+    var STICKER_RE = /:([a-zA-Z0-9-]{1,80}):([a-zA-Z0-9-]{1,80}):/g;
+    var STICKER_SOLO_RE = /^:([a-zA-Z0-9-]{1,80}):([a-zA-Z0-9-]{1,80}):$/;
+
+    function getAuthToken() {
+      try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (error) { return ''; }
+    }
+
+    // Возвращает пользователя или null (нет токена / токен просрочен / не одобрен).
+    async function loadCurrentUser() {
+      var token = getAuthToken();
+      if (!token) return null;
+      try {
+        var response = await fetch('/api/profile', { headers: { Authorization: 'Bearer ' + token } });
+        if (!response.ok) return null;
+        var data = await response.json();
+        return (data && data.user) || null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function makeEl(tag, className, text) {
+      var el = document.createElement(tag);
+      if (className) el.className = className;
+      if (text != null) el.textContent = text;
+      return el;
+    }
+
+    function makeStickerImg(sticker, code, solo) {
+      var src = sticker && safePublicImageUrl(sticker.url);
+      if (!src) return null;
+      var img = document.createElement('img');
+      img.className = solo ? 'pub-comment-sticker-solo' : 'pub-comment-sticker';
+      img.src = src;
+      img.alt = code;
+      img.title = code;
+      img.loading = 'lazy';
+      return img;
+    }
+
+    // Текст комментария: только textContent и <img> стикеров — HTML из комментария
+    // никогда не вставляется. Шорткод без найденного стикера остаётся текстом.
+    function renderCommentBody(comment) {
+      var body = makeEl('div', 'pub-comment-body');
+      var raw = String(comment.content || '');
+      var stickers = comment.stickers || {};
+      var solo = raw.trim().match(STICKER_SOLO_RE);
+      if (solo) {
+        var soloCode = solo[1].toLowerCase() + ':' + solo[2].toLowerCase();
+        var soloImg = makeStickerImg(stickers[soloCode], soloCode, true);
+        if (soloImg) { body.appendChild(soloImg); return body; }
+      }
+      var last = 0;
+      raw.replace(STICKER_RE, function (match, pack, alias, offset) {
+        var code = pack.toLowerCase() + ':' + alias.toLowerCase();
+        var img = makeStickerImg(stickers[code], code, false);
+        if (!img) return match;
+        if (offset > last) body.appendChild(document.createTextNode(raw.slice(last, offset)));
+        body.appendChild(img);
+        last = offset + match.length;
+        return match;
+      });
+      if (last < raw.length) body.appendChild(document.createTextNode(raw.slice(last)));
+      return body;
+    }
+
+    function makeAvatar(comment, size) {
+      var wrap = makeEl('span', 'pub-comment-avatar');
+      wrap.style.width = size + 'px';
+      wrap.style.height = size + 'px';
+      var src = comment.authorAvatar && safePublicImageUrl(comment.authorAvatar);
+      if (src) {
+        var img = document.createElement('img');
+        img.src = src;
+        img.alt = '';
+        img.loading = 'lazy';
+        wrap.appendChild(img);
+      } else {
+        wrap.textContent = String(comment.authorName || '?').trim().charAt(0).toUpperCase() || '?';
+      }
+      return wrap;
+    }
+
+    // Форма ввода: textarea + «Отправить». onSubmit(text) возвращает Promise<boolean>
+    // (true — отправлено, поле очищается). Ctrl/⌘+Enter отправляет.
+    function createComposer(placeholder, onSubmit, onCancel) {
+      var form = makeEl('form', 'pub-comment-form');
+      var input = document.createElement('textarea');
+      input.className = 'pub-comment-input';
+      input.rows = 2;
+      input.maxLength = COMMENT_MAX_LEN;
+      input.placeholder = placeholder;
+      input.setAttribute('aria-label', placeholder);
+      var actions = makeEl('div', 'pub-comment-form-actions');
+      var error = makeEl('span', 'pub-comment-error');
+      error.setAttribute('role', 'alert');
+      actions.appendChild(error);
+      if (onCancel) {
+        var cancel = makeEl('button', 'btn btn-secondary btn-sm', 'Отмена');
+        cancel.type = 'button';
+        cancel.addEventListener('click', onCancel);
+        actions.appendChild(cancel);
+      }
+      var submit = makeEl('button', 'btn btn-primary btn-sm', 'Отправить');
+      submit.type = 'submit';
+      actions.appendChild(submit);
+      form.appendChild(input);
+      form.appendChild(actions);
+
+      var busy = false;
+      async function send() {
+        var text = input.value.trim();
+        if (!text || busy) return;
+        busy = true;
+        submit.disabled = true;
+        error.textContent = '';
+        var result = await onSubmit(text);
+        busy = false;
+        submit.disabled = false;
+        if (result && result.ok) input.value = '';
+        else error.textContent = (result && result.message) || 'Не удалось отправить комментарий';
+      }
+      form.addEventListener('submit', function (event) { event.preventDefault(); send(); });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); send(); }
+      });
+      return { form: form, input: input };
+    }
+
+    async function initComments(article, container) {
+      var slug = article.slug;
+      var section = makeEl('section', 'pub-comments');
+      section.id = 'publicArticleComments';
+      var heading = makeEl('h2', 'pub-comments-title');
+      var headingCount = makeEl('span', 'pub-comments-count');
+      heading.appendChild(document.createTextNode('Комментарии '));
+      heading.appendChild(headingCount);
+      section.appendChild(heading);
+
+      var composerMount = makeEl('div', 'pub-comments-compose');
+      var list = makeEl('div', 'pub-comments-list');
+      var empty = makeEl('p', 'pub-comments-empty', 'Комментариев пока нет.');
+      empty.hidden = true;
+      section.appendChild(composerMount);
+      section.appendChild(list);
+      section.appendChild(empty);
+      container.appendChild(section);
+
+      var state = { user: null, comments: [], replyTo: null, expanded: {} };
+      var apiBase = '/api/articles/' + encodeURIComponent(slug) + '/comments';
+
+      function authHeaders() {
+        return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getAuthToken() };
+      }
+
+      function canModerate() {
+        var u = state.user;
+        return !!(u && (u.is_root || (u.admin_level || 0) > 0));
+      }
+
+      async function fetchComments() {
+        // Залогиненному — авторизованный список (в нём есть userId автора для «удалить
+        // свой»); если он недоступен — публичный, он есть у всех.
+        if (state.user) {
+          try {
+            var own = await fetch(apiBase, { headers: authHeaders() });
+            if (own.ok) return await own.json();
+          } catch (error) { /* упадём на публичный список */ }
+        }
+        var response = await fetch(PUBLIC_ARTICLES_API + '/' + encodeURIComponent(slug) + '/comments', { credentials: 'omit' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        var payload = await response.json();
+        return Array.isArray(payload.data) ? payload.data : [];
+      }
+
+      async function load() {
+        try {
+          state.comments = await fetchComments();
+        } catch (error) {
+          list.replaceChildren(makePublicMessage('Не удалось загрузить комментарии.'));
+          empty.hidden = true;
+          return;
+        }
+        render();
+      }
+
+      async function post(text, parentId) {
+        try {
+          var response = await fetch(apiBase, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ content: text, parentId: parentId || null })
+          });
+          if (response.ok) {
+            if (parentId) state.expanded[parentId] = true;
+            state.replyTo = null;
+            await load();
+            return { ok: true };
+          }
+          if (response.status === 401) {
+            state.user = null;
+            renderComposer();
+            render();
+            return { ok: false, message: 'Сессия истекла — войдите снова.' };
+          }
+          var data = await response.json().catch(function () { return {}; });
+          return { ok: false, message: data.error || 'Не удалось отправить комментарий' };
+        } catch (error) {
+          return { ok: false, message: 'Нет соединения с сервером' };
+        }
+      }
+
+      async function remove(id) {
+        if (!window.confirm('Удалить комментарий? Ответы на него удалятся вместе с ним.')) return;
+        try {
+          var response = await fetch(apiBase + '/' + encodeURIComponent(id), { method: 'DELETE', headers: authHeaders() });
+          if (!response.ok) {
+            var data = await response.json().catch(function () { return {}; });
+            window.alert(data.error || 'Не удалось удалить комментарий');
+            return;
+          }
+          await load();
+        } catch (error) {
+          window.alert('Нет соединения с сервером');
+        }
+      }
+
+      function renderComment(comment, isReply, threadId) {
+        var item = makeEl('div', 'pub-comment' + (isReply ? ' pub-comment-reply' : ''));
+        item.dataset.id = comment.id;
+        var head = makeEl('div', 'pub-comment-head');
+        head.appendChild(makeAvatar(comment, isReply ? 24 : 32));
+        head.appendChild(makeEl('span', 'pub-comment-author', comment.authorName || 'Аноним'));
+        head.appendChild(makeEl('span', 'pub-comment-date', formatDate(comment.createdAt)));
+        var me = state.user;
+        if (me && (canModerate() || (comment.userId != null && comment.userId === me.id))) {
+          var del = makeEl('button', 'pub-comment-delete');
+          del.type = 'button';
+          del.title = 'Удалить комментарий';
+          del.setAttribute('aria-label', 'Удалить комментарий');
+          del.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i>';
+          del.addEventListener('click', function () { remove(comment.id); });
+          head.appendChild(del);
+        }
+        item.appendChild(head);
+        item.appendChild(renderCommentBody(comment));
+        if (me) {
+          var reply = makeEl('button', 'pub-comment-reply-btn');
+          reply.type = 'button';
+          reply.innerHTML = '<i class="far fa-message" aria-hidden="true"></i> Ответить';
+          reply.addEventListener('click', function () {
+            state.replyTo = { threadId: threadId, mention: isReply ? comment.authorName : '' };
+            render();
+          });
+          item.appendChild(reply);
+        }
+        return item;
+      }
+
+      function render() {
+        var top = state.comments.filter(function (c) { return !c.parentId; });
+        var repliesBy = {};
+        state.comments.forEach(function (c) {
+          if (!c.parentId) return;
+          (repliesBy[c.parentId] = repliesBy[c.parentId] || []).push(c);
+        });
+        headingCount.textContent = state.comments.length ? '(' + state.comments.length + ')' : '';
+        empty.hidden = state.comments.length > 0;
+        list.replaceChildren();
+
+        top.forEach(function (comment) {
+          var thread = makeEl('div', 'pub-comment-thread');
+          thread.appendChild(renderComment(comment, false, comment.id));
+          var replies = repliesBy[comment.id] || [];
+          if (replies.length) {
+            var box = makeEl('div', 'pub-comment-replies');
+            var limit = 2;
+            var showAll = state.expanded[comment.id] || replies.length <= limit;
+            (showAll ? replies : replies.slice(0, limit)).forEach(function (r) {
+              box.appendChild(renderComment(r, true, comment.id));
+            });
+            if (!showAll) {
+              var more = makeEl('button', 'pub-comment-more', 'Показать ещё ответы (' + (replies.length - limit) + ')');
+              more.type = 'button';
+              more.addEventListener('click', function () { state.expanded[comment.id] = true; render(); });
+              box.appendChild(more);
+            }
+            thread.appendChild(box);
+          }
+          if (state.user && state.replyTo && state.replyTo.threadId === comment.id) {
+            var mention = state.replyTo.mention;
+            var composer = createComposer('Ответить…', function (text) { return post(text, comment.id); }, function () {
+              state.replyTo = null;
+              render();
+            });
+            if (mention) composer.input.value = (/\s/.test(mention) ? '@[' + mention + ']' : '@' + mention) + ' ';
+            composer.form.classList.add('pub-reply-form');
+            thread.appendChild(composer.form);
+            setTimeout(function () { composer.input.focus(); }, 0);
+          }
+          list.appendChild(thread);
+        });
+      }
+
+      // Строка ввода есть только у залогиненного; гость видит приглашение войти.
+      function renderComposer() {
+        composerMount.replaceChildren();
+        if (state.user) {
+          composerMount.appendChild(createComposer('Написать комментарий…', function (text) {
+            return post(text, null);
+          }).form);
+        } else {
+          var note = makeEl('p', 'pub-comments-login');
+          note.appendChild(document.createTextNode('Чтобы оставить комментарий, '));
+          var link = makeEl('a', null, 'войдите в аккаунт');
+          link.href = '/admin-panel';
+          note.appendChild(link);
+          note.appendChild(document.createTextNode('.'));
+          composerMount.appendChild(note);
+        }
+      }
+
+      renderComposer();
+      list.appendChild(makePublicMessage('Загружаем комментарии…'));
+      state.user = await loadCurrentUser();
+      renderComposer();
+      await load();
     }
 
     async function loadDetail() {

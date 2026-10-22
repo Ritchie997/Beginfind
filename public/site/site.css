@@ -1161,6 +1161,156 @@
 }
 
 /* ============================================================
+   Комментарии публичной статьи
+   ============================================================ */
+
+.pub-comments {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--background-accent);
+}
+
+.pub-comments-title {
+    font-size: 1.3rem;
+    margin: 0 0 16px;
+}
+
+.pub-comments-count { color: var(--text-muted); font-weight: 500; }
+
+.pub-comments-login,
+.pub-comments-empty {
+    padding: 14px 16px;
+    border-radius: var(--site-radius-md);
+    background: var(--background-secondary);
+    color: var(--text-muted);
+}
+
+.pub-comments-login a { color: var(--blurple); }
+
+.pub-comments-compose { margin-bottom: 20px; }
+
+.pub-comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pub-comment-input {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+    padding: 10px 12px;
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+    font: inherit;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.pub-comment-input:focus { outline: none; border-color: var(--blurple); }
+
+.pub-comment-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.pub-comment-error { margin-right: auto; color: var(--red); font-size: 0.85rem; }
+
+.pub-comments-list { display: flex; flex-direction: column; gap: 18px; }
+
+.pub-comment-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.pub-comment-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--blurple);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.pub-comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.pub-comment-author { font-weight: 600; }
+.pub-comment-date { color: var(--text-muted); font-size: 0.8rem; }
+
+.pub-comment-delete {
+    margin-left: auto;
+    padding: 4px 6px;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.pub-comment:hover .pub-comment-delete,
+.pub-comment-delete:focus-visible { opacity: 1; }
+.pub-comment-delete:hover { color: var(--red); }
+@media (hover: none) { .pub-comment-delete { opacity: 1; } }
+
+.pub-comment-body {
+    padding-left: 40px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.pub-comment-reply .pub-comment-body { padding-left: 32px; }
+
+.pub-comment-sticker { height: 1.6em; vertical-align: middle; }
+.pub-comment-sticker-solo { max-width: 140px; max-height: 140px; display: block; }
+
+.pub-comment-reply-btn,
+.pub-comment-more {
+    margin: 6px 0 0 40px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.pub-comment-reply-btn:hover,
+.pub-comment-more:hover { color: var(--text-normal); }
+
+.pub-comment-replies {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 12px 0 0 20px;
+    padding-left: 14px;
+    border-left: 2px solid var(--background-accent);
+}
+
+.pub-comment-more { margin-left: 0; }
+.pub-reply-form { margin: 10px 0 0 40px; }
+
+@media (max-width: 600px) {
+    .pub-comment-body { padding-left: 0; }
+    .pub-comment-reply .pub-comment-body { padding-left: 0; }
+    .pub-comment-reply-btn { margin-left: 0; }
+    .pub-comment-replies { margin-left: 6px; padding-left: 10px; }
+    .pub-reply-form { margin-left: 0; }
+}
+
+/* ============================================================
    ALLTELL: карточки серверов/сообществ
    ============================================================ */
 

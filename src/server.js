@@ -32,6 +32,8 @@ const articlesRoutes = require('./routes/articles.routes');
 const publicArticlesRoutes = require('./routes/public-articles.routes');
 const articlesStore = require('./services/articles-store');
 const socialStore = require('./services/social-store');
+const stickersStore = require('./services/stickers-store');
+const { getAvatarUrl } = require('./services/avatars');
 const taxonomyRoutes = require('./routes/taxonomy.routes');
 const serversRoutes = require('./routes/servers.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
@@ -113,7 +115,10 @@ app.use('/api/*', dedupeRequests);
 // Маршруты API
 app.use('/api', authRoutes);
 app.use('/api', messagesRoutes);
-app.use('/api', publicArticlesRoutes.createPublicArticlesRouter(articlesStore, socialStore));
+app.use('/api', publicArticlesRoutes.createPublicArticlesRouter(articlesStore, socialStore, async (comments) => {
+  const withStickers = await stickersStore.attachStickersToItems(comments);
+  return withStickers.map((c) => ({ ...c, authorAvatar: getAvatarUrl(c.userId) }));
+}));
 app.use('/api', articlesRoutes);
 app.use('/api', taxonomyRoutes);
 app.use('/api', serversRoutes);

@@ -9,7 +9,11 @@ const publicArticles = require('../services/public-articles');
 // Передаётся снаружи (см. server.js), чтобы роутер можно было собрать в тесте без
 // базы; без него счётчики в ответе просто нулевые. Наружу уходят только числа —
 // кто лайкал/комментировал, гостю не раскрывается.
-function createPublicArticlesRouter(articleStore = store, socialStore = null) {
+//
+// decorateComments(comments) — необязательный async-хук (см. server.js): достраивает
+// стикеры и аватарки. Принимает комментарии с userId (нужен только для аватарки) и
+// возвращает их же с полями stickers/authorAvatar; userId наружу не попадает.
+function createPublicArticlesRouter(articleStore = store, socialStore = null, decorateComments = null) {
   const router = express.Router();
 
   router.get('/public/articles', async (req, res) => {
@@ -81,6 +85,35 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null) {
     } catch (err) {
       console.error('[public-articles] Failed to load public article:', err);
       res.status(500).json({ error: 'Не удалось загрузить статью' });
+    }
+  });
+
+  // Комментарии открытой статьи — только чтение, без авторизации. Статья должна
+  // быть публичной (иначе нейтральный 404, как и у самой статьи). Наружу уходит
+  // allowlist полей: id пользователя, упоминания и реакции гостю не раскрываются.
+  // Писать и удалять комментарии можно только через авторизованные /api/articles.
+  router.get('/public/articles/:slug/comments', async (req, res) => {
+    try {
+      const article = articleStore.getArticle(req.params.slug);
+      if (!article || !publicArticles.getPublicArticle(article)) {
+        return res.status(404).json({ error: 'Статья не найдена' });
+      }
+      let comments = socialStore ? await socialStore.listComments(article.slug || req.params.slug) : [];
+      if (decorateComments && comments.length) comments = await decorateComments(comments);
+      res.json({
+        data: comments.map((c) => ({
+          id: c.id,
+          parentId: c.parentId || null,
+          authorName: c.authorName,
+          authorAvatar: c.authorAvatar || null,
+          content: c.content,
+          createdAt: c.createdAt,
+          stickers: c.stickers || {}
+        }))
+      });
+    } catch (err) {
+      console.error('[public-articles] Failed to load public comments:', err);
+      res.status(500).json({ error: 'Не удалось загрузить комментарии' });
     }
   });
 
