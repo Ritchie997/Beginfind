@@ -2,8 +2,51 @@
 // каждый ответ строится только из слоёв, которые article-layers признал публичными.
 
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
 const store = require('../services/articles-store');
 const publicArticles = require('../services/public-articles');
+const { dbPath } = require('../config/paths');
+const { getAvatarUrl } = require('../services/avatars');
+
+const usersDb = new sqlite3.Database(dbPath('users.db'));
+
+function getUserById(id) {
+  return new Promise((resolve, reject) => {
+    usersDb.get('SELECT id, display_name, username FROM users WHERE id = ?', [id], (err, row) => {
+      if (err) reject(err);
+      else resolve(row || null);
+    });
+  });
+}
+
+function findLegacyAuthor(name) {
+  return new Promise((resolve, reject) => {
+    usersDb.get(
+      'SELECT id, display_name, username FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(display_name) = LOWER(?)',
+      [name, name],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(row || null);
+      }
+    );
+  });
+}
+
+async function getPublicAuthor(article) {
+  const user = article.author_id
+    ? await getUserById(article.author_id)
+    : (article.legacyAuthorName ? await findLegacyAuthor(article.legacyAuthorName) : null);
+  if (user) {
+    return {
+      id: user.id,
+      display_name: user.display_name || user.username || 'Неизвестный автор',
+      avatar: getAvatarUrl(user.id)
+    };
+  }
+  return article.legacyAuthorName
+    ? { id: null, display_name: article.legacyAuthorName, avatar: null }
+    : null;
+}
 
 // socialStore — источник агрегированных счётчиков (лайки/комментарии/просмотры).
 // Передаётся снаружи (см. server.js), чтобы роутер можно было собрать в тесте без
@@ -11,8 +54,8 @@ const publicArticles = require('../services/public-articles');
 // кто лайкал/комментировал, гостю не раскрывается.
 //
 // decorateComments(comments) — необязательный async-хук (см. server.js): достраивает
-// стикеры и аватарки. Принимает комментарии с userId (нужен только для аватарки) и
-// возвращает их же с полями stickers/authorAvatar; userId наружу не попадает.
+// стикеры и аватарки. Публичный ответ содержит только профильный id, имя и аватар
+// автора комментария, чтобы ссылка на его публичный профиль работала для гостей.
 function createPublicArticlesRouter(articleStore = store, socialStore = null, decorateComments = null) {
   const router = express.Router();
 
@@ -76,12 +119,21 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null, de
     }
   });
 
-  router.get('/public/articles/:slug', (req, res) => {
+  router.get('/public/articles/:slug', async (req, res) => {
     try {
       const article = articleStore.getArticle(req.params.slug);
       const result = article && publicArticles.getPublicArticle(article);
       if (!result) return res.status(404).json({ error: 'Статья не найдена' });
-      res.json(result);
+      const counts = socialStore
+        ? (await socialStore.getCountsForSlugs(null, [article.slug || req.params.slug])).get(article.slug || req.params.slug) || {}
+        : {};
+      res.json({
+        ...result,
+        author: await getPublicAuthor(article),
+        likesCount: counts.likes || 0,
+        commentsCount: counts.comments || 0,
+        viewsCount: counts.views || 0
+      });
     } catch (err) {
       console.error('[public-articles] Failed to load public article:', err);
       res.status(500).json({ error: 'Не удалось загрузить статью' });
@@ -90,7 +142,8 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null, de
 
   // Комментарии открытой статьи — только чтение, без авторизации. Статья должна
   // быть публичной (иначе нейтральный 404, как и у самой статьи). Наружу уходит
-  // allowlist полей: id пользователя, упоминания и реакции гостю не раскрываются.
+  // allowlist полей: профильный id автора добавлен для публичной ссылки на его
+  // страницу; упоминания и реакции гостю не раскрываются.
   // Писать и удалять комментарии можно только через авторизованные /api/articles.
   router.get('/public/articles/:slug/comments', async (req, res) => {
     try {
@@ -103,6 +156,7 @@ function createPublicArticlesRouter(articleStore = store, socialStore = null, de
       res.json({
         data: comments.map((c) => ({
           id: c.id,
+          authorId: c.userId,
           parentId: c.parentId || null,
           authorName: c.authorName,
           authorAvatar: c.authorAvatar || null,

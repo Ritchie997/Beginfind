@@ -335,6 +335,21 @@
       return item;
     }
 
+    function makeEngageButton(iconClass, count, label, extraClass) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'engage-item' + (extraClass ? ' ' + extraClass : '');
+      item.title = label;
+      item.setAttribute('aria-label', label);
+      var icon = document.createElement('i');
+      icon.className = iconClass;
+      icon.setAttribute('aria-hidden', 'true');
+      var value = document.createElement('span');
+      value.textContent = formatCount(count);
+      item.append(icon, value);
+      return item;
+    }
+
     function createArticleCard(article) {
       var href = '/antropedia/' + encodeURIComponent(article.slug);
       var card = document.createElement('article');
@@ -422,15 +437,39 @@
         body.appendChild(meta);
       }
 
-      // Лайки/комментарии/просмотры — только числа, для гостя без действий.
       var foot = document.createElement('div');
       foot.className = 'wiki-card-foot';
       var group = document.createElement('div');
       group.className = 'engage-group';
-      group.append(
-        makeStat('far fa-heart', article.likesCount, 'Нравится'),
-        makeStat('far fa-comment', article.commentsCount, 'Комментарии')
+      var likeButton = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
+      likeButton.addEventListener('click', async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!getAuthToken()) {
+          openLogin();
+          return;
+        }
+        likeButton.disabled = true;
+        try {
+          var result = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/likes/toggle', 'POST');
+          likeButton.classList.toggle('active', !!result.liked);
+          likeButton.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
+          likeButton.querySelector('span').textContent = formatCount(result.count);
+        } catch (error) {
+          window.alert(error.message || 'Не удалось поставить лайк');
+        } finally {
+          likeButton.disabled = false;
+        }
+      });
+      var commentsLink = document.createElement('a');
+      commentsLink.className = 'engage-item is-comment';
+      commentsLink.href = '/antropedia/' + encodeURIComponent(article.slug) + '#publicArticleComments';
+      commentsLink.title = 'Открыть комментарии';
+      commentsLink.append(
+        makeEl('i', 'far fa-comment'),
+        makeEl('span', null, formatCount(article.commentsCount))
       );
+      group.append(likeButton, commentsLink);
       foot.append(group, makeStat('far fa-eye', article.viewsCount, 'Просмотры'));
       body.appendChild(foot);
 
@@ -617,6 +656,124 @@
       return index;
     }
 
+    function createReactionBar(slug, targetType, targetId, reactions, user, onChange) {
+      var bar = makeEl('div', 'pub-reactions');
+      (reactions || []).forEach(function (reaction) {
+        var button = makeEl('button', 'pub-reaction-pill' + (reaction.reacted ? ' active' : ''));
+        button.type = 'button';
+        button.title = reaction.packTitle || reaction.shortcode;
+        button.setAttribute('aria-label', 'Реакция ' + (reaction.packTitle || reaction.shortcode) + ', ' + reaction.count);
+        var image = document.createElement('img');
+        var imageUrl = safePublicImageUrl(reaction.url);
+        if (!imageUrl) return;
+        image.src = imageUrl;
+        image.alt = '';
+        image.loading = 'lazy';
+        button.append(image, makeEl('span', null, String(reaction.count || 0)));
+        button.addEventListener('click', function () {
+          if (!user) { openLogin(); return; }
+          changeReaction(reaction.shortcode);
+        });
+        bar.appendChild(button);
+      });
+
+      var add = makeEl('button', 'pub-reaction-add');
+      add.type = 'button';
+      add.title = 'Добавить реакцию';
+      add.setAttribute('aria-label', 'Добавить реакцию');
+      add.innerHTML = '<i class="far fa-face-smile" aria-hidden="true"></i>';
+      add.addEventListener('click', function () {
+        if (!user) { openLogin(); return; }
+        if (window.PublicStickerPicker) {
+          window.PublicStickerPicker.open(add, function (shortcode) {
+            changeReaction(shortcode.replace(/^:+|:+$/g, ''));
+          });
+        }
+      });
+      bar.appendChild(add);
+
+      async function changeReaction(shortcode) {
+        var code = String(shortcode || '').trim().replace(/^:+|:+$/g, '').toLowerCase();
+        if (!/^[a-z0-9-]{1,80}:[a-z0-9-]{1,80}$/.test(code)) {
+          window.alert('Не удалось определить стикер. Выберите его из набора ещё раз.');
+          return;
+        }
+        try {
+          var path = '/api/articles/' + encodeURIComponent(slug);
+          if (targetType === 'comment') path += '/comments/' + encodeURIComponent(targetId);
+          var result = await authenticatedRequest(path + '/reactions/toggle', 'POST', { shortcode: code });
+          if (onChange) onChange(result.reactions || []);
+        } catch (error) {
+          window.alert(error.message || 'Не удалось изменить реакцию');
+        }
+      }
+      return bar;
+    }
+
+    function initArticleEngagement(article, container, userPromise) {
+      var panel = makeEl('div', 'pub-article-engagement');
+      var actions = makeEl('div', 'pub-article-engagement-actions');
+      var like = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
+      var comments = makeEngageButton('far fa-comment', article.commentsCount, 'Комментарии', 'is-comment');
+      var currentUser = null;
+      var reactionBar;
+
+      like.addEventListener('click', async function () {
+        if (!currentUser) { openLogin(); return; }
+        like.disabled = true;
+        try {
+          var result = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/likes/toggle', 'POST');
+          like.classList.toggle('active', !!result.liked);
+          like.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
+          like.querySelector('span').textContent = String(result.count || 0);
+        } catch (error) {
+          window.alert(error.message || 'Не удалось поставить лайк');
+        } finally {
+          like.disabled = false;
+        }
+      });
+      comments.addEventListener('click', function () {
+        var section = document.getElementById('publicArticleComments');
+        if (!section) return;
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (currentUser) {
+          var input = section.querySelector('.pub-comment-input');
+          if (input) input.focus({ preventScroll: true });
+        }
+      });
+      function updateReactions(updated) {
+        var replacement = createReactionBar(article.slug, 'article', article.slug, updated, currentUser, updateReactions);
+        if (reactionBar) reactionBar.replaceWith(replacement);
+        else actions.appendChild(replacement);
+        reactionBar = replacement;
+      }
+
+      actions.appendChild(like);
+      updateReactions([]);
+      actions.appendChild(comments);
+      panel.appendChild(actions);
+      container.appendChild(panel);
+      userPromise.then(async function (user) {
+        currentUser = user;
+        updateReactions([]);
+        if (!user) return;
+        try {
+          var summary = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/likes');
+          like.classList.toggle('active', !!summary.liked);
+          like.querySelector('i').className = summary.liked ? 'fas fa-heart' : 'far fa-heart';
+          like.querySelector('span').textContent = String(summary.count || 0);
+        } catch (error) {
+          console.error('Не удалось загрузить лайк статьи:', error);
+        }
+        try {
+          var result = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/reactions');
+          updateReactions(result.reactions || []);
+        } catch (error) {
+          console.error('Не удалось загрузить реакции статьи:', error);
+        }
+      });
+    }
+
     function renderDetail(article) {
       listView.hidden = true;
       detail.hidden = false;
@@ -633,6 +790,34 @@
       title.className = 'public-article-title';
       title.textContent = article.title || article.slug;
       detail.appendChild(title);
+      var meta = makeEl('div', 'public-article-meta');
+      if (article.author && article.author.display_name) {
+        var author = article.author;
+        var authorLabel = makeEl('span', 'public-article-author');
+        var authorImage = safePublicImageUrl(author.avatar);
+        if (author.id != null) {
+          var authorLink = document.createElement('a');
+          authorLink.className = 'public-article-author-link';
+          authorLink.href = '/profile/' + encodeURIComponent(author.id);
+          if (authorImage) {
+            var avatar = document.createElement('img');
+            avatar.src = authorImage;
+            avatar.alt = '';
+            avatar.loading = 'lazy';
+            authorLink.appendChild(avatar);
+          } else {
+            authorLink.appendChild(makeEl('span', 'public-article-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
+          }
+          authorLink.appendChild(makeEl('span', null, author.display_name));
+          authorLabel.appendChild(authorLink);
+        } else {
+          authorLabel.appendChild(makeEl('span', 'public-article-author-name', author.display_name));
+        }
+        meta.appendChild(authorLabel);
+      }
+      var created = formatDate(article.created_at);
+      if (created) meta.appendChild(makeEl('span', 'public-article-date', created));
+      if (meta.childNodes.length) detail.appendChild(meta);
       if (article.excerpt) {
         var excerpt = document.createElement('p');
         excerpt.className = 'public-article-excerpt';
@@ -654,6 +839,9 @@
         });
         detail.appendChild(tags);
       }
+
+      var userPromise = loadCurrentUser();
+      initArticleEngagement(article, detail, userPromise);
 
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';
@@ -687,7 +875,7 @@
       }).catch(function () {
         content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
       });
-      initComments(article, detail).catch(function () { /* комментарии не критичны для чтения статьи */ });
+      initComments(article, detail, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
     }
 
@@ -719,6 +907,24 @@
       } catch (error) {
         return null;
       }
+    }
+
+    function openLogin() {
+      if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
+      else window.location.href = '/admin-panel';
+    }
+
+    async function authenticatedRequest(path, method, body) {
+      var headers = { Authorization: 'Bearer ' + getAuthToken() };
+      var options = { method: method || 'GET', headers: headers };
+      if (body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+      }
+      var response = await fetch(path, options);
+      var data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || 'Ошибка запроса (' + response.status + ')');
+      return data;
     }
 
     function makeEl(tag, className, text) {
@@ -783,20 +989,93 @@
       return wrap;
     }
 
-    // Форма ввода: textarea + «Отправить». onSubmit(text) возвращает Promise<boolean>
-    // (true — отправлено, поле очищается). Ctrl/⌘+Enter отправляет.
+    function serializeComposerInput(root) {
+      function serializeNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        if (node.tagName === 'BR') return '\n';
+        if (node.tagName === 'IMG') return node.getAttribute('data-shortcode') || '';
+        var text = Array.from(node.childNodes).map(serializeNode).join('');
+        if (node.tagName === 'DIV' || node.tagName === 'P') return text + '\n';
+        return text;
+      }
+      return Array.from(root.childNodes).map(serializeNode).join('').replace(/\n+$/, '');
+    }
+
+    function insertComposerSticker(input, shortcode, imageUrl) {
+      var code = String(shortcode || '').trim();
+      if (!code) return;
+      code = code.replace(/^:+|:+$/g, '').toLowerCase();
+      if (!/^[a-z0-9-]{1,80}:[a-z0-9-]{1,80}$/.test(code)) {
+        console.error('Некорректный шорткод стикера:', shortcode);
+        return;
+      }
+      code = ':' + code + ':';
+      var selection = window.getSelection();
+      var range = input._savedRange && input.contains(input._savedRange.startContainer)
+        ? input._savedRange.cloneRange()
+        : null;
+      if (!range && selection && selection.rangeCount && input.contains(selection.anchorNode)) {
+        range = selection.getRangeAt(0).cloneRange();
+      }
+      if (!range) {
+        range = document.createRange();
+        range.selectNodeContents(input);
+        range.collapse(false);
+      }
+      range.deleteContents();
+      var image = document.createElement('img');
+      image.className = 'pub-comment-sticker-chip';
+      image.src = imageUrl;
+      image.alt = code;
+      image.title = code;
+      image.setAttribute('data-shortcode', code);
+      image.setAttribute('contenteditable', 'false');
+      range.insertNode(image);
+      var spacer = document.createTextNode('\u00a0');
+      image.parentNode.insertBefore(spacer, image.nextSibling);
+      range.setStartAfter(spacer);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      input._savedRange = range.cloneRange();
+      input.focus();
+    }
+
+    // Редактируемое поле показывает выбранные стикеры картинками; перед
+    // отправкой изображения сериализуются обратно в поддерживаемый сервером шорткод.
     function createComposer(placeholder, onSubmit, onCancel) {
       var form = makeEl('form', 'pub-comment-form');
-      var input = document.createElement('textarea');
+      var input = makeEl('div', 'pub-comment-input');
+      input.contentEditable = 'true';
+      input.setAttribute('role', 'textbox');
+      input.setAttribute('aria-multiline', 'true');
       input.className = 'pub-comment-input';
-      input.rows = 2;
-      input.maxLength = COMMENT_MAX_LEN;
-      input.placeholder = placeholder;
+      input.dataset.placeholder = placeholder;
       input.setAttribute('aria-label', placeholder);
+      input.addEventListener('blur', function () {
+        var selection = window.getSelection();
+        if (selection && selection.rangeCount && input.contains(selection.anchorNode)) {
+          input._savedRange = selection.getRangeAt(0).cloneRange();
+        }
+      });
       var actions = makeEl('div', 'pub-comment-form-actions');
       var error = makeEl('span', 'pub-comment-error');
       error.setAttribute('role', 'alert');
       actions.appendChild(error);
+      var stickerButton = makeEl('button', 'btn btn-secondary btn-sm pub-comment-sticker-trigger');
+      stickerButton.type = 'button';
+      stickerButton.title = 'Добавить стикер';
+      stickerButton.setAttribute('aria-label', 'Добавить стикер');
+      stickerButton.innerHTML = '<i class="far fa-face-smile" aria-hidden="true"></i>';
+      stickerButton.addEventListener('mousedown', function (event) { event.preventDefault(); });
+      stickerButton.addEventListener('click', function () {
+        if (!window.PublicStickerPicker) return;
+        window.PublicStickerPicker.open(stickerButton, function (shortcode, imageUrl) {
+          insertComposerSticker(input, shortcode, imageUrl);
+        });
+      });
+      actions.appendChild(stickerButton);
       if (onCancel) {
         var cancel = makeEl('button', 'btn btn-secondary btn-sm', 'Отмена');
         cancel.type = 'button';
@@ -811,15 +1090,21 @@
 
       var busy = false;
       async function send() {
-        var text = input.value.trim();
+        var text = serializeComposerInput(input).trim();
         if (!text || busy) return;
         busy = true;
         submit.disabled = true;
         error.textContent = '';
+        if (text.length > COMMENT_MAX_LEN) {
+          error.textContent = 'Комментарий не должен превышать ' + COMMENT_MAX_LEN + ' символов';
+          busy = false;
+          submit.disabled = false;
+          return;
+        }
         var result = await onSubmit(text);
         busy = false;
         submit.disabled = false;
-        if (result && result.ok) input.value = '';
+        if (result && result.ok) input.replaceChildren();
         else error.textContent = (result && result.message) || 'Не удалось отправить комментарий';
       }
       form.addEventListener('submit', function (event) { event.preventDefault(); send(); });
@@ -829,7 +1114,7 @@
       return { form: form, input: input };
     }
 
-    async function initComments(article, container) {
+    async function initComments(article, container, userPromise) {
       var slug = article.slug;
       var section = makeEl('section', 'pub-comments');
       section.id = 'publicArticleComments';
@@ -884,6 +1169,8 @@
           return;
         }
         render();
+        var commentsCountButton = container.querySelector('.pub-article-engagement-actions .is-comment span');
+        if (commentsCountButton) commentsCountButton.textContent = String(state.comments.length);
       }
 
       async function post(text, parentId) {
@@ -931,8 +1218,12 @@
         var item = makeEl('div', 'pub-comment' + (isReply ? ' pub-comment-reply' : ''));
         item.dataset.id = comment.id;
         var head = makeEl('div', 'pub-comment-head');
-        head.appendChild(makeAvatar(comment, isReply ? 24 : 32));
-        head.appendChild(makeEl('span', 'pub-comment-author', comment.authorName || 'Аноним'));
+        var authorId = comment.authorId != null ? comment.authorId : comment.userId;
+        var person = authorId != null ? makeEl('a', 'pub-comment-person') : makeEl('span', 'pub-comment-person');
+        if (authorId != null) person.href = '/profile/' + encodeURIComponent(authorId);
+        person.appendChild(makeAvatar(comment, isReply ? 24 : 32));
+        person.appendChild(makeEl('span', 'pub-comment-author', comment.authorName || 'Аноним'));
+        head.appendChild(person);
         head.appendChild(makeEl('span', 'pub-comment-date', formatDate(comment.createdAt)));
         var me = state.user;
         if (me && (canModerate() || (comment.userId != null && comment.userId === me.id))) {
@@ -946,6 +1237,13 @@
         }
         item.appendChild(head);
         item.appendChild(renderCommentBody(comment));
+        var reactionBar = createReactionBar(slug, 'comment', comment.id, comment.reactions, state.user, function (updated) {
+          var current = state.comments.find(function (entry) { return String(entry.id) === String(comment.id); });
+          if (current) current.reactions = updated;
+          render();
+        });
+        reactionBar.classList.add('pub-comment-reactions');
+        item.appendChild(reactionBar);
         if (me) {
           var reply = makeEl('button', 'pub-comment-reply-btn');
           reply.type = 'button';
@@ -995,7 +1293,7 @@
               state.replyTo = null;
               render();
             });
-            if (mention) composer.input.value = (/\s/.test(mention) ? '@[' + mention + ']' : '@' + mention) + ' ';
+            if (mention) composer.input.textContent = (/\s/.test(mention) ? '@[' + mention + ']' : '@' + mention) + ' ';
             composer.form.classList.add('pub-reply-form');
             thread.appendChild(composer.form);
             setTimeout(function () { composer.input.focus(); }, 0);
@@ -1014,8 +1312,9 @@
         } else {
           var note = makeEl('p', 'pub-comments-login');
           note.appendChild(document.createTextNode('Чтобы оставить комментарий, '));
-          var link = makeEl('a', null, 'войдите в аккаунт');
-          link.href = '/admin-panel';
+          var link = makeEl('button', 'pub-login-link', 'войдите в аккаунт');
+          link.type = 'button';
+          link.addEventListener('click', openLogin);
           note.appendChild(link);
           note.appendChild(document.createTextNode('.'));
           composerMount.appendChild(note);
@@ -1024,9 +1323,12 @@
 
       renderComposer();
       list.appendChild(makePublicMessage('Загружаем комментарии…'));
-      state.user = await loadCurrentUser();
+      state.user = await userPromise;
       renderComposer();
       await load();
+      if (window.location.hash === '#publicArticleComments') {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
 
     async function loadDetail() {
