@@ -95,6 +95,8 @@ function sendPage(file, status = 200) {
 function createPagesRouter(articleStoreInstance = articleStore) {
   const router = express.Router();
   router.get('/', sendPage('site/index.html'));
+  router.get('/profile', sendPage('site/profile.html'));
+  router.get('/profile/:id', sendPage('site/profile.html'));
   router.get('/antropedia', (req, res) => {
     try {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');

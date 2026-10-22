@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Профиль — AllTell</title>
+<meta name="description" content="Профиль участника AllTell.">
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body data-page="profile">
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
+      <a href="/site/alltell.html" class="site-nav-link" data-page="alltell">AllTell</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+    </nav>
+    <div class="site-header-actions">
+      <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="site-user" id="siteUserMenu" hidden>
+        <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
+          <span class="site-user-avatar" id="siteUserAvatar"></span>
+          <span class="site-user-name" id="siteUserName"></span>
+          <i class="fas fa-chevron-down site-user-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
+          <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+          <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
+        </div>
+      </div>
+      <div class="site-auth-actions" id="siteGuestActions">
+        <button type="button" class="site-auth-button" data-auth-tab="login">Войти</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<main class="site-main site-profile-main">
+  <div id="siteProfileLoading" class="site-profile-state">
+    <span class="site-profile-spinner" aria-hidden="true"></span>
+    <span>Загружаем профиль…</span>
+  </div>
+  <section id="siteProfileGate" class="site-profile-state" hidden>
+    <i class="fas fa-user-lock" aria-hidden="true"></i>
+    <h1>Войдите, чтобы открыть профиль</h1>
+    <p>Профиль доступен участникам AllTell.</p>
+    <button type="button" class="site-profile-button is-primary" id="siteProfileLogin">Войти</button>
+  </section>
+  <section id="siteProfileError" class="site-profile-state" hidden>
+    <i class="fas fa-user-slash" aria-hidden="true"></i>
+    <h1>Не удалось открыть профиль</h1>
+    <p id="siteProfileErrorText"></p>
+    <a class="site-profile-button is-secondary" href="/">На главную</a>
+  </section>
+
+  <div id="siteProfileContent" class="site-profile-content" hidden>
+    <section class="site-profile-card site-profile-heading">
+      <div class="site-profile-avatar-wrap">
+        <div id="publicProfileAvatar" class="site-profile-avatar"></div>
+        <div id="publicProfileAvatarActions" class="site-profile-avatar-actions" hidden>
+          <button type="button" class="site-profile-icon-button" id="publicProfileAvatarUpload" title="Загрузить аватарку" aria-label="Загрузить аватарку"><i class="fas fa-camera"></i></button>
+          <button type="button" class="site-profile-icon-button is-danger" id="publicProfileAvatarRemove" title="Убрать аватарку" aria-label="Убрать аватарку" hidden><i class="fas fa-trash"></i></button>
+          <input type="file" id="publicProfileAvatarInput" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+        </div>
+      </div>
+      <div class="site-profile-identity">
+        <div class="site-profile-title-row">
+          <h1 id="publicProfileName"></h1>
+          <button type="button" class="site-profile-button is-quiet" id="publicProfileNameEdit"><i class="fas fa-pen"></i> Изменить имя</button>
+          <span id="publicProfileRole" class="site-profile-badge"></span>
+          <span id="publicProfileStatus" class="site-profile-badge" hidden></span>
+        </div>
+        <form id="publicProfileNameForm" class="site-profile-inline-form" hidden>
+          <input type="text" id="publicProfileNameInput" maxlength="32" autocomplete="nickname" aria-label="Имя профиля">
+          <button type="submit" class="site-profile-button is-primary">Сохранить</button>
+          <button type="button" class="site-profile-button is-secondary" data-cancel>Отмена</button>
+        </form>
+        <p id="publicProfileUsername" class="site-profile-username" hidden></p>
+        <p id="publicProfileJoined" class="site-profile-joined"></p>
+      </div>
+    </section>
+
+    <section class="site-profile-card site-profile-section">
+      <div class="site-profile-section-heading">
+        <div>
+          <span class="site-profile-eyebrow">Знакомство</span>
+          <h2>О себе</h2>
+        </div>
+        <button type="button" class="site-profile-button is-quiet" id="publicProfileBioEdit" hidden><i class="fas fa-pen"></i> Редактировать</button>
+      </div>
+      <p id="publicProfileBio" class="site-profile-bio"></p>
+      <form id="publicProfileBioForm" hidden>
+        <textarea id="publicProfileBioInput" maxlength="2000" rows="4" aria-label="О себе"></textarea>
+        <div class="site-profile-form-actions">
+          <button type="submit" class="site-profile-button is-primary">Сохранить</button>
+          <button type="button" class="site-profile-button is-secondary" data-cancel>Отмена</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="site-profile-card site-profile-section">
+      <div class="site-profile-section-heading">
+        <div>
+          <span class="site-profile-eyebrow">Сообщество</span>
+          <h2>Сервера</h2>
+        </div>
+      </div>
+      <div id="publicProfileServers" class="site-profile-server-list"></div>
+      <p id="publicProfileServersEmpty" class="site-profile-muted" hidden>Пользователь пока не состоит ни в одном сервере.</p>
+    </section>
+
+    <section id="publicProfileNote" class="site-profile-note" hidden>
+      <div class="site-profile-section-heading">
+        <div>
+          <span class="site-profile-eyebrow">Только для администрации</span>
+          <h2><i class="fas fa-lock" aria-hidden="true"></i> Заметка админ-панели</h2>
+        </div>
+        <button type="button" class="site-profile-button is-note" id="publicProfileNoteEdit"><i class="fas fa-pen"></i> Редактировать</button>
+      </div>
+      <p id="publicProfileNoteText"></p>
+      <form id="publicProfileNoteForm" hidden>
+        <textarea id="publicProfileNoteInput" maxlength="2000" rows="3" aria-label="Заметка админ-панели"></textarea>
+        <div class="site-profile-form-actions">
+          <button type="submit" class="site-profile-button is-note">Сохранить заметку</button>
+          <button type="button" class="site-profile-button is-secondary" data-cancel>Отмена</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="site-profile-card site-profile-section">
+      <div class="site-profile-section-heading">
+        <div>
+          <span class="site-profile-eyebrow">Активность</span>
+          <h2>Публикации</h2>
+        </div>
+      </div>
+      <div class="site-profile-tabs" role="tablist" aria-label="Публикации профиля">
+        <button type="button" class="site-profile-tab is-active" data-profile-tab="articles" role="tab" aria-selected="true"><i class="fas fa-book-open"></i> Статьи</button>
+        <button type="button" class="site-profile-tab" data-profile-tab="arts" role="tab" aria-selected="false"><i class="fas fa-images"></i> Арты</button>
+        <button type="button" class="site-profile-tab" data-profile-tab="stickers" role="tab" aria-selected="false"><i class="fas fa-icons"></i> Стикеры</button>
+        <button type="button" class="site-profile-tab" data-profile-tab="bookmarks" role="tab" aria-selected="false" id="publicProfileBookmarksTab" hidden><i class="fas fa-bookmark"></i> Закладки</button>
+      </div>
+      <div id="publicProfileMediaStatus" class="site-profile-media-status" aria-live="polite"></div>
+      <div id="publicProfileMedia" class="site-profile-media" role="tabpanel"></div>
+    </section>
+    <p id="siteProfileFeedback" class="site-profile-feedback" aria-live="polite" hidden></p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> AllTell</div>
+      <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома AllTell — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/antropedia">Antropedia</a>
+      <a href="/site/alltell.html">AllTell сервера</a>
+      <a href="/site/gallery.html">Галерея</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="/profile">Профиль</a>
+      <a href="/admin-panel">Админ-панель</a>
+    </div></div>
+  </div>
+</footer>
+
+<script src="/auth-system.js"></script>
+<script src="/site/site.js"></script>
+<script src="/site/profile.js"></script>
+</body>
+</html>
