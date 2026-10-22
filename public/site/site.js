@@ -849,7 +849,7 @@
       toolbar.appendChild(back);
       if (article.can_edit) {
         var adminLink = makeEl('a', 'public-article-admin-link');
-        adminLink.href = '/admin-panel?editArticle=' + encodeURIComponent(article.slug);
+        adminLink.href = '/admin-panel/antropedia/' + encodeURIComponent(article.slug);
         adminLink.appendChild(makeEl('i', 'fas fa-arrow-up-right-from-square'));
         adminLink.appendChild(document.createTextNode('Открыть в админ панели'));
         toolbar.appendChild(adminLink);
