@@ -305,30 +305,42 @@
     });
   }
 
-  var mediaLoaded = Object.create(null);
   var currentTargetId;
+  var activeMediaTab;
+  var mediaRequestId = 0;
 
   async function loadMedia(tab) {
+    var requestId = ++mediaRequestId;
+    activeMediaTab = tab;
     var status = el('publicProfileMediaStatus');
     status.classList.remove('is-error');
     status.textContent = 'Загрузка…';
     el('publicProfileMedia').replaceChildren();
     try {
-      var path;
-      if (tab === 'articles') path = '/api/articles?author=' + encodeURIComponent(currentTargetId);
-      if (tab === 'arts') path = '/api/gallery/works?author=' + encodeURIComponent(currentTargetId) + '&sort=newest&limit=24';
-      if (tab === 'stickers') path = '/api/stickers/by-user/' + encodeURIComponent(currentTargetId);
-      if (tab === 'bookmarks') path = '/api/bookmarks';
+      var paths = {
+        articles: '/api/articles?author=' + encodeURIComponent(currentTargetId),
+        arts: '/api/gallery/works?author=' + encodeURIComponent(currentTargetId) + '&sort=newest&limit=24',
+        stickers: '/api/stickers/by-user/' + encodeURIComponent(currentTargetId),
+        bookmarks: '/api/bookmarks'
+      };
+      var path = paths[tab];
+      if (!path) throw new Error('Неизвестная вкладка профиля.');
       var data = await requestJson(path);
-      var items = tab === 'arts' ? data.data || [] : data;
+      if (requestId !== mediaRequestId || activeMediaTab !== tab) return;
+      var items = tab === 'arts' ? data.data : data;
       if (!Array.isArray(items)) throw new Error('Сервер вернул неверный формат публикаций.');
       renderRows(items, tab);
       status.textContent = '';
       status.classList.remove('is-error');
-      mediaLoaded[tab] = true;
     } catch (error) {
+      if (requestId !== mediaRequestId || activeMediaTab !== tab) return;
       status.textContent = error.message;
       status.classList.add('is-error');
+      var retry = make('button', 'site-profile-media-retry', 'Повторить');
+      retry.type = 'button';
+      retry.addEventListener('click', function () { loadMedia(tab); });
+      status.appendChild(document.createTextNode(' '));
+      status.appendChild(retry);
     }
   }
 
@@ -344,7 +356,7 @@
           item.classList.toggle('is-active', active);
           item.setAttribute('aria-selected', String(active));
         });
-        if (!mediaLoaded[tab]) loadMedia(tab);
+        loadMedia(tab);
       });
     });
     loadMedia('articles');

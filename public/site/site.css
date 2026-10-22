@@ -2465,6 +2465,17 @@
 }
 
 .site-profile-media-status.is-error { color: #ff8587; }
+.site-profile-media-retry {
+    margin-left: 6px;
+    padding: 4px 9px;
+    border: 1px solid var(--background-accent);
+    border-radius: 7px;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+    font: inherit;
+    cursor: pointer;
+}
+.site-profile-media-retry:hover { border-color: var(--blurple); }
 .site-profile-media { display: grid; gap: 8px; padding-top: 10px; }
 
 .site-profile-media-row {
