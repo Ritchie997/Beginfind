@@ -845,7 +845,16 @@
       back.className = 'public-article-back';
       back.href = '/antropedia';
       back.textContent = '← Все статьи';
-      detail.appendChild(back);
+      var toolbar = makeEl('div', 'public-article-detail-toolbar');
+      toolbar.appendChild(back);
+      if (article.can_edit) {
+        var adminLink = makeEl('a', 'public-article-admin-link');
+        adminLink.href = '/admin-panel?editArticle=' + encodeURIComponent(article.slug);
+        adminLink.appendChild(makeEl('i', 'fas fa-arrow-up-right-from-square'));
+        adminLink.appendChild(document.createTextNode('Открыть в админ панели'));
+        toolbar.appendChild(adminLink);
+      }
+      detail.appendChild(toolbar);
 
       var title = document.createElement('h1');
       title.className = 'public-article-title';
