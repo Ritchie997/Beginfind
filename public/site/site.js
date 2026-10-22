@@ -1,9 +1,11 @@
 // site.js — поведение публичной витрины AllTell. Antropedia использует
-// только гостевые read-only endpoints; остальные разделы остаются макетами.
+// публичные API для гостей и авторизованные API для вошедших пользователей.
 
 (function () {
   var PUBLIC_ARTICLES_API = '/api/public/articles';
   var PUBLIC_PAGE_SIZE = 30;
+  var ARTICLE_LIST_RETURN_KEY = 'publicAntropediaListReturn';
+  var ARTICLE_LIST_RETURN_HASH = '#publicArticleListReturn';
 
   function ready(fn) {
     if (document.readyState !== 'loading') fn();
@@ -190,6 +192,7 @@
   function initPublicAntropedia() {
     if (document.body.getAttribute('data-page') !== 'antropedia') return;
     var main = document.querySelector('.site-main');
+    var hero = document.querySelector('.site-hero');
     var listView = document.getElementById('publicArticleListView');
     var detail = document.getElementById('publicArticleDetail');
     var input = document.getElementById('publicArticleSearch');
@@ -236,6 +239,94 @@
       } catch (error) {
         state.slug = pathMatch[1];
       }
+    }
+    if (hero) hero.hidden = !!state.slug;
+
+    function readListReturn() {
+      try {
+        var saved = JSON.parse(sessionStorage.getItem(ARTICLE_LIST_RETURN_KEY) || 'null');
+        if (!saved || typeof saved.url !== 'string' || !Number.isFinite(saved.scrollY) ||
+            !Number.isFinite(saved.savedAt) || Date.now() - saved.savedAt > 30 * 60 * 1000) return null;
+        return saved;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeListReturn(saved) {
+      try {
+        sessionStorage.setItem(ARTICLE_LIST_RETURN_KEY, JSON.stringify(saved));
+      } catch (error) {
+        console.warn('Не удалось сохранить позицию списка статей:', error);
+      }
+    }
+
+    function clearListReturn() {
+      try {
+        sessionStorage.removeItem(ARTICLE_LIST_RETURN_KEY);
+      } catch (error) {
+        console.warn('Не удалось очистить сохранённую позицию списка статей:', error);
+      }
+    }
+
+    function saveArticleListPosition(articleSlug) {
+      if (state.slug) {
+        var existing = readListReturn();
+        if (existing) {
+          existing.currentSlug = articleSlug;
+          writeListReturn(existing);
+        }
+        return;
+      }
+      writeListReturn({
+        url: window.location.pathname + window.location.search,
+        scrollY: window.scrollY,
+        currentSlug: articleSlug,
+        savedAt: Date.now()
+      });
+    }
+
+    var pendingListRestore = null;
+    if (!state.slug && window.location.hash === ARTICLE_LIST_RETURN_HASH) {
+      var savedListPosition = readListReturn();
+      var currentListUrl = window.location.pathname + window.location.search;
+      if (savedListPosition && savedListPosition.url === currentListUrl) {
+        pendingListRestore = savedListPosition;
+      } else {
+        clearListReturn();
+      }
+      history.replaceState(history.state || {}, '', currentListUrl);
+    }
+
+    document.addEventListener('click', function (event) {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      var link = event.target.closest('a[href]');
+      if (!link || link.target === '_blank') return;
+      var target;
+      try { target = new URL(link.href, window.location.href); }
+      catch (error) { return; }
+      var match = target.origin === window.location.origin && target.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
+      if (!match) return;
+      var slug;
+      try { slug = decodeURIComponent(match[1]); }
+      catch (error) { slug = match[1]; }
+      saveArticleListPosition(slug);
+    }, true);
+
+    function restoreArticleListPosition() {
+      if (!pendingListRestore) return;
+      var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      if (maxScroll < pendingListRestore.scrollY && state.hasMore) {
+        setTimeout(function () { loadArticles(true); }, 0);
+        return;
+      }
+      window.scrollTo({
+        top: Math.min(pendingListRestore.scrollY, maxScroll),
+        left: 0,
+        behavior: 'instant'
+      });
+      pendingListRestore = null;
+      clearListReturn();
     }
 
     function updateAdminLinks(slug) {
@@ -604,6 +695,7 @@
             : (authenticated ? 'Доступных статей пока нет.' : 'Публичных статей пока нет.');
           document.getElementById('pubEmptyReset').hidden = !filtered;
         }
+        restoreArticleListPosition();
       } catch (error) {
         if (error && error.name === 'AbortError') return;
         if (generation !== state.generation) return;
@@ -612,6 +704,13 @@
         grid.appendChild(makePublicMessage('Не удалось загрузить статьи. Проверьте соединение и попробуйте ещё раз.'));
         state.hasMore = false;
         loadMore.hidden = true;
+        if (pendingListRestore) {
+          pendingListRestore.scrollY = Math.min(
+            pendingListRestore.scrollY,
+            Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+          );
+          restoreArticleListPosition();
+        }
       } finally {
         if (generation === state.generation) {
           state.loading = false;
@@ -620,7 +719,7 @@
           updateStatus();
           // Если после загрузки метка конца списка всё ещё на виду (мало
           // карточек / высокий экран) — IntersectionObserver сам не сработает.
-          if (state.hasMore && sentinel.getBoundingClientRect().top < window.innerHeight + 400) {
+          if (!pendingListRestore && state.hasMore && sentinel.getBoundingClientRect().top < window.innerHeight + 400) {
             setTimeout(function () { loadArticles(true); }, 0);
           }
         }
@@ -666,7 +765,10 @@
         if (!response.ok) throw new Error('HTTP ' + response.status);
         var result = await response.json();
         var pick = Array.isArray(result.data) && result.data[0];
-        if (pick) window.location.href = '/antropedia/' + encodeURIComponent(pick.slug);
+        if (pick) {
+          saveArticleListPosition(pick.slug);
+          window.location.href = '/antropedia/' + encodeURIComponent(pick.slug);
+        }
       } catch (error) {
         status.textContent = 'Не удалось выбрать случайную статью — попробуйте ещё раз.';
       } finally {
@@ -847,6 +949,10 @@
       back.textContent = '← Все статьи';
       var toolbar = makeEl('div', 'public-article-detail-toolbar');
       toolbar.appendChild(back);
+      var listReturn = readListReturn();
+      if (listReturn && listReturn.currentSlug === article.slug) {
+        back.href = listReturn.url + ARTICLE_LIST_RETURN_HASH;
+      }
       if (article.can_edit) {
         var adminLink = makeEl('a', 'public-article-admin-link');
         adminLink.href = '/admin-panel/antropedia/' + encodeURIComponent(article.slug);
@@ -855,6 +961,17 @@
         toolbar.appendChild(adminLink);
       }
       detail.appendChild(toolbar);
+
+      var coverUrl = safePublicImageUrl(article.image);
+      if (coverUrl) {
+        var cover = makeEl('figure', 'public-article-cover');
+        var coverImage = document.createElement('img');
+        coverImage.src = coverUrl;
+        coverImage.alt = '';
+        coverImage.addEventListener('error', function () { cover.remove(); });
+        cover.appendChild(coverImage);
+        detail.appendChild(cover);
+      }
 
       var title = document.createElement('h1');
       title.className = 'public-article-title';
