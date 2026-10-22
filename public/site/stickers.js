@@ -59,7 +59,12 @@
   }
 
   function onOutsideClick(event) {
-    if (picker && !picker.contains(event.target) && !pickerTrigger.contains(event.target)) closePicker();
+    if (!picker) return;
+    var path = event.composedPath ? event.composedPath() : [];
+    var insidePicker = path.indexOf(picker) !== -1 || picker.contains(event.target);
+    var onTrigger = pickerTrigger &&
+      (event.target === pickerTrigger || pickerTrigger.contains(event.target) || path.indexOf(pickerTrigger) !== -1);
+    if (!insidePicker && !onTrigger) closePicker();
   }
 
   function onPickerKeydown(event) {

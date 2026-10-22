@@ -6,6 +6,33 @@
   var PUBLIC_PAGE_SIZE = 30;
   var ARTICLE_LIST_RETURN_KEY = 'publicAntropediaListReturn';
   var ARTICLE_LIST_RETURN_HASH = '#publicArticleListReturn';
+  var currentRouteCleanup = null;
+  var currentMountedPage = null;
+
+  function saveArticleListPosition(articleSlug, scrollY) {
+    try {
+      var saved = null;
+      try { saved = JSON.parse(sessionStorage.getItem(ARTICLE_LIST_RETURN_KEY) || 'null'); } catch (error) { /* ignore invalid saved state */ }
+      var currentPath = window.location.pathname;
+      if (/^\/antropedia\/[^/]+\/?$/.test(currentPath)) {
+        if (saved) {
+          saved.currentSlug = articleSlug;
+          saved.savedAt = Date.now();
+          sessionStorage.setItem(ARTICLE_LIST_RETURN_KEY, JSON.stringify(saved));
+        }
+        return;
+      }
+      if (currentPath !== '/antropedia') return;
+      sessionStorage.setItem(ARTICLE_LIST_RETURN_KEY, JSON.stringify({
+        url: currentPath + window.location.search,
+        scrollY: Number.isFinite(scrollY) ? scrollY : window.scrollY,
+        currentSlug: articleSlug,
+        savedAt: Date.now()
+      }));
+    } catch (error) {
+      console.warn('Не удалось сохранить позицию списка статей:', error);
+    }
+  }
 
   function ready(fn) {
     if (document.readyState !== 'loading') fn();
@@ -29,6 +56,13 @@
     } catch (error) {
       return '';
     }
+  }
+
+  function updateAdminLinks(slug) {
+    var destination = slug ? '/admin-panel?editArticle=' + encodeURIComponent(slug) : '/admin-panel';
+    document.querySelectorAll('.site-admin-toggle').forEach(function (link) {
+      link.href = destination;
+    });
   }
 
   function initSiteUserMenu() {
@@ -221,6 +255,7 @@
       loading: false,
       hasMore: true,
       controller: null,
+      disposed: false,
       slug: null,
       view: 'grid',
       tagField: null
@@ -269,23 +304,6 @@
       }
     }
 
-    function saveArticleListPosition(articleSlug) {
-      if (state.slug) {
-        var existing = readListReturn();
-        if (existing) {
-          existing.currentSlug = articleSlug;
-          writeListReturn(existing);
-        }
-        return;
-      }
-      writeListReturn({
-        url: window.location.pathname + window.location.search,
-        scrollY: window.scrollY,
-        currentSlug: articleSlug,
-        savedAt: Date.now()
-      });
-    }
-
     var pendingListRestore = null;
     if (!state.slug && window.location.hash === ARTICLE_LIST_RETURN_HASH) {
       var savedListPosition = readListReturn();
@@ -296,22 +314,12 @@
         clearListReturn();
       }
       history.replaceState(history.state || {}, '', currentListUrl);
+    } else if (!state.slug && window.history.state && Number.isFinite(window.history.state.publicSiteScrollY)) {
+      pendingListRestore = {
+        url: window.location.pathname + window.location.search,
+        scrollY: window.history.state.publicSiteScrollY
+      };
     }
-
-    document.addEventListener('click', function (event) {
-      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      var link = event.target.closest('a[href]');
-      if (!link || link.target === '_blank') return;
-      var target;
-      try { target = new URL(link.href, window.location.href); }
-      catch (error) { return; }
-      var match = target.origin === window.location.origin && target.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
-      if (!match) return;
-      var slug;
-      try { slug = decodeURIComponent(match[1]); }
-      catch (error) { slug = match[1]; }
-      saveArticleListPosition(slug);
-    }, true);
 
     function restoreArticleListPosition() {
       if (!pendingListRestore) return;
@@ -327,16 +335,6 @@
       });
       pendingListRestore = null;
       clearListReturn();
-    }
-
-    function updateAdminLinks(slug) {
-      var destination = '/admin-panel';
-      if (slug) {
-        destination += '?editArticle=' + encodeURIComponent(slug);
-      }
-      document.querySelectorAll('[data-mode-switch]').forEach(function (link) {
-        link.href = destination;
-      });
     }
 
     updateAdminLinks(state.slug);
@@ -632,6 +630,7 @@
     }
 
     async function loadArticles(append) {
+      if (state.disposed) return;
       if (append && (state.loading || !state.hasMore)) return;
       if (!append && state.controller) state.controller.abort();
       state.loading = true;
@@ -674,7 +673,7 @@
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         var result = await response.json();
-        if (generation !== state.generation) return;
+        if (state.disposed || generation !== state.generation) return;
         var articles = Array.isArray(result.data) ? result.data : [];
         if (!append) grid.replaceChildren();
         grid.querySelectorAll('.pub-skeleton').forEach(function (el) { el.remove(); });
@@ -697,6 +696,7 @@
         }
         restoreArticleListPosition();
       } catch (error) {
+        if (state.disposed) return;
         if (error && error.name === 'AbortError') return;
         if (generation !== state.generation) return;
         if (!append) grid.replaceChildren();
@@ -712,7 +712,7 @@
           restoreArticleListPosition();
         }
       } finally {
-        if (generation === state.generation) {
+        if (!state.disposed && generation === state.generation) {
           state.loading = false;
           loadMore.disabled = false;
           loadingMoreEl.hidden = true;
@@ -767,7 +767,7 @@
         var pick = Array.isArray(result.data) && result.data[0];
         if (pick) {
           saveArticleListPosition(pick.slug);
-          window.location.href = '/antropedia/' + encodeURIComponent(pick.slug);
+          window.PublicSite.navigateTo('/antropedia/' + encodeURIComponent(pick.slug));
         }
       } catch (error) {
         status.textContent = 'Не удалось выбрать случайную статью — попробуйте ещё раз.';
@@ -1023,7 +1023,7 @@
           button.className = 'wiki-tag';
           button.textContent = tag;
           button.addEventListener('click', function () {
-            window.location.href = '/antropedia?tag=' + encodeURIComponent(tag);
+            window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tag));
           });
           tags.appendChild(button);
         });
@@ -1052,14 +1052,10 @@
         });
         content.addEventListener('click', function (event) {
           var wikiLink = event.target.closest('a[data-slug]');
-          if (wikiLink) {
-            event.preventDefault();
-            window.location.href = '/antropedia/' + encodeURIComponent(wikiLink.dataset.slug);
-            return;
-          }
+          if (wikiLink) return;
           var tagLink = event.target.closest('[data-tag]');
           if (tagLink) {
-            window.location.href = '/antropedia?tag=' + encodeURIComponent(tagLink.dataset.tag);
+            window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tagLink.dataset.tag));
           }
         });
       }).catch(function () {
@@ -1538,12 +1534,17 @@
           }
         );
         if (response.status === 404) {
+          if (state.disposed) return;
           detail.replaceChildren(makePublicMessage('Статья не найдена или недоступна для публичного чтения.'));
           return;
         }
         if (!response.ok) throw new Error('HTTP ' + response.status);
-        renderDetail(await response.json());
+        if (state.disposed) return;
+        var article = await response.json();
+        if (state.disposed) return;
+        renderDetail(article);
       } catch (error) {
+        if (state.disposed) return;
         detail.replaceChildren(makePublicMessage('Не удалось загрузить статью. Попробуйте обновить страницу.'));
       }
     }
@@ -1562,24 +1563,31 @@
       if (event.key !== 'Enter') return;
       event.preventDefault();
       if (state.slug) {
-        window.location.href = '/antropedia' + (input.value.trim() ? '?q=' + encodeURIComponent(input.value.trim()) : '');
+        window.PublicSite.navigateTo('/antropedia' + (input.value.trim() ? '?q=' + encodeURIComponent(input.value.trim()) : ''));
         return;
       }
       clearTimeout(searchDebounce);
       applyFilters();
     });
     // «/» фокусирует поиск, если фокус не в поле ввода.
-    document.addEventListener('keydown', function (event) {
+    function onSearchShortcut(event) {
       if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
       var tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       event.preventDefault();
       input.focus();
-    });
+    }
+    document.addEventListener('keydown', onSearchShortcut);
 
     if (state.slug) {
-      loadDetail();
-      return;
+      var detailLoad = loadDetail();
+      var detailCleanup = function cleanup() {
+        state.disposed = true;
+        if (state.controller) state.controller.abort();
+        document.removeEventListener('keydown', onSearchShortcut);
+      };
+      detailCleanup.ready = detailLoad;
+      return detailCleanup;
     }
 
     var tagRoot = document.getElementById('pubTagField');
@@ -1608,17 +1616,109 @@
     // Подгрузка при прокрутке, как в админке; кнопка «Загрузить ещё» — только
     // запасной вариант для браузеров без IntersectionObserver.
     if ('IntersectionObserver' in window) {
-      new IntersectionObserver(function (entries) {
+      state.observer = new IntersectionObserver(function (entries) {
         if (entries.some(function (e) { return e.isIntersecting; })) loadArticles(true);
-      }, { rootMargin: '400px' }).observe(sentinel);
+      }, { rootMargin: '400px' });
+      state.observer.observe(sentinel);
     }
 
     updateFiltersCount();
-    loadArticles(false);
+    var initialLoad = loadArticles(false);
+    var listCleanup = function cleanup() {
+      state.disposed = true;
+      if (state.controller) state.controller.abort();
+      if (state.observer) state.observer.disconnect();
+      clearTimeout(searchDebounce);
+      document.removeEventListener('keydown', onSearchShortcut);
+    };
+    listCleanup.ready = initialLoad;
+    return listCleanup;
   }
 
+  function initStaticDemos() {
+    document.querySelectorAll('.chip-row').forEach(function (row) {
+      row.addEventListener('click', function (event) {
+        var chip = event.target.closest('.filter-chip');
+        if (!chip) return;
+        row.querySelectorAll('.filter-chip').forEach(function (item) { item.classList.remove('active'); });
+        chip.classList.add('active');
+      });
+    });
+    document.querySelectorAll('.engage-item.is-like').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var icon = button.querySelector('i');
+        var count = button.querySelector('span');
+        var active = button.classList.toggle('active');
+        if (icon) {
+          icon.classList.toggle('fas', active);
+          icon.classList.toggle('far', !active);
+        }
+        if (count) {
+          var value = parseInt(count.textContent, 10) || 0;
+          count.textContent = String(active ? value + 1 : value - 1);
+        }
+      });
+    });
+    document.querySelectorAll('.pin-save').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var saved = button.classList.toggle('is-saved');
+        button.textContent = saved ? 'Сохранено' : 'Сохранить';
+      });
+    });
+    document.querySelectorAll('[data-fake-load-more]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        button.innerHTML = '<i class="fas fa-check"></i> Это демо-макет — здесь пока нечего подгружать';
+        button.disabled = true;
+      });
+    });
+  }
+
+  function mountPublicPage() {
+    cleanupPublicPage();
+    var page = document.body.getAttribute('data-page');
+    if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
+    var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
+    var articleSlug = null;
+    if (articleMatch) {
+      try { articleSlug = decodeURIComponent(articleMatch[1]); }
+      catch (error) { articleSlug = articleMatch[1]; }
+    }
+    updateAdminLinks(articleSlug);
+    var readyPromise = Promise.resolve();
+    if (page === 'profile' && window.PublicProfile) readyPromise = window.PublicProfile.init();
+    if (currentRouteCleanup && currentRouteCleanup.ready) readyPromise = currentRouteCleanup.ready;
+    currentMountedPage = page;
+    document.querySelectorAll('.site-nav-link[data-page]').forEach(function (link) {
+      link.classList.toggle('active', link.dataset.page === page);
+    });
+    initStaticDemos();
+    return readyPromise;
+  }
+
+  function cleanupPublicPage() {
+    if (currentRouteCleanup) {
+      currentRouteCleanup();
+      currentRouteCleanup = null;
+    }
+    if (currentMountedPage === 'profile' && window.PublicProfile) window.PublicProfile.cleanup();
+    currentMountedPage = null;
+  }
+
+  window.PublicSite = {
+    mountPage: mountPublicPage,
+    cleanupPage: cleanupPublicPage,
+    saveArticleListPosition: saveArticleListPosition,
+    navigateTo: function (url) {
+      if (window.PublicSiteRouter) window.PublicSiteRouter.navigate(url);
+      else window.location.href = url;
+    }
+  };
+
   ready(function () {
-    initPublicAntropedia();
     initSiteUserMenu();
 
     // --- Мобильное меню ---
@@ -1644,59 +1744,6 @@
       });
     }
 
-    // --- Подсветка активного пункта меню по текущему файлу ---
-    var page = document.body.getAttribute('data-page');
-    if (page) {
-      document.querySelectorAll('.site-nav-link[data-page="' + page + '"]').forEach(function (el) {
-        el.classList.add('active');
-      });
-    }
-
-    // --- Чипы-фильтры: чисто визуальное переключение active ---
-    document.querySelectorAll('.chip-row').forEach(function (row) {
-      row.addEventListener('click', function (e) {
-        var chip = e.target.closest('.filter-chip');
-        if (!chip) return;
-        row.querySelectorAll('.filter-chip').forEach(function (c) { c.classList.remove('active'); });
-        chip.classList.add('active');
-      });
-    });
-
-    // --- Лайк: локальный визуальный тоггл, без сохранения и запросов ---
-    document.querySelectorAll('.engage-item.is-like').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var icon = btn.querySelector('i');
-        var countEl = btn.querySelector('span');
-        var active = btn.classList.toggle('active');
-        if (icon) {
-          icon.classList.toggle('fas', active);
-          icon.classList.toggle('far', !active);
-        }
-        if (countEl) {
-          var n = parseInt(countEl.textContent, 10) || 0;
-          countEl.textContent = active ? n + 1 : n - 1;
-        }
-      });
-    });
-
-    // --- Сохранить (галерея): визуальный тоггл кнопки ---
-    document.querySelectorAll('.pin-save').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var saved = btn.classList.toggle('is-saved');
-        btn.textContent = saved ? 'Сохранено' : 'Сохранить';
-      });
-    });
-
-    // --- "Загрузить ещё": просто показывает, что кнопка кликабельна ---
-    document.querySelectorAll('[data-fake-load-more]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        btn.innerHTML = '<i class="fas fa-check"></i> Это демо-макет — здесь пока нечего подгружать';
-        btn.disabled = true;
-      });
-    });
+    window.setTimeout(mountPublicPage, 0);
   });
 })();

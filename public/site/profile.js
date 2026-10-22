@@ -1,9 +1,4 @@
 (function () {
-  function ready(fn) {
-    if (document.readyState !== 'loading') fn();
-    else document.addEventListener('DOMContentLoaded', fn);
-  }
-
   function el(id) {
     return document.getElementById(id);
   }
@@ -131,7 +126,7 @@
     document.title = name + ' — профиль AllTell';
   }
 
-  function bindEditableProfile(profile, targetId) {
+  function bindEditableProfile(profile, targetId, generation) {
     var nameForm = el('publicProfileNameForm');
     var bioForm = el('publicProfileBioForm');
     var noteForm = el('publicProfileNoteForm');
@@ -167,6 +162,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ display_name: displayName })
         });
+        if (generation !== profileLoadGeneration) return;
         profile.display_name = data.display_name;
         el('publicProfileName').textContent = data.display_name;
         setAvatar(profile);
@@ -174,9 +170,10 @@
         showForm(nameForm, false);
         showFeedback('Имя профиля обновлено.');
       } catch (error) {
+        if (generation !== profileLoadGeneration) return;
         showFeedback(error.message, true);
       } finally {
-        submit.disabled = false;
+        if (generation === profileLoadGeneration) submit.disabled = false;
       }
     });
 
@@ -190,15 +187,17 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bio: el('publicProfileBioInput').value })
         });
+        if (generation !== profileLoadGeneration) return;
         bioText = data.bio || '';
         profile.bio = bioText;
         el('publicProfileBio').textContent = bioText || 'Вы ещё ничего не написали о себе.';
         showForm(bioForm, false);
         showFeedback('Описание профиля обновлено.');
       } catch (error) {
+        if (generation !== profileLoadGeneration) return;
         showFeedback(error.message, true);
       } finally {
-        submit.disabled = false;
+        if (generation === profileLoadGeneration) submit.disabled = false;
       }
     });
 
@@ -211,10 +210,12 @@
       form.append('avatar', file);
       try {
         var data = await requestJson('/api/profile/avatar', { method: 'POST', body: form });
+        if (generation !== profileLoadGeneration) return;
         profile.avatar = data.avatar || null;
         setAvatar(profile);
         showFeedback('Аватар обновлён.');
       } catch (error) {
+        if (generation !== profileLoadGeneration) return;
         showFeedback(error.message, true);
       }
     });
@@ -222,10 +223,12 @@
       if (!window.confirm('Убрать аватар?')) return;
       try {
         await requestJson('/api/profile/avatar', { method: 'DELETE' });
+        if (generation !== profileLoadGeneration) return;
         profile.avatar = null;
         setAvatar(profile);
         showFeedback('Аватар удалён.');
       } catch (error) {
+        if (generation !== profileLoadGeneration) return;
         showFeedback(error.message, true);
       }
     });
@@ -245,14 +248,16 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ note: el('publicProfileNoteInput').value })
           });
+          if (generation !== profileLoadGeneration) return;
           noteText = data.admin_note || '';
           el('publicProfileNoteText').textContent = noteText || 'Заметок пока нет.';
           showForm(noteForm, false);
           showFeedback('Заметка сохранена.');
         } catch (error) {
+          if (generation !== profileLoadGeneration) return;
           showFeedback(error.message, true);
         } finally {
-          submit.disabled = false;
+          if (generation === profileLoadGeneration) submit.disabled = false;
         }
       });
     }
@@ -308,6 +313,7 @@
   var currentTargetId;
   var activeMediaTab;
   var mediaRequestId = 0;
+  var profileLoadGeneration = 0;
 
   async function loadMedia(tab) {
     var requestId = ++mediaRequestId;
@@ -363,6 +369,8 @@
   }
 
   async function loadProfile() {
+    var generation = ++profileLoadGeneration;
+    mediaRequestId++;
     var auth = window.authManager;
     el('siteProfileLogin').addEventListener('click', function () {
       if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
@@ -375,33 +383,43 @@
 
     try {
       if (!await auth.validateToken()) {
+        if (generation !== profileLoadGeneration) return;
         el('siteProfileLoading').hidden = true;
         el('siteProfileGate').hidden = false;
         return;
       }
+      if (generation !== profileLoadGeneration) return;
       var me = auth.getUser() || {};
       var pathId = window.location.pathname.match(/^\/profile\/([^/]+)\/?$/);
       var targetId = pathId ? decodeURIComponent(pathId[1]) : me.id;
       if (!targetId) throw new Error('Не удалось определить пользователя профиля.');
       currentTargetId = targetId;
       var data = await requestJson('/api/users/' + encodeURIComponent(targetId) + '/profile');
+      if (generation !== profileLoadGeneration) return;
       var profile = data.profile;
       if (!profile || !profile.id) throw new Error('Сервер не вернул профиль пользователя.');
 
       renderIdentity(profile);
       renderServers(Array.isArray(profile.servers) ? profile.servers : []);
-      bindEditableProfile(profile, targetId);
+      bindEditableProfile(profile, targetId, generation);
       el('siteProfileLoading').hidden = true;
       el('siteProfileContent').hidden = false;
       bindMediaTabs(String(targetId) === String(me.id));
     } catch (error) {
+      if (generation !== profileLoadGeneration) return;
       el('siteProfileLoading').hidden = true;
       el('siteProfileErrorText').textContent = error.message;
       el('siteProfileError').hidden = false;
     }
   }
 
-  ready(function () {
-    if (document.body.dataset.page === 'profile') loadProfile();
-  });
+  window.PublicProfile = {
+    init: loadProfile,
+    cleanup: function () {
+      profileLoadGeneration++;
+      mediaRequestId++;
+      activeMediaTab = null;
+      window.clearTimeout(showFeedback.timer);
+    }
+  };
 })();

@@ -38,10 +38,13 @@
 
 ## Что есть сейчас
 
-- `public/site/*.html` и `public/site/site.css` содержат публичную оболочку.
-  Antropedia (`public/site/antropedia.html`, `site.js`) подключена к гостевому
-  API; главная, страницы серверов и галереи пока остаются статическими
-  макетами. В шапке есть авторизованное меню профиля и кнопка входа для гостя;
+- `public/site/*.html` и `public/site/site.css` содержат публичную оболочку;
+  `public/site/router.js` выполняет внутренние переходы через History API и
+  подмену контента без полной перезагрузки, сохраняя прямые URL и back/forward.
+  Antropedia (`public/site/antropedia.html`, `site.js`) использует публичный
+  API для гостей и авторизованный API для вошедших пользователей; главная,
+  страницы серверов и галереи пока остаются статическими макетами. В шапке
+  есть авторизованное меню профиля и кнопка входа для гостя;
   форма входа предлагает перейти к регистрации. Страница профиля —
   `public/site/profile.html` и `profile.js` — использует общий стиль витрины.
 - Профиль использует авторизованные API; редактирование имени, аватара и bio
@@ -68,7 +71,8 @@
 Проверяемые исходники: `src/server.js`, `src/routes/pages.routes.js`,
 `src/routes/articles.routes.js`, `src/services/article-layers.js`,
 `src/services/articles-store.js`, `public/antropedia.js`,
-`public/spa-router.js`, `public/site/*.html`, `public/site/site.js`.
+`public/spa-router.js`, `public/site/*.html`, `public/site/site.js`,
+`public/site/router.js`.
 
 ## Адресная модель
 

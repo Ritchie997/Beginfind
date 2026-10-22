@@ -27,7 +27,7 @@ CodeMirror, D3 и геометрические библиотеки. Ищите 
 | `public/app.js`, `auth-system.js`, `request-guard.js` | Инициализация, auth/client state, общие запросы |
 | `public/spa-router.js` | Навигация, загрузка экранов и крупная часть UI/операций SPA |
 | `public/views/*.html` | HTML-фрагменты экранов, подгружаемые приложением |
-| `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/site.css` | Публичная витрина; сервер рендерит article metadata для preview, Antropedia загружает статьи из гостевого API |
+| `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичная витрина; клиентская SPA-навигация между публичными страницами, сервер рендерит article metadata для preview |
 | `public/editor-manager.js`, `blocks-renderer.js`, `editor-blocks.css` | Редактор и отображение документов статей-блоков |
 | `public/antropedia.js`, `antropedia.css`, `editor-obsidian.css` | Вики-экран и оформление Antropedia |
 | `public/graph-view.js` | Граф статей |

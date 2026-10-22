@@ -34,7 +34,7 @@ src/server.js
 | Загрузки | `src/uploads/multer-config.js`, `src/routes/uploads.routes.js` | Приём и ограничения файлов |
 | API | `src/routes/*.routes.js` | Границы HTTP API по доменным областям |
 | Клиентская оболочка | `public/index.html`, `public/app.js`, `public/spa-router.js` | Загрузка приложения, состояние и переключение экранов |
-| Публичный сайт | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/site.css` | Публичные страницы; маршрут статьи формирует preview metadata, Antropedia читает гостевой API и использует renderer блоков, профиль загружается отдельной публичной страницей |
+| Публичный сайт | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичные страницы с SPA-переходами через History API; маршрут статьи формирует preview metadata, Antropedia использует публичный/авторизованный API и renderer блоков, профиль монтируется по маршруту |
 | Разметка экранов | `public/views/*.html` | Фрагменты страниц SPA |
 
 Порядок middleware в `src/server.js` значим: middleware API и маршруты нельзя
