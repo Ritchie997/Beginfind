@@ -32,7 +32,7 @@ CodeMirror, D3 и геометрические библиотеки. Ищите 
 | `public/antropedia.js`, `antropedia.css`, `editor-obsidian.css` | Вики-экран и оформление Antropedia |
 | `public/graph-view.js` | Граф статей |
 | `public/maps/*.js`, `maps.css` | Ядро карт, календарь, редактор, UI; см. `map-core.js` |
-| `public/gallery.js`, `gallery.css` | Галерея |
+| `public/gallery.js`, `gallery.css`, `public/site/gallery-client.js`, `public/site/gallery.css` | Галерея в админке и публичной витрине; публичный клиент подключает существующий просмотрщик/редактор и управляет его lifecycle |
 | `public/stickers-manager.js`, `sticker-store.js`, `sticker-pack-view.js` | Каталог и просмотр стикеров |
 | `public/feedback-manager.js` | Обращения и связанные UI-действия |
 | `public/user-notifications.js`, `.css` | Панель уведомлений |

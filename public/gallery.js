@@ -120,13 +120,21 @@
   // и для автодополнения в окне выкладывания. Кэш на минуту.
   let articlesIndexCache = null;
   function loadArticlesIndex() {
-    if (articlesIndexCache && Date.now() - articlesIndexCache.at < 60 * 1000) return articlesIndexCache.promise;
-    const promise = window.apiClient.makeAuthenticatedRequest('/api/articles-index').then((r) => {
+    const isPublicGuest = window.PublicSite && !window.authManager?.isAuthenticated?.();
+    const cacheScope = isPublicGuest ? 'public' : 'authenticated';
+    if (articlesIndexCache && articlesIndexCache.scope === cacheScope && Date.now() - articlesIndexCache.at < 60 * 1000) {
+      return articlesIndexCache.promise;
+    }
+    const endpoint = isPublicGuest ? '/api/public/articles-index' : '/api/articles-index';
+    const promise = window.apiClient.makeAuthenticatedRequest(endpoint).then((r) => {
       const data = (r.success && r.data) || {};
-      const list = Array.isArray(data.accessible) ? data.accessible : [];
-      return { list, bySlug: new Map(list.map((a) => [a.slug, a])), restricted: new Set(data.restrictedSlugs || []) };
+      const list = Array.isArray(data)
+        ? data
+        : (Array.isArray(data.data) ? data.data : (Array.isArray(data.accessible) ? data.accessible : []));
+      const restricted = Array.isArray(data.restrictedSlugs) ? data.restrictedSlugs : [];
+      return { list, bySlug: new Map(list.map((a) => [a.slug, a])), restricted: new Set(restricted) };
     }).catch(() => ({ list: [], bySlug: new Map(), restricted: new Set() }));
-    articlesIndexCache = { at: Date.now(), promise };
+    articlesIndexCache = { at: Date.now(), promise, scope: cacheScope };
     return promise;
   }
 
@@ -141,6 +149,10 @@
   }
 
   function openArticle(slug) {
+    if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
+      window.PublicSite.navigateTo(`/antropedia/${encodeURIComponent(slug)}`);
+      return;
+    }
     if (window.spaRouter && typeof window.spaRouter.openAntropediaArticle === 'function') {
       window.spaRouter.openAntropediaArticle(slug);
     }
@@ -357,7 +369,13 @@
       const personEl = e.target.closest('[data-action="open-profile"]');
       if (personEl && personEl.getAttribute('data-value')) {
         const id = personEl.getAttribute('data-value');
-        this.close().then(() => window.spaRouter?.navigateTo(`/profile/${id}`));
+        this.close().then(() => {
+          if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
+            window.PublicSite.navigateTo(`/profile/${id}`);
+          } else {
+            window.spaRouter?.navigateTo(`/profile/${id}`);
+          }
+        });
         return;
       }
       super.handleCommentsListClick(e);
@@ -463,12 +481,12 @@
       }
 
       // Адрес работы — /gallery/:id (его можно скопировать из строки браузера).
-      const workPath = `/gallery/${work.id}`;
+      const workPath = window.PublicSite ? null : `/gallery/${work.id}`;
       if (this.el.hidden) {
         this.el.hidden = false;
         document.body.classList.add('gallery-viewer-open');
         this._histId = window.modalHistory ? window.modalHistory.open(() => this.close({ fromHistory: true }), workPath) : null;
-      } else if (window.location.pathname !== workPath) {
+      } else if (workPath && window.location.pathname !== workPath) {
         history.replaceState(history.state || {}, '', workPath);
       }
       this.el.scrollTop = 0;
@@ -780,6 +798,8 @@
       if (this._observer) { this._observer.disconnect(); this._observer = null; }
       if (this._resizeHandler) { window.removeEventListener('resize', this._resizeHandler); this._resizeHandler = null; }
       clearTimeout(this._searchDebounce);
+      this._loadSeq++;
+      this.loading = false;
     }
 
     async loadTags() {
@@ -857,6 +877,7 @@
         if (seq === this._loadSeq) {
           this.loading = false;
           if (this.loadingEl) this.loadingEl.hidden = true;
+          this.renderCount();
           // Экран ещё не заполнен — догружаем, не дожидаясь прокрутки.
           if (this.hasMore && this.sentinelEl && this.sentinelEl.getBoundingClientRect().top < window.innerHeight + 600) {
             setTimeout(() => this.loadMore(), 0);

@@ -2264,13 +2264,14 @@
     // возможности отвечать на комментарии под комментариями").
     renderCommentHtml(comment, replies, me, canModerate, isReply, topParentId) {
       const canDelete = canModerate || (me && me.id === comment.userId);
+      const authorId = comment.authorId ?? comment.userId;
       const { html, standalone } = formatCommentContent(comment.content, comment.stickers, comment.mentions);
       const reactionsBar = `<div class="antropedia-reactions" data-target-type="comment" data-target-id="${comment.id}">${reactionsBarInnerHtml(comment.reactions)}</div>`;
 
       return `
         <div class="antropedia-comment${isReply ? ' antropedia-comment-reply' : ''}" data-id="${comment.id}">
           <div class="antropedia-comment-head">
-            <span class="antropedia-comment-person" data-action="open-profile" data-value="${comment.userId}" title="Открыть профиль">
+            <span class="antropedia-comment-person" data-action="open-profile" data-value="${authorId || ''}" title="Открыть профиль">
               ${window.avatarHtml({ name: comment.authorName, avatar: comment.authorAvatar }, isReply ? 22 : 28)}
               <span class="antropedia-comment-author">${escapeHtml(comment.authorName)}</span>
             </span>

@@ -165,7 +165,7 @@ async function getAccessContext(user) {
 function rolesMatch(roles, ctx) {
   if (!roles || roles.length === 0) return true;
   return roles.some((r) => {
-    if (r.scope === 'system') return ctx.user.admin_role_id != null && Number(ctx.user.admin_role_id) === Number(r.id);
+    if (r.scope === 'system') return !!ctx.user && ctx.user.admin_role_id != null && Number(ctx.user.admin_role_id) === Number(r.id);
     if (r.scope === 'server') return ctx.serverRoleIds.has(Number(r.id));
     return false;
   });
@@ -176,7 +176,8 @@ function seesEverything(work, ctx) {
 }
 
 function canViewWork(work, ctx) {
-  if (!ctx || !ctx.user) return false;
+  if (!ctx) return false;
+  if (!ctx.user) return !work.roles || work.roles.length === 0;
   return seesEverything(work, ctx) || rolesMatch(work.roles, ctx);
 }
 
@@ -377,8 +378,9 @@ const SORTS = {
  *   (rowToWork) + cover/pagesCount/hasVariations + counts.
  */
 async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids } = {}) {
+  const userId = user ? user.id : null;
   const where = ['(EXISTS (SELECT 1 FROM gallery_images i WHERE i.work_id = w.id) OR w.author_id = ?)'];
-  const params = [user.id];
+  const params = [userId];
   // Слова с # ("#персонаж") — фильтр по тегам работы (по началу тега), остальные — текст.
   const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
   const hashTerms = words.filter((w) => w.startsWith('#')).map((w) => w.replace(/^#+/, '')).filter(Boolean);
@@ -412,7 +414,7 @@ async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0,
 
   let counts = null;
   if (sort === 'likes' || sort === 'views' || sort === 'comments') {
-    counts = await getCountsForWorks(user.id, works.map((w) => w.id));
+    counts = await getCountsForWorks(userId, works.map((w) => w.id));
     works.sort((a, b) => (counts.get(b.id)[sort] - counts.get(a.id)[sort]) || SORTS.newest(a, b));
   } else {
     works.sort(SORTS[sort] || SORTS.newest);
@@ -425,7 +427,7 @@ async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0,
   const pageIds = page.map((w) => w.id);
   const [covers, pageCounts] = await Promise.all([
     getCoversForWorks(page, ctx),
-    getCountsForWorks(user.id, pageIds)
+    getCountsForWorks(userId, pageIds)
   ]);
   const items = page.map((w) => ({ ...w, ...covers.get(w.id), counts: pageCounts.get(w.id) }));
   return { items, total };

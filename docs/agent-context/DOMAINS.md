@@ -17,7 +17,7 @@
 | Социальные действия и уведомления | `src/services/social-store.js`, `notification-seen.js`, `user-notifications.js`, `src/routes/notifications.routes.js` | `public/user-notifications.js`, `spa-router.js`, `antropedia.js` |
 | Черновики и папки черновиков | `src/routes/drafts.routes.js`, `src/services/drafts-store.js` | `public/spa-router.js`, `editor-manager.js` |
 | Интерактивные карты и миры | `src/routes/maps.routes.js`, `src/services/maps-store.js`, `worlds-store.js`, `map-access.js`, `map-tiler.js` | `public/maps/map-core.js`, `map-editor.js`, `maps-ui.js`, `map-calendar.js` |
-| Галерея | `src/routes/gallery.routes.js`, `src/services/gallery-store.js` | `public/gallery.js`, `public/gallery.css`, `public/views/gallery.html` |
+| Галерея | `src/routes/gallery.routes.js`, `src/services/gallery-store.js` | Админка: `public/gallery.js`, `public/gallery.css`, `public/views/gallery.html`; витрина: `public/site/gallery.html`, `public/site/gallery-client.js`, `public/site/gallery.css` |
 | Стикеры | `src/routes/stickers.routes.js`, `src/services/stickers-store.js` | `public/stickers-manager.js`, `sticker-store.js`, `sticker-pack-view.js`, `public/views/stickers.html` |
 | Обращения и модерация кейсов | `src/routes/feedback.routes.js`, `src/services/feedback-store.js` | `public/feedback-manager.js`, `public/views/feedback.html` |
 | Бэкапы | `src/routes/backups.routes.js`, `src/services/backup.js`, `backup-settings.js` | `public/backup-ui.js`, `public/views/settings.html` |

@@ -1681,6 +1681,7 @@
     cleanupPublicPage();
     var page = document.body.getAttribute('data-page');
     if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
+    if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
     var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
     var articleSlug = null;
     if (articleMatch) {

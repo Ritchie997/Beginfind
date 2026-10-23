@@ -34,7 +34,7 @@ src/server.js
 | Загрузки | `src/uploads/multer-config.js`, `src/routes/uploads.routes.js` | Приём и ограничения файлов |
 | API | `src/routes/*.routes.js` | Границы HTTP API по доменным областям |
 | Клиентская оболочка | `public/index.html`, `public/app.js`, `public/spa-router.js` | Загрузка приложения, состояние и переключение экранов |
-| Публичный сайт | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичные страницы с SPA-переходами через History API; маршрут статьи формирует preview metadata, Antropedia использует публичный/авторизованный API и renderer блоков, профиль монтируется по маршруту |
+| Публичный сайт | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичные страницы с SPA-переходами через History API; Antropedia, профиль и галерея подключают доменную логику к общей оболочке |
 | Разметка экранов | `public/views/*.html` | Фрагменты страниц SPA |
 
 Порядок middleware в `src/server.js` значим: middleware API и маршруты нельзя
@@ -49,7 +49,7 @@ src/server.js
 | Статьи Antropedia | `articles.routes.js`, `public-articles.routes.js`, `articles-store.js`, `public-articles.js`, `blocks.js`, `article-layers.js`, `mentions.js` | `editor-manager.js`, `blocks-renderer.js`, `antropedia.js`, `site/site.js`, `spa-router.js`, `views/articles.html`, `views/antropedia.html` |
 | Граф статей и теги | `articles.routes.js`, `tag-colors.js` | `graph-view.js`, `antropedia.js`, `views/tags.html`, `views/dashboard.html` |
 | Карты и миры | `maps.routes.js`, `maps-store.js`, `worlds-store.js`, `map-access.js`, `map-tiler.js` | `maps/map-core.js`, `map-editor.js`, `maps-ui.js`, `map-calendar.js` |
-| Галерея | `gallery.routes.js`, `gallery-store.js` | `gallery.js`, `gallery.css`, `views/gallery.html` |
+| Галерея | `gallery.routes.js`, `gallery-store.js` | Админка: `gallery.js`, `gallery.css`, `views/gallery.html`; публичный экран: `site/gallery.html`, `site/gallery-client.js`, `site/gallery.css` |
 | Стикеры | `stickers.routes.js`, `stickers-store.js` | `stickers-manager.js`, `sticker-store.js`, `sticker-pack-view.js`, `views/stickers.html` |
 | Черновики статей | `drafts.routes.js`, `drafts-store.js` | `spa-router.js`, `editor-manager.js` |
 | Закладки и социальные действия | `bookmarks.routes.js`, `bookmarks-store.js`, `social-store.js` | `spa-router.js`, `antropedia.js` |

@@ -138,6 +138,12 @@
 
 ## `gallery.routes.js`
 
+- `GET /public/gallery/works`
+- `GET /public/gallery/tags`
+- `GET /public/gallery/works/:id`
+- `GET /public/gallery/works/:id/likes`
+- `GET /public/gallery/works/:id/reactions`
+- `GET /public/gallery/works/:id/comments`
 - `GET /gallery/works`
 - `GET /gallery/tags`
 - `GET /gallery/by-article/:slug`

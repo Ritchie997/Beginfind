@@ -155,6 +155,18 @@ async function linkedArticlesFor(slugs, user) {
   return out;
 }
 
+function publicLinkedArticlesFor(slugs) {
+  const out = [];
+  for (const slug of slugs) {
+    const article = articlesStore.getArticle(slug);
+    if (!article) continue;
+    const resolved = articleLayers.resolvePublicArticleLayers(article);
+    if (!resolved) continue;
+    out.push({ slug, title: resolved.layer.title || article.title || slug });
+  }
+  return out;
+}
+
 async function validateRolesOrThrow(user, roles) {
   if (!(await gallery.canAssignRoles(user, roles))) {
     throw new Error('Можно ограничить доступ только ролями, которые есть у вас самих');
@@ -214,6 +226,143 @@ async function fullWork(work, user) {
     can_change_author: !!(user.is_root || user.is_role_manager)
   };
 }
+
+// Публичная витрина доступна без аккаунта, но только для открытых работ и
+// вариаций. Изменяющие действия по-прежнему используют защищённые маршруты.
+async function loadPublicWork(req, res) {
+  const work = await gallery.getWorkRow(req.params.id);
+  if (!work) {
+    res.status(404).json({ error: 'Работа не найдена' });
+    return null;
+  }
+  const ctx = await gallery.getAccessContext(null);
+  if (!gallery.canViewWork(work, ctx) || !(await gallery.getPagesForUser(work, ctx)).length) {
+    res.status(404).json({ error: 'Работа не найдена' });
+    return null;
+  }
+  return work;
+}
+
+async function publicFullWork(work) {
+  const ctx = await gallery.getAccessContext(null);
+  const [pages, associatedIds, counts, serverName] = await Promise.all([
+    gallery.getPagesForUser(work, ctx),
+    gallery.getAssociatedIds(work.id),
+    gallery.getCountsForWorks(null, [work.id]),
+    getServerName(work.server_id)
+  ]);
+  const associated = associatedIds.length
+    ? await cardsFor((await gallery.listWorks(null, { ids: associatedIds, limit: 100 })).items)
+    : [];
+  const count = counts.get(work.id);
+  const usersMap = await getUsersByIds([work.author_id]);
+  return {
+    id: work.id,
+    title: work.title,
+    description: work.description,
+    tags: work.tags,
+    scrollMode: work.scroll_mode,
+    serverId: work.server_id,
+    serverName,
+    restricted: false,
+    author: authorInfo(work.author_id, usersMap),
+    pages,
+    associated,
+    articles: publicLinkedArticlesFor(work.article_slugs),
+    likes: count.likes,
+    liked: count.liked,
+    comments: count.comments,
+    views: count.views,
+    created_at: work.created_at,
+    updated_at: work.updated_at,
+    can_edit: false,
+    can_delete: false,
+    can_change_author: false
+  };
+}
+
+router.get('/public/gallery/works', async (req, res) => {
+  try {
+    const { items, total } = await gallery.listWorks(null, {
+      q: req.query.q,
+      tag: req.query.tag,
+      authorId: req.query.author,
+      sort: req.query.sort,
+      limit: req.query.limit,
+      offset: req.query.offset
+    });
+    res.json({ data: await cardsFor(items), total });
+  } catch (err) {
+    console.error('[gallery] public list:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/tags', async (req, res) => {
+  try {
+    res.json(await gallery.listTags(null));
+  } catch (err) {
+    console.error('[gallery] public tags:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/works/:id', async (req, res) => {
+  try {
+    const work = await loadPublicWork(req, res);
+    if (!work) return;
+    res.json(await publicFullWork(work));
+  } catch (err) {
+    console.error('[gallery] public get:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/works/:id/likes', async (req, res) => {
+  try {
+    const work = await loadPublicWork(req, res);
+    if (!work) return;
+    res.json(await gallery.getLikeSummary(work.id, null));
+  } catch (err) {
+    console.error('[gallery] public likes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/works/:id/reactions', async (req, res) => {
+  try {
+    const work = await loadPublicWork(req, res);
+    if (!work) return;
+    const map = await social.getReactionsForTargets('gallery', [work.id], null);
+    res.json({ reactions: await resolveReactions(map.get(String(work.id)) || []) });
+  } catch (err) {
+    console.error('[gallery] public reactions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/works/:id/comments', async (req, res) => {
+  try {
+    const work = await loadPublicWork(req, res);
+    if (!work) return;
+    const withStickers = await stickers.attachStickersToItems(await gallery.listComments(work.id));
+    const comments = await attachCommentExtras(withStickers, null);
+    res.json(comments.map((comment) => ({
+      id: comment.id,
+      authorId: comment.userId,
+      authorName: comment.authorName,
+      authorAvatar: comment.authorAvatar,
+      content: comment.content,
+      parentId: comment.parentId,
+      createdAt: comment.createdAt,
+      stickers: comment.stickers || {},
+      reactions: comment.reactions || []
+    })));
+  } catch (err) {
+    console.error('[gallery] public comments:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ===== Витрина / поиск =====
 
