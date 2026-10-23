@@ -1503,9 +1503,22 @@
   const embedInstances = new Set();
   const mapCache = new Map(); // mapId -> Promise<data>
 
+  function requestViewerMap(url) {
+    if (window.apiClient) return window.apiClient.makeAuthenticatedRequest(url);
+    let token = '';
+    try { token = localStorage.getItem('alltell_auth_token') || ''; } catch (e) { /* нет доступа к хранилищу */ }
+    return fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        return response.ok
+          ? { success: true, data }
+          : { success: false, data, error: data.error || `Ошибка запроса (${response.status})` };
+      });
+  }
+
   function fetchViewerMap(mapId, { fresh = false } = {}) {
     if (fresh || !mapCache.has(mapId)) {
-      const p = window.apiClient.makeAuthenticatedRequest(`/api/maps/${encodeURIComponent(mapId)}`).then((r) => {
+      const p = requestViewerMap(`/api/maps/${encodeURIComponent(mapId)}`).then((r) => {
         if (!r.success) throw new Error((r.data && r.data.error) || r.error || 'Карта недоступна');
         return r.data;
       });
@@ -1524,7 +1537,7 @@
     });
   }
 
-  async function mountEmbeds(root) {
+  async function mountEmbeds(root, { disableFullscreen = false } = {}) {
     sweepEmbeds();
     if (!window.L) return;
     const els = (root || document).querySelectorAll('.blk-map[data-map-id]:not([data-map-mounted])');
@@ -1536,7 +1549,9 @@
       const canvas = el.querySelector('.blk-map-canvas') || el;
       // В предпросмотре редактора статей переход по зоне увёл бы со
       // страницы редактора — там зоны только подсвечиваются.
-      const inEditor = !!el.closest('.editor-panes, .preview-pane');
+      const publicArticle = !!el.closest('.public-article-content');
+      const inEditor = !publicArticle && !!el.closest('.editor-panes, .preview-pane');
+      const noFullscreen = disableFullscreen || publicArticle;
       try {
         const data = await fetchViewerMap(mapId);
         canvas.innerHTML = '';
@@ -1547,23 +1562,25 @@
         const viewer = new MapViewer(canvas, data, {
           mode: 'embed', view: cfg.view, focusZoneId: cfg.focusZoneId, basemapId: cfg.basemapId, time: cfg.time,
           hiddenLayers: cfg.hiddenLayers, lockView: !!cfg.locked, lockMargin: cfg.lockMargin,
-          onZoneActivate: inEditor ? () => window.showMessage?.('В предпросмотре редактора переход по зонам отключён', 'info') : undefined
+          onZoneActivate: publicArticle
+            ? (zone) => { if (zone.article) window.PublicSite?.navigateTo(`/antropedia/${encodeURIComponent(zone.article)}`); }
+            : inEditor ? () => window.showMessage?.('В предпросмотре редактора переход по зонам отключён', 'info') : undefined
         });
         embedInstances.add(viewer);
-        addEmbedControls(el, viewer, mapId, { inEditor, locked: !!cfg.locked });
+        addEmbedControls(el, viewer, mapId, { inEditor, locked: !!cfg.locked, disableFullscreen: noFullscreen });
       } catch (err) {
         canvas.innerHTML = `<div class="blk-map-error"><i class="fas fa-map"></i> ${escapeHtml(err.message)}</div>`;
       }
     }
   }
 
-  function addEmbedControls(el, viewer, mapId, { inEditor = false, locked = false } = {}) {
+  function addEmbedControls(el, viewer, mapId, { inEditor = false, locked = false, disableFullscreen = false } = {}) {
     const bar = document.createElement('div');
     bar.className = 'blk-map-controls';
     const basemaps = viewer.data.basemaps;
     // «Только этот участок» — без перехода к полной карте.
     bar.innerHTML = `
-      ${inEditor || locked ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
+      ${inEditor || locked || disableFullscreen ? '' : '<button type="button" class="blk-map-fullscreen" title="Открыть на весь экран"><i class="fas fa-expand"></i></button>'}`;
     bar.querySelector('.blk-map-fullscreen')?.addEventListener('click', () => {
       window.MapsUI?.openMapPage(mapId, { zoneId: viewer.selectedId, view: viewer.getView(), basemapId: viewer.currentBasemapId, time: viewer.time });
     });

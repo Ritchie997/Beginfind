@@ -1047,6 +1047,7 @@
         return window.renderArticleBlocks(article.content, indexData.index, restricted);
       }).then(function (html) {
         content.innerHTML = html;
+        window.attachBlocksInteractions?.(content);
         content.querySelectorAll('a[data-slug]').forEach(function (link) {
           link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
         });

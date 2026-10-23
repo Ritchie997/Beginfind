@@ -595,7 +595,11 @@
     if (!container) return;
     // Карты монтируются при каждом вызове (содержимое контейнера могло
     // перерисоваться), слушатель спойлеров — один раз.
-    if (window.MapCore) window.MapCore.mountEmbeds(container);
+    if (window.MapCore) {
+      window.MapCore.mountEmbeds(container, {
+        disableFullscreen: !!container.closest('.public-article-content')
+      });
+    }
     if (container.__blocksInteractionsAttached) return;
     container.__blocksInteractionsAttached = true;
     container.addEventListener('click', (e) => {
