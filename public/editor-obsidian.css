@@ -787,8 +787,19 @@
 
 /* --- чек-лист (список с disabled-чекбоксами, только для чтения) --- */
 .preview-pane ul.blk-checklist { list-style: none; padding-left: 0; }
-.preview-pane .blk-check-item { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; }
-.preview-pane .blk-check-item input { margin: 0; }
+.preview-pane ul.blk-checklist > li.blk-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 0;
+}
+.preview-pane .blk-check-item input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.preview-pane .blk-check-item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 .preview-pane .blk-table-wrap { overflow-x: auto; margin: 0 0 1em; }
 .preview-pane hr.blk-divider { border: none; border-top: 1px solid var(--background-accent); margin: 1.4em 0; }
