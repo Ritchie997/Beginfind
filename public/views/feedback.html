@@ -8,6 +8,7 @@
          (feedback_triage / feedback_cases / feedback_decide), см. feedback-manager.js -->
     <div class="editor-mode-tabs feedback-tabs" id="feedbackTabs">
         <button type="button" class="editor-mode-tab active" data-feedback-tab="mine"><i class="fas fa-user"></i> Мои обращения</button>
+        <button type="button" class="editor-mode-tab" data-feedback-tab="public"><i class="fas fa-comments"></i> Баги и идеи</button>
         <button type="button" class="editor-mode-tab" data-feedback-tab="triage" hidden>
             <i class="fas fa-filter"></i> 1 · Очистка
             <span class="feedback-badge" data-feedback-badge="triage" hidden>0</span>
@@ -31,6 +32,14 @@
             <p>Нашли проблему или есть идея? Нажмите «Новое обращение». Модераторы проверят его, объединят с похожими и передадут на решение. Статус будет виден здесь, а пока решения нет — обращение можно поправить. Пожаловаться на статью можно кнопкой с флажком под самой статьёй в Ибрипедии.</p>
         </div>
         <div class="feedback-list" id="feedbackMineList"></div>
+    </div>
+
+    <!-- ============ Общая лента принятых багов и идей ============ -->
+    <div class="feedback-panel" id="feedbackPanelPublic" hidden>
+        <p class="feedback-explain">Здесь опубликованы принятые модераторами баги и идеи. Обсуждать их могут все подтверждённые пользователи. Жалобы на статьи и ещё не проверенные обращения остаются приватными.</p>
+        <div class="loading-pulse" id="feedbackPublicLoading">Загрузка...</div>
+        <div class="feedback-empty" id="feedbackPublicEmpty" hidden>Пока нет принятых багов и идей.</div>
+        <div class="feedback-list" id="feedbackPublicList"></div>
     </div>
 
     <!-- ============ 1 линия: очистка ============ -->
@@ -163,6 +172,27 @@
         </div>
     </div>
 
+    <!-- ============ Модалка: обсуждение бага или идеи ============ -->
+    <div class="modal-overlay" id="feedbackDiscussionModal" hidden>
+        <div class="modal-box feedback-discussion-box">
+            <div class="modal-header">
+                <h3 id="feedbackDiscussionTitle">Обсуждение</h3>
+                <button class="modal-close" data-close-modal="feedbackDiscussionModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="feedback-field-value" id="feedbackDiscussionDescription"></p>
+                <div class="feedback-discussion-list" id="feedbackDiscussionComments"></div>
+                <div class="form-group feedback-discussion-form">
+                    <label class="form-label" for="feedbackDiscussionInput">Ваш комментарий</label>
+                    <textarea class="form-textarea" id="feedbackDiscussionInput" maxlength="2000" placeholder="Поделитесь уточнением или опытом"></textarea>
+                </div>
+                <div class="btns-compact feedback-discussion-actions">
+                    <button type="button" class="btn btn-primary" id="feedbackDiscussionSubmit"><i class="fas fa-paper-plane"></i> Отправить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ============ Модалка: текст (причина отклонения / решение / доработка) ============ -->
     <div class="modal-overlay" id="feedbackTextModal" hidden>
         <div class="modal-box">
@@ -207,6 +237,12 @@
 
 .feedback-list { display: flex; flex-direction: column; gap: 8px; }
 .feedback-card { background: var(--background-secondary); border: 1px solid var(--background-accent); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.feedback-discussion-box { width: 720px; }
+.feedback-discussion-list { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+.feedback-discussion-comment { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--background-accent); border-radius: 8px; }
+.feedback-discussion-comment .feedback-card-meta { justify-content: space-between; }
+.feedback-discussion-form { margin-bottom: 8px; }
+.feedback-discussion-actions { justify-content: flex-end; }
 .feedback-card.is-clickable { cursor: pointer; transition: border-color 0.15s; }
 .feedback-card.is-clickable:hover { border-color: var(--blurple); }
 .feedback-card-head { display: flex; align-items: flex-start; gap: 8px; }

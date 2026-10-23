@@ -187,6 +187,8 @@
       this._textModalResolve = null;
       this.editingReport = null; // своё обращение в форме правки (null — новое)
       this.myReports = new Map();
+      this.publicReports = new Map();
+      this.activePublicReportId = null;
       this.queueReports = new Map();
       this.triageReports = new Map();
       this.newCaseIds = [];
@@ -215,6 +217,7 @@
       const user = (window.authManager && authManager.getUser()) || {};
       const has = (key) => !!(user.is_root || (user.permissions && user.permissions[key]));
       this.perms = { triage: has('feedback_triage'), cases: has('feedback_cases'), decide: has('feedback_decide') };
+      this.canModerateComments = this.perms.triage || this.perms.cases || this.perms.decide;
       this.triageView = 'new';
       this.root.querySelector('[data-feedback-tab="triage"]').hidden = !this.perms.triage;
       this.root.querySelector('[data-feedback-tab="cases"]').hidden = !this.perms.cases;
@@ -243,9 +246,9 @@
       root.querySelectorAll('[data-close-modal]').forEach((btn) => {
         btn.addEventListener('click', () => this.closeModal(btn.dataset.closeModal));
       });
-      // Формы с набранным текстом (обращение, сборка кейса) по клику мимо
+      // Формы с набранным текстом (обращение, сборка кейса, комментарий) по клику мимо
       // окна не закрываются — иначе случайный клик стирал бы написанное.
-      root.querySelectorAll('.modal-overlay:not(#feedbackCreateModal):not(#feedbackNewCaseModal)').forEach((overlay) => {
+      root.querySelectorAll('.modal-overlay:not(#feedbackCreateModal):not(#feedbackNewCaseModal):not(#feedbackDiscussionModal)').forEach((overlay) => {
         overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeModal(overlay.id); });
       });
 
@@ -269,6 +272,17 @@
         if (btn) this.openCreateModal(this.myReports.get(Number(btn.dataset.editReport)));
         const withdrawBtn = e.target.closest('[data-withdraw-report]');
         if (withdrawBtn) runExclusive(withdrawBtn, () => this.withdrawReport(Number(withdrawBtn.dataset.withdrawReport)));
+      });
+      root.querySelector('#feedbackPublicList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-open-discussion]');
+        if (btn) this.openDiscussion(Number(btn.dataset.openDiscussion));
+      });
+      root.querySelector('#feedbackDiscussionSubmit').addEventListener('click', (e) => {
+        runExclusive(e.currentTarget, () => this.submitDiscussionComment());
+      });
+      root.querySelector('#feedbackDiscussionComments').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-delete-comment]');
+        if (btn) runExclusive(btn, () => this.deleteDiscussionComment(Number(btn.dataset.deleteComment)));
       });
 
       // --- Первая линия ---
@@ -352,6 +366,7 @@
       this.currentTab = tab;
       this.root.querySelectorAll('[data-feedback-tab]').forEach((b) => b.classList.toggle('active', b.dataset.feedbackTab === tab));
       this.root.querySelector('#feedbackPanelMine').hidden = tab !== 'mine';
+      this.root.querySelector('#feedbackPanelPublic').hidden = tab !== 'public';
       this.root.querySelector('#feedbackPanelTriage').hidden = tab !== 'triage';
       this.root.querySelector('#feedbackPanelCases').hidden = tab !== 'cases';
       this.root.querySelector('#feedbackPanelDecide').hidden = tab !== 'decide';
@@ -360,6 +375,7 @@
 
     async refreshCurrentTab() {
       if (this.currentTab === 'mine') await this.loadMine();
+      else if (this.currentTab === 'public') await this.loadPublicBoard();
       else if (this.currentTab === 'triage') await this.loadTriage();
       else if (this.currentTab === 'cases') await Promise.all([this.loadQueue(), this.loadCasesList()]);
       else if (this.currentTab === 'decide') await this.loadDecide();
@@ -438,6 +454,95 @@
             </div>`;
         }
       );
+    }
+
+    async loadPublicBoard() {
+      await this.loadList(
+        { loading: '#feedbackPublicLoading', empty: '#feedbackPublicEmpty', list: '#feedbackPublicList' },
+        async () => {
+          const reports = await this.api('/api/feedback/public');
+          this.publicReports = new Map(reports.map((report) => [report.id, report]));
+          return reports;
+        },
+        (report) => `
+          <div class="feedback-card">
+            <div class="feedback-card-head">
+              <div class="feedback-card-title">#${report.id} · ${escapeHtml(report.title)}</div>
+            </div>
+            <div class="feedback-card-meta">${typeChip(report.type)}<span>${escapeHtml(report.authorName)}</span><span>${formatDate(report.createdAt)}</span></div>
+            <div class="feedback-field-value">${escapeHtml(report.description)}</div>
+            <div class="feedback-card-actions btns-compact">
+              <button type="button" class="btn btn-secondary btn-sm" data-open-discussion="${report.id}">
+                <i class="fas fa-comments"></i> Комментарии (${report.commentCount})
+              </button>
+            </div>
+          </div>`
+      );
+    }
+
+    async openDiscussion(reportId) {
+      const report = this.publicReports.get(reportId);
+      if (!report) return;
+      this.activePublicReportId = reportId;
+      this.root.querySelector('#feedbackDiscussionTitle').textContent = `#${report.id} · ${report.title}`;
+      this.root.querySelector('#feedbackDiscussionDescription').textContent = report.description;
+      this.root.querySelector('#feedbackDiscussionInput').value = '';
+      this.root.querySelector('#feedbackDiscussionComments').innerHTML = '<div class="feedback-empty">Загрузка комментариев...</div>';
+      this.root.querySelector('#feedbackDiscussionModal').hidden = false;
+      await this.loadDiscussionComments(reportId);
+    }
+
+    async loadDiscussionComments(reportId) {
+      try {
+        const comments = await this.api(`/api/feedback/public/${reportId}/comments`);
+        if (this.activePublicReportId !== reportId) return;
+        const user = (window.authManager && authManager.getUser()) || {};
+        const canDelete = (comment) => comment.authorId === user.id || this.canModerateComments || user.is_root;
+        this.root.querySelector('#feedbackDiscussionComments').innerHTML = comments.length
+          ? comments.map((comment) => `
+            <article class="feedback-discussion-comment">
+              <div class="feedback-card-meta"><strong>${escapeHtml(comment.authorName)}</strong><time>${formatDate(comment.createdAt)}</time></div>
+              <div class="feedback-field-value">${escapeHtml(comment.text)}</div>
+              ${canDelete(comment) ? `<button type="button" class="btn btn-secondary btn-sm" data-delete-comment="${comment.id}"><i class="fas fa-trash"></i> Удалить</button>` : ''}
+            </article>`).join('')
+          : '<div class="feedback-empty">Пока нет комментариев.</div>';
+      } catch (err) {
+        showMessage(err.message, 'error');
+      }
+    }
+
+    async submitDiscussionComment() {
+      const reportId = this.activePublicReportId;
+      if (!reportId) return;
+      const input = this.root.querySelector('#feedbackDiscussionInput');
+      const text = input.value.trim();
+      if (!text) {
+        showMessage('Введите комментарий', 'warning');
+        return;
+      }
+      try {
+        await this.api(`/api/feedback/public/${reportId}/comments`, 'POST', { text });
+        input.value = '';
+        await Promise.all([this.loadDiscussionComments(reportId), this.loadPublicBoard()]);
+      } catch (err) {
+        showMessage(err.message, 'error');
+      }
+    }
+
+    async deleteDiscussionComment(commentId) {
+      const ok = await window.confirmDialog.open({
+        title: 'Удалить комментарий',
+        message: 'Удалить этот комментарий?',
+        confirmLabel: 'Удалить'
+      });
+      if (!ok) return;
+      try {
+        await this.api(`/api/feedback/public/comments/${commentId}`, 'DELETE');
+        const reportId = this.activePublicReportId;
+        if (reportId) await Promise.all([this.loadDiscussionComments(reportId), this.loadPublicBoard()]);
+      } catch (err) {
+        showMessage(err.message, 'error');
+      }
     }
 
     // Отзыв своего обращения — пока по нему нет решения (см.

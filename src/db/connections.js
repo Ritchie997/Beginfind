@@ -601,6 +601,16 @@ const feedbackDb = new sqlite3.Database(dbPath('feedback.db'), (err) => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_events_case ON feedback_events (case_id)');
+
+      feedbackDb.run(`CREATE TABLE IF NOT EXISTS feedback_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        report_id INTEGER NOT NULL REFERENCES feedback_reports(id),
+        author_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      feedbackDb.run('CREATE INDEX IF NOT EXISTS idx_feedback_comments_report ON feedback_comments (report_id, created_at, id)');
     });
   }
 });

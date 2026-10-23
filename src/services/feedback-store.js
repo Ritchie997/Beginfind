@@ -435,6 +435,103 @@ async function listMyReports(userId) {
   }));
 }
 
+async function getPublicReport(reportId) {
+  const id = toId(reportId);
+  if (!id) throw httpError(404, 'Обращение не найдено');
+  const row = await get(
+    `SELECT r.id, r.type, r.title, r.description, r.author_name, r.created_at,
+       c.status as case_status, c.decision as case_decision,
+       (SELECT COUNT(*) FROM feedback_comments fc WHERE fc.report_id = r.id) as comment_count
+     FROM feedback_reports r LEFT JOIN feedback_cases c ON c.id = r.case_id
+     WHERE r.id = ? AND r.type IN ('bug', 'idea') AND r.status = 'accepted'`,
+    [id]
+  );
+  if (!row) throw httpError(404, 'Обращение не найдено');
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    description: row.description,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+    caseStatus: row.case_status || null,
+    caseDecision: row.case_decision || null,
+    commentCount: row.comment_count
+  };
+}
+
+async function listPublicReports() {
+  const rows = await all(
+    `SELECT r.id, r.type, r.title, r.description, r.author_name, r.created_at,
+       c.status as case_status, c.decision as case_decision,
+       (SELECT COUNT(*) FROM feedback_comments fc WHERE fc.report_id = r.id) as comment_count
+     FROM feedback_reports r LEFT JOIN feedback_cases c ON c.id = r.case_id
+     WHERE r.type IN ('bug', 'idea') AND r.status = 'accepted'
+     ORDER BY r.created_at DESC, r.id DESC`
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    description: row.description,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+    caseStatus: row.case_status || null,
+    caseDecision: row.case_decision || null,
+    commentCount: row.comment_count
+  }));
+}
+
+async function listPublicComments(reportId) {
+  const report = await getPublicReport(reportId);
+  const rows = await all(
+    'SELECT id, author_id, author_name, text, created_at FROM feedback_comments WHERE report_id = ? ORDER BY created_at ASC, id ASC',
+    [report.id]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    reportId: report.id,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    text: row.text,
+    createdAt: row.created_at
+  }));
+}
+
+async function createPublicComment(user, reportId, input) {
+  const report = await getPublicReport(reportId);
+  const text = requireText(input.text, LIMITS.comment, 'Комментарий');
+  const result = await run(
+    'INSERT INTO feedback_comments (report_id, author_id, author_name, text) VALUES (?, ?, ?, ?)',
+    [report.id, user.id, actorName(user), text]
+  );
+  const row = await get('SELECT id, author_id, author_name, text, created_at FROM feedback_comments WHERE id = ?', [result.lastID]);
+  return {
+    id: row.id,
+    reportId: report.id,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    text: row.text,
+    createdAt: row.created_at
+  };
+}
+
+async function deletePublicComment(user, commentId) {
+  const id = toId(commentId);
+  if (!id) throw httpError(404, 'Комментарий не найден');
+  const row = await get('SELECT id, report_id, author_id FROM feedback_comments WHERE id = ?', [id]);
+  if (!row) throw httpError(404, 'Комментарий не найден');
+  await getPublicReport(row.report_id);
+  const canModerate = user.is_root || (user.permissions && (
+    user.permissions.feedback_triage || user.permissions.feedback_cases || user.permissions.feedback_decide
+  ));
+  if (row.author_id !== user.id && !canModerate) {
+    throw httpError(403, 'Можно удалить только свой комментарий');
+  }
+  await run('DELETE FROM feedback_comments WHERE id = ?', [id]);
+  return { deleted: true };
+}
+
 // ---------- Первая линия ----------
 
 async function listReportsByStatus(status) {
@@ -792,6 +889,10 @@ module.exports = {
   updateOwnReport,
   withdrawOwnReport,
   listMyReports,
+  listPublicReports,
+  listPublicComments,
+  createPublicComment,
+  deletePublicComment,
   listReportsByStatus,
   listUnassignedAccepted,
   acceptReport,

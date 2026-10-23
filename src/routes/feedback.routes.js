@@ -43,6 +43,11 @@ router.post('/feedback/reports', ...base, handle((req) => store.createReport(req
 
 router.get('/feedback/reports/mine', ...base, handle((req) => store.listMyReports(req.user.id)));
 
+router.get('/feedback/public', ...base, handle(() => store.listPublicReports()));
+router.get('/feedback/public/:id/comments', ...base, handle((req) => store.listPublicComments(req.params.id)));
+router.post('/feedback/public/:id/comments', ...base, handle((req) => store.createPublicComment(req.user, req.params.id, req.body || {})));
+router.delete('/feedback/public/comments/:commentId', ...base, handle((req) => store.deletePublicComment(req.user, req.params.commentId)));
+
 // Правка своего обращения (пока по нему нет решения) — см. updateOwnReport.
 router.put('/feedback/reports/:id', ...base, handle((req) => store.updateOwnReport(req.user, req.params.id, req.body || {})));
 
