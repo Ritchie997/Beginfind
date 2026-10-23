@@ -677,6 +677,7 @@
           if (el) {
             el.classList.toggle('is-hidden', !show);
             el.classList.toggle('is-filtered', this.isZoneFiltered(l.zone));
+            el.classList.toggle('is-active', show && (id === this.hoveredId || id === this.selectedId));
           }
           if (show) this.labelVisible.add(id);
         });
@@ -696,7 +697,7 @@
       const zone = this.zoneById(id);
       if (!layer || !zone) return;
       const type = this.types.get(zone.typeId);
-      const active = id === this.hoveredId || id === this.selectedId;
+      const active = (id === this.hoveredId || id === this.selectedId) && this.zoneZoomVisible(zone);
       layer.setStyle(active ? hoverStyle(type, zone.style) : baseStyle(type, zone.style));
       const el = layer.getElement && layer.getElement();
       if (el) {
@@ -712,7 +713,9 @@
     }
 
     setHover(id) {
+      if (id && !this.zoneZoomVisible(this.zoneById(id))) id = null;
       const prev = this.hoveredId;
+      if (prev === id) return;
       this.hoveredId = id;
       if (prev) this.applyStyle(prev);
       if (id) this.applyStyle(id);
@@ -744,8 +747,8 @@
     zoneZoomVisible(zone) {
       if (!zone) return false;
       if (!existsAt(zone, this.time)) return false; // зоны ещё/уже нет в этот момент
+      if (this.isZoneExcluded(zone) || this.isZoneFiltered(zone)) return false;
       if (zone.id === this.selectedId) return true;
-      if (this.isZoneExcluded(zone)) return false;
       return this.layerVisibleForZone(zone);
     }
 
@@ -756,16 +759,16 @@
       return layerVisibleAtZoom(layer, this.map.getZoom(), this.fullZoom, this.map.getMaxZoom());
     }
 
-    // Скрытая по масштабу зона плавно гаснет и не ловит мышь — клик
+    // Скрытая по масштабу, времени или фильтру зона не ловит мышь — клик
     // проходит к родителю.
     updateZoomVisibility() {
       if (!this.map || !this.map._loaded) return;
+      if (this.hoveredId && !this.zoneZoomVisible(this.zoneById(this.hoveredId))) this.setHover(null);
       this.zoneLayers.forEach((layer, id) => {
         const el = layer.getElement && layer.getElement();
         if (el) {
           const z = this.zoneById(id);
           el.classList.toggle('map-zone-zoomhidden', !this.zoneZoomVisible(z));
-          // Выключено в «Слоях» — остаётся на карте полупрозрачным.
           el.classList.toggle('map-zone-filtered', !!z && this.isZoneFiltered(z));
         }
       });
@@ -1229,6 +1232,7 @@
       this.renderFog();
       this.updateZoomVisibility();
       if (shapeChanged) {
+        this.updateLabels();
         clearTimeout(this._labelTimer);
         this._labelTimer = setTimeout(() => this.renderLabels(), animate ? 650 : 0);
       } else {

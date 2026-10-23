@@ -711,7 +711,7 @@ body.map-fs-open { overflow: hidden; }
 
 /* ===== Этап 2: метки, видимость по масштабу, пульсация, свой стиль ===== */
 
-/* Скрытая по масштабу зона плавно гаснет и не ловит мышь */
+/* Скрытые зоны (по масштабу, времени или фильтру слоёв) не видны и не ловят мышь */
 .map-zone { transition: fill-opacity .15s, stroke-width .15s, opacity .35s ease; }
 .map-zone.map-zone-zoomhidden { opacity: 0; pointer-events: none; }
 
@@ -1291,8 +1291,9 @@ details.world-type:not([open]) .world-row-btns { opacity: .6; }
 @media (hover: none) { .map-layers-solo { opacity: 1; } }
 .map-layers-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
 
-/* Выключено в «Слоях»: на карте остаётся полупрозрачным */
-.map-zone.map-zone-filtered { opacity: .18; }
+/* Фильтр типа зоны скрывает её целиком; не позволяем ему переопределить
+   скрытие по времени или масштабу. */
+.map-zone.map-zone-filtered { opacity: 0; pointer-events: none; }
 .map-zone-label-anchor.is-filtered:not(.is-hidden) .map-zone-label { opacity: .3; }
 
 .map-marker-cluster.is-filtered { opacity: .3; }
