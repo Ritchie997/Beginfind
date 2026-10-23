@@ -117,10 +117,9 @@
 
 - `POST /feedback/reports`
 - `GET /feedback/reports/mine`
-- `GET /feedback/public`
-- `GET /feedback/public/:id/comments`
-- `POST /feedback/public/:id/comments`
-- `DELETE /feedback/public/comments/:commentId`
+- `GET /feedback/reports/:id/comments`
+- `POST /feedback/reports/:id/comments`
+- `DELETE /feedback/reports/:id/comments/:commentId`
 - `PUT /feedback/reports/:id`
 - `POST /feedback/reports/:id/withdraw`
 - `GET /feedback/reports`

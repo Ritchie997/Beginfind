@@ -187,8 +187,6 @@
       this._textModalResolve = null;
       this.editingReport = null; // своё обращение в форме правки (null — новое)
       this.myReports = new Map();
-      this.publicReports = new Map();
-      this.activePublicReportId = null;
       this.queueReports = new Map();
       this.triageReports = new Map();
       this.newCaseIds = [];
@@ -246,9 +244,9 @@
       root.querySelectorAll('[data-close-modal]').forEach((btn) => {
         btn.addEventListener('click', () => this.closeModal(btn.dataset.closeModal));
       });
-      // Формы с набранным текстом (обращение, сборка кейса, комментарий) по клику мимо
+      // Формы с набранным текстом (обращение, сборка кейса) по клику мимо
       // окна не закрываются — иначе случайный клик стирал бы написанное.
-      root.querySelectorAll('.modal-overlay:not(#feedbackCreateModal):not(#feedbackNewCaseModal):not(#feedbackDiscussionModal)').forEach((overlay) => {
+      root.querySelectorAll('.modal-overlay:not(#feedbackCreateModal):not(#feedbackNewCaseModal)').forEach((overlay) => {
         overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeModal(overlay.id); });
       });
 
@@ -272,17 +270,13 @@
         if (btn) this.openCreateModal(this.myReports.get(Number(btn.dataset.editReport)));
         const withdrawBtn = e.target.closest('[data-withdraw-report]');
         if (withdrawBtn) runExclusive(withdrawBtn, () => this.withdrawReport(Number(withdrawBtn.dataset.withdrawReport)));
-      });
-      root.querySelector('#feedbackPublicList').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-open-discussion]');
-        if (btn) this.openDiscussion(Number(btn.dataset.openDiscussion));
-      });
-      root.querySelector('#feedbackDiscussionSubmit').addEventListener('click', (e) => {
-        runExclusive(e.currentTarget, () => this.submitDiscussionComment());
-      });
-      root.querySelector('#feedbackDiscussionComments').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-delete-comment]');
-        if (btn) runExclusive(btn, () => this.deleteDiscussionComment(Number(btn.dataset.deleteComment)));
+        const submitComment = e.target.closest('[data-submit-report-comment]');
+        if (submitComment) runExclusive(submitComment, () => this.submitOwnReportComment(Number(submitComment.dataset.submitReportComment)));
+        const deleteComment = e.target.closest('[data-delete-report-comment]');
+        if (deleteComment) runExclusive(deleteComment, () => this.deleteOwnReportComment(
+          Number(deleteComment.dataset.reportId),
+          Number(deleteComment.dataset.deleteReportComment)
+        ));
       });
 
       // --- Первая линия ---
@@ -366,7 +360,6 @@
       this.currentTab = tab;
       this.root.querySelectorAll('[data-feedback-tab]').forEach((b) => b.classList.toggle('active', b.dataset.feedbackTab === tab));
       this.root.querySelector('#feedbackPanelMine').hidden = tab !== 'mine';
-      this.root.querySelector('#feedbackPanelPublic').hidden = tab !== 'public';
       this.root.querySelector('#feedbackPanelTriage').hidden = tab !== 'triage';
       this.root.querySelector('#feedbackPanelCases').hidden = tab !== 'cases';
       this.root.querySelector('#feedbackPanelDecide').hidden = tab !== 'decide';
@@ -375,7 +368,6 @@
 
     async refreshCurrentTab() {
       if (this.currentTab === 'mine') await this.loadMine();
-      else if (this.currentTab === 'public') await this.loadPublicBoard();
       else if (this.currentTab === 'triage') await this.loadTriage();
       else if (this.currentTab === 'cases') await Promise.all([this.loadQueue(), this.loadCasesList()]);
       else if (this.currentTab === 'decide') await this.loadDecide();
@@ -423,7 +415,7 @@
     // ---------- Мои обращения ----------
 
     async loadMine() {
-      await this.loadList(
+      const reports = await this.loadList(
         { loading: '#feedbackMineLoading', empty: '#feedbackMineEmpty', list: '#feedbackMineList' },
         async () => {
           const list = await this.api('/api/feedback/reports/mine');
@@ -450,96 +442,86 @@
               <div class="feedback-card-meta">${typeChip(r.type)}<span class="feedback-chip ${st.chip}">${escapeHtml(st.text)}</span><span>${formatDate(r.createdAt)}</span></div>
               ${note}
               <details class="feedback-details"><summary>Подробнее</summary>${renderReportFields(r)}</details>
+              ${['bug', 'idea'].includes(r.type) ? `
+                <details class="feedback-details feedback-own-comments" data-own-comments="${r.id}">
+                  <summary>Комментарии (${r.commentCount || 0})</summary>
+                  <div class="feedback-discussion-list" data-own-comments-list="${r.id}"></div>
+                  <div class="form-group feedback-discussion-form">
+                    <label class="form-label" for="feedbackCommentInput${r.id}">Добавить комментарий</label>
+                    <textarea class="form-textarea" id="feedbackCommentInput${r.id}" maxlength="2000" placeholder="Добавьте уточнение или ответ"></textarea>
+                  </div>
+                  <div class="btns-compact feedback-discussion-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-submit-report-comment="${r.id}"><i class="fas fa-paper-plane"></i> Отправить</button>
+                  </div>
+                </details>` : ''}
               ${edit}
             </div>`;
         }
       );
+      reports.forEach((report) => {
+        if (report.type !== 'bug' && report.type !== 'idea') return;
+        const details = this.root.querySelector(`[data-own-comments="${report.id}"]`);
+        details?.addEventListener('toggle', () => {
+          if (details.open && details.dataset.loaded !== 'true') this.loadOwnReportComments(report.id);
+        });
+      });
     }
 
-    async loadPublicBoard() {
-      await this.loadList(
-        { loading: '#feedbackPublicLoading', empty: '#feedbackPublicEmpty', list: '#feedbackPublicList' },
-        async () => {
-          const reports = await this.api('/api/feedback/public');
-          this.publicReports = new Map(reports.map((report) => [report.id, report]));
-          return reports;
-        },
-        (report) => `
-          <div class="feedback-card">
-            <div class="feedback-card-head">
-              <div class="feedback-card-title">#${report.id} · ${escapeHtml(report.title)}</div>
-            </div>
-            <div class="feedback-card-meta">${typeChip(report.type)}<span>${escapeHtml(report.authorName)}</span><span>${formatDate(report.createdAt)}</span></div>
-            <div class="feedback-field-value">${escapeHtml(report.description)}</div>
-            <div class="feedback-card-actions btns-compact">
-              <button type="button" class="btn btn-secondary btn-sm" data-open-discussion="${report.id}">
-                <i class="fas fa-comments"></i> Комментарии (${report.commentCount})
-              </button>
-            </div>
-          </div>`
-      );
-    }
-
-    async openDiscussion(reportId) {
-      const report = this.publicReports.get(reportId);
-      if (!report) return;
-      this.activePublicReportId = reportId;
-      this.root.querySelector('#feedbackDiscussionTitle').textContent = `#${report.id} · ${report.title}`;
-      this.root.querySelector('#feedbackDiscussionDescription').textContent = report.description;
-      this.root.querySelector('#feedbackDiscussionInput').value = '';
-      this.root.querySelector('#feedbackDiscussionComments').innerHTML = '<div class="feedback-empty">Загрузка комментариев...</div>';
-      this.root.querySelector('#feedbackDiscussionModal').hidden = false;
-      await this.loadDiscussionComments(reportId);
-    }
-
-    async loadDiscussionComments(reportId) {
+    async loadOwnReportComments(reportId) {
+      const details = this.root.querySelector(`[data-own-comments="${reportId}"]`);
+      const list = details?.querySelector(`[data-own-comments-list="${reportId}"]`);
+      if (!details || !list) return;
+      list.innerHTML = '<div class="feedback-empty">Загрузка комментариев...</div>';
       try {
-        const comments = await this.api(`/api/feedback/public/${reportId}/comments`);
-        if (this.activePublicReportId !== reportId) return;
-        const user = (window.authManager && authManager.getUser()) || {};
-        const canDelete = (comment) => comment.authorId === user.id || this.canModerateComments || user.is_root;
-        this.root.querySelector('#feedbackDiscussionComments').innerHTML = comments.length
+        const comments = await this.api(`/api/feedback/reports/${reportId}/comments`);
+        list.innerHTML = comments.length
           ? comments.map((comment) => `
             <article class="feedback-discussion-comment">
               <div class="feedback-card-meta"><strong>${escapeHtml(comment.authorName)}</strong><time>${formatDate(comment.createdAt)}</time></div>
               <div class="feedback-field-value">${escapeHtml(comment.text)}</div>
-              ${canDelete(comment) ? `<button type="button" class="btn btn-secondary btn-sm" data-delete-comment="${comment.id}"><i class="fas fa-trash"></i> Удалить</button>` : ''}
+              <button type="button" class="btn btn-secondary btn-sm" data-report-id="${reportId}" data-delete-report-comment="${comment.id}"><i class="fas fa-trash"></i> Удалить</button>
             </article>`).join('')
           : '<div class="feedback-empty">Пока нет комментариев.</div>';
+        details.dataset.loaded = 'true';
+        details.querySelector('summary').textContent = `Комментарии (${comments.length})`;
+        const report = this.myReports.get(reportId);
+        if (report) report.commentCount = comments.length;
       } catch (err) {
+        list.innerHTML = '';
         showMessage(err.message, 'error');
       }
     }
 
-    async submitDiscussionComment() {
-      const reportId = this.activePublicReportId;
-      if (!reportId) return;
-      const input = this.root.querySelector('#feedbackDiscussionInput');
-      const text = input.value.trim();
+    async submitOwnReportComment(reportId) {
+      const details = this.root.querySelector(`[data-own-comments="${reportId}"]`);
+      const input = details?.querySelector(`#feedbackCommentInput${reportId}`);
+      const text = input?.value.trim();
       if (!text) {
         showMessage('Введите комментарий', 'warning');
         return;
       }
       try {
-        await this.api(`/api/feedback/public/${reportId}/comments`, 'POST', { text });
+        await this.api(`/api/feedback/reports/${reportId}/comments`, 'POST', { text });
         input.value = '';
-        await Promise.all([this.loadDiscussionComments(reportId), this.loadPublicBoard()]);
+        details.dataset.loaded = 'false';
+        await this.loadOwnReportComments(reportId);
       } catch (err) {
         showMessage(err.message, 'error');
       }
     }
 
-    async deleteDiscussionComment(commentId) {
+    async deleteOwnReportComment(reportId, commentId) {
       const ok = await window.confirmDialog.open({
         title: 'Удалить комментарий',
-        message: 'Удалить этот комментарий?',
+        message: 'Удалить комментарий к своему обращению?',
         confirmLabel: 'Удалить'
       });
       if (!ok) return;
       try {
-        await this.api(`/api/feedback/public/comments/${commentId}`, 'DELETE');
-        const reportId = this.activePublicReportId;
-        if (reportId) await Promise.all([this.loadDiscussionComments(reportId), this.loadPublicBoard()]);
+        await this.api(`/api/feedback/reports/${reportId}/comments/${commentId}`, 'DELETE');
+        const details = this.root.querySelector(`[data-own-comments="${reportId}"]`);
+        details.dataset.loaded = 'false';
+        await this.loadOwnReportComments(reportId);
       } catch (err) {
         showMessage(err.message, 'error');
       }
