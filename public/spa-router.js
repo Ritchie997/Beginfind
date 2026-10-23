@@ -2864,37 +2864,7 @@ class SPARouter {
   // Reset article form to empty state
   resetArticle() {
     if (confirm('Вы уверены, что хотите сбросить все данные формы?')) {
-      // Clear all form fields
-      document.getElementById('articleTitle').value = '';
-      document.getElementById('articleContent').innerHTML = '';
-      if (this.tagsField) this.tagsField.setValues([]);
-      document.getElementById('articleImageFile').value = '';
-      document.getElementById('articleImageFileInput').value = '';
-      document.getElementById('articleCoverPreview').style.display = 'none';
-      document.getElementById('coverFileName').textContent = '';
-
-      // Reset article status and trigger UI update
-      const lockedSelect = document.getElementById('articleLocked');
-      lockedSelect.value = 'false'; // Reset article status to unlocked (open)
-      // Trigger change event to update UI
-      const lockedChangeEvent = new Event('change', { bubbles: true });
-      lockedSelect.dispatchEvent(lockedChangeEvent);
-
-      // Reset server field and trigger any related UI updates (сбросит и роли —
-      // см. обработчик 'change' в setupArticleFormEvents)
-      const serverSelect = document.getElementById('articleServer');
-      serverSelect.value = ''; // Reset server field to default (empty/"No server")
-      const serverChangeEvent = new Event('change', { bubbles: true });
-      serverSelect.dispatchEvent(serverChangeEvent);
-
-      this.resetArticleAuthorInfo();
-
-      // Reset form title and save button
-      document.getElementById('article-form-title').textContent = 'Создать новую статью';
-      document.getElementById('saveArticleBtn').textContent = 'Опубликовать';
-      document.getElementById('saveArticleBtn').removeAttribute('data-article-id');
-
-      this.closeDraftsModal();
+      this.clearArticleForm();
 
       // "Сбросить" лишь очищает форму и отвязывает её от открытого
       // черновика. Сами сохранённые черновики НЕ удаляются: ранее здесь
@@ -2905,10 +2875,6 @@ class SPARouter {
       // автосохранение и сохранение при выходе её не запишут, а флаг ниже
       // не даёт автозагрузке молча подставить черновик заново.
       this.suppressDraftAutoLoad();
-
-      // Clear current draft ID
-      this.currentDraftId = null;
-      this.currentDraftRev = null;
 
       showMessage('Форма сброшена до пустого состояния', 'info');
     }
@@ -4578,15 +4544,13 @@ class SPARouter {
     const channels = channelsResult.success ? channelsResult.data : [];
     const me = authManager.getUser() || {};
 
-    // "Администратор сервера" — фактическое назначение системной роли admin
-    // (см. isAdminOnServer в src/services/server-permissions.js) ЛИБО
-    // владелец системы (is_root): на бэкенде root администрирует любой
-    // сервер (см. isServerAdmin в src/routes/servers.routes.js), даже не
-    // будучи его участником. Другие админ-роли системы (Ведущий и т.п.)
+    // "Администратор сервера" — владелец сервера, системная роль admin или
+    // владелец системы (is_root). Владелец сервера сохраняет права независимо
+    // от ролей и их иерархии; другие админ-роли системы (Ведущий и т.п.)
     // такого доступа не получают.
     const myMembership = members.find(m => m.id === me.id);
-    const isAdmin = !!me.is_root || !!(myMembership && myMembership.roles && myMembership.roles.some(r => r.name === 'admin' && r.type === 'system'));
-    const isOwner = server.owner_id === me.id;
+    const isOwner = Number(server.owner_id) === Number(me.id);
+    const isAdmin = !!me.is_root || isOwner || !!(myMembership && myMembership.roles && myMembership.roles.some(r => r.name === 'admin' && r.type === 'system'));
 
     this.currentServerId = serverId;
     this.currentServerData = { server, members, roles, channels, isAdmin, isOwner, isRoot: !!me.is_root };
@@ -5943,6 +5907,12 @@ window.spaRouter = {
   },
 
   clearArticleForm: () => {
+    if (spaRouter) {
+      spaRouter.clearArticleForm();
+    }
+  },
+
+  resetArticleForm: () => {
     if (spaRouter) {
       spaRouter.clearArticleForm();
     }

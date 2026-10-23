@@ -1716,14 +1716,27 @@
       const toolbar = document.createElement('div');
       toolbar.className = 'eb-table-toolbar';
       const addRow = document.createElement('button'); addRow.type = 'button'; addRow.className = 'eb-mini-btn'; addRow.innerHTML = '<i class="fas fa-plus"></i> Строка';
-      addRow.addEventListener('click', () => { block.data.rows.push(block.data.rows[0].map(() => '')); this.renderAll(); this.scheduleRenderPreview(); });
+      addRow.addEventListener('click', () => {
+        const columnCount = block.data.rows[0]?.length || 2;
+        block.data.rows.push(Array.from({ length: columnCount }, () => ''));
+        this.renderAll();
+        this.scheduleRenderPreview();
+      });
+      const removeRow = document.createElement('button'); removeRow.type = 'button'; removeRow.className = 'eb-mini-btn'; removeRow.innerHTML = '<i class="fas fa-minus"></i> Последнюю строку';
+      removeRow.disabled = block.data.rows.length <= 1;
+      removeRow.addEventListener('click', () => {
+        if (block.data.rows.length <= 1) return;
+        block.data.rows.pop();
+        this.renderAll();
+        this.scheduleRenderPreview();
+      });
       const addCol = document.createElement('button'); addCol.type = 'button'; addCol.className = 'eb-mini-btn'; addCol.innerHTML = '<i class="fas fa-plus"></i> Колонка';
       addCol.addEventListener('click', () => { block.data.rows.forEach((row) => row.push('')); this.renderAll(); this.scheduleRenderPreview(); });
       const headerToggle = document.createElement('label'); headerToggle.className = 'eb-row'; headerToggle.style.fontSize = '12px'; headerToggle.style.color = 'var(--text-muted)';
       const headerCb = document.createElement('input'); headerCb.type = 'checkbox'; headerCb.checked = block.data.header;
       headerCb.addEventListener('change', () => { block.data.header = headerCb.checked; this.scheduleRenderPreview(); });
       headerToggle.append(headerCb, document.createTextNode(' первая строка — заголовок'));
-      toolbar.append(addRow, addCol, headerToggle);
+      toolbar.append(addRow, removeRow, addCol, headerToggle);
       wrap.appendChild(toolbar);
       return wrap;
     }

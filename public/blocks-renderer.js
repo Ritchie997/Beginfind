@@ -476,12 +476,14 @@
         return `<${tag}>${items}</${tag}>`;
       }
       case 'table': {
-        if (!d.rows.length) return '';
-        const [headRow, ...bodyRows] = d.rows;
+        const rows = [...d.rows];
+        while (rows.length && rows[rows.length - 1].every((cell) => !String(cell).trim())) rows.pop();
+        if (!rows.length) return '';
+        const [headRow, ...bodyRows] = rows;
         const head = d.header
           ? `<thead><tr>${headRow.map((c) => `<th>${renderInline(marked, c)}</th>`).join('')}</tr></thead>`
           : '';
-        const bodySource = d.header ? bodyRows : d.rows;
+        const bodySource = d.header ? bodyRows : rows;
         const body = `<tbody>${bodySource.map((row) => `<tr>${row.map((c) => `<td>${renderInline(marked, c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
         return `<div class="blk-table-wrap"><table class="blk-table">${head}${body}</table></div>`;
       }

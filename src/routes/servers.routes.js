@@ -11,11 +11,17 @@ const { dbPath } = require('../config/paths');
 const router = express.Router();
 
 // "Админ сервера" для проверок в этом файле: владелец системы (is_root)
-// администрирует ЛЮБОЙ сервер, даже если он на нём не участник и роли admin
-// не имеет; остальным нужна реально назначенная системная роль admin.
+// администрирует любой сервер, а владелец сервера сохраняет права независимо
+// от назначенных ролей. Остальным нужна системная роль admin.
 async function isServerAdmin(user, serverId) {
   if (user.is_root) return true;
+  if (await isServerOwner(user.id, serverId)) return true;
   return isAdminOnServer(user.id, serverId);
+}
+
+async function isServerOwner(userId, serverId) {
+  const server = await dbGet('servers.db', 'SELECT owner_id FROM servers WHERE id = ?', [serverId]);
+  return !!server && Number(server.owner_id) === Number(userId);
 }
 
 // Одиночный SELECT к указанной БД (отдельное соединение на запрос, как и
@@ -331,7 +337,8 @@ router.post('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticateT
       return res.status(403).json({ error: 'Only administrators can assign roles' });
     }
 
-    const canManage = req.user.is_root || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
+    const isOwner = await isServerOwner(currentUserId, parseInt(serverId));
+    const canManage = req.user.is_root || isOwner || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
     if (!canManage) {
       return res.status(403).json({ error: 'Cannot assign roles to users with higher or equal hierarchy level' });
     }
@@ -355,7 +362,8 @@ router.delete('/servers/:serverId/users/:userId/roles/:roleId', auth.authenticat
       return res.status(403).json({ error: 'Only administrators can remove roles' });
     }
 
-    const canManage = req.user.is_root || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
+    const isOwner = await isServerOwner(currentUserId, parseInt(serverId));
+    const canManage = req.user.is_root || isOwner || await canManageUser(currentUserId, parseInt(userId), parseInt(serverId));
     if (!canManage) {
       return res.status(403).json({ error: 'Cannot remove roles from users with higher or equal hierarchy level' });
     }
