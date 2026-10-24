@@ -159,6 +159,10 @@
         headers: { 'X-Requested-With': 'PublicSiteNavigation' },
         signal: activeRequest.signal
       });
+      if (response.status === 503 && response.headers.get('content-type')?.includes('text/html')) {
+        window.location.assign(url.href);
+        return false;
+      }
       var articleNotFound = response.status === 404 && /^\/antropedia\/[^/]+\/?$/.test(url.pathname);
       if (!response.ok && !articleNotFound) throw new Error('HTTP ' + response.status);
       var parsedDocument = new DOMParser().parseFromString(await response.text(), 'text/html');

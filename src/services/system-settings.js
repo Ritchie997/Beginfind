@@ -19,6 +19,7 @@ const path = require('path');
 const { ROOT_DIR } = require('../config/paths');
 
 const SETTINGS_PATH = path.join(ROOT_DIR, 'system-settings.json');
+const MAINTENANCE_PAGE_KEYS = ['home', 'alltell', 'antropedia', 'gallery'];
 
 const DEFAULT_SETTINGS = {
   // МБ — реальный лимит на загрузку картинки через POST /api/upload-image
@@ -33,19 +34,34 @@ const DEFAULT_SETTINGS = {
   // значения не требует перезапуска — подействует на СЛЕДУЮЩИЙ вход; уже
   // выданные токены живут до срока, с которым были подписаны.
   sessionDurationHours: 8,
-  // Режим техобслуживания — см. src/middleware/maintenance.js: пока включён,
-  // весь /api/* (кроме логина и самой проверки статуса) отвечает 503 всем,
-  // кроме владельца (is_root).
-  maintenanceMode: false,
+  maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false },
   maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
 };
+
+function normalizeMaintenancePages(value, legacyMode = false) {
+  const pages = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(MAINTENANCE_PAGE_KEYS.map((key) => [
+    key,
+    typeof pages[key] === 'boolean' ? pages[key] : legacyMode
+  ]));
+}
 
 function readSettings() {
   if (!fs.existsSync(SETTINGS_PATH)) {
     return { ...DEFAULT_SETTINGS };
   }
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')) };
+    const stored = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      maintenancePages: normalizeMaintenancePages(
+        stored.maintenancePages,
+        stored.maintenancePages === undefined && stored.maintenanceMode === true
+      )
+    };
+    delete settings.maintenanceMode;
+    return settings;
   } catch (e) {
     console.error('[Settings] Не удалось прочитать system-settings.json, использую значения по умолчанию:', e.message);
     return { ...DEFAULT_SETTINGS };
@@ -53,9 +69,18 @@ function readSettings() {
 }
 
 function writeSettings(settings) {
-  const merged = { ...DEFAULT_SETTINGS, ...settings };
+  const merged = { ...readSettings(), ...settings };
+  merged.maintenancePages = normalizeMaintenancePages(merged.maintenancePages);
+  delete merged.maintenanceMode;
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2));
   return merged;
 }
 
-module.exports = { SETTINGS_PATH, DEFAULT_SETTINGS, readSettings, writeSettings };
+module.exports = {
+  SETTINGS_PATH,
+  DEFAULT_SETTINGS,
+  MAINTENANCE_PAGE_KEYS,
+  normalizeMaintenancePages,
+  readSettings,
+  writeSettings
+};

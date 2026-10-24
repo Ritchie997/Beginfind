@@ -188,8 +188,7 @@
     if (canonicalLink) canonicalLink.href = canonical;
   }
 
-  // Градиенты обложек из исходного макета — карточка без картинки берёт один из
-  // них по хэшу slug, чтобы каталог не превращался в одинаковые серые плитки.
+  // Обложкам без изображения назначается градиент, зависящий от slug.
   var COVER_GRADIENTS = [
     'linear-gradient(135deg,#5865f2,#8b93f8)',
     'linear-gradient(135deg,#a78bfa,#ff5d8f)',
@@ -207,7 +206,7 @@
     return COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
   }
 
-  // 5100 -> «5.1k», как в макете.
+  // Форматирование больших чисел для счётчиков.
   function formatCount(value) {
     var n = Number(value) || 0;
     if (n < 1000) return String(n);
@@ -1829,7 +1828,7 @@
 
     async function loadArticles() {
       try {
-        var result = await request('/api/public/articles?sort=views&limit=4');
+        var result = await request('/api/public/articles?surface=home&sort=views&limit=4');
         if (!mounted) return;
         articlesRoot.replaceChildren();
         if (!Array.isArray(result.data) || !result.data.length) {
@@ -1906,44 +1905,13 @@
     return cleanup;
   }
 
-  function initStaticDemos() {
+  function initPageControls() {
     document.querySelectorAll('.chip-row').forEach(function (row) {
       row.addEventListener('click', function (event) {
         var chip = event.target.closest('.filter-chip');
         if (!chip) return;
         row.querySelectorAll('.filter-chip').forEach(function (item) { item.classList.remove('active'); });
         chip.classList.add('active');
-      });
-    });
-    document.querySelectorAll('.engage-item.is-like').forEach(function (button) {
-      button.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        var icon = button.querySelector('i');
-        var count = button.querySelector('span');
-        var active = button.classList.toggle('active');
-        if (icon) {
-          icon.classList.toggle('fas', active);
-          icon.classList.toggle('far', !active);
-        }
-        if (count) {
-          var value = parseInt(count.textContent, 10) || 0;
-          count.textContent = String(active ? value + 1 : value - 1);
-        }
-      });
-    });
-    document.querySelectorAll('.pin-save').forEach(function (button) {
-      button.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        var saved = button.classList.toggle('is-saved');
-        button.textContent = saved ? 'Сохранено' : 'Сохранить';
-      });
-    });
-    document.querySelectorAll('[data-fake-load-more]').forEach(function (button) {
-      button.addEventListener('click', function () {
-        button.innerHTML = '<i class="fas fa-check"></i> Это демо-макет — здесь пока нечего подгружать';
-        button.disabled = true;
       });
     });
   }
@@ -1968,7 +1936,7 @@
     document.querySelectorAll('.site-nav-link[data-page]').forEach(function (link) {
       link.classList.toggle('active', link.dataset.page === page);
     });
-    initStaticDemos();
+    initPageControls();
     return readyPromise;
   }
 

@@ -1,14 +1,17 @@
 // settings.routes.js — общие настройки системы (вкладка "Настройки").
 // Чтение/запись — только владелец (auth.checkRoot). Исключение —
-// GET /api/maintenance-status ниже: она НАМЕРЕННО публичная (без auth
-// вообще), потому что её обязан проверить даже неавторизованный посетитель
-// (или пользователь с уже просроченным токеном), прежде чем сайт покажет
-// ему форму входа вместо экрана "идут технические работы" — см.
-// src/middleware/maintenance.js и public/auth-system.js.
+// GET /api/maintenance-status намеренно публичный и возвращает только
+// состояния публичных страниц, без остальных системных настроек.
 
 const express = require('express');
 const auth = require('../middleware/auth');
-const { readSettings, writeSettings, DEFAULT_SETTINGS } = require('../services/system-settings');
+const {
+  readSettings,
+  writeSettings,
+  DEFAULT_SETTINGS,
+  normalizeMaintenancePages
+} = require('../services/system-settings');
+const { setMaintenanceBypassCookie, MAINTENANCE_PAGE_KEYS } = require('../middleware/maintenance');
 
 const router = express.Router();
 
@@ -35,13 +38,13 @@ router.get('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
 // одной большой — поэтому в req.body почти всегда есть только ЧАСТЬ полей.
 // Раньше любое отсутствующее поле трактовалось как "сбросить к дефолту"
 // (fallback на DEFAULT_SETTINGS), из-за чего сохранение "Максимальный размер
-// файла" в одной форме тихо гасило maintenanceMode/sessionDurationHours,
+// файла" в одной форме тихо сбрасывало другие настройки,
 // сохранённые из другой. Теперь отсутствующее поле = "не трогать", берём его
 // из уже сохранённых настроек (current), а не из дефолта.
 router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   try {
     const current = readSettings();
-    const { maxFileSize, allowRegistration, sessionDurationHours, maintenanceMode, maintenanceMessage } = req.body;
+    const { maxFileSize, allowRegistration, sessionDurationHours, maintenancePages, maintenanceMessage } = req.body;
 
     const settings = writeSettings({
       maxFileSize: maxFileSize !== undefined ? clampInt(maxFileSize, current.maxFileSize, 1, 20) : current.maxFileSize,
@@ -52,7 +55,9 @@ router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
       sessionDurationHours: sessionDurationHours !== undefined
         ? clampInt(sessionDurationHours, current.sessionDurationHours, 1, 24 * 30)
         : current.sessionDurationHours,
-      maintenanceMode: maintenanceMode !== undefined ? !!maintenanceMode : current.maintenanceMode,
+      maintenancePages: maintenancePages !== undefined
+        ? normalizeMaintenancePages(maintenancePages)
+        : current.maintenancePages,
       maintenanceMessage: maintenanceMessage !== undefined
         ? (String(maintenanceMessage).trim().slice(0, 300) || DEFAULT_SETTINGS.maintenanceMessage)
         : current.maintenanceMessage
@@ -63,18 +68,32 @@ router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
   }
 });
 
-// GET /api/maintenance-status — публичный статус режима техобслуживания
-// (без auth.authenticateToken — см. комментарий в начале файла). Отдаём
-// только флаг и текст сообщения, ничего больше из system-settings.json.
+// Публичный статус отдельных страниц: не отдаёт остальные системные настройки.
 router.get('/maintenance-status', (req, res) => {
   try {
     const settings = readSettings();
-    res.json({ enabled: !!settings.maintenanceMode, message: settings.maintenanceMessage });
+    res.json({ pages: settings.maintenancePages, message: settings.maintenanceMessage });
   } catch (error) {
-    // Если даже это упало — не блокируем клиента "здесь могла бы быть
-    // техобслуживание", а считаем, что режима нет.
-    res.json({ enabled: false, message: '' });
+    res.status(500).json({ error: 'Не удалось загрузить статус страниц' });
   }
+});
+
+router.post('/maintenance-continue', auth.authenticateToken, auth.checkApproved, (req, res) => {
+  const { page } = req.body || {};
+  if (!MAINTENANCE_PAGE_KEYS.includes(page)) {
+    return res.status(400).json({ error: 'Неизвестная страница' });
+  }
+  if (!req.user.is_root && !(req.user.admin_level > 0)) {
+    return res.status(403).json({ error: 'Продолжить могут только владелец или администратор' });
+  }
+
+  const settings = readSettings();
+  if (!settings.maintenancePages[page]) {
+    return res.json({ continued: true });
+  }
+
+  setMaintenanceBypassCookie(req, res, page);
+  return res.json({ continued: true });
 });
 
 module.exports = router;

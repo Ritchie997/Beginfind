@@ -5364,16 +5364,23 @@ class SPARouter {
     }
   }
 
-  // Режим техобслуживания — отдельная кнопка/запрос, а не часть общего
-  // autoSaveInputs: включение затрагивает вообще всех остальных пользователей
-  // сайта немедленно, такое действие не должно срабатывать тихо по дебаунсу
-  // от одного клика по чекбоксу — только явным сохранением, с подтверждением
-  // при включении.
+  // Режим техобслуживания страниц сохраняется отдельной формой.
   async saveMaintenanceSettings() {
-    const maintenanceMode = document.getElementById('maintenanceMode')?.checked;
+    const maintenancePages = {
+      home: document.getElementById('maintenancePageHome')?.checked || false,
+      alltell: document.getElementById('maintenancePageAlltell')?.checked || false,
+      antropedia: document.getElementById('maintenancePageAntropedia')?.checked || false,
+      gallery: document.getElementById('maintenancePageGallery')?.checked || false
+    };
     const maintenanceMessage = document.getElementById('maintenanceMessage')?.value;
 
-    if (maintenanceMode && !confirm('Включить режим техобслуживания?\n\nВсе, кроме вас, немедленно потеряют доступ к сайту (увидят это сообщение вместо панели).')) {
+    const enabledPages = Object.entries(maintenancePages)
+      .filter(([, enabled]) => enabled)
+      .map(([page]) => ({ home: 'Главная', alltell: 'AllTell', antropedia: 'Antropedia', gallery: 'Галерея' }[page]));
+    if (enabledPages.length && !confirm(
+      `Включить техобслуживание для страниц:\n${enabledPages.join(', ')}?\n\n` +
+      'Посетители не смогут открыть выбранные страницы.'
+    )) {
       return;
     }
 
@@ -5381,11 +5388,14 @@ class SPARouter {
       const res = await fetch('/api/system-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maintenanceMode, maintenanceMessage })
+        body: JSON.stringify({ maintenancePages, maintenanceMessage })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Ошибка сохранения');
-      showMessage(maintenanceMode ? 'Режим техобслуживания включён' : 'Режим техобслуживания выключен', maintenanceMode ? 'error' : 'success');
+      showMessage(
+        enabledPages.length ? 'Техобслуживание страниц сохранено' : 'Техобслуживание отключено для всех страниц',
+        enabledPages.length ? 'error' : 'success'
+      );
     } catch (error) {
       showMessage(`Ошибка сохранения: ${error.message}`, 'error');
     }
@@ -5402,7 +5412,7 @@ class SPARouter {
           maxFileSize: 5,
           allowRegistration: true,
           sessionDurationHours: 8,
-          maintenanceMode: false,
+          maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false },
           maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
         })
       });
@@ -5426,7 +5436,11 @@ class SPARouter {
       if (settings.maxFileSize != null) document.getElementById('maxFileSize').value = settings.maxFileSize;
       if (settings.allowRegistration !== undefined) document.getElementById('allowRegistration').checked = settings.allowRegistration;
       if (settings.sessionDurationHours != null) document.getElementById('sessionDurationHours').value = settings.sessionDurationHours;
-      if (settings.maintenanceMode !== undefined) document.getElementById('maintenanceMode').checked = settings.maintenanceMode;
+      const maintenancePages = settings.maintenancePages || {};
+      if (maintenancePages.home !== undefined) document.getElementById('maintenancePageHome').checked = maintenancePages.home;
+      if (maintenancePages.alltell !== undefined) document.getElementById('maintenancePageAlltell').checked = maintenancePages.alltell;
+      if (maintenancePages.antropedia !== undefined) document.getElementById('maintenancePageAntropedia').checked = maintenancePages.antropedia;
+      if (maintenancePages.gallery !== undefined) document.getElementById('maintenancePageGallery').checked = maintenancePages.gallery;
       if (settings.maintenanceMessage != null) document.getElementById('maintenanceMessage').value = settings.maintenanceMessage;
     } catch (error) {
       showMessage(`Ошибка загрузки настроек: ${error.message}`, 'error');
@@ -5783,31 +5797,15 @@ class SPARouter {
 // Global router instance
 let spaRouter = null;
 
-// Владелец (is_root) проходит и во время техобслуживания — все остальные
-// (в т.ч. только что успешно вошедшие: /api/login открыт даже в
-// техобслуживание, см. src/middleware/maintenance.js, иначе владельцу
-// самому было бы некуда войти) видят заглушку вместо панели.
-function isMaintenanceBlockedForCurrentUser(maintenance) {
-  if (!maintenance || !maintenance.enabled) return false;
-  const user = authManager && authManager.isAuthenticated() ? authManager.getUser() : null;
-  return !(user && user.is_root);
-}
-
 // Initialize router after DOM is fully loaded
-document.addEventListener('DOMContentLoaded', async () => {
-  const maintenance = typeof checkMaintenanceStatus === 'function' ? await checkMaintenanceStatus() : { enabled: false };
-
-  if (isMaintenanceBlockedForCurrentUser(maintenance)) {
-    showMaintenanceBlocker(maintenance.message);
-  } else if (authManager && authManager.isAuthenticated()) {
+document.addEventListener('DOMContentLoaded', () => {
+  if (authManager && authManager.isAuthenticated()) {
     // Create router instance only if authenticated
     spaRouter = new SPARouter();
   } else {
     // If not authenticated, show login form
     showModalLogin();
   }
-
-  if (typeof startMaintenancePolling === 'function') startMaintenancePolling();
 });
 
 // Check on auth status change
@@ -5821,17 +5819,8 @@ window.addEventListener('authChanged', async () => {
     // Small delay for full status change
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const maintenance = typeof checkMaintenanceStatus === 'function' ? await checkMaintenanceStatus() : { enabled: false };
-
-    if (isMaintenanceBlockedForCurrentUser(maintenance)) {
-      // Успешный логин во время техобслуживания (не владельцем) — /api/login
-      // пропускает кого угодно, но панель ему всё равно не откроем: показываем
-      // ту же заглушку, что видел бы неавторизованный посетитель.
-      spaRouter = null;
-      showMaintenanceBlocker(maintenance.message);
-    } else if (authManager && authManager.isAuthenticated() && !spaRouter) {
+    if (authManager && authManager.isAuthenticated() && !spaRouter) {
       // If user logged in and router not created yet
-      hideMaintenanceBlocker();
       spaRouter = new SPARouter();
     } else if (authManager && !authManager.isAuthenticated() && spaRouter) {
       // If user logged out, remove router

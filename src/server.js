@@ -22,7 +22,7 @@ const backup = require('./services/backup');
 const { readSettings, writeSettings, SETTINGS_PATH } = require('./services/backup-settings');
 const cleanup = require('./services/cleanup');
 const { readSettings: readCleanupSettings, writeSettings: writeCleanupSettings, SETTINGS_PATH: CLEANUP_SETTINGS_PATH } = require('./services/cleanup-settings');
-const { maintenanceGate } = require('./middleware/maintenance');
+const { maintenanceGate, maintenancePageGate } = require('./middleware/maintenance');
 const { dedupeRequests } = require('./middleware/dedupe-requests');
 
 const pages = require('./routes/pages.routes');
@@ -62,6 +62,7 @@ app.use(/\.js$/, (req, res, next) => {
 
 // Статические файлы. index:false позволяет маршруту pages.routes.js отдавать
 // публичную основу на /, не меняя прямой legacy-доступ к /index.html (админка).
+app.use(maintenancePageGate);
 app.use(express.static(PUBLIC_DIR, { index: false }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -102,10 +103,8 @@ const corsOptions = {
 app.use('/api/*', express.json({ limit: '10mb' }));
 app.use('/api/*', express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/*', cors(corsOptions));
-// Шлагбаум режима техобслуживания — после json/cors (нужен req.body ни для
-// чего тут, но порядок ради единообразия), ДО всех настоящих маршрутов, иначе
-// they успеют отработать до проверки. См. src/middleware/maintenance.js —
-// пропускает владельца и сам /api/login, всех остальных отбивает 503.
+// Техобслуживание ограничивает публичные страницы и их публичные read-only API;
+// административные API остаются доступными для работы и снятия ограничений.
 app.use('/api/*', maintenanceGate);
 // Повторные одинаковые изменяющие запросы (многократное нажатие "Создать",
 // одновременное нажатие в двух вкладках) не выполняются второй раз, а

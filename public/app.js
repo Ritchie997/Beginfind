@@ -870,7 +870,6 @@ if (document.readyState === 'loading') {
     window.initLogoutHandler();
     window.checkApprovedStatus();
     window.updateUserInfo();
-    window.initMaintenanceBanner();
     window.initNotificationBadges();
   });
 } else {
@@ -880,7 +879,6 @@ if (document.readyState === 'loading') {
   window.initLogoutHandler();
   window.checkApprovedStatus();
   window.updateUserInfo();
-  window.initMaintenanceBanner();
   window.initNotificationBadges();
 }
 
@@ -905,39 +903,6 @@ window.initRootSidebarVisibility = function() {
     if (user.is_root || perms.view_users_tab) show('sidebar-users-list');
   } catch (e) {
     console.error('Error in initRootSidebarVisibility:', e);
-  }
-};
-
-// Напоминание владельцу, что включён режим техобслуживания — сам он
-// заходит на сайт как обычно (см. maintenanceGate/isMaintenanceBlockedForCurrentUser),
-// поэтому легко забыть выключить режим, ушедший в фоне блокировать всех
-// остальных. Показываем только владельцу — остальных вместо этого баннера
-// встречает полноэкранная заглушка (showMaintenanceBlocker в auth-system.js).
-window.initMaintenanceBanner = async function() {
-  try {
-    const user = authManager.getUser();
-    if (!user || !user.is_root) return;
-    if (typeof checkMaintenanceStatus !== 'function') return;
-
-    const status = await checkMaintenanceStatus();
-    const existing = document.getElementById('maintenance-owner-banner');
-    if (!status.enabled) {
-      existing?.remove();
-      return;
-    }
-    if (existing) return; // уже показан
-
-    const banner = document.createElement('div');
-    banner.id = 'maintenance-owner-banner';
-    banner.style.cssText = `
-      position: sticky; top: 0; z-index: 500; padding: 8px 16px;
-      background: var(--yellow, #faa81a); color: #1a1a1a; font-size: 13px;
-      font-weight: 600; text-align: center;
-    `;
-    banner.textContent = '🛠️ Режим техобслуживания включён — сайт недоступен всем, кроме вас. Выключить: Настройки → «Режим технического обслуживания».';
-    document.body.prepend(banner);
-  } catch (e) {
-    console.error('Error in initMaintenanceBanner:', e);
   }
 };
 

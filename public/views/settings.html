@@ -29,15 +29,36 @@
     <fieldset class="fieldset-group">
         <legend>Режим технического обслуживания</legend>
         <div class="setting-description">
-            Пока включено, сайтом может пользоваться только владелец — все остальные (включая
-            админов) видят это сообщение вместо панели. Полезно на время восстановления бэкапа
-            или другой рискованной операции.
+            Выберите, какие публичные страницы временно закрыть для посетителей.
+            Владелец и администраторы могут подтвердить вход на такую страницу; админ-панель
+            и её инструменты остаются доступными.
         </div>
 
         <div class="form-group">
-            <label class="form-label">Включить режим техобслуживания</label>
+            <label class="form-label" for="maintenancePageHome">Главная</label>
             <label class="switch">
-                <input type="checkbox" id="maintenanceMode">
+                <input type="checkbox" id="maintenancePageHome">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="maintenancePageAlltell">AllTell</label>
+            <label class="switch">
+                <input type="checkbox" id="maintenancePageAlltell">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="maintenancePageAntropedia">Antropedia</label>
+            <label class="switch">
+                <input type="checkbox" id="maintenancePageAntropedia">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="maintenancePageGallery">Галерея</label>
+            <label class="switch">
+                <input type="checkbox" id="maintenancePageGallery">
                 <span class="slider"></span>
             </label>
         </div>

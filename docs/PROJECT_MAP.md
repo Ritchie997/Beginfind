@@ -30,7 +30,7 @@ src/server.js
 | Конфигурация | `src/config/env.js`, `src/config/paths.js` | Переменные окружения и единые абсолютные пути |
 | Базы | `src/db/connections.js`, `src/db/migrate-*.js` | Общие SQLite-соединения, создание и миграция таблиц |
 | Аутентификация | `src/middleware/auth.js` | JWT, учётные записи и middleware авторизации |
-| Общие middleware | `src/middleware/maintenance.js`, `dedupe-requests.js` | Техобслуживание и защита изменяющих запросов от повторного выполнения |
+| Общие middleware | `src/middleware/maintenance.js`, `dedupe-requests.js` | Отдельное техобслуживание публичных страниц с ограниченным обходом для администраторов; защита изменяющих запросов от повторного выполнения |
 | Загрузки | `src/uploads/multer-config.js`, `src/routes/uploads.routes.js` | Приём и ограничения файлов |
 | API | `src/routes/*.routes.js` | Границы HTTP API по доменным областям |
 | Клиентская оболочка | `public/index.html`, `public/app.js`, `public/spa-router.js` | Загрузка приложения, состояние и переключение экранов |
