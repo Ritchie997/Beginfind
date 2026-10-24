@@ -1,10 +1,15 @@
-// Read-only API для публичного каталога статей. Не использует auth middleware:
-// каждый ответ строится только из слоёв, которые article-layers признал публичными.
+// Read-only API публичной основы без auth middleware: содержимое статей и графа
+// ограничено публичными слоями, а сводка отдаёт только агрегированные счётчики.
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const store = require('../services/articles-store');
 const publicArticles = require('../services/public-articles');
+const blocks = require('../services/blocks');
+const { slugify } = require('../services/slugify');
+const tagColors = require('../services/tag-colors');
+const dashboardStats = require('../services/dashboard-stats');
+const gallery = require('../services/gallery-store');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
 const stickers = require('../services/stickers-store');
@@ -57,8 +62,92 @@ async function getPublicAuthor(article) {
 // decorateComments(comments) — необязательный async-хук (см. server.js): достраивает
 // стикеры и аватарки. Публичный ответ содержит только профильный id, имя и аватар
 // автора комментария, чтобы ссылка на его публичный профиль работала для гостей.
-function createPublicArticlesRouter(articleStore = store, socialStore = null, decorateComments = null) {
+function createPublicArticlesRouter(
+  articleStore = store,
+  socialStore = null,
+  decorateComments = null,
+  dependencies = {}
+) {
   const router = express.Router();
+  const statsStore = dependencies.dashboardStats || dashboardStats;
+  const galleryStore = dependencies.galleryStore || gallery;
+  const colorsStore = dependencies.tagColors || tagColors;
+
+  router.get('/public/site-summary', async (req, res) => {
+    try {
+      const articles = articleStore.listArticles();
+      const publicIndex = publicArticles.listPublicIndex(articles);
+      const publicSlugs = new Set(publicIndex.map((article) => article.slug));
+      // Публично отдаём только агрегаты: dashboard helpers также возвращают
+      // недавнюю активность пользователей и содержимое сообщений.
+      const [users, messages, comments, works] = await Promise.all([
+        statsStore.getUsersSummary(0),
+        statsStore.getMessengerSummary(0),
+        statsStore.getCommentsSummary(0),
+        galleryStore.listWorks(null, { limit: 1 })
+      ]);
+      const publicComments = comments.perArticle.reduce(
+        (total, row) => total + (publicSlugs.has(row.slug) ? row.total : 0),
+        0
+      );
+
+      res.json({
+        articles: publicIndex.length,
+        users: users.total,
+        messages: messages.total,
+        comments: publicComments,
+        gallery: works.total
+      });
+    } catch (err) {
+      console.error('[public-articles] Failed to build public site summary:', err);
+      res.status(500).json({ error: 'Не удалось загрузить статистику сайта' });
+    }
+  });
+
+  router.get('/public/articles-graph', async (req, res) => {
+    try {
+      const allArticles = articleStore.listArticles();
+      const publicItems = allArticles
+        .map((article) => publicArticles.getPublicArticle(article))
+        .filter(Boolean);
+      const publicSlugs = new Set(publicItems.map((article) => article.slug));
+      const nodes = publicItems.map((article) => ({
+        slug: article.slug,
+        title: article.title || article.slug,
+        server: null,
+        tags: [...new Set((article.tags || []).map((tag) => articleStore.tagKey(tag)).filter(Boolean))]
+      }));
+      const edges = [];
+      for (const article of publicItems) {
+        // Берём ссылки из публичного документа, не из закрытых слоёв статьи.
+        for (const target of blocks.extractWikiLinksFromDocument(article.content, slugify)) {
+          if (target !== article.slug && publicSlugs.has(target)) {
+            edges.push({ from: article.slug, to: target });
+          }
+        }
+      }
+
+      const tagList = new Map();
+      for (const article of publicItems) {
+        for (const tag of article.tags || []) {
+          const key = articleStore.tagKey(tag);
+          if (key && !tagList.has(key)) tagList.set(key, tag);
+        }
+      }
+      const colorMap = await colorsStore.ensureColors(
+        [...tagList].map(([key, name]) => ({ key, name }))
+      );
+      const graphTagColors = {};
+      colorMap.forEach((value, key) => {
+        graphTagColors[key] = { name: value.name, color: value.color };
+      });
+
+      res.json({ nodes, edges, tagColors: graphTagColors });
+    } catch (err) {
+      console.error('[public-articles] Failed to build public article graph:', err);
+      res.status(500).json({ error: 'Не удалось загрузить граф связей' });
+    }
+  });
 
   router.get('/public/articles', async (req, res) => {
     try {

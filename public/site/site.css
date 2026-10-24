@@ -2,8 +2,7 @@
    site.css — публичная витрина AllTell (лендинг/Antropedia/
    AllTell-сервера/Галерея).
 
-   Это НЕ функциональный раздел — кликабельный макет для оценки
-   внешнего вида. Опирается на палитру и переменные global-styles.css
+   Публичная витрина с данными из публичных API. Опирается на палитру и переменные global-styles.css
    (--background-*, --blurple, --green и т.д.), которые уже задают
    тёмную Discord-подобную тему админ-панели — здесь та же база,
    плюс более "фандомный", визуально насыщенный слой поверх неё:
@@ -545,6 +544,13 @@
     margin: 0 auto;
 }
 
+.site-home-stats-error {
+    flex-basis: 100%;
+    margin: -20px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .site-hero-stat-value {
     font-size: 26px;
     font-weight: 800;
@@ -606,6 +612,20 @@
 }
 
 .site-section-link:hover { text-decoration: underline; }
+
+.home-graph-card {
+    padding: 16px;
+}
+
+.home-graph-card .chart-title {
+    margin: 0;
+    color: var(--header-primary);
+    font-size: 18px;
+}
+
+.home-graph-card .graph-container-dashboard {
+    height: 380px;
+}
 
 /* ============================================================
    ГЛАВНАЯ: ТРИ БОЛЬШИЕ КАРТОЧКИ-ХАБЫ
@@ -2001,6 +2021,12 @@
     transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
+.home-gallery-card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+
 .pin-card:hover {
     transform: translateY(-4px);
     box-shadow: var(--site-shadow-soft);
@@ -2016,6 +2042,14 @@
     font-size: 34px;
     color: rgba(255, 255, 255, 0.9);
     position: relative;
+}
+
+.pin-media img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .pin-media::after {

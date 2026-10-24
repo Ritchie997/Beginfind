@@ -199,6 +199,8 @@
 
 ## `public-articles.routes.js`
 
+- `GET /public/site-summary`
+- `GET /public/articles-graph`
 - `GET /public/articles`
 - `GET /public/tags`
 - `GET /public/articles-index`

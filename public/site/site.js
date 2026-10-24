@@ -1636,6 +1636,276 @@
     return listCleanup;
   }
 
+  function createHomeArticleCard(article) {
+    var href = '/antropedia/' + encodeURIComponent(article.slug);
+    var card = document.createElement('article');
+    card.className = 'wiki-card public-wiki-card';
+
+    var cover = document.createElement('a');
+    cover.className = 'wiki-card-cover';
+    cover.href = href;
+    cover.tabIndex = -1;
+    cover.setAttribute('aria-hidden', 'true');
+    var imageUrl = safePublicImageUrl(article.image);
+    if (imageUrl) {
+      var image = document.createElement('img');
+      image.src = imageUrl;
+      image.alt = '';
+      image.loading = 'lazy';
+      image.addEventListener('error', function () {
+        image.remove();
+        cover.classList.add('is-empty');
+        cover.style.setProperty('--cover-grad', coverGradient(article.slug));
+        var fallback = document.createElement('i');
+        fallback.className = 'fas fa-book-open';
+        cover.appendChild(fallback);
+      });
+      cover.appendChild(image);
+    } else {
+      cover.classList.add('is-empty');
+      cover.style.setProperty('--cover-grad', coverGradient(article.slug));
+      var icon = document.createElement('i');
+      icon.className = 'fas fa-book-open';
+      icon.setAttribute('aria-hidden', 'true');
+      cover.appendChild(icon);
+    }
+    card.appendChild(cover);
+
+    var body = document.createElement('div');
+    body.className = 'wiki-card-body';
+    var link = document.createElement('a');
+    link.className = 'public-card-link';
+    link.href = href;
+    var title = document.createElement('div');
+    title.className = 'wiki-card-title';
+    title.textContent = article.title || article.slug;
+    link.appendChild(title);
+    body.appendChild(link);
+
+    if (article.excerpt) {
+      var excerpt = document.createElement('div');
+      excerpt.className = 'wiki-card-excerpt';
+      excerpt.textContent = article.excerpt;
+      body.appendChild(excerpt);
+    }
+
+    if (Array.isArray(article.tags) && article.tags.length) {
+      var tags = document.createElement('div');
+      tags.className = 'wiki-card-tags';
+      article.tags.slice(0, 4).forEach(function (tag) {
+        var item = document.createElement('span');
+        item.className = 'wiki-tag';
+        item.textContent = tag;
+        tags.appendChild(item);
+      });
+      body.appendChild(tags);
+    }
+
+    var foot = document.createElement('div');
+    foot.className = 'wiki-card-foot';
+    var engagement = document.createElement('div');
+    engagement.className = 'engage-group';
+    [
+      ['far fa-heart', article.likesCount, 'Лайки'],
+      ['far fa-comment', article.commentsCount, 'Комментарии']
+    ].forEach(function (entry) {
+      var item = document.createElement('span');
+      item.className = 'engage-item';
+      item.title = entry[2];
+      var icon = document.createElement('i');
+      icon.className = entry[0];
+      icon.setAttribute('aria-hidden', 'true');
+      var count = document.createElement('span');
+      count.textContent = formatCount(entry[1]);
+      item.append(icon, count);
+      engagement.appendChild(item);
+    });
+    var views = document.createElement('span');
+    var viewsIcon = document.createElement('i');
+    viewsIcon.className = 'far fa-eye';
+    viewsIcon.setAttribute('aria-hidden', 'true');
+    views.append(viewsIcon, document.createTextNode(' ' + formatCount(article.viewsCount)));
+    foot.append(engagement, views);
+    body.append(foot);
+    card.appendChild(body);
+    return card;
+  }
+
+  function createHomeGalleryCard(work) {
+    var card = document.createElement('a');
+    card.className = 'pin-card home-gallery-card';
+    card.href = '/site/gallery.html?sort=newest';
+    card.setAttribute('aria-label', (work.title || 'Работа галереи') + ' — открыть галерею');
+    card.style.setProperty('--pin-h', String(170 + (Number(work.id) % 3) * 35) + 'px');
+
+    var media = document.createElement('div');
+    media.className = 'pin-media';
+    var cover = work.cover || {};
+    var imageUrl = safePublicImageUrl(cover.thumb || cover.url);
+    if (imageUrl) {
+      var image = document.createElement('img');
+      image.src = imageUrl;
+      image.alt = work.title || '';
+      image.loading = 'lazy';
+      image.addEventListener('error', function () {
+        image.remove();
+        media.classList.add('is-empty');
+        var fallback = document.createElement('i');
+        fallback.className = 'fas fa-images';
+        fallback.setAttribute('aria-hidden', 'true');
+        media.appendChild(fallback);
+      });
+      media.appendChild(image);
+    } else {
+      media.classList.add('is-empty');
+      var icon = document.createElement('i');
+      icon.className = 'fas fa-images';
+      icon.setAttribute('aria-hidden', 'true');
+      media.appendChild(icon);
+    }
+    card.appendChild(media);
+
+    var caption = document.createElement('div');
+    caption.className = 'pin-caption';
+    var avatar = document.createElement('div');
+    avatar.className = 'pin-avatar';
+    var authorName = work.author && work.author.display_name || 'Автор';
+    avatar.textContent = authorName.trim().charAt(0).toLocaleUpperCase() || 'А';
+    var text = document.createElement('div');
+    text.className = 'pin-caption-text';
+    text.appendChild(document.createTextNode(work.title || 'Работа без названия'));
+    var author = document.createElement('div');
+    author.className = 'pin-caption-author';
+    author.textContent = authorName;
+    text.appendChild(author);
+    caption.append(avatar, text);
+    card.appendChild(caption);
+    return card;
+  }
+
+  function initPublicHome() {
+    var statsError = document.getElementById('homeStatsError');
+    var articlesRoot = document.getElementById('homePopularArticles');
+    var galleryRoot = document.getElementById('homeRecentGallery');
+    var graphRoot = document.getElementById('homeGraphContainer');
+    if (!articlesRoot || !galleryRoot || !graphRoot) return null;
+
+    var controller = new AbortController();
+    var mounted = true;
+    var graphInstance = null;
+
+    function setError(root, message) {
+      root.replaceChildren(makePublicMessage(message));
+    }
+
+    async function request(path) {
+      var response = await fetch(path, { signal: controller.signal });
+      var data = await response.json();
+      if (!response.ok) throw new Error(data && data.error || 'Ошибка запроса: ' + response.status);
+      return data;
+    }
+
+    async function loadStats() {
+      try {
+        var stats = await request('/api/public/site-summary');
+        if (!mounted) return;
+        Object.keys(stats).forEach(function (key) {
+          var value = document.querySelector('[data-home-stat="' + key + '"]');
+          if (value) value.textContent = formatCount(stats[key]);
+        });
+        if (statsError) statsError.hidden = true;
+      } catch (error) {
+        if (error.name === 'AbortError' || !mounted) return;
+        console.error('Не удалось загрузить статистику главной страницы:', error);
+        document.querySelectorAll('[data-home-stat]').forEach(function (value) {
+          value.textContent = '—';
+        });
+        if (statsError) {
+          statsError.textContent = 'Не удалось загрузить статистику. Попробуйте обновить страницу.';
+          statsError.hidden = false;
+        }
+      }
+    }
+
+    async function loadArticles() {
+      try {
+        var result = await request('/api/public/articles?sort=views&limit=4');
+        if (!mounted) return;
+        articlesRoot.replaceChildren();
+        if (!Array.isArray(result.data) || !result.data.length) {
+          setError(articlesRoot, 'Пока нет открытых статей для показа.');
+          return;
+        }
+        result.data.forEach(function (article) {
+          articlesRoot.appendChild(createHomeArticleCard(article));
+        });
+      } catch (error) {
+        if (error.name === 'AbortError' || !mounted) return;
+        console.error('Не удалось загрузить популярные статьи:', error);
+        setError(articlesRoot, 'Не удалось загрузить статьи. Попробуйте обновить страницу.');
+      }
+    }
+
+    async function loadGallery() {
+      try {
+        var result = await request('/api/public/gallery/works?sort=newest&limit=4');
+        if (!mounted) return;
+        galleryRoot.replaceChildren();
+        if (!Array.isArray(result.data) || !result.data.length) {
+          setError(galleryRoot, 'Пока нет доступных работ в галерее.');
+          return;
+        }
+        result.data.forEach(function (work) {
+          galleryRoot.appendChild(createHomeGalleryCard(work));
+        });
+      } catch (error) {
+        if (error.name === 'AbortError' || !mounted) return;
+        console.error('Не удалось загрузить свежие работы галереи:', error);
+        setError(galleryRoot, 'Не удалось загрузить галерею. Попробуйте обновить страницу.');
+      }
+    }
+
+    async function loadGraph() {
+      try {
+        var data = await request('/api/public/articles-graph');
+        if (!mounted) return;
+        var pairs = new Set(data.edges.map(function (edge) {
+          return edge.from < edge.to ? edge.from + '\u0000' + edge.to : edge.to + '\u0000' + edge.from;
+        }));
+        var count = document.getElementById('homeGraphCount');
+        if (count) count.textContent = 'Статей: ' + data.nodes.length + ' · Связей: ' + pairs.size;
+        graphInstance = await window.GraphView.renderGraph(graphRoot, data, {
+          onNodeClick: function (slug) {
+            window.location.href = '/antropedia/' + encodeURIComponent(slug);
+          },
+          colorByTag: true,
+          tagColors: data.tagColors,
+          cosmos: true,
+          clusters: true
+        });
+        if (!mounted && graphInstance) {
+          graphInstance.destroy();
+          graphInstance = null;
+        }
+      } catch (error) {
+        if (error.name === 'AbortError' || !mounted) return;
+        console.error('Не удалось загрузить граф связей:', error);
+        graphRoot.replaceChildren(makePublicMessage('Не удалось загрузить граф связей. Попробуйте обновить страницу.', 'graph-empty'));
+      }
+    }
+
+    var cleanup = function () {
+      mounted = false;
+      controller.abort();
+      if (graphInstance) {
+        graphInstance.destroy();
+        graphInstance = null;
+      }
+    };
+    cleanup.ready = Promise.all([loadStats(), loadArticles(), loadGallery(), loadGraph()]);
+    return cleanup;
+  }
+
   function initStaticDemos() {
     document.querySelectorAll('.chip-row').forEach(function (row) {
       row.addEventListener('click', function (event) {
@@ -1681,6 +1951,7 @@
   function mountPublicPage() {
     cleanupPublicPage();
     var page = document.body.getAttribute('data-page');
+    if (page === 'home') currentRouteCleanup = initPublicHome();
     if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
     if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
     var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
