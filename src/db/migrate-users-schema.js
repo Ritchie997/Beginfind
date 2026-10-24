@@ -248,6 +248,21 @@ function ensureUserSchema(db) {
             )`
           )
         )
+        .then(() =>
+          run(
+            db,
+            `CREATE TABLE IF NOT EXISTS archived_users (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              original_user_id INTEGER NOT NULL,
+              username TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              role_name TEXT,
+              deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              transfer_status TEXT NOT NULL DEFAULT 'available',
+              transferred_to TEXT
+            )`
+          )
+        )
         .then(
           () =>
             new Promise((res2, rej2) => {

@@ -255,6 +255,14 @@ router.get('/all-users', auth.authenticateToken, auth.checkApproved, auth.checkP
   }
 });
 
+router.get('/archived-users', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    res.json({ users: await auth.getArchivedUsers() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========================================
 // КАТАЛОГ РОЛЕЙ АДМИНОВ (admin_roles) — гибкий конструктор ролей.
 // Список ролей виден любому подтверждённому пользователю (нужен для
@@ -355,11 +363,14 @@ router.delete('/users/:id', auth.authenticateToken, auth.checkApproved, auth.che
     const cleanup = mode === 'all'
       ? await userDeletion.deleteAllUserData(target, req.user.id, users)
       : null;
-    await auth.deleteUser(req.user, target.id);
+    const deletion = mode === 'keep'
+      ? await auth.archiveAndDeleteUser(req.user, target.id)
+      : await auth.deleteUser(req.user, target.id);
     if (mode === 'all') avatars.removeAvatar(target.id);
     res.json({
       deleted: true,
       mode,
+      archiveId: deletion.archiveId || null,
       user: { id: target.id, username: target.username, display_name: target.display_name },
       cleanup
     });
@@ -369,36 +380,38 @@ router.delete('/users/:id', auth.authenticateToken, auth.checkApproved, auth.che
   }
 });
 
-// POST /api/users/:id/transfer-content — передать сохранённые статьи и
-// работы галереи после удаления аккаунта.
-router.post('/users/:id/transfer-content', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+// POST /api/archived-users/:id/transfer-content — передать статьи и работы
+// галереи из архивной записи существующему пользователю по логину.
+router.post('/archived-users/:id/transfer-content', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  let archive = null;
   try {
-    const sourceId = Number(req.params.id);
-    const sourceUsername = String(req.body.sourceUsername || '').trim();
-    const sourceDisplayName = String(req.body.sourceDisplayName || '').trim();
     const targetUsername = String(req.body.username || '').trim();
-    if (!Number.isInteger(sourceId) || sourceId <= 0 || (!sourceUsername && !sourceDisplayName) || !targetUsername) {
-      return res.status(400).json({ error: 'Укажите исходного и целевого пользователя' });
-    }
-    try {
-      await auth.getUserById(sourceId);
-      return res.status(400).json({ error: 'Сначала удалите исходный аккаунт с сохранением данных' });
-    } catch (error) {
-      if (error.message !== 'Пользователь не найден') throw error;
-    }
-
+    if (!targetUsername) return res.status(400).json({ error: 'Укажите логин пользователя-получателя' });
+    const archivePreview = await auth.getArchivedUser(req.params.id);
+    if (!archivePreview) return res.status(404).json({ error: 'Архивный пользователь не найден' });
+    const currentUser = await auth.getUserFull(archivePreview.original_user_id);
+    if (currentUser) return res.status(409).json({ error: 'Пользователь с исходным ID уже существует; передача заблокирована для защиты данных' });
     const users = await auth.getAllUsers();
     const target = users.find((user) => user.username.toLowerCase() === targetUsername.toLowerCase());
     if (!target) return res.status(404).json({ error: 'Пользователь-получатель не найден по логину' });
-    if (Number(target.id) === sourceId) return res.status(400).json({ error: 'Нельзя передать данные самому себе' });
-
-    const sourceNames = [sourceUsername];
-    if (sourceDisplayName && !users.some((user) => user.display_name === sourceDisplayName)) {
-      sourceNames.push(sourceDisplayName);
-    }
-    const result = await userDeletion.transferPreservedContent(sourceId, sourceNames, target);
+    archive = await auth.beginArchivedUserTransfer(req.params.id);
+    const sourceNames = [...new Set([archive.username, archive.display_name]
+      .filter((name) => name && !users.some((user) => user.display_name === name)))];
+    const result = await userDeletion.transferPreservedContent(
+      archive.original_user_id,
+      sourceNames,
+      target
+    );
+    await auth.finishArchivedUserTransfer(archive.id, true, target.username);
     res.json({ transferred: true, recipient: target.username, ...result });
   } catch (error) {
+    if (archive) {
+      try {
+        await auth.finishArchivedUserTransfer(archive.id, false);
+      } catch (resetError) {
+        console.error('[auth] Не удалось сбросить статус передачи архивного пользователя:', resetError);
+      }
+    }
     console.error('[auth] Не удалось передать пользовательские данные:', error);
     res.status(400).json({ error: error.message });
   }

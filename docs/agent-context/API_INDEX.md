@@ -63,6 +63,7 @@
 - `PUT /pending-users/:id/approve`
 - `PUT /pending-users/:id/reject`
 - `GET /all-users`
+- `GET /archived-users`
 - `GET /admin-roles`
 - `POST /admin-roles`
 - `PUT /admin-roles/:id`
@@ -70,7 +71,7 @@
 - `PUT /users/:id/role-manager`
 - `PUT /users/:id/role`
 - `DELETE /users/:id`
-- `POST /users/:id/transfer-content`
+- `POST /archived-users/:id/transfer-content`
 - `PUT /users/:id/rename`
 - `PUT /users/:id/block`
 - `PUT /users/:id/unblock`

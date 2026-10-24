@@ -797,6 +797,98 @@ function getAllUsers() {
   });
 }
 
+function getArchivedUsers() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT id, original_user_id, username, display_name, role_name, deleted_at, transfer_status, transferred_to
+       FROM archived_users ORDER BY deleted_at DESC, id DESC`,
+      [],
+      (err, rows) => (err ? reject(err) : resolve(rows || []))
+    );
+  });
+}
+
+function getArchivedUser(archiveId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT id, original_user_id, username, display_name, role_name, deleted_at, transfer_status, transferred_to
+       FROM archived_users WHERE id = ?`,
+      [archiveId],
+      (err, row) => (err ? reject(err) : resolve(row || null))
+    );
+  });
+}
+
+async function archiveAndDeleteUser(actingUser, userId) {
+  if (!actingUser.is_root) throw new Error('Удалять пользователей может только владелец');
+  const target = await assertCanManage(actingUser, userId);
+  if (target.is_root) throw new Error('Удалить владельца нельзя');
+
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run('BEGIN IMMEDIATE', (beginErr) => {
+        if (beginErr) return reject(beginErr);
+        db.run(
+          'INSERT INTO archived_users (original_user_id, username, display_name, role_name) VALUES (?, ?, ?, ?)',
+          [target.id, target.username, target.display_name, target.role_name],
+          function (insertErr) {
+            if (insertErr) {
+              db.run('ROLLBACK', () => reject(insertErr));
+              return;
+            }
+            const archiveId = this.lastID;
+            db.run('DELETE FROM users WHERE id = ? AND is_root = 0', [target.id], function (deleteErr) {
+              if (deleteErr || !this.changes) {
+                const error = deleteErr || new Error('Пользователь не найден');
+                db.run('ROLLBACK', () => reject(error));
+                return;
+              }
+              db.run('COMMIT', (commitErr) => {
+                if (commitErr) {
+                  db.run('ROLLBACK', () => reject(commitErr));
+                  return;
+                }
+                resolve({ success: true, userId: target.id, archiveId });
+              });
+            });
+          }
+        );
+      });
+    });
+  });
+}
+
+function beginArchivedUserTransfer(archiveId) {
+  return new Promise((resolve, reject) => {
+    getArchivedUser(archiveId).then((archive) => {
+      if (!archive) return reject(new Error('Архивный пользователь не найден'));
+      db.run(
+        "UPDATE archived_users SET transfer_status = 'transferring' WHERE id = ? AND transfer_status = 'available'",
+        [archiveId],
+        function (err) {
+          if (err) return reject(err);
+          if (!this.changes) return reject(new Error('Архивная запись уже передана или обрабатывается'));
+          resolve({ ...archive, transfer_status: 'transferring' });
+        }
+      );
+    }, reject);
+  });
+}
+
+function finishArchivedUserTransfer(archiveId, success, recipientUsername) {
+  const status = success ? 'transferred' : 'available';
+  return new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE archived_users SET transfer_status = ?, transferred_to = ? WHERE id = ?',
+      [status, success ? recipientUsername : null, archiveId],
+      (err) => {
+        if (err) reject(err);
+        else resolve();
+      }
+    );
+  });
+}
+
 // ========================================
 // ВЛАДЕЛЕЦ/ДОВЕРЕННЫЙ АДМИН — каталог ролей (admin_roles)
 // ========================================
@@ -1164,6 +1256,11 @@ module.exports = {
   approveUser,
   rejectUser,
   getAllUsers,
+  getArchivedUsers,
+  getArchivedUser,
+  archiveAndDeleteUser,
+  beginArchivedUserTransfer,
+  finishArchivedUserTransfer,
   getAllRoles,
   createRole,
   updateRole,

@@ -6225,6 +6225,8 @@ SPARouter.prototype.renderUsersList = async function() {
   const tableEl = document.getElementById('users-table');
   const tbodyEl = document.getElementById('users-tbody');
   const statsEl = document.getElementById('users-stats');
+  const archiveToggle = document.getElementById('users-archive-toggle');
+  const archivePanel = document.getElementById('users-archive-panel');
 
   if (loadingEl) loadingEl.style.display = 'block';
   if (emptyEl) emptyEl.style.display = 'none';
@@ -6234,12 +6236,21 @@ SPARouter.prototype.renderUsersList = async function() {
   const me = authManager.getUser() || {};
   const myPerms = me.permissions || {};
   const can = (key) => !!(me.is_root || myPerms[key]);
+  if (archiveToggle) {
+    archiveToggle.style.display = me.is_root ? '' : 'none';
+    archiveToggle.onclick = () => {
+      if (!archivePanel) return;
+      archivePanel.style.display = archivePanel.style.display === 'none' ? '' : 'none';
+      if (archivePanel.style.display !== 'none') this.renderArchivedUsersList();
+    };
+  }
 
   try {
     const res = await fetch('/api/all-users');
     if (!res.ok) throw new Error('Не удалось загрузить пользователей');
     const data = await res.json();
     const users = data.users || [];
+    if (me.is_root) await this.renderArchivedUsersList();
 
     if (loadingEl) loadingEl.style.display = 'none';
 
@@ -6361,11 +6372,84 @@ SPARouter.prototype.renderUsersList = async function() {
       btn.addEventListener('click', () => this.setRoleManager(btn.dataset.id, btn.dataset.name, false));
     });
     tbodyEl.querySelectorAll('.btn-delete-user').forEach(btn => {
-      btn.addEventListener('click', () => this.showDeleteUserModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
+      btn.addEventListener('click', () => this.showDeleteUserModal(btn.dataset.id, btn.dataset.name));
     });
   } catch (error) {
     if (loadingEl) loadingEl.style.display = 'none';
     this.showUsersToast(error.message || 'Ошибка загрузки пользователей', 'error');
+  }
+};
+
+SPARouter.prototype.renderArchivedUsersList = async function() {
+  const countEl = document.getElementById('users-archive-count');
+  const emptyEl = document.getElementById('users-archive-empty');
+  const tableEl = document.getElementById('users-archive-table-wrap');
+  const tbodyEl = document.getElementById('users-archive-tbody');
+  if (!tbodyEl) return;
+
+  try {
+    const res = await fetch('/api/archived-users');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Не удалось загрузить архив');
+    const users = data.users || [];
+    if (countEl) countEl.textContent = users.length;
+    tbodyEl.replaceChildren();
+    if (emptyEl) emptyEl.style.display = users.length ? 'none' : 'block';
+    if (tableEl) tableEl.style.display = users.length ? 'block' : 'none';
+
+    users.forEach((user) => {
+      const tr = document.createElement('tr');
+      const displayName = this.escapeHtml(user.display_name || user.username);
+      const username = this.escapeHtml(user.username);
+      const roleName = this.escapeHtml(user.role_name || 'Без роли');
+      const deletedAt = user.deleted_at ? new Date(user.deleted_at).toLocaleString('ru-RU') : '—';
+      const transferCell = user.transfer_status === 'transferred'
+        ? `Передано: ${this.escapeHtml(user.transferred_to || 'пользователь')}`
+        : user.transfer_status === 'transferring'
+          ? 'Передача выполняется…'
+          : `<div class="users-archive-transfer"><input class="form-input" data-archive-recipient="${user.id}" aria-label="Логин получателя для ${displayName}" placeholder="Логин получателя"><button class="btn btn-primary btn-sm btn-archive-transfer" data-id="${user.id}">Передать</button></div>`;
+      tr.innerHTML = `
+        <td data-label="Имя" class="cell-primary">${displayName}</td>
+        <td data-label="Логин" style="font-family: monospace;">${username}</td>
+        <td data-label="Роль при удалении">${roleName}</td>
+        <td data-label="Дата удаления">${this.escapeHtml(deletedAt)}</td>
+        <td data-label="Передача данных">${transferCell}</td>
+      `;
+      tbodyEl.appendChild(tr);
+    });
+
+    tbodyEl.querySelectorAll('.btn-archive-transfer').forEach((button) => {
+      button.addEventListener('click', () => {
+        const input = tbodyEl.querySelector(`[data-archive-recipient="${button.dataset.id}"]`);
+        this.transferArchivedUser(button.dataset.id, input && input.value);
+      });
+    });
+  } catch (error) {
+    this.showUsersToast(error.message || 'Ошибка загрузки архива', 'error');
+  }
+};
+
+SPARouter.prototype.transferArchivedUser = async function(archiveId, recipientUsername) {
+  const username = String(recipientUsername || '').trim();
+  if (!username) {
+    this.showUsersToast('Введите логин пользователя-получателя', 'error');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/archived-users/${archiveId}/transfer-content`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Не удалось передать данные');
+    this.showUsersToast(
+      `Данные переданы пользователю «${data.recipient}»: статей — ${data.transferredArticles}, работ галереи — ${data.transferredWorks}`,
+      'success'
+    );
+    await this.renderArchivedUsersList();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
   }
 };
 
@@ -6536,7 +6620,7 @@ SPARouter.prototype.removeBlockedUserRole = async function(userId, userName) {
   }
 };
 
-SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
+SPARouter.prototype.showDeleteUserModal = function(userId, userName) {
   const modal = document.getElementById('delete-user-modal');
   const choice = document.getElementById('delete-user-choice');
   const success = document.getElementById('delete-user-success');
@@ -6546,6 +6630,7 @@ SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
   const transferInput = document.getElementById('delete-user-transfer-login');
   const transferButton = document.getElementById('delete-user-transfer-btn');
   const confirmButton = document.getElementById('delete-user-confirm-btn');
+  let archiveId = null;
   const finish = () => { modal.style.display = 'none'; };
 
   document.getElementById('delete-user-modal-title').textContent = `Удалить пользователя «${userName}»?`;
@@ -6574,6 +6659,7 @@ SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Не удалось удалить пользователя');
+      archiveId = data.archiveId || null;
 
       choice.hidden = true;
       success.hidden = false;
@@ -6614,10 +6700,11 @@ SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
     transferButton.disabled = true;
     transferButton.textContent = 'Передача...';
     try {
-      const res = await fetch(`/api/users/${userId}/transfer-content`, {
+      if (!archiveId) throw new Error('Архивная запись не найдена. Передайте данные из окна архива пользователей.');
+      const res = await fetch(`/api/archived-users/${archiveId}/transfer-content`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceUsername: username, sourceDisplayName: userName, username: recipientLogin })
+        body: JSON.stringify({ username: recipientLogin })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Не удалось передать данные');
@@ -6626,6 +6713,7 @@ SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
       transferInput.disabled = true;
       transferButton.textContent = 'Передано';
       await this.renderUsersList();
+      await this.renderArchivedUsersList();
     } catch (error) {
       this.showUsersToast(error.message, 'error');
       transferButton.disabled = false;

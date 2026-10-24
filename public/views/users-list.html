@@ -3,7 +3,35 @@
   <div class="users-toolbar">
     <h2 class="users-heading"><i class="fas fa-users"></i> Пользователи</h2>
     <p class="users-subtitle">Все зарегистрированные пользователи, иерархия админов, мут и блокировки</p>
+    <button id="users-archive-toggle" class="btn btn-secondary btn-sm" type="button" style="display: none;">
+      <i class="fas fa-box-archive"></i> Архивные пользователи <span id="users-archive-count">0</span>
+    </button>
   </div>
+
+  <section id="users-archive-panel" class="users-roles-panel" style="display: none;">
+    <div class="users-section-toolbar">
+      <h2 class="users-section-title"><i class="fas fa-box-archive"></i> Архивные пользователи</h2>
+    </div>
+    <p class="users-roles-hint">Здесь хранятся аккаунты, удалённые с сохранением данных. Их статьи и работы галереи можно передать существующему пользователю по логину.</p>
+    <div id="users-archive-empty" class="users-empty" style="display: none;">
+      <i class="fas fa-box-open"></i>
+      <h3>Архив пуст</h3>
+    </div>
+    <div id="users-archive-table-wrap" class="table-container table-cards" style="display: none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Имя</th>
+            <th>Логин</th>
+            <th>Роль при удалении</th>
+            <th>Дата удаления</th>
+            <th>Передача данных</th>
+          </tr>
+        </thead>
+        <tbody id="users-archive-tbody"></tbody>
+      </table>
+    </div>
+  </section>
 
   <!-- Статистика -->
   <div class="users-stats-grid" id="users-stats" style="display: none;">
