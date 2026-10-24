@@ -9,7 +9,7 @@
 | Запуск, SPA fallback | `src/server.js`, `src/routes/pages.routes.js` | `public/index.html`, `public/app.js`, `public/spa-router.js` |
 | Аутентификация, профили, root и заявки | `src/routes/auth.routes.js`, `src/middleware/auth.js`, `src/services/avatars.js` | `public/auth-system.js`, `public/spa-router.js`, `public/views/profile.html`, `pending-users.html`, `users-list.html` |
 | Сообщения | `src/routes/messages.routes.js` | `public/app.js`, `public/spa-router.js` |
-| Франшизы (серверы), хабы, роли, каналы, членство | `src/routes/servers.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` | `public/spa-router.js`, `public/views/servers.html` |
+| Франшизы, хабы, публикация, членство и лента | `src/routes/servers.routes.js`, `src/routes/franchises.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` | `public/spa-router.js`, `public/views/servers.html`, `public/site/alltell-client.js` |
 | Глобальная таксономия | `src/routes/taxonomy.routes.js` | `public/spa-router.js` |
 | Статьи Antropedia | `src/routes/articles.routes.js`, `src/services/articles-store.js`, `blocks.js`, `article-layers.js`, `slugify.js`, `mentions.js` | `public/editor-manager.js`, `blocks-renderer.js`, `antropedia.js`, `spa-router.js`, `public/views/articles.html`, `antropedia.html` |
 | Поиск, граф и цвета тегов | `articles.routes.js`, `articles-store.js`, `tag-colors.js` | `public/graph-view.js`, `antropedia.js`, `public/views/tags.html`, `dashboard.html` |

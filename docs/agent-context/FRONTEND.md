@@ -28,6 +28,7 @@ CodeMirror, D3 и геометрические библиотеки. Ищите 
 | `public/spa-router.js` | Навигация, загрузка экранов и крупная часть UI/операций SPA, включая каталог франшиз/хабов и выбор франшизы/хаба в редакторе |
 | `public/views/*.html` | HTML-фрагменты экранов, подгружаемые приложением |
 | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичная витрина; клиентская SPA-навигация между публичными страницами, сервер рендерит article metadata для preview |
+| `public/site/alltell-client.js` | Каталог опубликованных франшиз, членство, хабы и лента AllTell |
 | `public/editor-manager.js`, `blocks-renderer.js`, `editor-blocks.css` | Редактор и отображение документов статей-блоков |
 | `public/antropedia.js`, `antropedia.css`, `editor-obsidian.css` | Вики-экран и оформление Antropedia |
 | `public/graph-view.js` | Граф статей |

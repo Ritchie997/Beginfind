@@ -1367,6 +1367,16 @@ tr:hover td::before {
     border-radius: 6px;
 }
 
+.server-publication-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+.server-publication-toggle input { margin-top: 3px; }
+.server-publication-toggle span { display: grid; gap: 4px; }
+.server-publication-toggle small { color: var(--text-muted); font-size: 12px; font-weight: 400; }
+
 /* ========================================
    BUTTON COMPONENT (канонический .btn — единственное определение)
    ======================================== */

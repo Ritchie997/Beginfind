@@ -52,12 +52,83 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
   }
 });
 
+let resolveServersSchemaReady;
+let rejectServersSchemaReady;
+const serversSchemaReady = new Promise((resolve, reject) => {
+  resolveServersSchemaReady = resolve;
+  rejectServersSchemaReady = reject;
+});
+serversSchemaReady.catch((error) => {
+  console.error('Franchise database schema initialization failed:', error);
+});
+
 const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
   if (err) {
     console.error('Error opening servers database', err);
+    rejectServersSchemaReady(err);
   } else {
     console.log('Connected to servers SQLite database');
     serversDb.run("PRAGMA encoding = 'UTF-8'");
+    let pendingSchemaTasks = 5;
+    let schemaFailed = false;
+    const completeSchemaTask = (taskError) => {
+      if (taskError) {
+        if (!schemaFailed) {
+          schemaFailed = true;
+          rejectServersSchemaReady(taskError);
+        }
+        return;
+      }
+      pendingSchemaTasks--;
+      if (pendingSchemaTasks === 0) resolveServersSchemaReady();
+    };
+
+    serversDb.all('PRAGMA table_info(servers)', (schemaErr, columns) => {
+      if (schemaErr) {
+        completeSchemaTask(schemaErr);
+        return;
+      }
+      if (!columns.length) {
+        completeSchemaTask(new Error('The servers table is missing'));
+        return;
+      }
+      if (!columns.some((column) => column.name === 'is_published')) {
+        serversDb.run('ALTER TABLE servers ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0', (migrationErr) => {
+          completeSchemaTask(migrationErr);
+        });
+      } else {
+        completeSchemaTask();
+      }
+    });
+    serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id INTEGER NOT NULL,
+      hub_id INTEGER,
+      type TEXT NOT NULL CHECK (type IN ('news', 'announcement', 'event')),
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      article_slug TEXT,
+      event_at DATETIME,
+      created_by INTEGER NOT NULL,
+      created_by_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (postTableErr) => {
+      if (postTableErr) {
+        completeSchemaTask(postTableErr);
+        return;
+      }
+      serversDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_posts_server_created ON franchise_posts (server_id, created_at DESC, id DESC)', (postIndexErr) => {
+        completeSchemaTask(postIndexErr);
+      });
+    });
+    serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_feed_reads (
+      user_id INTEGER NOT NULL,
+      server_id INTEGER NOT NULL,
+      last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_post_id INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, server_id)
+    )`, completeSchemaTask);
     serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_hubs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       server_id INTEGER NOT NULL,
@@ -73,11 +144,11 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (hubTableErr) => {
       if (hubTableErr) {
-        console.error('Error creating franchise hubs table:', hubTableErr);
+        completeSchemaTask(hubTableErr);
         return;
       }
       serversDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_hubs_server_status ON franchise_hubs (server_id, status)', (hubIndexErr) => {
-        if (hubIndexErr) console.error('Error creating franchise hubs index:', hubIndexErr);
+        completeSchemaTask(hubIndexErr);
       });
     });
     // Журнал действий на сервере (кто/что/когда) — вкладка "Журнал" в
@@ -94,7 +165,7 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
       action TEXT NOT NULL,
       details TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    )`, completeSchemaTask);
   }
 });
 
@@ -755,4 +826,4 @@ function createGalleryTables(legacy) {
   });
 }
 
-module.exports = { messengerDb, articlesDb, serversDb, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb, galleryDb };
+module.exports = { messengerDb, articlesDb, serversDb, serversSchemaReady, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb, galleryDb };

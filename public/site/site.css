@@ -1949,6 +1949,180 @@
     gap: 6px;
 }
 
+.alltell-app-section { min-height: 50vh; }
+.alltell-app-section .site-section { padding-top: 0; }
+.alltell-state {
+    padding: 28px;
+    border: 1px solid var(--background-accent);
+    border-radius: var(--site-radius-md);
+    color: var(--text-muted);
+    text-align: center;
+}
+.alltell-state h3 { margin: 10px 0 6px; color: var(--header-primary); }
+.alltell-error { color: #ff8c8c; }
+.alltell-toolbar,
+.alltell-live-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+}
+.alltell-toolbar { margin-bottom: 28px; }
+.alltell-toolbar h2,
+.alltell-live-section-heading h2 {
+    margin: 0;
+    color: var(--header-primary);
+    font-size: 22px;
+}
+.alltell-toolbar h2 i,
+.alltell-live-section-heading h2 i { color: var(--blurple); margin-right: 8px; }
+.alltell-toolbar p,
+.alltell-live-section-heading > span { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; }
+.alltell-search { display: flex; gap: 8px; width: min(100%, 420px); }
+.alltell-search input,
+.alltell-post-form input,
+.alltell-post-form select,
+.alltell-post-form textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font: inherit;
+}
+.alltell-search input { flex: 1; }
+.alltell-live-section { margin-top: 34px; }
+.alltell-live-section-heading { margin-bottom: 16px; }
+.alltell-live-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 16px;
+}
+.alltell-live-card {
+    overflow: hidden;
+    border: 1px solid var(--background-accent);
+    border-radius: var(--site-radius-lg);
+    background: var(--background-secondary);
+}
+.alltell-live-card-banner {
+    height: 58px;
+    background: linear-gradient(120deg, #5865f2, #a78bfa 55%, #2dd4bf);
+}
+.alltell-live-card-content { padding: 0 16px 16px; margin-top: -22px; }
+.alltell-live-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--background-secondary);
+    border-radius: 14px;
+    background: linear-gradient(135deg, #5865f2, #a78bfa);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+}
+.alltell-live-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.alltell-live-title-row h3 { margin: 0; color: var(--header-primary); font-size: 17px; overflow-wrap: anywhere; }
+.alltell-unread-badge {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(88, 101, 242, .2);
+    color: #c9ceff;
+    font-size: 11px;
+    font-weight: 700;
+}
+.alltell-draft-badge { background: rgba(250, 166, 26, .2); color: #ffd079; }
+.alltell-live-description { min-height: 36px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.alltell-live-summary { display: flex; flex-direction: column; gap: 5px; color: var(--text-muted); font-size: 12px; }
+.alltell-live-summary i { margin-right: 4px; }
+.alltell-live-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
+.alltell-live-card-foot > span { color: var(--text-muted); font-size: 12px; }
+.alltell-create-note { margin: 26px 0 0; color: var(--text-muted); text-align: center; font-size: 13px; }
+.alltell-toast {
+    position: fixed;
+    z-index: 1200;
+    right: 20px;
+    bottom: 20px;
+    max-width: min(420px, calc(100vw - 40px));
+    padding: 12px 16px;
+    border: 1px solid rgba(59, 165, 93, .55);
+    border-radius: 10px;
+    background: var(--background-secondary);
+    color: #8fe2ac;
+    box-shadow: var(--site-shadow-soft);
+}
+.alltell-create-note a,
+.alltell-back-link,
+.alltell-post-article { color: #aeb5ff; }
+.alltell-back-link { display: inline-block; margin-bottom: 20px; font-size: 13px; }
+.alltell-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 24px;
+    border: 1px solid var(--background-accent);
+    border-radius: var(--site-radius-lg);
+    background: linear-gradient(120deg, rgba(88, 101, 242, .13), var(--background-secondary));
+}
+.alltell-detail-avatar { width: 68px; height: 68px; flex-shrink: 0; font-size: 21px; }
+.alltell-detail-heading { flex: 1; min-width: 0; }
+.alltell-detail-heading h2 { margin: 0; color: var(--header-primary); font-size: 25px; }
+.alltell-detail-heading p { margin: 6px 0; color: var(--text-muted); }
+.alltell-detail-heading > span,
+.alltell-member-label { color: var(--text-muted); font-size: 12px; }
+.alltell-member-label { color: #6fdb9a; white-space: nowrap; }
+.alltell-hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.alltell-hub-card,
+.alltell-post-card {
+    padding: 16px;
+    border: 1px solid var(--background-accent);
+    border-radius: var(--site-radius-md);
+    background: var(--background-secondary);
+}
+.alltell-hub-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.alltell-hub-heading h3 { margin: 0; color: var(--header-primary); font-size: 15px; }
+.alltell-hub-status,
+.alltell-post-type { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.alltell-hub-status-active { background: rgba(59, 165, 93, .2); color: #6fdb9a; }
+.alltell-hub-status-paused { background: rgba(250, 166, 26, .2); color: #ffd079; }
+.alltell-hub-status-finished { background: rgba(153, 170, 181, .18); color: #b8c0c7; }
+.alltell-hub-card p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.alltell-hub-date { color: var(--text-muted); font-size: 11px; }
+.alltell-post-list { display: grid; gap: 12px; }
+.alltell-post-topline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.alltell-post-topline time,
+.alltell-post-hub { color: var(--text-muted); font-size: 11px; }
+.alltell-post-type-news { background: rgba(88, 101, 242, .2); color: #c9ceff; }
+.alltell-post-type-announcement { background: rgba(255, 93, 143, .18); color: #ff9fbb; }
+.alltell-post-type-event { background: rgba(45, 212, 191, .18); color: #75ead9; }
+.alltell-post-card h3 { margin: 10px 0; color: var(--header-primary); font-size: 17px; }
+.alltell-post-body { margin: 0; color: var(--text-normal); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.alltell-post-article { display: inline-block; margin-top: 12px; font-size: 13px; }
+.alltell-post-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; color: var(--text-muted); font-size: 11px; }
+.alltell-post-actions { display: flex; gap: 6px; }
+.alltell-post-form { margin-bottom: 16px; padding: 18px; border: 1px solid var(--background-accent); border-radius: var(--site-radius-md); background: var(--background-secondary); }
+.alltell-post-form h3 { margin: 0 0 14px; color: var(--header-primary); }
+.alltell-post-form label { display: grid; gap: 6px; margin-bottom: 12px; color: var(--text-muted); font-size: 12px; }
+.alltell-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.alltell-form-hint { margin: 0 0 12px; color: var(--text-muted); font-size: 11px; }
+.alltell-post-form-actions { display: flex; gap: 8px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 700px) {
+    .alltell-toolbar,
+    .alltell-live-section-heading { align-items: flex-start; flex-direction: column; }
+    .alltell-search { width: 100%; }
+    .alltell-detail-header { align-items: flex-start; flex-wrap: wrap; padding: 18px; }
+    .alltell-detail-heading { flex-basis: calc(100% - 88px); }
+    .alltell-detail-header > button,
+    .alltell-member-label { margin-left: 86px; }
+    .alltell-form-row { grid-template-columns: 1fr; gap: 0; }
+    .alltell-post-footer { align-items: flex-start; flex-direction: column; }
+}
+
 /* Шаги "как начать" на странице AllTell */
 .steps-grid {
     display: grid;

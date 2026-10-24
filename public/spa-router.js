@@ -5556,12 +5556,18 @@ class SPARouter {
       <div class="server-settings">
       ${!canEdit ? `<div class="server-permission-note"><i class="fas fa-circle-info"></i> Изменять настройки сервера может только его владелец.</div>` : ''}
       <div class="form-group" style="margin-bottom: 18px;">
-        <label class="form-label" for="server-settings-name">Название сервера</label>
+        <label class="form-label" for="server-settings-name">Название франшизы</label>
         <input type="text" id="server-settings-name" class="form-input" value="${this.escapeHtml(server.name)}" maxlength="100" ${canEdit ? '' : 'disabled'}>
       </div>
       <div class="form-group" style="margin-bottom: 18px;">
         <label class="form-label" for="server-settings-description">Описание</label>
         <textarea id="server-settings-description" class="form-input server-settings-textarea" rows="3" maxlength="500" data-autogrow ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
+      </div>
+      <div class="form-group server-publication-setting">
+        <label class="server-publication-toggle">
+          <input type="checkbox" id="server-settings-published" ${server.is_published ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>
+          <span><strong>Опубликовать франшизу в AllTell</strong><small>Только опубликованные франшизы отображаются в публичном каталоге.</small></span>
+        </label>
       </div>
       ${canEdit ? `<div class="server-settings-actions"><button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button></div>` : ''}
 
@@ -5576,7 +5582,7 @@ class SPARouter {
       ${canDelete ? `
         <div class="server-danger-zone">
           <h4>Опасная зона</h4>
-          <p>Удаление сервера безвозвратно сотрёт его роли, участников и каналы.</p>
+          <p>Удаление франшизы безвозвратно сотрёт её роли, участников, каналы и публикации.</p>
           <button class="btn btn-danger" onclick="spaRouter.deleteServer(${server.id}, true)"><i class="fas fa-trash"></i> Удалить сервер</button>
         </div>
       ` : ''}
@@ -5604,6 +5610,7 @@ class SPARouter {
   async saveServerSettings() {
     const name = document.getElementById('server-settings-name').value.trim();
     const description = document.getElementById('server-settings-description').value.trim();
+    const isPublished = document.getElementById('server-settings-published').checked;
     if (!name) {
       showMessage('Название сервера обязательно', 'error');
       return;
@@ -5611,6 +5618,12 @@ class SPARouter {
     try {
       const result = await apiClient.updateServer(this.currentServerId, { name, description });
       if (result.success) {
+        const publicationResult = await apiClient.updateServerPublication(this.currentServerId, isPublished);
+        if (!publicationResult.success) {
+          showMessage(`Франшиза обновлена, но публикацию изменить не удалось: ${this.serverApiError(publicationResult)}`, 'error');
+          await this.refreshServerWorkspace();
+          return;
+        }
         showMessage('Сервер обновлён', 'success');
         await this.refreshServerWorkspace();
       } else {

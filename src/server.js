@@ -36,6 +36,7 @@ const stickersStore = require('./services/stickers-store');
 const { getAvatarUrl } = require('./services/avatars');
 const taxonomyRoutes = require('./routes/taxonomy.routes');
 const serversRoutes = require('./routes/servers.routes');
+const franchisesRoutes = require('./routes/franchises.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const backupsRoutes = require('./routes/backups.routes');
 const settingsRoutes = require('./routes/settings.routes');
@@ -121,6 +122,7 @@ app.use('/api', publicArticlesRoutes.createPublicArticlesRouter(articlesStore, s
 app.use('/api', articlesRoutes);
 app.use('/api', taxonomyRoutes);
 app.use('/api', serversRoutes);
+app.use('/api', franchisesRoutes);
 app.use('/api', uploadsRoutes);
 app.use('/api', backupsRoutes);
 app.use('/api', settingsRoutes);

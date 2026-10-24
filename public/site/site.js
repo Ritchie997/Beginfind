@@ -2024,6 +2024,7 @@
     var page = document.body.getAttribute('data-page');
     if (page === 'home') currentRouteCleanup = initPublicHome();
     if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
+    if (page === 'alltell' && window.AllTellClient) currentRouteCleanup = window.AllTellClient.init();
     if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
     if (page === 'maintenance') currentRouteCleanup = initMaintenancePage();
     var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);

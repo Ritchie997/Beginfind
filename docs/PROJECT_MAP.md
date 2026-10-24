@@ -45,7 +45,7 @@ src/server.js
 | Функция | Сервер: маршрут → логика | Клиент / разметка |
 | --- | --- | --- |
 | Вход, профиль, пользователи | `auth.routes.js`, `middleware/auth.js`, `services/user-deletion.js` | `auth-system.js`, публичный `site/profile.js`, `spa-router.js`, `views/profile.html`, `views/pending-users.html`, `views/users-list.html` |
-| Сообщения и серверы | `messages.routes.js`, `servers.routes.js`, `server-system-logic.js`, `server-permissions.js` | `app.js`, `spa-router.js`, `views/servers.html` |
+| Сообщения и франшизы | `messages.routes.js`, `servers.routes.js`, `franchises.routes.js`, `server-system-logic.js`, `server-permissions.js` | Админка: `app.js`, `spa-router.js`, `views/servers.html`; публичная основа: `site/alltell-client.js` |
 | Статьи Antropedia | `articles.routes.js`, `public-articles.routes.js`, `articles-store.js`, `public-articles.js`, `blocks.js`, `article-layers.js`, `mentions.js` | `editor-manager.js`, `blocks-renderer.js`, `antropedia.js`, `site/site.js`, `spa-router.js`, `views/articles.html`, `views/antropedia.html` |
 | Граф статей и теги | `articles.routes.js`, `tag-colors.js` | `graph-view.js`, `antropedia.js`, `views/tags.html`, `views/dashboard.html` |
 | Карты и миры | `maps.routes.js`, `maps-store.js`, `worlds-store.js`, `map-access.js`, `map-tiler.js` | `maps/map-core.js`, `map-editor.js`, `maps-ui.js`, `map-calendar.js` |
@@ -75,7 +75,7 @@ src/server.js
 | Карты и настройки миров | `content/maps/*.json`, `content/worlds/*.json` | `maps-store.js`, `worlds-store.js` |
 | Исходные изображения карт | `map-sources/` | `map-tiler.js`, `maps.routes.js` |
 | Тайлы карт и пользовательские файлы | `public/uploads/` | `map-tiler.js`, доменные services/routes |
-| Сообщения, пользователи, серверы и прочие домены | SQLite в корне проекта: `messenger.db`, `users.db`, `servers.db`, `articles.db`, `bookmarks.db`, `drafts.db`, `social.db`, `stickers.db`, `feedback.db`, `gallery.db` | `src/db/connections.js`, миграции, соответствующие stores/routes |
+| Сообщения, пользователи, франшизы, хабы, публикации и прочие домены | SQLite в корне проекта: `messenger.db`, `users.db`, `servers.db`, `articles.db`, `bookmarks.db`, `drafts.db`, `social.db`, `stickers.db`, `feedback.db`, `gallery.db` | `src/db/connections.js`, миграции, соответствующие stores/routes |
 | Настройки сервера | JSON-файлы в корне, создаваемые по необходимости | соответствующие `*-settings.js` и `src/server.js` |
 | Резервные копии | `backups/` | `src/services/backup.js` |
 

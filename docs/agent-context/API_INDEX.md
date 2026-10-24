@@ -142,6 +142,16 @@
 - `POST /feedback/cases/:id/complete`
 - `POST /feedback/cases/:id/return`
 
+## `franchises.routes.js`
+
+- `GET /public/franchises`
+- `GET /public/franchises/:id`
+- `GET /franchises/mine`
+- `POST /franchises/:id/feed/read`
+- `POST /franchises/:id/posts`
+- `PUT /franchises/:id/posts/:postId`
+- `DELETE /franchises/:id/posts/:postId`
+
 ## `gallery.routes.js`
 
 - `GET /public/gallery/works`
@@ -221,6 +231,7 @@
 - `GET /servers/:id`
 - `POST /servers`
 - `PUT /servers/:id`
+- `PUT /servers/:id/publication`
 - `DELETE /servers/:id`
 - `GET /servers/:id/users`
 - `GET /servers/:id/roles`

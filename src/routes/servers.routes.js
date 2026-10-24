@@ -8,9 +8,16 @@ const serverSystem = require('../services/server-system-logic');
 const { isAdminOnServer, canManageUser } = require('../services/server-permissions');
 const { dbPath } = require('../config/paths');
 const articlesStore = require('../services/articles-store');
+const { serversSchemaReady } = require('../db/connections');
 
 const router = express.Router();
 const HUB_STATUSES = new Set(['active', 'paused', 'finished']);
+
+router.use((req, res, next) => {
+  serversSchemaReady.then(() => next()).catch(() => {
+    res.status(500).json({ error: 'Не удалось подготовить базу франшиз' });
+  });
+});
 
 // "Админ сервера" для проверок в этом файле: владелец системы (is_root)
 // администрирует любой сервер, а владелец сервера сохраняет права независимо
@@ -201,6 +208,13 @@ router.delete('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkAppr
     }
     const hub = await dbGet('servers.db', 'SELECT id, name FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
     if (!hub) return res.status(404).json({ error: 'Hub not found in this franchise' });
+    const linkedPosts = await dbGet('servers.db', 'SELECT COUNT(*) AS count FROM franchise_posts WHERE hub_id = ?', [hubId]);
+    if (linkedPosts && linkedPosts.count > 0) {
+      return res.status(409).json({
+        error: `Hub is linked to ${linkedPosts.count} franchise publication(s). Remove or change those links before deleting it.`,
+        linked_posts: linkedPosts.count
+      });
+    }
     const linkedArticles = [...articlesStore.listArticles(), ...articlesStore.listTrashedArticles()]
       .filter(article => Number(article.hub_id) === hubId).length;
     if (linkedArticles) {
@@ -287,6 +301,26 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
       }
       serversDb.close();
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/servers/:id/publication', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    if (!Number.isInteger(serverId) || serverId < 1) return res.status(400).json({ error: 'Некорректная франшиза' });
+    if (typeof req.body.is_published !== 'boolean') return res.status(400).json({ error: 'Укажите состояние публикации' });
+    if (!(await isServerAdmin(req.user, serverId))) return res.status(403).json({ error: 'Недостаточно прав для публикации франшизы' });
+    const result = await dbRun('servers.db', `
+      UPDATE servers SET is_published = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `, [req.body.is_published ? 1 : 0, serverId]);
+    if (!result.changes) return res.status(404).json({ error: 'Франшиза не найдена' });
+    const actor = hubActorName(req.user);
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'publication_changed', {
+      is_published: req.body.is_published
+    });
+    res.json({ id: serverId, is_published: req.body.is_published });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -421,9 +455,12 @@ router.post('/servers/:serverId/users/:userId', auth.authenticateToken, auth.che
     if (!targetUser) {
       return res.status(404).json({ error: `Пользователь с ID ${userId} не найден` });
     }
-    const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [serverId]);
+    const server = await dbGet('servers.db', 'SELECT id, is_published FROM servers WHERE id = ?', [serverId]);
     if (!server) {
       return res.status(404).json({ error: 'Server not found' });
+    }
+    if (userId === currentUserId && !server.is_published && !(await isServerAdmin(req.user, serverId))) {
+      return res.status(404).json({ error: 'Франшиза не опубликована' });
     }
     const existing = await dbGet('servers.db', 'SELECT 1 FROM user_server_memberships WHERE user_id = ? AND server_id = ?', [userId, serverId]);
     if (existing) {

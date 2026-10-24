@@ -69,8 +69,8 @@ function updateServer(serverId, name, description) {
   });
 }
 
-// Удаление сервера вместе со всеми связанными данными (роли, участники,
-// назначения ролей, каналы) в одной транзакции.
+// Удаление франшизы вместе со связанными данными (роли, участники,
+// назначения ролей, каналы и публикации) в одной транзакции.
 //
 // Раньше в проекте было два независимых обработчика DELETE /api/servers/:id
 // (один по параметру :id, другой по :serverId — фактически один и тот же
@@ -105,16 +105,24 @@ function deleteServer(serverId) {
             db.run('DELETE FROM server_channels WHERE server_id = ?', [serverId], (err) => {
               if (err) return rollback(err);
 
-              db.run('DELETE FROM servers WHERE id = ?', [serverId], function (err) {
+              db.run('DELETE FROM franchise_posts WHERE server_id = ?', [serverId], (err) => {
                 if (err) return rollback(err);
 
-                db.run('COMMIT', (commitErr) => {
-                  db.close();
-                  if (commitErr) {
-                    reject(commitErr);
-                  } else {
-                    resolve({ changes: this.changes, serverId });
-                  }
+                db.run('DELETE FROM franchise_feed_reads WHERE server_id = ?', [serverId], (err) => {
+                  if (err) return rollback(err);
+
+                  db.run('DELETE FROM servers WHERE id = ?', [serverId], function (err) {
+                    if (err) return rollback(err);
+
+                    db.run('COMMIT', (commitErr) => {
+                      db.close();
+                      if (commitErr) {
+                        reject(commitErr);
+                      } else {
+                        resolve({ changes: this.changes, serverId });
+                      }
+                    });
+                  });
                 });
               });
             });
@@ -326,7 +334,7 @@ function getAllServersWithUserCount() {
     
     // Сначала получаем все сервера
     serversDb.all(`
-      SELECT s.id, s.name, s.description, s.owner_id, s.created_at,
+      SELECT s.id, s.name, s.description, s.owner_id, s.is_published, s.created_at,
              s.updated_at
       FROM servers s
       ORDER BY s.created_at DESC
@@ -413,7 +421,7 @@ function getServerWithDetails(serverId) {
     
     // Получаем основную информацию о сервере
     serversDb.get(`
-      SELECT s.id, s.name, s.description, s.owner_id, s.created_at, s.updated_at
+      SELECT s.id, s.name, s.description, s.owner_id, s.is_published, s.created_at, s.updated_at
       FROM servers s
       WHERE s.id = ?
     `, [serverId], (err, serverRow) => {

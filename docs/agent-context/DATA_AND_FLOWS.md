@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Пользователи | `users.db` | `src/middleware/auth.js`, миграция `src/db/migrate-users-schema.js` |
 | Сообщения | `messenger.db` | `src/db/connections.js`, `src/routes/messages.routes.js` |
-| Франшизы/серверы, хабы, членства, роли, аудит | `servers.db` | `src/routes/servers.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` |
+| Франшизы/серверы, публикация, хабы, членства, лента и отметки прочтения | `servers.db` | `src/db/connections.js`, `src/routes/servers.routes.js`, `src/routes/franchises.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` |
 | Документы Antropedia | `content/<slug>.json`; удалённое — `content/.trash/` | `src/services/articles-store.js`, `blocks.js` |
 | Вспомогательная таблица цветов тегов | `articles.db` | `src/services/tag-colors.js` |
 | Закладки | `bookmarks.db` | `src/services/bookmarks-store.js` |
@@ -32,6 +32,13 @@
 SQLite-соединения самостоятельно; `connections.js` — не единственное место,
 где встречается база пользователей. Полный состав таблиц проверяйте поиском по
 `CREATE TABLE` в `src/db/` и stores.
+
+Франшиза не попадает в публичный каталог, пока создатель не установит
+`servers.is_published = 1`; существующие строки мигрируются со значением `0`.
+Публикации и индивидуальный курс непрочитанного хранятся в
+`franchise_posts` и `franchise_feed_reads` внутри `servers.db`. Удаление хаба,
+на который ссылаются статьи или публикации, блокируется; публикации и курсы
+прочтения удаляются вместе с франшизой при её явном удалении.
 
 ### Удаление пользователя из админ-панели
 
