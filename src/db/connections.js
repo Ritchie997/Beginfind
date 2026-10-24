@@ -58,6 +58,28 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
   } else {
     console.log('Connected to servers SQLite database');
     serversDb.run("PRAGMA encoding = 'UTF-8'");
+    serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_hubs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'finished')),
+      created_by INTEGER NOT NULL,
+      created_by_name TEXT NOT NULL,
+      status_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      status_updated_by INTEGER,
+      status_updated_by_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (hubTableErr) => {
+      if (hubTableErr) {
+        console.error('Error creating franchise hubs table:', hubTableErr);
+        return;
+      }
+      serversDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_hubs_server_status ON franchise_hubs (server_id, status)', (hubIndexErr) => {
+        if (hubIndexErr) console.error('Error creating franchise hubs index:', hubIndexErr);
+      });
+    });
     // Журнал действий на сервере (кто/что/когда) — вкладка "Журнал" в
     // рабочей области сервера, см. logServerAction/getServerAuditLog в
     // server-system-logic.js. actor_username денормализован (снят с

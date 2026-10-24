@@ -25,7 +25,7 @@ CodeMirror, D3 и геометрические библиотеки. Ищите 
 | Файлы | Ответственность |
 | --- | --- |
 | `public/app.js`, `auth-system.js`, `request-guard.js` | Инициализация, auth/client state, общие запросы |
-| `public/spa-router.js` | Навигация, загрузка экранов и крупная часть UI/операций SPA |
+| `public/spa-router.js` | Навигация, загрузка экранов и крупная часть UI/операций SPA, включая каталог франшиз/хабов и выбор франшизы/хаба в редакторе |
 | `public/views/*.html` | HTML-фрагменты экранов, подгружаемые приложением |
 | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичная витрина; клиентская SPA-навигация между публичными страницами, сервер рендерит article metadata для preview |
 | `public/editor-manager.js`, `blocks-renderer.js`, `editor-blocks.css` | Редактор и отображение документов статей-блоков |

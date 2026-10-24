@@ -7,8 +7,10 @@ const auth = require('../middleware/auth');
 const serverSystem = require('../services/server-system-logic');
 const { isAdminOnServer, canManageUser } = require('../services/server-permissions');
 const { dbPath } = require('../config/paths');
+const articlesStore = require('../services/articles-store');
 
 const router = express.Router();
+const HUB_STATUSES = new Set(['active', 'paused', 'finished']);
 
 // "Админ сервера" для проверок в этом файле: владелец системы (is_root)
 // администрирует любой сервер, а владелец сервера сохраняет права независимо
@@ -36,11 +38,180 @@ function dbGet(dbFile, sql, params) {
   });
 }
 
+function dbAll(dbFile, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath(dbFile));
+    db.all(sql, params, (err, rows) => {
+      db.close();
+      if (err) reject(err); else resolve(rows);
+    });
+  });
+}
+
+function dbRun(dbFile, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath(dbFile));
+    db.run(sql, params, function(err) {
+      db.close();
+      if (err) reject(err); else resolve({ changes: this.changes, lastID: this.lastID });
+    });
+  });
+}
+
+async function hubSummariesByServer() {
+  const rows = await dbAll('servers.db', `
+    SELECT server_id, status, COUNT(*) AS count
+    FROM franchise_hubs
+    GROUP BY server_id, status
+  `);
+  const summaries = new Map();
+  for (const row of rows) {
+    if (!summaries.has(row.server_id)) {
+      summaries.set(row.server_id, { total: 0, active: 0, paused: 0, finished: 0 });
+    }
+    const summary = summaries.get(row.server_id);
+    summary[row.status] = row.count;
+    summary.total += row.count;
+  }
+  return summaries;
+}
+
+function hubActorName(user) {
+  return user.display_name || user.username || `Пользователь ${user.id}`;
+}
+
 // Получение всех серверов
 router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const servers = await serverSystem.getAllServersWithUserCount();
+    const [servers, summaries] = await Promise.all([
+      serverSystem.getAllServersWithUserCount(),
+      hubSummariesByServer()
+    ]);
+    for (const server of servers) {
+      server.hub_summary = summaries.get(server.id) || { total: 0, active: 0, paused: 0, finished: 0 };
+    }
     res.json(servers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Хабы франшизы (внутреннее имя верхнего уровня — server).
+router.get('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [req.params.id]);
+    if (!server) return res.status(404).json({ error: 'Franchise not found' });
+    const hubs = await dbAll('servers.db', `
+      SELECT id, server_id, name, description, status, created_by,
+             created_by_name, status_updated_at, status_updated_by,
+             status_updated_by_name, created_at, updated_at
+      FROM franchise_hubs
+      WHERE server_id = ?
+      ORDER BY created_at DESC, id DESC
+    `, [req.params.id]);
+    res.json(hubs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    if (!Number.isInteger(serverId) || serverId < 1) return res.status(400).json({ error: 'Invalid franchise id' });
+    if (!(await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [serverId]))) {
+      return res.status(404).json({ error: 'Franchise not found' });
+    }
+    if (!(await isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Only the franchise creator or an administrator can manage hubs' });
+    }
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
+    if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
+    if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
+    const actor = hubActorName(req.user);
+    const result = await dbRun('servers.db', `
+      INSERT INTO franchise_hubs (server_id, name, description, created_by, created_by_name, status_updated_by, status_updated_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [serverId, name, description, req.user.id, actor, req.user.id, actor]);
+    const hub = await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [result.lastID]);
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_created', { hubId: hub.id, name });
+    res.status(201).json(hub);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    const hubId = Number(req.params.hubId);
+    if (!(await isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Only the franchise creator or an administrator can manage hubs' });
+    }
+    const existing = await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
+    if (!existing) return res.status(404).json({ error: 'Hub not found in this franchise' });
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
+    if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
+    if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
+    await dbRun('servers.db', `
+      UPDATE franchise_hubs SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND server_id = ?
+    `, [name, description, hubId, serverId]);
+    const actor = hubActorName(req.user);
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_updated', { hubId, name });
+    res.json(await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [hubId]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/servers/:id/hubs/:hubId/status', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    const hubId = Number(req.params.hubId);
+    if (!(await isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Only the franchise creator or an administrator can manage hubs' });
+    }
+    const status = req.body.status;
+    if (!HUB_STATUSES.has(status)) return res.status(400).json({ error: 'Invalid hub status' });
+    const existing = await dbGet('servers.db', 'SELECT id, status FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
+    if (!existing) return res.status(404).json({ error: 'Hub not found in this franchise' });
+    const actor = hubActorName(req.user);
+    await dbRun('servers.db', `
+      UPDATE franchise_hubs
+      SET status = ?, status_updated_at = CURRENT_TIMESTAMP, status_updated_by = ?,
+          status_updated_by_name = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND server_id = ?
+    `, [status, req.user.id, actor, hubId, serverId]);
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_status_changed', { hubId, from: existing.status, to: status });
+    res.json(await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [hubId]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    const hubId = Number(req.params.hubId);
+    if (!(await isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Only the franchise creator or an administrator can manage hubs' });
+    }
+    const hub = await dbGet('servers.db', 'SELECT id, name FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
+    if (!hub) return res.status(404).json({ error: 'Hub not found in this franchise' });
+    const linkedArticles = [...articlesStore.listArticles(), ...articlesStore.listTrashedArticles()]
+      .filter(article => Number(article.hub_id) === hubId).length;
+    if (linkedArticles) {
+      return res.status(409).json({
+        error: `Hub is linked to ${linkedArticles} article(s). Remove or change those links before deleting it.`,
+        linked_articles: linkedArticles
+      });
+    }
+    await dbRun('servers.db', 'DELETE FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
+    await serverSystem.logServerAction(serverId, req.user.id, hubActorName(req.user), 'hub_deleted', { hubId, name: hub.name });
+    res.json({ deleted: 1, hubId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -155,6 +326,11 @@ router.delete('/servers/:id', auth.authenticateToken, auth.checkApproved, async 
       }
 
       try {
+        const hubCount = await dbGet('servers.db', 'SELECT COUNT(*) AS count FROM franchise_hubs WHERE server_id = ?', [id]);
+        if (hubCount && hubCount.count > 0) {
+          res.status(409).json({ error: 'Сначала удалите хабы франшизы; хабы со связанными статьями удалить нельзя' });
+          return;
+        }
         // Пишем в журнал ДО удаления — после deleteServer строка сервера
         // (и всё, что на неё формально "ссылалось" бы) уже не существует,
         // но сама запись в server_audit_log остаётся историческим следом

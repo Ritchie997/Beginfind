@@ -4,7 +4,7 @@
   <div id="servers-directory">
     <div class="servers-toolbar">
       <div class="servers-toolbar-row servers-toolbar-row-main">
-        <h2 class="servers-heading"><i class="fas fa-server"></i> Сервера</h2>
+        <h2 class="servers-heading"><i class="fas fa-server"></i> Франшизы</h2>
         <div class="servers-search-wrap">
           <i class="fas fa-search"></i>
           <input type="text" id="servers-search-input" class="servers-search-input" placeholder="Поиск">
@@ -15,9 +15,17 @@
           <option value="name_asc">По названию (А-Я)</option>
           <option value="members_desc">Больше всего участников</option>
         </select>
-        <button class="btn btn-primary" id="create-server-btn"><i class="fas fa-plus"></i> Создать сервер</button>
+        <button class="btn btn-primary" id="create-server-btn"><i class="fas fa-plus"></i> Создать франшизу</button>
       </div>
       <div class="servers-toolbar-row servers-toolbar-row-status">
+        <select id="servers-hubs-filter" class="form-select servers-hubs-filter" aria-label="Фильтр франшиз по хабам">
+          <option value="all">Все франшизы</option>
+          <option value="with">С хабами</option>
+          <option value="without">Без хабов</option>
+          <option value="active">Есть активные хабы</option>
+          <option value="paused">Есть хабы на паузе</option>
+          <option value="finished">Есть завершённые хабы</option>
+        </select>
         <div class="servers-stats" id="servers-stats"></div>
         <div class="servers-count" id="servers-count"></div>
       </div>
@@ -31,9 +39,9 @@
 
     <div class="servers-empty" id="servers-empty" hidden>
       <i class="fas fa-server"></i>
-      <h3>Пока нет ни одного сервера</h3>
-      <p>Сервер — это отдельное пространство со своими ролями и участниками. Он используется, чтобы ограничивать доступ к статьям (поле «Доступ для» в редакторе).</p>
-      <button class="btn btn-primary" id="create-server-empty-btn"><i class="fas fa-plus"></i> Создать первый сервер</button>
+      <h3>Пока нет ни одной франшизы</h3>
+      <p>Франшиза объединяет хабы, а также задаёт роли и доступ к статьям.</p>
+      <button class="btn btn-primary" id="create-server-empty-btn"><i class="fas fa-plus"></i> Создать первую франшизу</button>
     </div>
 
     <div class="servers-grid" id="servers-grid" hidden></div>
@@ -41,7 +49,7 @@
 
   <!-- ============ Рабочее пространство сервера (открывается вместо каталога) ============ -->
   <div id="server-workspace" class="server-workspace" hidden>
-    <button class="server-workspace-back" id="server-workspace-back-btn"><i class="fas fa-arrow-left"></i> Ко всем серверам</button>
+    <button class="server-workspace-back" id="server-workspace-back-btn"><i class="fas fa-arrow-left"></i> Ко всем франшизам</button>
 
     <div class="server-workspace-header">
       <div class="server-avatar server-avatar-lg" id="server-workspace-avatar"></div>
@@ -57,6 +65,7 @@
       <button type="button" class="editor-mode-tab" data-server-tab="members"><i class="fas fa-users"></i> Участники</button>
       <button type="button" class="editor-mode-tab" data-server-tab="roles"><i class="fas fa-user-shield"></i> Роли</button>
       <button type="button" class="editor-mode-tab" data-server-tab="channels"><i class="fas fa-hashtag"></i> Каналы</button>
+      <button type="button" class="editor-mode-tab" data-server-tab="hubs"><i class="fas fa-layer-group"></i> Хабы</button>
       <button type="button" class="editor-mode-tab" data-server-tab="maps"><i class="fas fa-map"></i> Карты</button>
       <button type="button" class="editor-mode-tab" data-server-tab="log"><i class="fas fa-clock-rotate-left"></i> Журнал</button>
       <button type="button" class="editor-mode-tab" data-server-tab="settings"><i class="fas fa-gear"></i> Настройки</button>
@@ -74,29 +83,29 @@
        (заголовок как обычный текст, кнопки сразу под последним полем) —
        по отзыву "выглядит устаревше". -->
 
-  <!-- Создать сервер -->
+  <!-- Создать франшизу -->
   <div id="create-server-modal" class="modal-overlay" hidden>
     <div class="modal-box modal-box-create">
       <div class="modal-header modal-header-hero">
         <div class="servers-create-hero">
           <div class="server-avatar server-avatar-lg" id="create-server-avatar-preview">?</div>
           <div>
-            <h3>Новый сервер</h3>
-            <p class="modal-subtitle">Пространство со своими ролями и участниками</p>
+            <h3>Новая франшиза</h3>
+            <p class="modal-subtitle">Франшиза объединяет хабы и задаёт доступ к статьям</p>
           </div>
         </div>
         <button type="button" class="modal-close" id="create-server-close-btn" title="Закрыть">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="server-name">Название <span class="servers-required">*</span></label>
-          <input type="text" id="server-name" class="form-input" placeholder="Например: Команда разработки" maxlength="100">
+          <label class="form-label" for="server-name">Название франшизы <span class="servers-required">*</span></label>
+          <input type="text" id="server-name" class="form-input" placeholder="Например: Вселенная" maxlength="100">
         </div>
         <div class="form-group">
           <label class="form-label" for="server-description">Описание</label>
-          <textarea id="server-description" class="form-input" data-autogrow placeholder="Коротко — для чего этот сервер (необязательно)" rows="3" maxlength="500"></textarea>
+          <textarea id="server-description" class="form-input" data-autogrow placeholder="Краткое описание франшизы (необязательно)" rows="3" maxlength="500"></textarea>
         </div>
-        <p class="modal-hint"><i class="fas fa-circle-info"></i> Вы автоматически станете владельцем и получите системную роль «admin» на этом сервере.</p>
+        <p class="modal-hint"><i class="fas fa-circle-info"></i> Вы автоматически станете создателем франшизы и получите административные права.</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="cancel-create-server-btn">Отмена</button>
@@ -350,6 +359,11 @@
   padding: 9px 10px;
 }
 
+.servers-hubs-filter {
+  width: auto;
+  min-width: 170px;
+}
+
 .servers-stats {
   display: flex;
   flex-wrap: wrap;
@@ -544,6 +558,88 @@
   color: var(--text-muted);
 }
 .servers-card-delete-btn:hover { background: var(--red); color: #fff; }
+
+.franchise-hub-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--header-secondary);
+  font-size: 12px;
+}
+.franchise-hub-summary i { color: var(--blurple); }
+.franchise-hubs-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--blurple);
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+  font-size: 12px;
+}
+.franchise-hubs-preview {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  background: var(--background-tertiary);
+  border-radius: 7px;
+}
+.franchise-hubs-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.franchise-hubs-preview p { margin: 0; color: var(--text-muted); font-size: 12px; }
+
+.hub-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.hub-status-active { background: rgba(59, 165, 93, .17); color: #57d98a; }
+.hub-status-paused { background: rgba(250, 168, 26, .17); color: #ffc65c; }
+.hub-status-finished { background: rgba(148, 155, 164, .18); color: #c3c8ce; }
+
+.franchise-hubs-help,
+.franchise-hubs-empty p { color: var(--text-muted); font-size: 13px; }
+.franchise-hubs-help { margin: 5px 0 0; }
+.franchise-hubs-empty { padding: 28px 16px; text-align: center; color: var(--text-muted); }
+.franchise-hubs-empty > i { color: var(--blurple); font-size: 24px; }
+.franchise-hubs-empty h3 { margin: 10px 0 5px; color: var(--text-normal); font-size: 16px; }
+.franchise-hubs-empty p { margin: 0 0 14px; }
+.server-hubs-loading { color: var(--text-muted); }
+.franchise-hub-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+}
+.franchise-hub-form h3 { margin: 0; font-size: 15px; color: var(--text-normal); }
+.franchise-hub-form .form-label { display: grid; gap: 6px; }
+.franchise-hub-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.franchise-hub-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--background-accent);
+}
+.franchise-hub-card-main { flex: 1; min-width: 0; }
+.franchise-hub-card-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.franchise-hub-card h3 { margin: 0; color: var(--text-normal); font-size: 15px; }
+.franchise-hub-card p { margin: 8px 0; color: var(--header-secondary); font-size: 13px; }
+.franchise-hub-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text-muted); font-size: 11px; }
+.franchise-hub-card-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.hub-status-control { display: grid; gap: 4px; color: var(--text-muted); font-size: 11px; }
+.hub-status-control .form-select { min-width: 145px; }
 
 /* --- Workspace --- */
 .server-workspace {
@@ -783,19 +879,22 @@ textarea[data-autogrow] {
   #create-server-btn { order: 2; }
   .servers-search-wrap { order: 3; flex: 1 1 100%; }
   .servers-sort-select { order: 4; flex: 1 1 100%; width: 100%; min-width: 0; }
+  .servers-hubs-filter { width: 100%; }
   .servers-toolbar-row-status { padding-top: 8px; }
   .servers-empty { padding: 28px 16px; }
   .server-workspace-header { flex-direction: column; }
   .servers-permissions-grid { grid-template-columns: 1fr; }
+  .franchise-hub-card { flex-direction: column; }
+  .franchise-hub-card-actions { justify-content: flex-start; }
 }
 
-/* Панель вкладок сервера (Обзор/Участники/Роли/Каналы/Журнал/Настройки) —
+/* Панель вкладок франшизы (Обзор/Участники/Роли/Каналы/Хабы/Карты/Журнал/Настройки) —
    переиспользует .editor-mode-tab* из editor-obsidian.css, где на ≤1024px
    заложено "flex:1; min-width:0" в расчёте на тулбар редактора статей
    (2-3 вкладки: Редактирование/Просмотр/Разделить), который на телефоне
    именно сжимается под ширину экрана. У вкладок сервера их 6, и то же самое
-   min-width:0 при таком количестве позволяет кнопке сжаться уже своего
-   текста (white-space:nowrap не даёт тексту перенестись внутри самой
+   min-width:0 при таком количестве вкладок позволяет кнопке сжаться уже
+   своего текста (white-space:nowrap не даёт тексту перенестись внутри самой
    кнопки) — текст просто вылезает за её рамки. Здесь вместо сжатия —
    перенос: каждая вкладка держит естественный размер (flex:none), а те,
    что не поместились в строку, уходят на следующую. */

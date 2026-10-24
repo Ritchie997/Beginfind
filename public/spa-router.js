@@ -118,6 +118,10 @@ class SPARouter {
     this.currentServerId = null;
     this.currentServerData = null; // { server, members, roles, isAdmin, isOwner, isRoot }
     this.currentServerWorkspaceTab = 'overview';
+    this.currentFranchiseHubs = [];
+    this.franchiseHubEditorId = null;
+    this.franchiseHubPreviewCache = new Map();
+    this.expandedFranchiseHubIds = new Set();
     this.assignRoleTargetUserId = null;
     this.roleEditorEditingId = null;
     this.channelEditorEditingId = null;
@@ -476,7 +480,7 @@ class SPARouter {
       '/gallery': 'Галерея - Админ-панель AllTell',
       '/articles': 'Редактор - Админ-панель AllTell',
       '/tags': 'Теги - Админ-панель AllTell',
-      '/servers': 'Сервера - Админ-панель AllTell',
+      '/servers': 'Франшизы - Админ-панель AllTell',
       '/pending-users': 'Заявки - Админ-панель AllTell',
       '/users': 'Пользователи - Админ-панель AllTell',
       '/settings': 'Настройки - Админ-панель AllTell',
@@ -737,7 +741,7 @@ class SPARouter {
         // Update page title
         const titleElement = document.getElementById('page-title');
         if (titleElement) {
-          titleElement.textContent = 'Сервера';
+          titleElement.textContent = 'Франшизы';
         }
       }
 
@@ -1417,6 +1421,7 @@ class SPARouter {
     const data = {
       title: document.getElementById('articleTitle').value,
       server: document.getElementById('articleServer').value,
+      hub_id: document.getElementById('articleHub')?.value || null,
       content: document.getElementById('articleContent').innerHTML,
       image: document.getElementById('articleImageFile')?.value || '',
       locked: document.getElementById('articleLocked')?.value === 'true',
@@ -1594,10 +1599,16 @@ class SPARouter {
     document.getElementById('articleServer')?.addEventListener('change', (e) => {
       if (this.rolesField) this.rolesField.setValues([]);
       this.loadRolesForArticleField(e.target.value);
+      this.loadArticleHubsForFranchise(e.target.value, { selectedHubId: null });
       if (this.articleLayersEnabled) {
         this.layerRolesField?.setValues([]);
         this.loadRoleCatalogForLayers(e.target.value);
       }
+    });
+    document.getElementById('articleHub')?.addEventListener('change', () => this.updateArticleFranchisePath());
+    document.getElementById('articleHubStatusFilter')?.addEventListener('change', () => {
+      const selectedHubId = document.getElementById('articleHub')?.value || null;
+      this.loadArticleHubsForFranchise(document.getElementById('articleServer')?.value, { selectedHubId });
     });
 
     // Многослойность (см. setLayersMode/renderArticleLayersList выше).
@@ -1813,6 +1824,24 @@ class SPARouter {
       };
       serversRoot.addEventListener('input', grow);
       serversRoot.addEventListener('focusin', grow);
+      serversRoot.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-hub-action]');
+        if (!button) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleFranchiseHubAction(button.dataset.hubAction, button.dataset.hubId);
+      });
+      serversRoot.addEventListener('submit', (e) => {
+        if (e.target.matches('[data-franchise-hub-form]')) {
+          e.preventDefault();
+          this.saveFranchiseHub(e.target);
+        }
+      });
+      serversRoot.addEventListener('change', (e) => {
+        if (e.target.matches('[data-hub-status]')) {
+          this.changeFranchiseHubStatus(e.target.dataset.hubId, e.target.value);
+        }
+      });
     }
 
     // Поиск/сортировка каталога — работают локально по уже загруженному
@@ -1823,6 +1852,7 @@ class SPARouter {
       serversSearchDebounce = setTimeout(() => this.renderServersGrid(), 150);
     });
     document.getElementById('servers-sort-select')?.addEventListener('change', () => this.renderServersGrid());
+    document.getElementById('servers-hubs-filter')?.addEventListener('change', () => this.renderServersGrid());
 
     // Рабочая область открытого сервера
     document.getElementById('server-workspace-back-btn')?.addEventListener('click', () => this.closeServerWorkspace());
@@ -1913,7 +1943,7 @@ class SPARouter {
     const description = document.getElementById('server-description').value.trim();
 
     if (!name) {
-      showMessage('Название сервера обязательно', 'error');
+      showMessage('Название франшизы обязательно', 'error');
       return;
     }
 
@@ -1921,14 +1951,14 @@ class SPARouter {
       const result = await apiClient.createServer({ name, description });
 
       if (result.success) {
-        showMessage('Сервер успешно создан!', 'success');
+        showMessage('Франшиза успешно создана!', 'success');
         this.hideCreateServerModal();
         await this.loadServersDirectory();
       } else {
-        showMessage(`Ошибка создания сервера: ${this.serverApiError(result)}`, 'error');
+        showMessage(`Ошибка создания франшизы: ${this.serverApiError(result)}`, 'error');
       }
     } catch (error) {
-      showMessage(`Ошибка при создании сервера: ${error.message}`, 'error');
+      showMessage(`Ошибка при создании франшизы: ${error.message}`, 'error');
     }
   }
 
@@ -2699,6 +2729,7 @@ class SPARouter {
         if (draft.server) {
           document.getElementById('articleServer').value = draft.server;
         }
+        await this.loadArticleHubsForFranchise(draft.server || '', { selectedHubId: draft.hub_id || null });
 
         document.getElementById('articleContent').innerHTML = draft.content || '';
 
@@ -4004,7 +4035,10 @@ class SPARouter {
       // чтобы восстановить id для <select> и для подгрузки ролей сервера.
       let serverForRoles = '';
       if (serverSelect) {
-        if (article.server) {
+        if (article.server_id) {
+          serverSelect.value = article.server_id;
+          serverForRoles = String(article.server_id);
+        } else if (article.server) {
           let found = false;
           for (let i = 0; i < serverSelect.options.length; i++) {
             if (serverSelect.options[i].textContent === article.server) {
@@ -4022,6 +4056,7 @@ class SPARouter {
           serverSelect.value = '';
         }
       }
+      await this.loadArticleHubsForFranchise(serverForRoles, { selectedHubId: article.hub_id || null });
 
       if (lockedSelect) lockedSelect.value = article.locked ? 'true' : 'false';
 
@@ -4169,7 +4204,7 @@ class SPARouter {
           const currentServerValue = serverSelect.value;
 
           // Clear list except first "None" option
-          serverSelect.innerHTML = '<option value="">Нет</option>';
+          serverSelect.innerHTML = '<option value="">Нет франшизы</option>';
 
           // Add servers from API
           result.data.forEach(server => {
@@ -4181,6 +4216,9 @@ class SPARouter {
 
           // Restore selected value
           serverSelect.value = currentServerValue;
+          await this.loadArticleHubsForFranchise(currentServerValue, {
+            selectedHubId: document.getElementById('articleHub')?.value || null
+          });
         }
       } else {
         showMessage(`Ошибка загрузки серверов: ${result.error}`, 'error');
@@ -4188,6 +4226,73 @@ class SPARouter {
     } catch (error) {
       showMessage(`Неожиданная ошибка загрузки серверов: ${error.message}`, 'error');
     }
+  }
+
+  async loadArticleHubsForFranchise(franchiseId, { selectedHubId = null } = {}) {
+    const hubSelect = document.getElementById('articleHub');
+    const statusFilter = document.getElementById('articleHubStatusFilter');
+    if (!hubSelect || !statusFilter) return;
+    const requestId = (this._articleHubsRequestId || 0) + 1;
+    this._articleHubsRequestId = requestId;
+    hubSelect.disabled = true;
+    statusFilter.disabled = !franchiseId;
+    hubSelect.innerHTML = `<option value="">${franchiseId ? 'Загрузка хабов…' : 'Сначала выберите франшизу'}</option>`;
+    this.updateArticleFranchisePath();
+    if (!franchiseId) return;
+
+    const result = await apiClient.getFranchiseHubs(franchiseId);
+    if (requestId !== this._articleHubsRequestId || !document.getElementById('articleHub')) return;
+    if (!result.success) {
+      hubSelect.innerHTML = selectedHubId
+        ? `<option value="${this.escapeHtml(selectedHubId)}">Сохранённый хаб (${this.escapeHtml(selectedHubId)}) — список недоступен</option>`
+        : '<option value="">Не удалось загрузить хабы</option>';
+      if (selectedHubId) hubSelect.value = selectedHubId;
+      showMessage(`Ошибка загрузки хабов: ${this.serverApiError(result)}`, 'error');
+      return;
+    }
+
+    const hubs = Array.isArray(result.data) ? result.data : [];
+    let filter = statusFilter.value || 'active';
+    if (selectedHubId && !hubs.some(hub => String(hub.id) === String(selectedHubId) && (filter === 'all' || hub.status === 'active'))) {
+      filter = 'all';
+      statusFilter.value = 'all';
+    }
+    const visibleHubs = hubs.filter(hub => filter === 'all' || hub.status === 'active');
+    hubSelect.innerHTML = '<option value="">Без хаба</option>';
+    visibleHubs.forEach(hub => {
+      const option = document.createElement('option');
+      option.value = hub.id;
+      option.dataset.hubName = hub.name;
+      option.textContent = `${hub.name} — ${this.franchiseHubStatusLabel(hub.status)}`;
+      hubSelect.appendChild(option);
+    });
+    if (selectedHubId && !visibleHubs.some(hub => String(hub.id) === String(selectedHubId))) {
+      const unavailable = document.createElement('option');
+      unavailable.value = selectedHubId;
+      unavailable.textContent = `Хаб недоступен (${selectedHubId})`;
+      hubSelect.appendChild(unavailable);
+    }
+    hubSelect.value = selectedHubId || '';
+    hubSelect.disabled = false;
+    this.updateArticleFranchisePath();
+  }
+
+  updateArticleFranchisePath() {
+    const path = document.getElementById('articleFranchisePath');
+    const franchiseSelect = document.getElementById('articleServer');
+    const hubSelect = document.getElementById('articleHub');
+    if (!path || !franchiseSelect) return;
+    const franchise = franchiseSelect.selectedOptions[0]?.textContent;
+    if (!franchiseSelect.value) {
+      path.hidden = true;
+      path.textContent = '';
+      return;
+    }
+    const hub = hubSelect?.value
+      ? (hubSelect.selectedOptions[0]?.dataset.hubName || hubSelect.selectedOptions[0]?.textContent)
+      : '';
+    path.textContent = hub ? `${franchise} → ${hub}` : franchise;
+    path.hidden = false;
   }
 
   // === Вкладка "Теги" — глобальный список тегов ===
@@ -4453,6 +4558,7 @@ class SPARouter {
 
     const query = (document.getElementById('servers-search-input')?.value || '').trim().toLowerCase();
     const sort = document.getElementById('servers-sort-select')?.value || 'created_desc';
+    const hubFilter = document.getElementById('servers-hubs-filter')?.value || 'all';
 
     let list = this.serversCache.slice();
     if (query) {
@@ -4461,6 +4567,14 @@ class SPARouter {
         (s.description || '').toLowerCase().includes(query) ||
         (s.owner_username || '').toLowerCase().includes(query)
       );
+    }
+    if (hubFilter !== 'all') {
+      list = list.filter(server => {
+        const summary = server.hub_summary || {};
+        if (hubFilter === 'with') return (summary.total || 0) > 0;
+        if (hubFilter === 'without') return !(summary.total || 0);
+        return (summary[hubFilter] || 0) > 0;
+      });
     }
 
     list.sort((a, b) => {
@@ -4477,13 +4591,15 @@ class SPARouter {
     if (statsEl) {
       const totalServers = this.serversCache.length;
       const totalMembers = this.serversCache.reduce((sum, s) => sum + (s.user_count || 0), 0);
+      const totalHubs = this.serversCache.reduce((sum, s) => sum + (s.hub_summary?.total || 0), 0);
       statsEl.innerHTML = `
-        <span class="servers-stat-chip"><i class="fas fa-server"></i> Серверов: <strong>${totalServers}</strong></span>
+        <span class="servers-stat-chip"><i class="fas fa-layer-group"></i> Франшиз: <strong>${totalServers}</strong></span>
+        <span class="servers-stat-chip"><i class="fas fa-cubes"></i> Хабов: <strong>${totalHubs}</strong></span>
         <span class="servers-stat-chip"><i class="fas fa-users"></i> Всего участников: <strong>${totalMembers}</strong></span>
       `;
     }
     if (countEl) {
-      countEl.textContent = query ? `Найдено: ${list.length} из ${this.serversCache.length}` : '';
+      countEl.textContent = query || hubFilter !== 'all' ? `Найдено: ${list.length} из ${this.serversCache.length}` : '';
     }
 
     if (this.serversCache.length === 0) {
@@ -4503,6 +4619,15 @@ class SPARouter {
     gridEl.innerHTML = list.map(server => {
       const isOwner = server.owner_id === me.id;
       const canDelete = isOwner || me.is_root;
+      const summary = server.hub_summary || { total: 0, active: 0, paused: 0, finished: 0 };
+      const statusParts = [
+        summary.active ? `${summary.active} ${summary.active === 1 ? 'активный' : 'активных'}` : '',
+        summary.paused ? `${summary.paused} на паузе` : '',
+        summary.finished ? `${summary.finished} ${summary.finished === 1 ? 'завершён' : 'завершённых'}` : ''
+      ].filter(Boolean).join(' · ') || 'Хабов пока нет';
+      const statusSummary = summary.total ? `Хабов: ${summary.total} · ${statusParts}` : statusParts;
+      const expanded = this.expandedFranchiseHubIds.has(server.id);
+      const previewHubs = this.franchiseHubPreviewCache.get(server.id);
       return `
         <div class="servers-card" onclick="spaRouter.openServerWorkspace(${server.id})">
           <div class="servers-card-top">
@@ -4513,15 +4638,222 @@ class SPARouter {
             </div>
           </div>
           <div class="servers-card-desc">${this.escapeHtml(server.description || 'Без описания')}</div>
+          <div class="franchise-hub-summary"><i class="fas fa-layer-group"></i> ${this.escapeHtml(statusSummary)}</div>
           <div class="servers-card-meta">
             <span><i class="fas fa-users"></i> ${server.user_count || 0}</span>
             <span><i class="fas fa-calendar"></i> ${new Date(server.created_at).toLocaleDateString('ru-RU')}</span>
             <span><i class="fas fa-hashtag"></i> ${server.id}</span>
             ${canDelete ? `<button class="server-role-chip-remove servers-card-delete-btn" title="Удалить сервер" onclick="event.stopPropagation(); spaRouter.deleteServer(${server.id})"><i class="fas fa-trash"></i></button>` : ''}
           </div>
+          <button type="button" class="franchise-hubs-toggle" onclick="event.stopPropagation(); spaRouter.toggleFranchiseHubPreview(${server.id})" aria-expanded="${expanded}">
+            <i class="fas fa-chevron-${expanded ? 'up' : 'down'}"></i> ${expanded ? 'Скрыть хабы' : `Показать хабы (${summary.total || 0})`}
+          </button>
+          ${expanded ? `<div class="franchise-hubs-preview">${previewHubs
+            ? (previewHubs.length ? previewHubs.map(hub => `<div><span>${this.escapeHtml(hub.name)}</span>${this.franchiseHubStatusBadge(hub.status)}</div>`).join('') : '<p>В этой франшизе пока нет хабов.</p>')
+            : '<p>Загрузка хабов…</p>'}</div>` : ''}
         </div>
       `;
     }).join('');
+  }
+
+  franchiseHubStatusLabel(status) {
+    return ({ active: 'Ведётся', paused: 'Приостановлено', finished: 'Завершено' })[status] || 'Неизвестный статус';
+  }
+
+  franchiseHubStatusBadge(status) {
+    return `<span class="hub-status-badge hub-status-${this.escapeHtml(status)}">${this.escapeHtml(this.franchiseHubStatusLabel(status))}</span>`;
+  }
+
+  async toggleFranchiseHubPreview(franchiseId) {
+    if (this.expandedFranchiseHubIds.has(franchiseId)) {
+      this.expandedFranchiseHubIds.delete(franchiseId);
+      this.renderServersGrid();
+      return;
+    }
+    this.expandedFranchiseHubIds.add(franchiseId);
+    this.renderServersGrid();
+    const result = await apiClient.getFranchiseHubs(franchiseId);
+    if (!result.success) {
+      this.expandedFranchiseHubIds.delete(franchiseId);
+      this.renderServersGrid();
+      showMessage(`Ошибка загрузки хабов: ${this.serverApiError(result)}`, 'error');
+      return;
+    }
+    this.franchiseHubPreviewCache.set(franchiseId, Array.isArray(result.data) ? result.data : []);
+    this.renderServersGrid();
+  }
+
+  async loadAndRenderFranchiseHubs() {
+    const body = document.getElementById('server-workspace-body');
+    const franchiseId = this.currentServerId;
+    if (!body || !franchiseId) return;
+    body.innerHTML = '<p class="server-hubs-loading">Загрузка хабов…</p>';
+    const result = await apiClient.getFranchiseHubs(franchiseId);
+    if (this.currentServerId !== franchiseId || this.currentServerWorkspaceTab !== 'hubs' || !document.getElementById('server-workspace-body')) return;
+    if (!result.success) {
+      body.innerHTML = `<div class="server-permission-note"><i class="fas fa-triangle-exclamation"></i> ${this.escapeHtml(this.serverApiError(result))}</div>`;
+      return;
+    }
+    this.currentFranchiseHubs = Array.isArray(result.data) ? result.data : [];
+    this.franchiseHubPreviewCache.set(franchiseId, this.currentFranchiseHubs);
+    body.innerHTML = this.renderFranchiseHubsTab();
+  }
+
+  renderFranchiseHubsTab() {
+    const { isAdmin, server } = this.currentServerData || {};
+    const canManage = !!isAdmin;
+    const editing = this.franchiseHubEditorId === 'new'
+      ? { name: '', description: '' }
+      : this.currentFranchiseHubs.find(hub => String(hub.id) === String(this.franchiseHubEditorId));
+    const form = editing ? `
+      <form class="franchise-hub-form" data-franchise-hub-form>
+        <h3>${this.franchiseHubEditorId === 'new' ? 'Новый хаб' : 'Редактировать хаб'}</h3>
+        <label class="form-label">Название
+          <input class="form-input" name="name" maxlength="120" required value="${this.escapeHtml(editing.name || '')}">
+        </label>
+        <label class="form-label">Описание
+          <textarea class="form-input" name="description" maxlength="1000" rows="3" data-autogrow>${this.escapeHtml(editing.description || '')}</textarea>
+        </label>
+        <div class="franchise-hub-form-actions">
+          <button type="submit" class="btn btn-primary">${this.franchiseHubEditorId === 'new' ? 'Создать хаб' : 'Сохранить'}</button>
+          <button type="button" class="btn btn-secondary" data-hub-action="cancel">Отмена</button>
+        </div>
+      </form>
+    ` : '';
+    const hubs = this.currentFranchiseHubs.map(hub => {
+      const isEditing = String(this.franchiseHubEditorId) === String(hub.id);
+      const statusControl = canManage ? `
+        <label class="hub-status-control">Статус
+          <select class="form-select" data-hub-status data-hub-id="${hub.id}">
+            ${[['active', 'Ведётся'], ['paused', 'Приостановлено'], ['finished', 'Завершено']].map(([value, label]) => `<option value="${value}" ${hub.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </label>` : this.franchiseHubStatusBadge(hub.status);
+      return `
+        <article class="franchise-hub-card">
+          <div class="franchise-hub-card-main">
+            <div class="franchise-hub-card-heading">
+              <h3>${this.escapeHtml(hub.name)}</h3>
+              ${this.franchiseHubStatusBadge(hub.status)}
+            </div>
+            <p>${this.escapeHtml(hub.description || 'Без описания')}</p>
+            <div class="franchise-hub-meta">
+              <span>Создан: ${this.escapeHtml(new Date(hub.created_at).toLocaleString('ru-RU'))}</span>
+              <span>Изменён: ${this.escapeHtml(new Date(hub.updated_at).toLocaleString('ru-RU'))}</span>
+              <span>Создатель: ${this.escapeHtml(hub.created_by_name || `ID ${hub.created_by}`)}</span>
+              ${hub.status_updated_by_name ? `<span>Статус изменил: ${this.escapeHtml(hub.status_updated_by_name)} · ${this.escapeHtml(new Date(hub.status_updated_at).toLocaleString('ru-RU'))}</span>` : ''}
+            </div>
+          </div>
+          <div class="franchise-hub-card-actions">
+            ${statusControl}
+            ${canManage ? `<button type="button" class="btn btn-secondary btn-sm" data-hub-action="edit" data-hub-id="${hub.id}" ${isEditing ? 'disabled' : ''}><i class="fas fa-pen"></i> Изменить</button>
+            <button type="button" class="btn btn-danger btn-sm" data-hub-action="delete" data-hub-id="${hub.id}"><i class="fas fa-trash"></i> Удалить</button>` : ''}
+          </div>
+        </article>
+      `;
+    }).join('');
+    return `
+      <div class="server-section-toolbar">
+        <div>
+          <h3 class="server-section-title">Хабы франшизы «${this.escapeHtml(server?.name || '')}»</h3>
+          <p class="franchise-hubs-help">Хабы могут быть активными, приостановленными или завершёнными. Завершение не удаляет связанные данные.</p>
+        </div>
+        ${canManage ? '<button type="button" class="btn btn-primary" data-hub-action="create"><i class="fas fa-plus"></i> Создать хаб</button>' : ''}
+      </div>
+      ${form}
+      ${hubs || (!canManage ? '<p class="franchise-hubs-empty">В этой франшизе пока нет хабов.</p>' : '')}
+      ${!this.currentFranchiseHubs.length && canManage && !editing ? `
+        <div class="franchise-hubs-empty">
+          <i class="fas fa-layer-group"></i>
+          <h3>Пока нет хабов</h3>
+          <p>Создайте хаб, чтобы организовать отдельное направление внутри франшизы.</p>
+          <button type="button" class="btn btn-primary" data-hub-action="create">Создать хаб</button>
+        </div>` : ''}
+    `;
+  }
+
+  async handleFranchiseHubAction(action, hubId) {
+    if (action === 'create') this.franchiseHubEditorId = 'new';
+    else if (action === 'edit') this.franchiseHubEditorId = hubId;
+    else if (action === 'cancel') this.franchiseHubEditorId = null;
+    else if (action === 'delete') return this.deleteFranchiseHub(hubId);
+    else return;
+    const body = document.getElementById('server-workspace-body');
+    if (body) {
+      body.innerHTML = this.renderFranchiseHubsTab();
+      body.querySelectorAll('textarea[data-autogrow]').forEach(el => this.autoGrowTextarea(el));
+    }
+  }
+
+  async saveFranchiseHub(form) {
+    const submit = form.querySelector('[type="submit"]');
+    if (submit) submit.disabled = true;
+    const payload = {
+      name: form.elements.name.value.trim(),
+      description: form.elements.description.value.trim()
+    };
+    const isNew = this.franchiseHubEditorId === 'new';
+    const result = isNew
+      ? await apiClient.createFranchiseHub(this.currentServerId, payload)
+      : await apiClient.updateFranchiseHub(this.currentServerId, this.franchiseHubEditorId, payload);
+    if (!result.success) {
+      if (submit) submit.disabled = false;
+      showMessage(`Ошибка сохранения хаба: ${this.serverApiError(result)}`, 'error');
+      return;
+    }
+    this.franchiseHubEditorId = null;
+    showMessage(isNew ? 'Хаб создан' : 'Хаб обновлён', 'success');
+    await this.loadAndRenderFranchiseHubs();
+    await this.loadServersDirectory();
+  }
+
+  async changeFranchiseHubStatus(hubId, status) {
+    if (status === 'finished') {
+      const confirmed = window.confirmDialog
+        ? await window.confirmDialog.open({
+          title: 'Завершить хаб?',
+          message: 'Хаб будет помечен как завершённый. Его данные и связанные статьи сохранятся.',
+          confirmLabel: 'Завершить',
+          danger: false
+        })
+        : window.confirm('Пометить хаб как завершённый? Его данные и связанные статьи сохранятся.');
+      if (!confirmed) {
+        this.loadAndRenderFranchiseHubs();
+        return;
+      }
+    }
+    const result = await apiClient.updateFranchiseHubStatus(this.currentServerId, hubId, status);
+    if (!result.success) {
+      showMessage(`Ошибка смены статуса: ${this.serverApiError(result)}`, 'error');
+      await this.loadAndRenderFranchiseHubs();
+      return;
+    }
+    showMessage('Статус хаба изменён', 'success');
+    await this.loadAndRenderFranchiseHubs();
+    await this.loadServersDirectory();
+  }
+
+  async deleteFranchiseHub(hubId) {
+    const hub = this.currentFranchiseHubs.find(item => String(item.id) === String(hubId));
+    const confirmed = window.confirmDialog
+      ? await window.confirmDialog.open({
+        title: 'Удалить хаб?',
+        message: `Хаб «${hub?.name || ''}» будет удалён. Если к нему привязаны статьи, сначала переназначьте их.`,
+        confirmLabel: 'Удалить'
+      })
+      : window.confirm(`Удалить хаб «${hub?.name || ''}»? Если к нему привязаны статьи, сначала переназначьте их.`);
+    if (!confirmed) return;
+    const result = await apiClient.deleteFranchiseHub(this.currentServerId, hubId);
+    if (!result.success) {
+      const linked = result.data?.linked_articles;
+      showMessage(linked
+        ? `Хаб связан со статьями (${linked}). Переназначьте хаб в редакторе перед удалением.`
+        : `Ошибка удаления хаба: ${this.serverApiError(result)}`, 'error');
+      return;
+    }
+    this.franchiseHubEditorId = null;
+    showMessage('Хаб удалён', 'success');
+    await this.loadAndRenderFranchiseHubs();
+    await this.loadServersDirectory();
   }
 
   // Загружает сервер+участников+роли и обновляет и состояние, и шапку
@@ -4555,6 +4887,8 @@ class SPARouter {
 
     this.currentServerId = serverId;
     this.currentServerData = { server, members, roles, channels, isAdmin, isOwner, isRoot: !!me.is_root };
+    this.currentFranchiseHubs = [];
+    this.franchiseHubEditorId = null;
 
     this.applyServerAvatar(document.getElementById('server-workspace-avatar'), server);
     document.getElementById('server-workspace-name').textContent = server.name;
@@ -4633,6 +4967,7 @@ class SPARouter {
       case 'members': body.innerHTML = this.renderServerMembersTab(); break;
       case 'roles': body.innerHTML = this.renderServerRolesTab(); break;
       case 'channels': body.innerHTML = this.renderServerChannelsTab(); break;
+      case 'hubs': this.loadAndRenderFranchiseHubs(); break;
       case 'log': this.loadAndRenderAuditLogTab(); break;
       case 'settings': body.innerHTML = this.renderServerSettingsTab(); break;
       case 'maps': window.MapsUI?.renderServerMapsTab(body, this.currentServerData); break;
@@ -4685,6 +5020,10 @@ class SPARouter {
       channel_created: 'создал канал',
       channel_updated: 'изменил канал',
       channel_deleted: 'удалил канал',
+      hub_created: 'создал хаб',
+      hub_updated: 'изменил хаб',
+      hub_deleted: 'удалил хаб',
+      hub_status_changed: 'изменил статус хаба',
       owner_changed: 'сменил владельца'
     };
     return labels[action] || action;
@@ -4702,7 +5041,12 @@ class SPARouter {
       case 'role_created':
       case 'role_updated':
       case 'role_deleted':
+      case 'hub_created':
+      case 'hub_updated':
+      case 'hub_deleted':
         return details.name ? `«${details.name}»` : '';
+      case 'hub_status_changed':
+        return `хаб ID ${details.hubId}: ${this.franchiseHubStatusLabel(details.from)} → ${this.franchiseHubStatusLabel(details.to)}`;
       case 'member_added':
       case 'member_removed':
         return details.self ? '(сам себя)' : `ID ${details.targetUserId}`;
@@ -5613,7 +5957,7 @@ class SPARouter {
         title: `Создан сервер: ${server.name}`,
         description: clip(server.description) || 'Новый сервер',
         target: { action: 'server', name: server.name },
-        hint: 'Открыть во вкладке «Сервера»'
+        hint: 'Открыть во вкладке «Франшизы»'
       });
     });
 

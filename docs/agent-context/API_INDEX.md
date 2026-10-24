@@ -213,6 +213,11 @@
 ## `servers.routes.js`
 
 - `GET /servers`
+- `GET /servers/:id/hubs`
+- `POST /servers/:id/hubs`
+- `PUT /servers/:id/hubs/:hubId`
+- `PUT /servers/:id/hubs/:hubId/status`
+- `DELETE /servers/:id/hubs/:hubId`
 - `GET /servers/:id`
 - `POST /servers`
 - `PUT /servers/:id`

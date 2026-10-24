@@ -65,12 +65,23 @@
       </div>
 
       <div class="form-section-grid">
-        <!-- Сервер — виден всегда, нужен и обычной статье, и многослойной
+        <!-- Франшиза — видна всегда, нужна и обычной статье, и многослойной
              (сервер задаёт каталог ролей "Доступ к слою" ниже). -->
         <div class="form-group">
-          <label class="form-label" for="articleServer">Сервер</label>
+          <label class="form-label" for="articleServer">Франшиза</label>
           <select id="articleServer" class="form-select">
-            <option value="">Выберите сервер</option>
+            <option value="">Выберите франшизу</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="articleHub">Хаб <span class="form-section-hint">необязательно</span></label>
+          <select id="articleHub" class="form-select" disabled>
+            <option value="">Сначала выберите франшизу</option>
+          </select>
+          <select id="articleHubStatusFilter" class="form-select" aria-label="Фильтр статусов хабов" disabled>
+            <option value="active">Только активные</option>
+            <option value="all">Все статусы</option>
           </select>
         </div>
 
@@ -86,6 +97,7 @@
           </select>
         </div>
       </div>
+      <p id="articleFranchisePath" class="article-franchise-path" aria-live="polite" hidden></p>
 
       <!-- Доступ для (роли) — тот же чиповый компонент, что и у тегов,
            чтобы оба поля выглядели одинаково (см. .chip-field в global-styles.css). -->
@@ -467,6 +479,15 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--header-secondary);
+}
+
+.articles-page .article-franchise-path {
+  margin: -8px 0 0;
+  padding: 8px 11px;
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--header-secondary);
+  font-size: 12px;
 }
 
 .articles-page .form-input,

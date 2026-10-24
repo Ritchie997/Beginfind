@@ -686,6 +686,26 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/servers/${serverId}`, 'DELETE');
   }
 
+  async getFranchiseHubs(serverId) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/hubs`);
+  }
+
+  async createFranchiseHub(serverId, hubData) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/hubs`, 'POST', hubData);
+  }
+
+  async updateFranchiseHub(serverId, hubId, hubData) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/hubs/${hubId}`, 'PUT', hubData);
+  }
+
+  async updateFranchiseHubStatus(serverId, hubId, status) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/hubs/${hubId}/status`, 'PUT', { status });
+  }
+
+  async deleteFranchiseHub(serverId, hubId) {
+    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/hubs/${hubId}`, 'DELETE');
+  }
+
   async getServerUsers(serverId) {
     return this.makeAuthenticatedRequest(`/api/servers/${serverId}/users`);
   }

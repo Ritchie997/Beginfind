@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Пользователи | `users.db` | `src/middleware/auth.js`, миграция `src/db/migrate-users-schema.js` |
 | Сообщения | `messenger.db` | `src/db/connections.js`, `src/routes/messages.routes.js` |
-| Серверы, членства, роли, аудит | `servers.db` | `src/services/server-system-logic.js`, `server-permissions.js` |
+| Франшизы/серверы, хабы, членства, роли, аудит | `servers.db` | `src/routes/servers.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` |
 | Документы Antropedia | `content/<slug>.json`; удалённое — `content/.trash/` | `src/services/articles-store.js`, `blocks.js` |
 | Вспомогательная таблица цветов тегов | `articles.db` | `src/services/tag-colors.js` |
 | Закладки | `bookmarks.db` | `src/services/bookmarks-store.js` |
@@ -66,7 +66,9 @@ SQLite-соединения самостоятельно; `connections.js` — �
 
 Не предполагайте Markdown-frontmatter: это прежний формат. Не меняйте форму
 документа без проверки всех клиентов, нормализатора, миграционных сценариев и
-backup/restore.
+backup/restore. `server` — необязательная привязка к франшизе; `hub_id` —
+необязательная привязка к хабу этой франшизы. Отсутствующий `hub_id` означает
+прежнее поведение: статья относится только к франшизе.
 
 ### Карта
 

@@ -105,6 +105,21 @@ function getServerNameById(serverId) {
   });
 }
 
+function validateArticleHub(serverId, hubId) {
+  if (hubId == null || hubId === '') return Promise.resolve(null);
+  const parsedHubId = Number(hubId);
+  const parsedServerId = Number(serverId);
+  if (!Number.isInteger(parsedHubId) || parsedHubId < 1 || !Number.isInteger(parsedServerId) || parsedServerId < 1) {
+    return Promise.resolve('Выберите франшизу и корректный хаб');
+  }
+  return new Promise((resolve, reject) => {
+    serversDb.get('SELECT server_id FROM franchise_hubs WHERE id = ?', [parsedHubId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row && Number(row.server_id) === parsedServerId ? null : 'Выбранный хаб не принадлежит выбранной франшизе');
+    });
+  });
+}
+
 // Проверяет, может ли пользователь просматривать статью хотя бы на каком-то
 // уровне — обёртка над article-layers.hasArticleAccess (см. там же). Раньше
 // это была самостоятельная проверка article.locked/article.roles — теперь
@@ -330,8 +345,11 @@ function readerTagKeys(resolved) {
 // в т.ч. недоступные читателю) в ответ НИКОГДА не попадает — см. articleSafe.
 async function formatArticleResponse(article, req, usersMap, legacyNameToId, rankCache, requestedLayerIndex) {
   let serverName = article.server;
+  const serverId = article.server && !isNaN(article.server) && parseInt(article.server) > 0
+    ? parseInt(article.server)
+    : null;
   if (article.server && !isNaN(article.server) && parseInt(article.server) > 0) {
-    const serverFromDb = await getServerNameById(parseInt(article.server));
+    const serverFromDb = await getServerNameById(serverId);
     if (serverFromDb) {
       serverName = serverFromDb;
     }
@@ -402,6 +420,7 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     layerCount,
     layerOptions,
     server: serverName,
+    server_id: serverId,
     author,
     co_authors: (article.co_author_ids || []).map((id) => ({ id, display_name: map.get(id) || 'Неизвестный', avatar: getAvatarUrl(id) })),
     ...permissions
@@ -628,10 +647,12 @@ router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, as
 
 router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
-    const { title, content, views, locked, role, roles, tags, image, attachments, server, layers } = req.body;
+    const { title, content, views, locked, role, roles, tags, image, attachments, server, hub_id, layers } = req.body;
     if (!title || !String(title).trim()) {
       return res.status(400).json({ error: 'Заголовок статьи обязателен' });
     }
+    const hubError = await validateArticleHub(server, hub_id);
+    if (hubError) return res.status(400).json({ error: hubError });
 
     // Слои у совсем новой статьи — своей "уже сохранённой" версии для
     // сравнения нет, поэтому просто каждый присланный слой должен быть под
@@ -665,7 +686,8 @@ router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkN
       // клиент — поле "Автор" в форме вырезано именно поэтому.
       author_id: req.user.id,
       // Сервер статьи берём только из тела запроса — без фоллбэка на заголовок Host.
-      server: server || null
+      server: server || null,
+      hub_id: hub_id || null
     });
     await assignColorsForArticle(article);
     res.json({ id: article.slug, slug: article.slug });
@@ -736,6 +758,14 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
     }
 
     const { author_id: _ignoredAuthorId, ...bodyFields } = req.body;
+    const serverChanged = Object.prototype.hasOwnProperty.call(bodyFields, 'server') &&
+      String(bodyFields.server || '') !== String(existing.server || '');
+    const nextHubId = Object.prototype.hasOwnProperty.call(bodyFields, 'hub_id')
+      ? bodyFields.hub_id
+      : (serverChanged ? null : existing.hub_id);
+    const nextServerId = Object.prototype.hasOwnProperty.call(bodyFields, 'server') ? bodyFields.server : existing.server;
+    const hubError = await validateArticleHub(nextServerId, nextHubId);
+    if (hubError) return res.status(400).json({ error: hubError });
 
     // Многослойность (см. src/services/article-layers.js): клиент присылает
     // только слои от 0 до своего резолвнутого максимума (ровно то, что сам
@@ -764,6 +794,7 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
 
     const updated = store.updateArticle(req.params.id, {
       ...bodyFields,
+      hub_id: nextHubId,
       co_author_ids: coAuthorIds,
       ...(claimedAuthorId !== undefined ? { author_id: claimedAuthorId } : {})
     });
