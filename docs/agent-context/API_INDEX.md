@@ -302,3 +302,4 @@
 ## `uploads.routes.js`
 
 - `POST /upload-image`
+- `POST /upload-images`

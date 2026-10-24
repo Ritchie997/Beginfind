@@ -43,4 +43,28 @@ router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadI
   }
 });
 
+router.post('/upload-images', auth.authenticateToken, auth.checkApproved, uploadImage.array('images', 60), (req, res) => {
+  const files = req.files || [];
+  const cleanupFiles = () => files.forEach((file) => fs.unlink(file.path, () => {}));
+  try {
+    if (!files.length) return res.status(400).json({ error: 'Файлы не загружены' });
+    const maxFileSizeMb = readSettings().maxFileSize;
+    const tooBig = files.find((file) => file.size > maxFileSizeMb * 1024 * 1024);
+    if (tooBig) {
+      cleanupFiles();
+      return res.status(400).json({ error: `Файл «${tooBig.originalname}» больше ${maxFileSizeMb} МБ — лимит задан в Настройках` });
+    }
+    const urls = files.map((file) => {
+      const filePath = path.join(UPLOADS_DIR, file.filename);
+      if (!fs.existsSync(filePath)) throw new Error(`Загруженное изображение «${file.originalname}» не найдено`);
+      return `/uploads/${file.filename}`;
+    });
+    res.status(201).json({ urls });
+  } catch (error) {
+    cleanupFiles();
+    console.error('Upload images error:', error);
+    res.status(500).json({ error: 'Не удалось загрузить изображения: ' + error.message });
+  }
+});
+
 module.exports = router;

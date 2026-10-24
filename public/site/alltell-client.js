@@ -11,6 +11,7 @@
     rejected: 'Отклонено'
   };
   var HUB_STATUSES = { active: 'Ведётся', paused: 'Приостановлено', finished: 'Завершено' };
+  var IMAGE_UPLOAD_CHUNK = 8;
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
@@ -196,11 +197,23 @@
       </article>`;
   }
 
+  function renderPostImageItems(images, disabled) {
+    return images.map(function (image, index) {
+      return `<article class="alltell-form-image-item${image.file ? ' is-pending' : ''}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
+        <img class="alltell-form-image-preview" src="${escapeHtml(image.preview || image.url)}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
+        ${image.file ? '<span class="alltell-image-pending">Ожидает загрузки</span>' : ''}
+        <div class="alltell-form-image-actions">
+          <button class="btn btn-secondary btn-sm" type="button" data-action="move-image" data-direction="-1" data-image-index="${index}" aria-label="Переместить влево" ${index === 0 || disabled ? 'disabled' : ''}><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+          <button class="btn btn-secondary btn-sm" type="button" data-action="move-image" data-direction="1" data-image-index="${index}" aria-label="Переместить вправо" ${index === images.length - 1 || disabled ? 'disabled' : ''}><i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+          <button class="btn btn-secondary btn-sm" type="button" data-action="remove-image" data-image-index="${index}" ${disabled ? 'disabled' : ''}>Убрать</button>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
   function renderPostForm(state, hubs, canManage) {
     var post = state.editingPost;
-    var images = Array.isArray(post && post.images) && post.images.length
-      ? post.images
-      : (post && post.image_url ? [post.image_url] : []);
+    var images = state.postImages || [];
     var hubOptions = hubs.map(function (hub) {
       return `<option value="${Number(hub.id)}" ${post && Number(post.hub_id) === Number(hub.id) ? 'selected' : ''}>${escapeHtml(hub.name)}</option>`;
     }).join('');
@@ -239,17 +252,22 @@
             <input name="article_slug" type="hidden" value="${escapeHtml(article ? article.slug : '')}" data-article-slug>
             <div class="alltell-article-options" data-article-options hidden></div>
           </label>
-          <label>Картинки
-            <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
-            <span class="alltell-image-selection" data-image-selection>Можно выбрать несколько изображений.</span>
-            <input name="image_urls" type="hidden" value="${escapeHtml(JSON.stringify(images))}">
-            ${images.length ? `<div class="alltell-form-images">${images.map(function (image, index) {
-              return `<div class="alltell-form-image-item">
-                <img class="alltell-form-image-preview" src="${escapeHtml(image)}" alt="">
-                <button class="btn btn-secondary btn-sm" type="button" data-action="remove-image" data-image-index="${index}">Убрать</button>
-              </div>`;
-            }).join('')}</div>` : ''}
-          </label>
+          <div class="alltell-post-image-editor" data-image-drop>
+            <div class="alltell-image-editor-heading">
+              <strong>Изображения</strong>
+              <span data-image-selection>${images.length ? images.length + ' добавлено' : 'Можно добавить любое количество'}</span>
+            </div>
+            <label class="alltell-image-dropzone">
+                <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden ${state.uploadingImages ? 'disabled' : ''}>
+              <i class="fas fa-cloud-arrow-up" aria-hidden="true"></i>
+              <span><strong>Добавить изображения</strong><small>Выберите несколько файлов или перетащите их сюда</small></span>
+            </label>
+            <div class="alltell-form-images" data-post-image-grid>${renderPostImageItems(images, state.uploadingImages)}</div>
+            <div class="alltell-upload-progress" data-image-progress hidden>
+              <div><span data-image-progress-label>Загрузка изображений…</span><span data-image-progress-count></span></div>
+              <progress max="100" value="0" data-image-progress-bar></progress>
+            </div>
+          </div>
         </div>
         <p class="alltell-form-hint">${canManage
           ? 'Запись датируется автоматически. Для публикации в чужой франшизе отправьте предложение создателю.'
@@ -320,6 +338,9 @@
       mine: [],
       detail: null,
       editingPost: null,
+      postImages: [],
+      uploadingImages: false,
+      draggedImageIndex: null,
       articleIndex: [],
       articleIndexError: '',
       loading: true,
@@ -340,6 +361,62 @@
       document.body.appendChild(toast);
       window.clearTimeout(state.toastTimer);
       state.toastTimer = window.setTimeout(function () { toast.remove(); }, 3600);
+    }
+
+    function releasePostImages() {
+      state.postImages.forEach(function (image) {
+        if (image.preview && image.preview.startsWith('blob:')) URL.revokeObjectURL(image.preview);
+      });
+      state.postImages = [];
+      state.uploadingImages = false;
+    }
+
+    function setPostImages(post) {
+      releasePostImages();
+      var images = Array.isArray(post && post.images) && post.images.length
+        ? post.images
+        : (post && post.image_url ? [post.image_url] : []);
+      state.postImages = images.map(function (url) {
+        return { url: url, preview: url, file: null };
+      });
+    }
+
+    function renderPostImageQueue() {
+      var form = root.querySelector('[data-post-form]');
+      if (!form) return;
+      var grid = form.querySelector('[data-post-image-grid]');
+      grid.innerHTML = renderPostImageItems(state.postImages, state.uploadingImages);
+      form.querySelector('[data-image-selection]').textContent = state.postImages.length
+        ? state.postImages.length + ' изображений · добавляйте ещё или изменяйте порядок'
+        : 'Можно добавить любое количество изображений';
+    }
+
+    function addPostImages(fileList) {
+      var files = Array.from(fileList || []).filter(function (file) {
+        return /^image\/(jpeg|png|webp|gif)$/.test(file.type);
+      }).sort(function (a, b) {
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+      if (fileList && fileList.length && !files.length) {
+        notifyError('Подходят только изображения JPG, PNG, WEBP или GIF');
+        return;
+      }
+      files.forEach(function (file) {
+        state.postImages.push({ file: file, preview: URL.createObjectURL(file), url: null });
+      });
+      renderPostImageQueue();
+    }
+
+    function updateImageProgress(done, total, currentName) {
+      var form = root.querySelector('[data-post-form]');
+      if (!form) return;
+      var progress = form.querySelector('[data-image-progress]');
+      progress.hidden = false;
+      form.querySelector('[data-image-progress-label]').textContent = currentName
+        ? 'Загружаем ' + currentName
+        : 'Загрузка изображений…';
+      form.querySelector('[data-image-progress-count]').textContent = done + ' / ' + total;
+      form.querySelector('[data-image-progress-bar]').value = total ? Math.round(done / total * 100) : 0;
     }
 
     async function loadMine() {
@@ -439,18 +516,16 @@
 
     async function savePost(form) {
       var formData = new FormData(form);
-      var imageUrls;
-      try {
-        imageUrls = JSON.parse(formData.get('image_urls') || '[]');
-      } catch (error) {
-        throw new Error('Не удалось прочитать список изображений записи');
-      }
-      if (!Array.isArray(imageUrls)) imageUrls = [];
-      var imageFiles = Array.from(form.querySelector('[name="images"]').files || []);
-      for (var i = 0; i < imageFiles.length; i++) {
+      var pendingImages = state.postImages.filter(function (image) { return image.file && !image.url; });
+      var done = 0;
+      for (var i = 0; i < pendingImages.length; i += IMAGE_UPLOAD_CHUNK) {
+        var chunk = pendingImages.slice(i, i + IMAGE_UPLOAD_CHUNK);
+        updateImageProgress(done, pendingImages.length, chunk.length === 1
+          ? chunk[0].file.name
+          : `Пачка ${i + 1}–${i + chunk.length} из ${pendingImages.length}`);
         var uploadData = new FormData();
-        uploadData.append('image', imageFiles[i]);
-        var uploadResponse = await fetch('/api/upload-image', {
+        chunk.forEach(function (image) { uploadData.append('images', image.file); });
+        var uploadResponse = await fetch('/api/upload-images', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + token() },
           credentials: 'same-origin',
@@ -458,14 +533,20 @@
         });
         var uploadResult = {};
         try { uploadResult = await uploadResponse.json(); } catch (error) { /* Report the HTTP failure below. */ }
-        if (!uploadResponse.ok || !uploadResult.url) {
-          throw new Error(uploadResult.error || 'Не удалось загрузить изображение');
+        if (!uploadResponse.ok || !Array.isArray(uploadResult.urls) || uploadResult.urls.length !== chunk.length) {
+          throw new Error(uploadResult.error || 'Не удалось загрузить изображения');
         }
-        imageUrls.push(uploadResult.url);
+        chunk.forEach(function (image, index) {
+          image.url = uploadResult.urls[index];
+          image.file = null;
+          if (image.preview && image.preview.startsWith('blob:')) URL.revokeObjectURL(image.preview);
+          image.preview = image.url;
+        });
+        done += chunk.length;
+        updateImageProgress(done, pendingImages.length);
+        renderPostImageQueue();
       }
-      form.querySelector('[name="image_urls"]').value = JSON.stringify(imageUrls);
-      form.querySelector('[name="images"]').value = '';
-      form.querySelector('[data-image-selection]').textContent = 'Можно выбрать несколько изображений.';
+      var imageUrls = state.postImages.map(function (image) { return image.url; }).filter(Boolean);
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
@@ -484,6 +565,7 @@
         state.detail.posts.unshift(post);
       }
       state.editingPost = null;
+      releasePostImages();
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
         ? 'Предложение отправлено создателю франшизы'
@@ -548,18 +630,27 @@
         state.editingPost = state.detail.posts.find(function (post) {
           return String(post.id) === button.dataset.postId;
         }) || null;
+        setPostImages(state.editingPost);
         renderDetail(root, state);
         root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
+        releasePostImages();
         renderDetail(root, state);
+      } else if (action === 'move-image') {
+        var imageIndex = Number(button.dataset.imageIndex);
+        var destination = imageIndex + Number(button.dataset.direction);
+        if (destination >= 0 && destination < state.postImages.length) {
+          var movedImage = state.postImages.splice(imageIndex, 1)[0];
+          state.postImages.splice(destination, 0, movedImage);
+          renderPostImageQueue();
+        }
       } else if (action === 'remove-image') {
-        var imageForm = button.closest('[data-post-form]');
-        var imagesInput = imageForm.querySelector('[name="image_urls"]');
-        var remainingImages = JSON.parse(imagesInput.value || '[]');
-        remainingImages.splice(Number(button.dataset.imageIndex), 1);
-        imagesInput.value = JSON.stringify(remainingImages);
-        button.closest('.alltell-form-image-item').remove();
+        var removedImage = state.postImages.splice(Number(button.dataset.imageIndex), 1)[0];
+        if (removedImage && removedImage.preview && removedImage.preview.startsWith('blob:')) {
+          URL.revokeObjectURL(removedImage.preview);
+        }
+        renderPostImageQueue();
       } else if (action === 'approve-post' || action === 'reject-post') {
         var postId = button.dataset.postId;
         button.disabled = true;
@@ -592,6 +683,56 @@
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
     }
 
+    function onDragOver(event) {
+      var dropzone = event.target.closest('[data-image-drop]');
+      if (!dropzone || state.uploadingImages) return;
+      event.preventDefault();
+      dropzone.classList.add('is-dragging-files');
+      dropzone.querySelectorAll('.is-drop-target').forEach(function (node) { node.classList.remove('is-drop-target'); });
+      var target = event.target.closest('[data-post-image]');
+      if (state.draggedImageIndex !== null && target) target.classList.add('is-drop-target');
+    }
+
+    function onImageDragStart(event) {
+      var item = event.target.closest('[data-post-image]');
+      if (!item || state.uploadingImages) return;
+      state.draggedImageIndex = Number(item.dataset.postImage);
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', 'alltell-image');
+      item.classList.add('is-dragging');
+    }
+
+    function onImageDragEnd(event) {
+      var item = event.target.closest('[data-post-image]');
+      if (item) item.classList.remove('is-dragging');
+      state.draggedImageIndex = null;
+    }
+
+    function onDragLeave(event) {
+      var dropzone = event.target.closest('[data-image-drop]');
+      if (!dropzone || dropzone.contains(event.relatedTarget)) return;
+      dropzone.classList.remove('is-dragging-files');
+      dropzone.querySelectorAll('.is-drop-target').forEach(function (node) { node.classList.remove('is-drop-target'); });
+    }
+
+    function onDrop(event) {
+      var dropzone = event.target.closest('[data-image-drop]');
+      if (!dropzone || state.uploadingImages) return;
+      event.preventDefault();
+      dropzone.classList.remove('is-dragging-files');
+      var targetItem = event.target.closest('[data-post-image]');
+      dropzone.querySelectorAll('.is-drop-target').forEach(function (node) { node.classList.remove('is-drop-target'); });
+      if (state.draggedImageIndex !== null && targetItem) {
+        var toIndex = Number(targetItem.dataset.postImage);
+        var movedImage = state.postImages.splice(state.draggedImageIndex, 1)[0];
+        state.postImages.splice(toIndex, 0, movedImage);
+        state.draggedImageIndex = null;
+        renderPostImageQueue();
+      } else if (event.dataTransfer.files.length) {
+        addPostImages(event.dataTransfer.files);
+      }
+    }
+
     function onScroll(event) {
       var track = event.target.closest('[data-image-track]');
       if (!track) return;
@@ -605,10 +746,9 @@
 
     function onChange(event) {
       if (event.target.matches('[name="images"]')) {
-        var selected = event.target.closest('[data-post-form]').querySelector('[data-image-selection]');
-        selected.textContent = event.target.files.length
-          ? 'Выбрано изображений: ' + event.target.files.length
-          : 'Можно выбрать несколько изображений.';
+        if (state.uploadingImages) return;
+        addPostImages(event.target.files);
+        event.target.value = '';
         return;
       }
       var form = event.target.closest('[data-post-form]');
@@ -628,12 +768,25 @@
         renderCatalog(root, state);
       } else if (event.target.matches('[data-post-form]')) {
         event.preventDefault();
+        if (state.uploadingImages) return;
         var submitButton = event.target.querySelector('[type="submit"]');
-        submitButton.disabled = true;
+        state.uploadingImages = true;
+        event.target.querySelectorAll('input, select, textarea, button').forEach(function (control) {
+          control.disabled = true;
+        });
+        renderPostImageQueue();
         savePost(event.target).catch(function (error) {
           notifyError(error.message);
+          state.uploadingImages = false;
+          var progress = root.querySelector('[data-image-progress]');
+          if (progress) progress.hidden = true;
+          renderPostImageQueue();
           var activeForm = root.querySelector('[data-post-form]');
-          if (activeForm) activeForm.querySelector('[type="submit"]').disabled = false;
+          if (activeForm) {
+            activeForm.querySelectorAll('input, select, textarea, button').forEach(function (control) {
+              control.disabled = false;
+            });
+          }
         });
       }
     }
@@ -651,6 +804,11 @@
     root.addEventListener('input', onInput);
     root.addEventListener('scroll', onScroll, true);
     root.addEventListener('change', onChange);
+    root.addEventListener('dragover', onDragOver);
+    root.addEventListener('dragleave', onDragLeave);
+    root.addEventListener('drop', onDrop);
+    root.addEventListener('dragstart', onImageDragStart);
+    root.addEventListener('dragend', onImageDragEnd);
     root.addEventListener('submit', onSubmit);
     window.addEventListener('authChanged', onAuthChanged);
     await loadArticleIndex();
@@ -661,9 +819,15 @@
       root.removeEventListener('input', onInput);
       root.removeEventListener('scroll', onScroll, true);
       root.removeEventListener('change', onChange);
+      root.removeEventListener('dragover', onDragOver);
+      root.removeEventListener('dragleave', onDragLeave);
+      root.removeEventListener('drop', onDrop);
+      root.removeEventListener('dragstart', onImageDragStart);
+      root.removeEventListener('dragend', onImageDragEnd);
       root.removeEventListener('submit', onSubmit);
       window.removeEventListener('authChanged', onAuthChanged);
       window.clearTimeout(state.toastTimer);
+      releasePostImages();
       document.querySelector('.alltell-toast')?.remove();
     };
   }
