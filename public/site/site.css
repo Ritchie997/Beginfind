@@ -1112,6 +1112,7 @@
     font-size: 0.7rem;
     font-weight: 600;
 }
+.public-card-author img { background: #000; }
 
 .public-card-author-name {
     overflow: hidden;
@@ -1823,6 +1824,7 @@
     color: #fff;
     font-size: 0.9rem;
 }
+.public-article-author-link img { background: #000; }
 .public-article-date::before { content: '•'; margin-right: 8px; color: var(--background-accent); }
 
 .pub-comment-delete {
