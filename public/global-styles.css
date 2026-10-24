@@ -1127,6 +1127,9 @@ th {
     letter-spacing: 0.5px;
     position: relative;
 }
+.user-avatar.has-image {
+    background-color: var(--background-tertiary);
+}
 
 th::after {
     content: '';
@@ -1846,7 +1849,11 @@ html {
     border-radius: 50%;
     object-fit: cover;
     display: block;
+    background: var(--background-tertiary);
 }
+
+#profile-avatar { background: var(--blurple); }
+#profile-avatar.has-image { background: var(--background-tertiary); }
 
 .profile-avatar-wrap {
     flex-shrink: 0;
