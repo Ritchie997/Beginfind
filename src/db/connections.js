@@ -145,6 +145,7 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         const migrations = [
           ['approval_status', "ALTER TABLE franchise_posts ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'published'"],
           ['image_url', 'ALTER TABLE franchise_posts ADD COLUMN image_url TEXT'],
+          ['image_urls', 'ALTER TABLE franchise_posts ADD COLUMN image_urls TEXT'],
           ['hub_status', 'ALTER TABLE franchise_posts ADD COLUMN hub_status TEXT']
         ].filter(([name]) => !existingColumns.has(name));
         const addNextColumn = () => {

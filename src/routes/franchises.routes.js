@@ -92,12 +92,13 @@ async function isMember(userId, franchiseId) {
 
 async function validatePostInput(body, franchiseId, user, canManage) {
   body = body && typeof body === 'object' ? body : {};
-  const requestedType = body.type === 'hub_update' ? 'hub_update' : body.type;
-  const type = POST_TYPES.has(requestedType) || requestedType === 'hub_update' ? requestedType : '';
+  const type = POST_TYPES.has(body.type) ? body.type : '';
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const text = typeof body.body === 'string' ? body.body.trim() : '';
   const articleSlug = typeof body.article_slug === 'string' ? body.article_slug.trim() : '';
-  const imageUrl = typeof body.image_url === 'string' ? body.image_url.trim() : '';
+  const imageUrls = Array.isArray(body.image_urls)
+    ? body.image_urls.map((url) => typeof url === 'string' ? url.trim() : '')
+    : (typeof body.image_url === 'string' && body.image_url.trim() ? [body.image_url.trim()] : []);
   const hubId = body.hub_id === '' || body.hub_id == null ? null : Number(body.hub_id);
   const hubStatus = typeof body.hub_status === 'string' ? body.hub_status : '';
 
@@ -113,19 +114,19 @@ async function validatePostInput(body, franchiseId, user, canManage) {
   if (hubId && !hub) {
     throw Object.assign(new Error('Хаб не принадлежит этой франшизе'), { status: 400 });
   }
-  if (type === 'hub_update' && (!hub || !HUB_STATUSES.has(hubStatus))) {
-    throw Object.assign(new Error('Для новости о хабе выберите хаб и его статус'), { status: 400 });
+  if (hubStatus && (!hub || !HUB_STATUSES.has(hubStatus))) {
+    throw Object.assign(new Error('Статус хаба можно выбрать только для выбранного хаба'), { status: 400 });
   }
   if (hub && !hub.is_public && !canManage) {
     throw Object.assign(new Error('Предлагать публикации можно только для хабов, открытых в общем доступе'), { status: 400 });
   }
-  if (type !== 'hub_update' && hubStatus) {
-    throw Object.assign(new Error('Статус хаба используется только в новости о хабе'), { status: 400 });
+  if (imageUrls.length > 60) {
+    throw Object.assign(new Error('Можно прикрепить не более 60 изображений'), { status: 400 });
   }
-  if (imageUrl && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) {
-    throw Object.assign(new Error('Изображение должно быть загружено через форму публикации'), { status: 400 });
-  }
-  if (imageUrl) {
+  for (const imageUrl of imageUrls) {
+    if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) {
+      throw Object.assign(new Error('Изображение должно быть загружено через форму публикации'), { status: 400 });
+    }
     const imageName = imageUrl.slice('/uploads/'.length);
     const imagePath = path.join(UPLOADS_DIR, imageName);
     if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(path.extname(imageName).toLowerCase()) ||
@@ -141,13 +142,13 @@ async function validatePostInput(body, franchiseId, user, canManage) {
   }
 
   return {
-    type: type === 'hub_update' ? 'news' : type,
+    type,
     title,
     body: text,
     hub_id: hubId,
     article_slug: articleSlug || null,
-    image_url: imageUrl || null,
-    hub_status: type === 'hub_update' ? hubStatus : null,
+    image_urls: imageUrls,
+    hub_status: hubId ? hubStatus || null : null,
     event_at: null
   };
 }
@@ -163,9 +164,10 @@ async function publicPost(row, user) {
   return {
     id: row.id,
     hub_id: row.hub_id,
-    type: row.hub_status ? 'hub_update' : row.type,
+    type: row.type,
     title: row.title,
     body: row.body,
+    images: parsePostImages(row),
     image_url: row.image_url || null,
     article: article ? {
       slug: article.slug,
@@ -181,6 +183,18 @@ async function publicPost(row, user) {
     created_at: row.created_at,
     updated_at: row.updated_at
   };
+}
+
+function parsePostImages(row) {
+  if (typeof row.image_urls === 'string' && row.image_urls) {
+    try {
+      const images = JSON.parse(row.image_urls);
+      if (Array.isArray(images)) return images.filter((image) => typeof image === 'string');
+    } catch (error) {
+      console.error(`[franchises] Invalid image list for post ${row.id}:`, error.message);
+    }
+  }
+  return row.image_url ? [row.image_url] : [];
 }
 
 router.get('/public/franchises', async (req, res) => {
@@ -307,11 +321,12 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
     const authorName = req.user.display_name || req.user.username || `Пользователь ${req.user.id}`;
     const result = await dbRun(`
       INSERT INTO franchise_posts
-        (server_id, hub_id, type, title, body, article_slug, event_at, image_url, hub_status, approval_status, created_by, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (server_id, hub_id, type, title, body, article_slug, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug,
-      post.event_at, post.image_url, post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
+      post.event_at, post.image_urls[0] || null, JSON.stringify(post.image_urls),
+      post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
     ]);
     const row = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [result.lastID]);
     res.status(201).json(await publicPost(row, req.user));
@@ -339,13 +354,13 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
     await dbRun(`
       UPDATE franchise_posts
       SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, event_at = ?,
-          image_url = ?, hub_status = ?,
+          image_url = ?, image_urls = ?, hub_status = ?,
           approval_status = CASE WHEN created_by = ? AND approval_status != 'published' THEN 'pending' ELSE approval_status END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
     `, [
       post.hub_id, post.type, post.title, post.body, post.article_slug, post.event_at,
-      post.image_url, post.hub_status, req.user.id, postId, franchiseId
+      post.image_urls[0] || null, JSON.stringify(post.image_urls), post.hub_status, req.user.id, postId, franchiseId
     ]);
     res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
   } catch (error) {

@@ -1,22 +1,16 @@
 (function () {
   'use strict';
 
-  var HUB_STATUSES = {
-    active: 'Ведётся',
-    paused: 'Приостановлено',
-    finished: 'Завершено'
-  };
   var POST_TYPES = {
     news: 'Новость',
     announcement: 'Объявление',
-    event: 'Событие',
-    hub_update: 'Статус хаба'
+    event: 'Событие'
   };
   var POST_STATUS_LABELS = {
     pending: 'На подтверждении',
     rejected: 'Отклонено'
   };
-  var HUB_STATUSES = { active: 'Запущен', paused: 'Приостановлен', finished: 'Завершён' };
+  var HUB_STATUSES = { active: 'Ведётся', paused: 'Приостановлено', finished: 'Завершено' };
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
@@ -32,6 +26,22 @@
 
   function token() {
     return window.authManager && window.authManager.getToken();
+  }
+
+  function notifyError(message) {
+    if (typeof window.showMessage === 'function') {
+      window.showMessage(message, 'error');
+      return;
+    }
+    var previous = document.getElementById('message-container');
+    if (previous) previous.remove();
+    var toast = document.createElement('div');
+    toast.id = 'message-container';
+    toast.className = 'toast toast-error';
+    toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10001;max-width:min(420px,calc(100vw - 40px));';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    window.setTimeout(function () { toast.remove(); }, 5000);
   }
 
   async function request(path, method, data) {
@@ -146,6 +156,9 @@
   function renderPost(post, hubMap, canManage) {
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
     var canEdit = canManage || post.can_edit;
+    var images = Array.isArray(post.images) && post.images.length
+      ? post.images
+      : (post.image_url ? [post.image_url] : []);
     var articleHref = post.article && (post.article.is_public
       ? '/antropedia/' + encodeURIComponent(post.article.slug)
       : '/admin-panel/antropedia/' + encodeURIComponent(post.article.slug));
@@ -158,7 +171,9 @@
           ${post.approval_status !== 'published' ? `<span class="alltell-post-review alltell-post-review-${escapeHtml(post.approval_status)}">${escapeHtml(POST_STATUS_LABELS[post.approval_status] || '')}</span>` : ''}
         </div>
         <h3>${escapeHtml(post.title)}</h3>
-        ${post.image_url ? `<img class="alltell-post-image" src="${escapeHtml(post.image_url)}" alt="">` : ''}
+        ${images.length ? `<div class="alltell-post-images">${images.map(function (image) {
+          return `<img class="alltell-post-image" src="${escapeHtml(image)}" alt="" loading="lazy">`;
+        }).join('')}</div>` : ''}
         ${post.body ? `<p class="alltell-post-body">${escapeHtml(post.body)}</p>` : ''}
         ${post.article && articleHref ? `<a class="alltell-post-article" href="${escapeHtml(articleHref)}"><i class="fas fa-book-open" aria-hidden="true"></i> Статья: ${escapeHtml(post.article.title)}</a>` : ''}
         <div class="alltell-post-footer">
@@ -176,6 +191,9 @@
 
   function renderPostForm(state, hubs, canManage) {
     var post = state.editingPost;
+    var images = Array.isArray(post && post.images) && post.images.length
+      ? post.images
+      : (post && post.image_url ? [post.image_url] : []);
     var hubOptions = hubs.map(function (hub) {
       return `<option value="${Number(hub.id)}" ${post && Number(post.hub_id) === Number(hub.id) ? 'selected' : ''}>${escapeHtml(hub.name)}</option>`;
     }).join('');
@@ -198,8 +216,8 @@
             </select>
           </label>
         </div>
-        <label>Статус хаба для новости
-          <select name="hub_status">
+        <label data-hub-status-field ${post && post.hub_id ? '' : 'hidden'}>Статус хаба
+          <select name="hub_status" ${post && post.hub_id ? '' : 'disabled'}>
             <option value="">Выберите статус</option>
             ${Object.keys(HUB_STATUSES).map(function (status) {
               return `<option value="${status}" ${post && post.hub_status === status ? 'selected' : ''}>${HUB_STATUSES[status]}</option>`;
@@ -214,11 +232,15 @@
             <input name="article_slug" type="hidden" value="${escapeHtml(article ? article.slug : '')}" data-article-slug>
             <div class="alltell-article-options" data-article-options hidden></div>
           </label>
-          <label>Картинка
-            <input name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
-            <input name="image_url" type="hidden" value="${escapeHtml(post && post.image_url || '')}">
-            ${post && post.image_url ? `<img class="alltell-form-image-preview" src="${escapeHtml(post.image_url)}" alt="">` : ''}
-            ${post && post.image_url ? '<button class="btn btn-secondary btn-sm" type="button" data-action="remove-image">Убрать картинку</button>' : ''}
+          <label>Картинки
+            <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+            <input name="image_urls" type="hidden" value="${escapeHtml(JSON.stringify(images))}">
+            ${images.length ? `<div class="alltell-form-images">${images.map(function (image, index) {
+              return `<div class="alltell-form-image-item">
+                <img class="alltell-form-image-preview" src="${escapeHtml(image)}" alt="">
+                <button class="btn btn-secondary btn-sm" type="button" data-action="remove-image" data-image-index="${index}">Убрать</button>
+              </div>`;
+            }).join('')}</div>` : ''}
           </label>
         </div>
         <p class="alltell-form-hint">${canManage
@@ -409,26 +431,41 @@
 
     async function savePost(form) {
       var formData = new FormData(form);
-      var imageUrl = formData.get('image_url') || '';
-      var imageFile = formData.get('image');
-      if (imageFile && imageFile.size) {
-        if (!window.apiClient || typeof window.apiClient.uploadImage !== 'function') {
-          throw new Error('Загрузка изображений сейчас недоступна');
+      var imageUrls;
+      try {
+        imageUrls = JSON.parse(formData.get('image_urls') || '[]');
+      } catch (error) {
+        throw new Error('Не удалось прочитать список изображений записи');
+      }
+      if (!Array.isArray(imageUrls)) imageUrls = [];
+      var imageFiles = Array.from(form.querySelector('[name="images"]').files || []);
+      if (imageUrls.length + imageFiles.length > 60) {
+        throw new Error('Можно прикрепить не более 60 изображений');
+      }
+      for (var i = 0; i < imageFiles.length; i++) {
+        var uploadData = new FormData();
+        uploadData.append('image', imageFiles[i]);
+        var uploadResponse = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token() },
+          credentials: 'same-origin',
+          body: uploadData
+        });
+        var uploadResult = {};
+        try { uploadResult = await uploadResponse.json(); } catch (error) { /* Report the HTTP failure below. */ }
+        if (!uploadResponse.ok || !uploadResult.url) {
+          throw new Error(uploadResult.error || 'Не удалось загрузить изображение');
         }
-        var uploaded = await window.apiClient.uploadImage(imageFile);
-        if (!uploaded.success || !uploaded.data || !uploaded.data.url) {
-          throw new Error(uploaded.error || 'Не удалось загрузить изображение');
-        }
-        imageUrl = uploaded.data.url;
+        imageUrls.push(uploadResult.url);
       }
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
-        hub_status: formData.get('type') === 'hub_update' ? formData.get('hub_status') : '',
+        hub_status: formData.get('hub_id') ? formData.get('hub_status') : '',
         title: formData.get('title'),
         body: formData.get('body'),
         article_slug: formData.get('article_slug'),
-        image_url: imageUrl
+        image_urls: imageUrls
       };
       var franchiseId = state.detail.franchise.id;
       var postId = state.editingPost && state.editingPost.id;
@@ -491,8 +528,7 @@
       } else if (action === 'join') {
         button.disabled = true;
         joinFranchise().catch(function (error) {
-          state.error = error.message;
-          renderDetail(root, state);
+          notifyError(error.message);
         });
       } else if (action === 'edit-post') {
         state.editingPost = state.detail.posts.find(function (post) {
@@ -505,9 +541,11 @@
         renderDetail(root, state);
       } else if (action === 'remove-image') {
         var imageForm = button.closest('[data-post-form]');
-        imageForm.querySelector('[name="image_url"]').value = '';
-        imageForm.querySelector('.alltell-form-image-preview')?.remove();
-        button.remove();
+        var imagesInput = imageForm.querySelector('[name="image_urls"]');
+        var remainingImages = JSON.parse(imagesInput.value || '[]');
+        remainingImages.splice(Number(button.dataset.imageIndex), 1);
+        imagesInput.value = JSON.stringify(remainingImages);
+        button.closest('.alltell-form-image-item').remove();
       } else if (action === 'approve-post' || action === 'reject-post') {
         var postId = button.dataset.postId;
         button.disabled = true;
@@ -518,8 +556,7 @@
             showToast(action === 'approve-post' ? 'Предложение опубликовано' : 'Предложение отклонено');
           })
           .catch(function (error) {
-            state.error = error.message;
-            renderDetail(root, state);
+            notifyError(error.message);
           });
       } else if (action === 'delete-post') {
         if (!window.confirm('Удалить эту публикацию?')) return;
@@ -532,8 +569,7 @@
             showToast('Публикация удалена');
           })
           .catch(function (error) {
-            state.error = error.message;
-            renderDetail(root, state);
+            notifyError(error.message);
           });
       }
     }
@@ -544,15 +580,13 @@
 
     function onChange(event) {
       var form = event.target.closest('[data-post-form]');
-      if (!form || !event.target.matches('[name="type"], [name="hub_id"], [name="hub_status"]')) return;
-      if (form.querySelector('[name="type"]').value !== 'hub_update') return;
-      var title = form.querySelector('[name="title"]');
-      var hub = form.querySelector('[name="hub_id"]');
-      var status = form.querySelector('[name="hub_status"]');
-      var hubName = hub.selectedOptions[0] && hub.selectedOptions[0].textContent;
-      if (!title.value.trim() && hub.value && status.value) {
-        title.value = 'Хаб «' + hubName + '»: ' + HUB_STATUSES[status.value];
-      }
+      if (!form || !event.target.matches('[name="hub_id"]')) return;
+      var hubSelected = !!event.target.value;
+      var statusField = form.querySelector('[data-hub-status-field]');
+      var statusSelect = statusField.querySelector('[name="hub_status"]');
+      statusField.hidden = !hubSelected;
+      statusSelect.disabled = !hubSelected;
+      statusSelect.value = '';
     }
 
     function onSubmit(event) {
@@ -565,15 +599,9 @@
         var submitButton = event.target.querySelector('[type="submit"]');
         submitButton.disabled = true;
         savePost(event.target).catch(function (error) {
-          state.error = error.message;
-          var form = root.querySelector('[data-post-form]');
-          if (!form) return;
-          var message = document.createElement('p');
-          message.className = 'alltell-form-error';
-          message.setAttribute('role', 'alert');
-          message.textContent = error.message;
-          form.prepend(message);
-          form.querySelector('[type="submit"]').disabled = false;
+          notifyError(error.message);
+          var activeForm = root.querySelector('[data-post-form]');
+          if (activeForm) activeForm.querySelector('[type="submit"]').disabled = false;
         });
       }
     }

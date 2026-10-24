@@ -2099,20 +2099,23 @@
 .alltell-post-type-news { background: rgba(88, 101, 242, .2); color: #c9ceff; }
 .alltell-post-type-announcement { background: rgba(255, 93, 143, .18); color: #ff9fbb; }
 .alltell-post-type-event { background: rgba(45, 212, 191, .18); color: #75ead9; }
-.alltell-post-type-hub_update { background: rgba(59, 165, 93, .2); color: #6fdb9a; }
 .alltell-post-card h3 { margin: 10px 0; color: var(--header-primary); font-size: 17px; }
 .alltell-post-body { margin: 0; color: var(--text-normal); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .alltell-post-article { display: inline-block; margin-top: 12px; font-size: 13px; }
+.alltell-post-images,
+.alltell-form-images { display: flex; flex-wrap: wrap; gap: 10px; }
 .alltell-post-image,
 .alltell-form-image-preview {
     display: block;
-    max-width: 100%;
+    width: min(100%, 360px);
     max-height: 360px;
     margin-top: 12px;
     border-radius: 10px;
     object-fit: contain;
 }
-.alltell-form-image-preview { max-height: 180px; }
+.alltell-form-image-preview { width: 140px; height: 100px; max-height: 100px; margin: 0 0 8px; }
+.alltell-form-image-item { display: flex; flex-direction: column; align-items: flex-start; }
+.alltell-post-images .alltell-post-image { margin-top: 12px; }
 .alltell-article-options {
     display: grid;
     max-height: 220px;
