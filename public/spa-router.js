@@ -5377,12 +5377,6 @@ class SPARouter {
     const enabledPages = Object.entries(maintenancePages)
       .filter(([, enabled]) => enabled)
       .map(([page]) => ({ home: 'Главная', alltell: 'AllTell', antropedia: 'Antropedia', gallery: 'Галерея' }[page]));
-    if (enabledPages.length && !confirm(
-      `Включить техобслуживание для страниц:\n${enabledPages.join(', ')}?\n\n` +
-      'Посетители не смогут открыть выбранные страницы.'
-    )) {
-      return;
-    }
 
     try {
       const res = await fetch('/api/system-settings', {
