@@ -169,10 +169,10 @@ function maintenancePageHtml(page, message) {
       <span class="site-hero-badge"><i class="fas fa-screwdriver-wrench"></i> Техническое обслуживание</span>
       <h1>Раздел временно недоступен</h1>
       <p>${escapeHtml(message)}</p>
-      <p>Продолжить могут владелец и администраторы.</p>
+      <p id="maintenanceAdminNotice" hidden>Владелец и администраторы могут продолжить работу.</p>
       <div class="site-maintenance-actions">
         <a class="btn btn-primary btn-lg" href="/"><i class="fas fa-arrow-left"></i> Вернуться на основу</a>
-        <button class="btn btn-ghost btn-lg" id="maintenanceContinue" type="button">Продолжить?</button>
+        <button class="btn btn-ghost btn-lg" id="maintenanceContinue" type="button" hidden>Продолжить?</button>
       </div>
       <p id="maintenanceError" class="site-maintenance-error" role="status" aria-live="polite"></p>
     </section>

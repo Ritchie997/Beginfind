@@ -1918,15 +1918,50 @@
 
   function initMaintenancePage() {
     var button = document.getElementById('maintenanceContinue');
+    var adminNotice = document.getElementById('maintenanceAdminNotice');
     var errorMessage = document.getElementById('maintenanceError');
     var page = document.body.dataset.maintenanceTarget;
-    if (!button || !errorMessage || !page) return null;
+    if (!button || !adminNotice || !errorMessage || !page) return null;
+    var requestId = 0;
+
+    async function updateContinueAvailability() {
+      var currentRequest = ++requestId;
+      button.hidden = true;
+      adminNotice.hidden = true;
+      errorMessage.textContent = '';
+      var token = window.authManager && window.authManager.getToken();
+      if (!token) return;
+
+      try {
+        var response = await fetch('/api/profile', {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!response.ok) {
+          if (response.status !== 401 && response.status !== 403) {
+            throw new Error('Не удалось проверить права доступа');
+          }
+          return;
+        }
+        var result = await response.json();
+        if (currentRequest !== requestId ||
+            !window.authManager ||
+            window.authManager.getToken() !== token) return;
+        var user = result.user;
+        var canContinue = !!(user && (user.is_root || user.admin_level > 0));
+        button.hidden = !canContinue;
+        adminNotice.hidden = !canContinue;
+      } catch (error) {
+        if (currentRequest === requestId) {
+          console.error('Не удалось проверить права на обход техобслуживания:', error);
+        }
+      }
+    }
 
     async function continueToPage() {
-      if (!window.confirm('Страница находится на техническом обслуживании. Продолжить?')) return;
       var token = window.authManager && window.authManager.getToken();
       if (!token) {
-        errorMessage.textContent = 'Войдите в аккаунт с правами администратора, чтобы продолжить.';
+        button.hidden = true;
+        adminNotice.hidden = true;
         return;
       }
 
@@ -1953,7 +1988,13 @@
     }
 
     button.addEventListener('click', continueToPage);
-    return function () { button.removeEventListener('click', continueToPage); };
+    window.addEventListener('authChanged', updateContinueAvailability);
+    updateContinueAvailability();
+    return function () {
+      requestId++;
+      button.removeEventListener('click', continueToPage);
+      window.removeEventListener('authChanged', updateContinueAvailability);
+    };
   }
 
   function mountPublicPage() {
