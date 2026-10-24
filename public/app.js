@@ -64,12 +64,18 @@ window.applyAvatarTo = function (el, { name, avatar } = {}) {
   if (!el) return;
   const letter = avatarInitial(name);
   el.classList.toggle('has-image', !!avatar);
+  el.style.backgroundColor = avatar ? 'var(--background-tertiary)' : 'var(--blurple)';
   if (avatar) {
     el.textContent = '';
     const img = document.createElement('img');
     img.src = avatar;
     img.alt = '';
-    img.onerror = () => { el.classList.remove('has-image'); el.textContent = letter; };
+    img.style.backgroundColor = 'var(--background-tertiary)';
+    img.onerror = () => {
+      el.classList.remove('has-image');
+      el.style.backgroundColor = 'var(--blurple)';
+      el.textContent = letter;
+    };
     el.appendChild(img);
   } else {
     el.textContent = letter;
