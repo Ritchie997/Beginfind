@@ -226,6 +226,13 @@ class AuthManager {
   }
 
   logout() {
+    fetch('/api/maintenance-logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      keepalive: true
+    }).catch((error) => {
+      console.error('Не удалось завершить обход техобслуживания:', error);
+    });
     this.setToken(null);
     this.setUser(null);
     this.dispatchAuthEvent('logout');

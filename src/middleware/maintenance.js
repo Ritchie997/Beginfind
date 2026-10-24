@@ -6,10 +6,12 @@ const { MAINTENANCE_PAGE_KEYS, readSettings } = require('../services/system-sett
 
 const BYPASS_COOKIE = 'alltell_maintenance_bypass';
 const BYPASS_TTL_SECONDS = 2 * 60 * 60;
+const BYPASS_TOKEN_VERSION = 'v2';
 const ALWAYS_ALLOWED_API = new Set([
   '/api/login',
   '/api/maintenance-status',
-  '/api/maintenance-continue'
+  '/api/maintenance-continue',
+  '/api/maintenance-logout'
 ]);
 
 function maintenancePageForPath(pathname) {
@@ -67,13 +69,19 @@ function bypassSignature(value) {
 function hasMaintenanceBypass(req, page) {
   const token = cookieValue(req, BYPASS_COOKIE);
   const parts = token.split('.');
-  if (parts.length !== 3 || parts[0] !== page || !MAINTENANCE_PAGE_KEYS.includes(parts[0])) return false;
-  const expires = Number(parts[1]);
+  if (
+    parts.length !== 4 ||
+    parts[0] !== BYPASS_TOKEN_VERSION ||
+    parts[1] !== page ||
+    !MAINTENANCE_PAGE_KEYS.includes(parts[1])
+  ) return false;
+  const expires = Number(parts[2]);
   if (!Number.isInteger(expires) || expires <= Math.floor(Date.now() / 1000)) return false;
-  const expected = Buffer.from(bypassSignature(`${parts[0]}.${parts[1]}`), 'hex');
+  const signedValue = `${parts[0]}.${parts[1]}.${parts[2]}`;
+  const expected = Buffer.from(bypassSignature(signedValue), 'hex');
   let supplied;
   try {
-    supplied = Buffer.from(parts[2], 'hex');
+    supplied = Buffer.from(parts[3], 'hex');
   } catch (error) {
     return false;
   }
@@ -82,13 +90,22 @@ function hasMaintenanceBypass(req, page) {
 
 function setMaintenanceBypassCookie(req, res, page) {
   const expires = Math.floor(Date.now() / 1000) + BYPASS_TTL_SECONDS;
-  const value = `${page}.${expires}`;
+  const value = `${BYPASS_TOKEN_VERSION}.${page}.${expires}`;
   const token = `${value}.${bypassSignature(value)}`;
   const forwardedProto = req.get('x-forwarded-proto');
   const secure = req.secure || forwardedProto === 'https' ? '; Secure' : '';
   res.append(
     'Set-Cookie',
     `${BYPASS_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${BYPASS_TTL_SECONDS}${secure}`
+  );
+}
+
+function clearMaintenanceBypassCookie(req, res) {
+  const forwardedProto = req.get('x-forwarded-proto');
+  const secure = req.secure || forwardedProto === 'https' ? '; Secure' : '';
+  res.append(
+    'Set-Cookie',
+    `${BYPASS_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
   );
 }
 
@@ -208,5 +225,6 @@ module.exports = {
   maintenancePageGate,
   maintenancePageForPath,
   setMaintenanceBypassCookie,
+  clearMaintenanceBypassCookie,
   MAINTENANCE_PAGE_KEYS
 };

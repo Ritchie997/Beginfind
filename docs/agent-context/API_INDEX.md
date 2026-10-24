@@ -238,6 +238,7 @@
 - `PUT /system-settings`
 - `GET /maintenance-status`
 - `POST /maintenance-continue`
+- `POST /maintenance-logout`
 
 ## `stickers.routes.js`
 

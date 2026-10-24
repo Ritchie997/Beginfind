@@ -11,7 +11,11 @@ const {
   DEFAULT_SETTINGS,
   normalizeMaintenancePages
 } = require('../services/system-settings');
-const { setMaintenanceBypassCookie, MAINTENANCE_PAGE_KEYS } = require('../middleware/maintenance');
+const {
+  setMaintenanceBypassCookie,
+  clearMaintenanceBypassCookie,
+  MAINTENANCE_PAGE_KEYS
+} = require('../middleware/maintenance');
 
 const router = express.Router();
 
@@ -94,6 +98,11 @@ router.post('/maintenance-continue', auth.authenticateToken, auth.checkApproved,
 
   setMaintenanceBypassCookie(req, res, page);
   return res.json({ continued: true });
+});
+
+router.post('/maintenance-logout', (req, res) => {
+  clearMaintenanceBypassCookie(req, res);
+  return res.json({ cleared: true });
 });
 
 module.exports = router;
