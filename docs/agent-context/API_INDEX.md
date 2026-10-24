@@ -147,6 +147,8 @@
 - `GET /public/franchises`
 - `GET /public/franchises/:id`
 - `GET /franchises/mine`
+- `GET /franchises/feed`
+- `POST /franchises/feed/read`
 - `GET /franchises/:id/posts/:postId/likes`
 - `POST /franchises/:id/posts/:postId/likes/toggle`
 - `GET /franchises/:id/posts/:postId/comments`

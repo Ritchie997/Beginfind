@@ -25,6 +25,10 @@
     });
   }
 
+  function postSocialKey(franchiseId, postId) {
+    return String(franchiseId) + '-' + String(postId);
+  }
+
   function token() {
     return window.authManager && window.authManager.getToken();
   }
@@ -114,6 +118,7 @@
     root.innerHTML = `
       <div class="alltell-toolbar">
         <div>
+          ${renderViewTabs(state.view)}
           <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
           <p>Выберите сообщество и присоединяйтесь к его истории.</p>
         </div>
@@ -151,6 +156,43 @@
             `<div class="alltell-state"><i class="fas fa-compass" aria-hidden="true"></i><h3>${state.franchises.length ? 'Ничего не найдено' : 'Каталог пока пуст'}</h3><p>${state.franchises.length ? 'Измените поисковый запрос.' : 'Франшизы появятся здесь после публикации создателями.'}</p></div>`}
       </section>
       <p class="alltell-create-note">Создаёте собственный мир? <a href="/admin-panel">Создайте франшизу в AllTell</a> — она появится в каталоге автоматически.</p>
+    `;
+  }
+
+  function renderViewTabs(view) {
+    return `<nav class="alltell-view-tabs" aria-label="Раздел AllTell">
+      <button type="button" data-action="switch-view" data-view="feed" class="${view === 'feed' ? 'active' : ''}" aria-current="${view === 'feed' ? 'page' : 'false'}"><i class="fas fa-house" aria-hidden="true"></i> Лента</button>
+      <button type="button" data-action="switch-view" data-view="catalog" class="${view === 'catalog' ? 'active' : ''}" aria-current="${view === 'catalog' ? 'page' : 'false'}"><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</button>
+    </nav>`;
+  }
+
+  function renderFeed(root, state) {
+    var feedPosts = state.feedPosts || [];
+    var user = window.authManager && window.authManager.getUser();
+    root.innerHTML = `
+      <div class="alltell-toolbar">
+        <div>
+          ${renderViewTabs(state.view)}
+          <h2><i class="fas fa-house" aria-hidden="true"></i> Лента подписок</h2>
+          <p>Свежие публикации франшиз, на которые вы подписаны.</p>
+        </div>
+      </div>
+      ${state.error ? `<div class="alltell-state alltell-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
+      ${!token()
+        ? `<div class="alltell-state"><h3>Войдите, чтобы открыть свою ленту</h3><p>В ленте собраны новости франшиз, к которым вы присоединились.</p><button type="button" class="btn btn-primary" data-action="login">Войти</button></div>`
+        : state.loading
+          ? '<p class="alltell-state">Загружаем ленту…</p>'
+          : !state.followedCount
+            ? `<div class="alltell-state"><h3>Вы пока не подписаны на франшизы</h3><p>Откройте каталог, найдите интересные сообщества и присоединитесь к ним.</p><button type="button" class="btn btn-primary" data-action="switch-view" data-view="catalog">Открыть каталог франшиз</button></div>`
+            : feedPosts.length
+              ? `<div class="alltell-post-list">${feedPosts.map(function (post) {
+                var postSocial = state.postSocial[postSocialKey(post.franchise_id, post.id)];
+                return `<div class="alltell-feed-item">
+                  <a class="alltell-feed-franchise" href="/alltell?franchise=${Number(post.franchise_id)}"><i class="fas fa-users" aria-hidden="true"></i> ${escapeHtml(post.franchise_name)}${post.hub_name ? ' · ' + escapeHtml(post.hub_name) : ''}</a>
+                  ${renderPost(post, new Map(), false, postSocial, user && user.id, true, post.franchise_id)}
+                </div>`;
+              }).join('')}</div>`
+              : '<div class="alltell-state"><h3>Лента пока пуста</h3><p>В подписанных франшизах ещё нет опубликованных записей.</p><button type="button" class="btn btn-secondary" data-action="switch-view" data-view="catalog">Посмотреть каталог</button></div>'}
     `;
   }
 
@@ -199,7 +241,7 @@
     </article>`;
   }
 
-  function renderPostSocial(post, social, canManage, userId, loggedIn) {
+  function renderPostSocial(post, social, canManage, userId, loggedIn, franchiseId) {
     var comments = social.comments || [];
     var topLevel = comments.filter(function (comment) { return !comment.parentId; });
     var commentsHtml = topLevel.map(function (comment) {
@@ -218,7 +260,7 @@
           </div>
         </form>`
       : (social.open ? '<p class="alltell-comment-login"><button type="button" data-action="login">Войдите, чтобы комментировать и ставить реакции</button></p>' : '');
-    return `<div class="alltell-post-social" data-post-social="${Number(post.id)}">
+    return `<div class="alltell-post-social" data-post-social="${postSocialKey(franchiseId, post.id)}" data-franchise-id="${Number(franchiseId)}" data-post-id="${Number(post.id)}">
       <div class="alltell-social-actions">
         <button type="button" class="alltell-like-button${social.liked ? ' active' : ''}" data-action="toggle-post-like" data-post-id="${Number(post.id)}"><i class="${social.liked ? 'fas' : 'far'} fa-heart" aria-hidden="true"></i> <span>${Number(social.likes || 0)}</span></button>
         <button type="button" class="alltell-comments-toggle" data-action="toggle-comments" data-post-id="${Number(post.id)}"><i class="far fa-comment" aria-hidden="true"></i> ${commentsLabel(Number(social.commentCount || 0))}</button>
@@ -236,7 +278,8 @@
     </div>`;
   }
 
-  function renderPost(post, hubMap, canManage, social, userId, loggedIn) {
+  function renderPost(post, hubMap, canManage, social, userId, loggedIn, franchiseId) {
+    franchiseId = franchiseId || post.franchise_id;
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
     var canEdit = canManage || post.can_edit;
     var images = Array.isArray(post.images) && post.images.length
@@ -285,7 +328,7 @@
             open: false,
             loaded: false,
             comments: []
-          }, canManage, userId, loggedIn)
+          }, canManage, userId, loggedIn, franchiseId)
           : ''}
       </article>`;
   }
@@ -384,7 +427,7 @@
     var posts = data.posts.filter(function (post) { return post.approval_status === 'published'; });
     var suggestions = data.posts.filter(function (post) { return post.approval_status !== 'published'; });
     root.innerHTML = `
-      <a class="alltell-back-link" href="/alltell"><i class="fas fa-arrow-left" aria-hidden="true"></i> К каталогу</a>
+      <a class="alltell-back-link" href="/alltell?view=catalog"><i class="fas fa-arrow-left" aria-hidden="true"></i> К каталогу</a>
       ${state.error ? `<div class="alltell-state alltell-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
       <header class="alltell-detail-header">
         <div class="alltell-live-avatar alltell-detail-avatar">${escapeHtml(initials(franchise.name))}</div>
@@ -415,10 +458,10 @@
         ${suggestions.length ? `<div class="alltell-live-section-heading"><h3>${canManage ? 'Предложения и модерация' : 'Мои предложения'}</h3><span>${canManage
           ? suggestions.filter(function (post) { return post.approval_status === 'pending'; }).length + ' ожидают решения'
           : suggestions.length + ' предложений'}</span></div>
-          <div class="alltell-post-list">${suggestions.map(function (post) { return renderPost(post, hubMap, canManage, null, userId, !!token()); }).join('')}</div>` : ''}
+          <div class="alltell-post-list">${suggestions.map(function (post) { return renderPost(post, hubMap, canManage, null, userId, !!token(), franchise.id); }).join('')}</div>` : ''}
         ${posts.length ? `<div class="alltell-post-list">${posts.map(function (post) {
-          var postSocial = state.postSocial[String(post.id)];
-          return renderPost(post, hubMap, canManage, postSocial, userId, !!token());
+          var postSocial = state.postSocial[postSocialKey(franchise.id, post.id)];
+          return renderPost(post, hubMap, canManage, postSocial, userId, !!token(), franchise.id);
         }).join('')}</div>` : `<div class="alltell-state"><p>${canManage ? 'Добавьте первую новость, объявление или событие.' : 'Публикаций пока нет.'}</p></div>`}
       </section>
     `;
@@ -434,6 +477,9 @@
       franchises: [],
       mine: [],
       detail: null,
+      view: new URLSearchParams(window.location.search).get('view') === 'catalog' ? 'catalog' : 'feed',
+      feedPosts: [],
+      followedCount: 0,
       editingPost: null,
       postSocial: {},
       stickerPacks: null,
@@ -519,10 +565,25 @@
       form.querySelector('[data-image-progress-bar]').value = total ? Math.round(done / total * 100) : 0;
     }
 
-    function getPostSocial(postId) {
-      var key = String(postId);
+    function findPost(postId, franchiseId) {
+      var posts = (state.detail && state.detail.posts || []).concat(state.feedPosts || []);
+      return posts.find(function (item) {
+        return String(item.id) === String(postId) &&
+          (franchiseId == null || String(item.franchise_id || state.detail && state.detail.franchise.id) === String(franchiseId));
+      });
+    }
+
+    function franchiseIdForPost(postId, franchiseId) {
+      if (franchiseId != null) return Number(franchiseId);
+      var post = findPost(postId);
+      return Number(post && (post.franchise_id || state.detail && state.detail.franchise.id));
+    }
+
+    function getPostSocial(postId, franchiseId) {
+      franchiseId = franchiseIdForPost(postId, franchiseId);
+      var key = postSocialKey(franchiseId, postId);
       if (!state.postSocial[key]) {
-        var post = state.detail.posts.find(function (item) { return String(item.id) === key; }) || {};
+        var post = findPost(postId, franchiseId) || {};
         state.postSocial[key] = {
           likes: Number(post.likes_count || 0),
           liked: !!post.liked,
@@ -540,23 +601,27 @@
       return state.postSocial[key];
     }
 
-    function renderSocialPanel(postId) {
-      var post = state.detail.posts.find(function (item) { return String(item.id) === String(postId); });
-      var panel = root.querySelector('[data-post-social="' + Number(postId) + '"]');
+    function renderSocialPanel(postId, franchiseId) {
+      franchiseId = franchiseIdForPost(postId, franchiseId);
+      var post = findPost(postId, franchiseId);
+      var key = postSocialKey(franchiseId, postId);
+      var panel = root.querySelector('[data-post-social="' + key + '"]');
       if (!post || !panel) return;
-      panel.outerHTML = renderPostSocial(post, getPostSocial(postId), state.detail.can_manage,
-        (window.authManager && window.authManager.getUser() || {}).id, !!token());
+      var canManage = !!(state.detail && Number(state.detail.franchise.id) === franchiseId && state.detail.can_manage);
+      panel.outerHTML = renderPostSocial(post, getPostSocial(postId, franchiseId), canManage,
+        (window.authManager && window.authManager.getUser() || {}).id, !!token(), franchiseId);
     }
 
-    async function loadPostComments(postId) {
-      var social = getPostSocial(postId);
+    async function loadPostComments(postId, franchiseId) {
+      franchiseId = franchiseIdForPost(postId, franchiseId);
+      var social = getPostSocial(postId, franchiseId);
       if (social.loading) return;
       social.loading = true;
       social.open = true;
       social.loadError = '';
-      renderSocialPanel(postId);
+      renderSocialPanel(postId, franchiseId);
       try {
-        social.comments = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/comments');
+        social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
         social.commentCount = social.comments.length;
         social.loaded = true;
       } catch (error) {
@@ -564,7 +629,7 @@
         throw error;
       } finally {
         social.loading = false;
-        renderSocialPanel(postId);
+        renderSocialPanel(postId, franchiseId);
       }
     }
 
@@ -602,8 +667,10 @@
     }
 
     async function openPostStickerPicker(button) {
-      var postId = button.closest('[data-post-social]').dataset.postSocial;
-      var social = getPostSocial(postId);
+      var postRoot = button.closest('[data-post-social]');
+      var postId = postRoot.dataset.postId;
+      var franchiseId = postRoot.dataset.franchiseId;
+      var social = getPostSocial(postId, franchiseId);
       social.pickerTarget = {
         mode: button.dataset.pickerMode,
         type: button.dataset.targetType,
@@ -611,7 +678,7 @@
       };
       try {
         await loadStickerPickerData();
-        var panel = root.querySelector('[data-post-social="' + Number(postId) + '"] [data-sticker-picker]');
+        var panel = postRoot.querySelector('[data-sticker-picker]');
         if (!panel) return;
         panel.innerHTML = stickerPickerMarkup();
         panel.hidden = false;
@@ -622,8 +689,9 @@
 
     async function selectPostSticker(button) {
       var panel = button.closest('[data-post-social]');
-      var postId = panel.dataset.postSocial;
-      var social = getPostSocial(postId);
+      var postId = panel.dataset.postId;
+      var franchiseId = panel.dataset.franchiseId;
+      var social = getPostSocial(postId, franchiseId);
       var target = social.pickerTarget;
       if (!target) return;
       var shortcode = button.dataset.shortcode;
@@ -637,59 +705,61 @@
         panel.querySelector('[data-sticker-picker]').hidden = true;
         return;
       }
-      var endpoint = '/api/franchises/' + state.detail.franchise.id + '/posts/' + postId;
+      var endpoint = '/api/franchises/' + franchiseId + '/posts/' + postId;
       if (target.type === 'franchise_post_comment') endpoint += '/comments/' + target.id;
       endpoint += '/reactions/toggle';
       try {
         var result = await request(endpoint, 'POST', { shortcode: shortcode.replace(/^:+|:+$/g, '') });
         if (target.type === 'franchise_post') {
           social.reactions = result.reactions || [];
-          renderSocialPanel(postId);
+          renderSocialPanel(postId, franchiseId);
         } else {
-          social.comments = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/comments');
-          renderSocialPanel(postId);
+          social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
+          renderSocialPanel(postId, franchiseId);
         }
       } catch (error) {
         notifyError(error.message);
       }
     }
 
-    async function togglePostLike(postId) {
+    async function togglePostLike(postId, franchiseId) {
       try {
-        var result = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/likes/toggle', 'POST', {});
-        var social = getPostSocial(postId);
+        var result = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/likes/toggle', 'POST', {});
+        var social = getPostSocial(postId, franchiseId);
         social.likes = result.count;
         social.liked = result.liked;
-        renderSocialPanel(postId);
+        renderSocialPanel(postId, franchiseId);
       } catch (error) {
         notifyError(error.message);
       }
     }
 
     async function togglePostReaction(button) {
-      var postId = button.closest('[data-post-social]').dataset.postSocial;
+      var postRoot = button.closest('[data-post-social]');
+      var postId = postRoot.dataset.postId;
+      var franchiseId = postRoot.dataset.franchiseId;
       var targetType = button.dataset.targetType;
       var targetId = button.dataset.targetId;
-      var endpoint = '/api/franchises/' + state.detail.franchise.id + '/posts/' + postId;
+      var endpoint = '/api/franchises/' + franchiseId + '/posts/' + postId;
       if (targetType === 'franchise_post_comment') endpoint += '/comments/' + targetId;
       endpoint += '/reactions/toggle';
       try {
         var result = await request(endpoint, 'POST', { shortcode: button.dataset.shortcode });
-        var social = getPostSocial(postId);
+        var social = getPostSocial(postId, franchiseId);
         if (targetType === 'franchise_post') social.reactions = result.reactions || [];
-        else social.comments = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/comments');
-        renderSocialPanel(postId);
+        else social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
+        renderSocialPanel(postId, franchiseId);
       } catch (error) {
         notifyError(error.message);
       }
     }
 
-    function buildStickerReplyTargets(postId, commentId) {
-      var social = getPostSocial(postId);
+    function buildStickerReplyTargets(postId, franchiseId, commentId) {
+      var social = getPostSocial(postId, franchiseId);
       var comment = social.comments.find(function (item) { return Number(item.id) === Number(commentId); });
       if (!comment) return [];
       var rootCommentId = comment.parentId || comment.id;
-      var base = '/api/franchises/' + state.detail.franchise.id + '/posts/' + postId;
+      var base = '/api/franchises/' + franchiseId + '/posts/' + postId;
       return [
         {
           label: 'Реакция на этот комментарий',
@@ -698,7 +768,7 @@
               shortcode: code.replace(/^:+|:+$/g, '')
             });
             social.comments = await request(base + '/comments');
-            renderSocialPanel(postId);
+            renderSocialPanel(postId, franchiseId);
             return true;
           }
         },
@@ -709,7 +779,7 @@
             social.comments = await request(base + '/comments');
             social.commentCount = social.comments.length;
             social.loaded = true;
-            renderSocialPanel(postId);
+            renderSocialPanel(postId, franchiseId);
             showToast('Ответ добавлен');
             return true;
           }
@@ -721,7 +791,7 @@
               shortcode: code.replace(/^:+|:+$/g, '')
             });
             social.reactions = result.reactions || [];
-            renderSocialPanel(postId);
+            renderSocialPanel(postId, franchiseId);
             return true;
           }
         }
@@ -730,19 +800,20 @@
 
     async function submitPostComment(form) {
       var postId = form.dataset.postId;
-      var social = getPostSocial(postId);
+      var franchiseId = form.closest('[data-post-social]').dataset.franchiseId;
+      var social = getPostSocial(postId, franchiseId);
       var content = new FormData(form).get('content');
       try {
-        await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/comments', 'POST', {
+        await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments', 'POST', {
           content: content,
           parentId: social.replyTo ? social.replyTo.id : null
         });
         social.replyTo = null;
-        social.comments = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/comments');
+        social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
         social.commentCount = social.comments.length;
         social.loaded = true;
         social.open = true;
-        renderSocialPanel(postId);
+        renderSocialPanel(postId, franchiseId);
         showToast('Комментарий добавлен');
       } catch (error) {
         notifyError(error.message);
@@ -783,6 +854,7 @@
     }
 
     async function loadCatalog() {
+      state.view = 'catalog';
       state.loading = true;
       state.error = '';
       renderCatalog(root, state);
@@ -800,6 +872,39 @@
         state.loading = false;
         state.error = error.message;
         renderCatalog(root, state);
+      }
+    }
+
+    async function loadFeed() {
+      state.view = 'feed';
+      state.postSocial = {};
+      state.loading = true;
+      state.error = '';
+      renderFeed(root, state);
+      if (!token()) {
+        state.feedPosts = [];
+        state.followedCount = 0;
+        state.loading = false;
+        renderFeed(root, state);
+        return;
+      }
+      try {
+        var result = await request('/api/franchises/feed');
+        if (state.disposed) return;
+        state.feedPosts = result.posts || [];
+        state.followedCount = Number(result.followed_count || 0);
+        state.loading = false;
+        renderFeed(root, state);
+        if (state.followedCount) {
+          request('/api/franchises/feed/read', 'POST', {}).catch(function (error) {
+            notifyError(error.message);
+          });
+        }
+      } catch (error) {
+        if (state.disposed) return;
+        state.loading = false;
+        state.error = error.message;
+        renderFeed(root, state);
       }
     }
 
@@ -832,7 +937,16 @@
     function refreshCurrentView() {
       var franchiseId = new URLSearchParams(window.location.search).get('franchise');
       if (franchiseId && /^\d+$/.test(franchiseId)) return loadDetail(franchiseId);
-      return loadCatalog();
+      state.view = new URLSearchParams(window.location.search).get('view') === 'catalog' ? 'catalog' : 'feed';
+      return state.view === 'catalog' ? loadCatalog() : loadFeed();
+    }
+
+    function switchView(view) {
+      if (view !== 'feed' && view !== 'catalog') return;
+      state.view = view;
+      window.history.pushState({}, '', '/alltell?view=' + view);
+      if (view === 'catalog') loadCatalog();
+      else loadFeed();
     }
 
     async function joinFranchise() {
@@ -940,7 +1054,7 @@
         }
         var socialPanel = commentSticker.closest('[data-post-social]');
         var commentElement = commentSticker.closest('[data-comment-id]');
-        var targets = buildStickerReplyTargets(socialPanel.dataset.postSocial, commentElement.dataset.commentId);
+        var targets = buildStickerReplyTargets(socialPanel.dataset.postId, socialPanel.dataset.franchiseId, commentElement.dataset.commentId);
         if (targets.length) {
           window.stickerPackView?.open(commentSticker.dataset.packId, { replyTargets: targets });
         }
@@ -963,53 +1077,63 @@
       var button = event.target.closest('[data-action]');
       if (!button) return;
       var action = button.dataset.action;
-      if (action === 'toggle-post-like') {
+      if (action === 'switch-view') {
+        switchView(button.dataset.view);
+      } else if (action === 'toggle-post-like') {
         if (!token()) {
           if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
           else window.location.href = '/admin-panel';
           return;
         }
-        togglePostLike(button.dataset.postId);
+        var likeRoot = button.closest('[data-post-social]');
+        togglePostLike(likeRoot.dataset.postId, likeRoot.dataset.franchiseId);
       } else if (action === 'toggle-comments') {
-        var postSocial = getPostSocial(button.dataset.postId);
+        var commentsRoot = button.closest('[data-post-social]');
+        var commentsPostId = commentsRoot.dataset.postId;
+        var commentsFranchiseId = commentsRoot.dataset.franchiseId;
+        var postSocial = getPostSocial(commentsPostId, commentsFranchiseId);
         if (!token()) {
           postSocial.open = !postSocial.open;
-          renderSocialPanel(button.dataset.postId);
+          renderSocialPanel(commentsPostId, commentsFranchiseId);
         } else if (postSocial.open) {
           postSocial.open = false;
-          renderSocialPanel(button.dataset.postId);
+          renderSocialPanel(commentsPostId, commentsFranchiseId);
         } else {
-          loadPostComments(button.dataset.postId).catch(function (error) { notifyError(error.message); });
+          loadPostComments(commentsPostId, commentsFranchiseId).catch(function (error) { notifyError(error.message); });
         }
       } else if (action === 'reload-comments') {
-        loadPostComments(button.dataset.postId).catch(function (error) { notifyError(error.message); });
+        var reloadRoot = button.closest('[data-post-social]');
+        loadPostComments(reloadRoot.dataset.postId, reloadRoot.dataset.franchiseId).catch(function (error) { notifyError(error.message); });
       } else if (action === 'reply-comment') {
-        var commentPostId = button.closest('[data-post-social]').dataset.postSocial;
-        var commentSocial = getPostSocial(commentPostId);
+        var commentRoot = button.closest('[data-post-social]');
+        var commentPostId = commentRoot.dataset.postId;
+        var commentFranchiseId = commentRoot.dataset.franchiseId;
+        var commentSocial = getPostSocial(commentPostId, commentFranchiseId);
         var targetComment = commentSocial.comments.find(function (comment) {
           return Number(comment.id) === Number(button.dataset.commentId);
         });
         if (!targetComment) return;
         commentSocial.replyTo = { id: targetComment.parentId || targetComment.id, authorName: button.dataset.author };
         commentSocial.open = true;
-        renderSocialPanel(commentPostId);
-        root.querySelector('[data-post-social="' + Number(commentPostId) + '"] [data-comment-form] textarea')?.focus();
+        renderSocialPanel(commentPostId, commentFranchiseId);
+        root.querySelector('[data-post-social="' + postSocialKey(commentFranchiseId, commentPostId) + '"] [data-comment-form] textarea')?.focus();
       } else if (action === 'cancel-reply') {
         var replyPanel = button.closest('[data-post-social]');
-        var replyState = getPostSocial(replyPanel.dataset.postSocial);
+        var replyState = getPostSocial(replyPanel.dataset.postId, replyPanel.dataset.franchiseId);
         replyState.replyTo = null;
-        renderSocialPanel(replyPanel.dataset.postSocial);
+        renderSocialPanel(replyPanel.dataset.postId, replyPanel.dataset.franchiseId);
       } else if (action === 'delete-comment') {
         if (!window.confirm('Удалить комментарий вместе с ответами?')) return;
         var deletePanel = button.closest('[data-post-social]');
-        var deletePostId = deletePanel.dataset.postSocial;
-        request('/api/franchises/' + state.detail.franchise.id + '/posts/' + deletePostId +
+        var deletePostId = deletePanel.dataset.postId;
+        var deleteFranchiseId = deletePanel.dataset.franchiseId;
+        request('/api/franchises/' + deleteFranchiseId + '/posts/' + deletePostId +
           '/comments/' + button.dataset.commentId, 'DELETE')
           .then(async function () {
-            var deletedSocial = getPostSocial(deletePostId);
-            deletedSocial.comments = await request('/api/franchises/' + state.detail.franchise.id + '/posts/' + deletePostId + '/comments');
+            var deletedSocial = getPostSocial(deletePostId, deleteFranchiseId);
+            deletedSocial.comments = await request('/api/franchises/' + deleteFranchiseId + '/posts/' + deletePostId + '/comments');
             deletedSocial.commentCount = deletedSocial.comments.length;
-            renderSocialPanel(deletePostId);
+            renderSocialPanel(deletePostId, deleteFranchiseId);
           }).catch(function (error) { notifyError(error.message); });
       } else if (action === 'toggle-reaction') {
         if (!token()) {
@@ -1215,8 +1339,10 @@
       loadArticleIndex();
       if (new URLSearchParams(window.location.search).has('franchise')) {
         loadDetail(new URLSearchParams(window.location.search).get('franchise'));
-      } else {
+      } else if (new URLSearchParams(window.location.search).get('view') === 'catalog') {
         loadCatalog();
+      } else {
+        loadFeed();
       }
     }
 

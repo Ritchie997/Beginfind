@@ -365,6 +365,78 @@ router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async
   }
 });
 
+router.get('/franchises/feed', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const rows = await dbAll(`
+      SELECT p.*, s.id AS franchise_id, s.name AS franchise_name,
+             h.name AS hub_name
+      FROM user_server_memberships m
+      JOIN servers s ON s.id = m.server_id AND s.is_published = 1
+      JOIN franchise_posts p ON p.server_id = s.id AND p.approval_status = 'published'
+      LEFT JOIN franchise_hubs h ON h.id = p.hub_id AND h.server_id = p.server_id
+      WHERE m.user_id = ? AND (p.hub_id IS NULL OR h.is_public = 1)
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT 100
+    `, [req.user.id]);
+    const postIds = rows.map((row) => row.id);
+    const [postCounts, postReactionMap] = await Promise.all([
+      social.getFranchisePostCounts(postIds, req.user.id),
+      social.getReactionsForTargets('franchise_post', postIds, req.user.id)
+    ]);
+    const postReactionMeta = await stickers.resolveCodes(
+      [...postReactionMap.values()].flat().map((reaction) => reaction.shortcode)
+    );
+    const posts = await Promise.all(rows.map(async (row) => {
+      const post = await publicPost(row, req.user);
+      const counts = postCounts.get(row.id) || { likes: 0, comments: 0, liked: false };
+      const reactions = (postReactionMap.get(String(row.id)) || [])
+        .map((reaction) => ({ ...reaction, ...postReactionMeta.get(reaction.shortcode) }))
+        .filter((reaction) => reaction.url);
+      return {
+        ...post,
+        franchise_id: row.franchise_id,
+        franchise_name: row.franchise_name,
+        hub_name: row.hub_name || null,
+        likes_count: counts.likes,
+        comments_count: counts.comments,
+        liked: counts.liked,
+        reactions
+      };
+    }));
+    const followed = await dbGet(
+      'SELECT COUNT(*) AS count FROM user_server_memberships m JOIN servers s ON s.id = m.server_id AND s.is_published = 1 WHERE m.user_id = ?',
+      [req.user.id]
+    );
+    res.json({ posts, followed_count: followed?.count || 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/feed/read', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await dbRun(`
+      INSERT INTO franchise_feed_reads (user_id, server_id, last_seen_at, last_seen_post_id)
+      SELECT ?, m.server_id, CURRENT_TIMESTAMP,
+             COALESCE((SELECT MAX(p.id) FROM franchise_posts p
+                       WHERE p.server_id = m.server_id AND p.approval_status = 'published'
+                         AND (p.hub_id IS NULL OR EXISTS (
+                           SELECT 1 FROM franchise_hubs h
+                           WHERE h.id = p.hub_id AND h.server_id = p.server_id AND h.is_public = 1
+                         ))), 0)
+      FROM user_server_memberships m
+      JOIN servers s ON s.id = m.server_id AND s.is_published = 1
+      WHERE m.user_id = ?
+      ON CONFLICT(user_id, server_id) DO UPDATE SET
+        last_seen_at = CURRENT_TIMESTAMP,
+        last_seen_post_id = excluded.last_seen_post_id
+    `, [req.user.id, req.user.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/franchises/:id/posts/:postId/likes', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);

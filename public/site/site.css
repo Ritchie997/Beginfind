@@ -1968,6 +1968,9 @@
     gap: 18px;
 }
 .alltell-toolbar { margin-bottom: 28px; }
+.alltell-view-tabs { display: flex; gap: 7px; margin: 0 0 14px; }
+.alltell-view-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid var(--background-accent); border-radius: 20px; background: var(--background-secondary); color: var(--text-muted); cursor: pointer; font: inherit; font-size: 13px; }
+.alltell-view-tabs button.active { border-color: var(--blurple); background: rgba(88, 101, 242, .2); color: var(--header-primary); }
 .alltell-toolbar h2,
 .alltell-live-section-heading h2 {
     margin: 0;
@@ -2095,6 +2098,10 @@
 .alltell-hub-card p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
 .alltell-hub-date { color: var(--text-muted); font-size: 11px; }
 .alltell-post-list { display: grid; gap: 12px; }
+.alltell-feed-item { width: min(100%, 760px); margin: 0 auto 6px; }
+.alltell-feed-franchise { display: inline-block; margin: 0 0 7px 4px; color: #aeb5ff; font-size: 12px; font-weight: 600; text-decoration: none; }
+.alltell-feed-franchise:hover { text-decoration: underline; }
+.alltell-feed-item .alltell-post-card { margin: 0; }
 .alltell-feed-section {
     width: min(100%, 760px);
     margin-right: auto;
