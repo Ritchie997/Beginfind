@@ -533,6 +533,34 @@
     font-size: 15px;
 }
 
+.site-hero-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 36px;
+    max-width: 760px;
+    margin: 0 auto;
+}
+
+.site-home-stats-error {
+    flex-basis: 100%;
+    margin: -20px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.site-hero-stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.site-hero-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
 /* ============================================================
    СЕКЦИИ / КОНТЕЙНЕР
    ============================================================ */
@@ -2605,5 +2633,6 @@ a.site-profile-media-row:hover {
 
 @media (max-width: 560px) {
     .site-hero { padding: 56px 16px 44px; }
+    .site-hero-stats { gap: 22px; }
     .cta-banner { padding: 26px 22px; }
 }

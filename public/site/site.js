@@ -1784,6 +1784,7 @@
   }
 
   function initPublicHome() {
+    var statsError = document.getElementById('homeStatsError');
     var articlesRoot = document.getElementById('homePopularArticles');
     var galleryRoot = document.getElementById('homeRecentGallery');
     var graphRoot = document.getElementById('homeGraphContainer');
@@ -1802,6 +1803,28 @@
       var data = await response.json();
       if (!response.ok) throw new Error(data && data.error || 'Ошибка запроса: ' + response.status);
       return data;
+    }
+
+    async function loadStats() {
+      try {
+        var stats = await request('/api/public/site-summary');
+        if (!mounted) return;
+        Object.keys(stats).forEach(function (key) {
+          var value = document.querySelector('[data-home-stat="' + key + '"]');
+          if (value) value.textContent = formatCount(stats[key]);
+        });
+        if (statsError) statsError.hidden = true;
+      } catch (error) {
+        if (error.name === 'AbortError' || !mounted) return;
+        console.error('Не удалось загрузить статистику главной страницы:', error);
+        document.querySelectorAll('[data-home-stat]').forEach(function (value) {
+          value.textContent = '—';
+        });
+        if (statsError) {
+          statsError.textContent = 'Не удалось загрузить статистику. Попробуйте обновить страницу.';
+          statsError.hidden = false;
+        }
+      }
     }
 
     async function loadArticles() {
@@ -1900,7 +1923,7 @@
         graphInstance = null;
       }
     };
-    cleanup.ready = Promise.all([loadArticles(), loadGallery(), loadGraph()]);
+    cleanup.ready = Promise.all([loadStats(), loadArticles(), loadGallery(), loadGraph()]);
     return cleanup;
   }
 
