@@ -10,13 +10,16 @@
   });
 
   function isPublicPath(pathname) {
-    return pathname === '/' ||
-      pathname === '/antropedia' ||
-      /^\/antropedia\/[^/]+\/?$/.test(pathname) ||
-      pathname === '/profile' ||
-      /^\/profile\/[^/]+\/?$/.test(pathname) ||
-      pathname === '/site/alltell.html' ||
-      pathname === '/site/gallery.html';
+    var normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    return normalizedPath === '/' ||
+      normalizedPath === '/antropedia' ||
+      /^\/antropedia\/[^/]+$/.test(normalizedPath) ||
+      normalizedPath === '/profile' ||
+      /^\/profile\/[^/]+$/.test(normalizedPath) ||
+      normalizedPath === '/alltell' ||
+      normalizedPath === '/site/alltell.html' ||
+      normalizedPath === '/gallery' ||
+      normalizedPath === '/site/gallery.html';
   }
 
   function syncHead(parsedDocument) {

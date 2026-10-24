@@ -85,6 +85,8 @@
 | Публичная главная / основа | `/` |
 | Публичная Antropedia | `/antropedia` |
 | Публичная статья | `/antropedia/:slug` |
+| Публичный AllTell | `/alltell` |
+| Публичная галерея | `/gallery` |
 | Админ-панель | `/admin-panel` |
 | Админский просмотр статьи | `/admin-panel/antropedia/:slug` |
 | Переход в редактор статьи | `/admin-panel?editArticle=:slug`, затем `/articles` после входа |

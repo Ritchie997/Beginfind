@@ -13,13 +13,16 @@ const ALWAYS_ALLOWED_API = new Set([
 ]);
 
 function maintenancePageForPath(pathname) {
-  if (pathname === '/' || pathname === '/site/index.html') return 'home';
-  if (pathname === '/site/alltell.html') return 'alltell';
-  if (pathname === '/site/gallery.html') return 'gallery';
+  const normalizedPath = pathname.length > 1
+    ? pathname.replace(/\/+$/, '').toLowerCase()
+    : pathname;
+  if (normalizedPath === '/' || normalizedPath === '/site/index.html') return 'home';
+  if (normalizedPath === '/site/alltell.html' || normalizedPath === '/alltell') return 'alltell';
+  if (normalizedPath === '/site/gallery.html' || normalizedPath === '/gallery') return 'gallery';
   if (
-    pathname === '/antropedia' ||
-    pathname === '/site/antropedia.html' ||
-    /^\/antropedia\/[^/]+\/?$/.test(pathname)
+    normalizedPath === '/antropedia' ||
+    normalizedPath === '/site/antropedia.html' ||
+    /^\/antropedia\/[^/]+$/.test(normalizedPath)
   ) return 'antropedia';
   return null;
 }
