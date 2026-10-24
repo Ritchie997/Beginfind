@@ -387,7 +387,7 @@
    МОБИЛЬНОЕ МЕНЮ
    ============================================================ */
 
-@media (max-width: 900px) {
+@media (max-width: 1150px) {
     .site-burger { display: flex; }
 
     .site-nav {
