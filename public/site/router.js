@@ -130,12 +130,21 @@
     else if (currentFooter) currentFooter.remove();
     else if (nextFooter) document.body.appendChild(document.importNode(nextFooter, true));
     document.body.dataset.page = parsedDocument.body.dataset.page || '';
+    if (parsedDocument.body.hasAttribute('data-maintenance-page')) {
+      document.body.dataset.maintenancePage = parsedDocument.body.dataset.maintenancePage;
+      document.body.dataset.maintenanceTarget = parsedDocument.body.dataset.maintenanceTarget || '';
+    } else {
+      delete document.body.dataset.maintenancePage;
+      delete document.body.dataset.maintenanceTarget;
+    }
   }
 
   async function navigate(target, options) {
     var url = target instanceof URL ? target : new URL(target, window.location.href);
     if (url.origin !== window.location.origin || !isPublicPath(url.pathname)) return false;
-    if (url.pathname + url.search === window.location.pathname + window.location.search && url.hash !== '#publicArticleListReturn') {
+    if ((!options || !options.force) &&
+        url.pathname + url.search === window.location.pathname + window.location.search &&
+        url.hash !== '#publicArticleListReturn') {
       if (url.hash) window.location.hash = url.hash;
       return true;
     }
@@ -159,15 +168,16 @@
         headers: { 'X-Requested-With': 'PublicSiteNavigation' },
         signal: activeRequest.signal
       });
-      if (response.status === 503 && response.headers.get('content-type')?.includes('text/html')) {
-        window.location.assign(url.href);
-        return false;
-      }
+      var maintenanceResponse = response.status === 503 &&
+        response.headers.get('content-type')?.includes('text/html');
       var articleNotFound = response.status === 404 && /^\/antropedia\/[^/]+\/?$/.test(url.pathname);
-      if (!response.ok && !articleNotFound) throw new Error('HTTP ' + response.status);
+      if (!response.ok && !articleNotFound && !maintenanceResponse) throw new Error('HTTP ' + response.status);
       var parsedDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
       if (id !== navigationId) return false;
       if (!parsedDocument.body.dataset.page) throw new Error('Не удалось определить публичную страницу.');
+      if (maintenanceResponse && parsedDocument.body.dataset.maintenancePage !== 'true') {
+        throw new Error('Не удалось загрузить страницу технического обслуживания.');
+      }
 
       if (!options || (options.history !== false && options.history !== 'pop')) {
         history.replaceState(Object.assign({}, history.state, { publicSiteScrollY: previousScrollY }), '', window.location.pathname + window.location.search + window.location.hash);

@@ -110,46 +110,56 @@ function maintenancePageHtml(page, message) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Техническое обслуживание — AllTell</title>
-  <style>
-    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#202225;color:#dcddde;font:16px system-ui,sans-serif}
-    main{width:min(480px,calc(100% - 40px));box-sizing:border-box;padding:32px;border:1px solid #40444b;border-radius:14px;background:#2f3136;text-align:center}
-    h1{margin:0 0 12px;color:#fff;font-size:24px}p{line-height:1.6;color:#b9bbbe}
-    button,a{display:inline-block;margin:8px 4px 0;padding:10px 16px;border:0;border-radius:7px;background:#5865f2;color:#fff;font:inherit;text-decoration:none;cursor:pointer}
-    a{background:#4f545c}.error{min-height:1.5em;color:#faa81a}
-  </style>
+  <link rel="stylesheet" href="/global-styles.css">
+  <link rel="stylesheet" href="/site/site.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body>
-  <main>
-    <h1>Страница временно недоступна</h1>
-    <p>${escapeHtml(message)}</p>
-    <p>Владелец и администраторы могут продолжить работу.</p>
-    <button id="maintenanceContinue" type="button">Продолжить?</button>
-    <a href="/admin-panel">Войти в админ-панель</a>
-    <p id="maintenanceError" class="error" role="status"></p>
+<body data-page="maintenance" data-maintenance-page="true" data-maintenance-target="${page}">
+  <header class="site-header">
+    <div class="site-header-inner">
+      <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+      <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+      <nav class="site-nav" id="siteNav">
+        <a href="/" class="site-nav-link" data-page="home">Главная</a>
+        <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
+        <a href="/site/alltell.html" class="site-nav-link" data-page="alltell">AllTell</a>
+        <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+      </nav>
+      <div class="site-header-actions">
+        <div class="site-user" id="siteUserMenu" hidden>
+          <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
+            <span class="site-user-avatar" id="siteUserAvatar"></span>
+            <span class="site-user-name" id="siteUserName"></span>
+            <i class="fas fa-chevron-down site-user-chevron" aria-hidden="true"></i>
+          </button>
+          <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
+            <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+            <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
+          </div>
+        </div>
+        <div class="site-auth-actions" id="siteGuestActions">
+          <button type="button" class="site-auth-button" data-auth-tab="login">Войти</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="site-nav-overlay" id="siteNavOverlay"></div>
+  <main class="site-main site-maintenance">
+    <section class="site-maintenance-card">
+      <span class="site-hero-badge"><i class="fas fa-screwdriver-wrench"></i> Техническое обслуживание</span>
+      <h1>Раздел временно недоступен</h1>
+      <p>${escapeHtml(message)}</p>
+      <p>Продолжить могут владелец и администраторы.</p>
+      <div class="site-maintenance-actions">
+        <a class="btn btn-primary btn-lg" href="/"><i class="fas fa-arrow-left"></i> Вернуться на основу</a>
+        <button class="btn btn-ghost btn-lg" id="maintenanceContinue" type="button">Продолжить?</button>
+      </div>
+      <p id="maintenanceError" class="site-maintenance-error" role="status" aria-live="polite"></p>
+    </section>
   </main>
-  <script>
-    document.getElementById('maintenanceContinue').addEventListener('click', async function () {
-      if (!window.confirm('Страница находится на техническом обслуживании. Продолжить?')) return;
-      var token = '';
-      try { token = localStorage.getItem('alltell_auth_token') || ''; } catch (error) {}
-      if (!token) {
-        document.getElementById('maintenanceError').textContent = 'Сначала войдите в админ-панель.';
-        return;
-      }
-      try {
-        var response = await fetch('/api/maintenance-continue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({ page: '${page}' })
-        });
-        var result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Не удалось продолжить');
-        window.location.reload();
-      } catch (error) {
-        document.getElementById('maintenanceError').textContent = error.message;
-      }
-    });
-  </script>
+  <script src="/auth-system.js"></script>
+  <script src="/site/site.js"></script>
+  <script src="/site/router.js"></script>
 </body>
 </html>`;
 }

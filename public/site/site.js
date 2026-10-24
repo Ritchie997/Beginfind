@@ -1916,12 +1916,53 @@
     });
   }
 
+  function initMaintenancePage() {
+    var button = document.getElementById('maintenanceContinue');
+    var errorMessage = document.getElementById('maintenanceError');
+    var page = document.body.dataset.maintenanceTarget;
+    if (!button || !errorMessage || !page) return null;
+
+    async function continueToPage() {
+      if (!window.confirm('Страница находится на техническом обслуживании. Продолжить?')) return;
+      var token = window.authManager && window.authManager.getToken();
+      if (!token) {
+        errorMessage.textContent = 'Войдите в аккаунт с правами администратора, чтобы продолжить.';
+        return;
+      }
+
+      button.disabled = true;
+      errorMessage.textContent = '';
+      try {
+        var response = await fetch('/api/maintenance-continue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ page: page })
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Не удалось продолжить');
+        if (window.PublicSiteRouter) {
+          await window.PublicSiteRouter.navigate(window.location.href, { force: true, history: false });
+        } else {
+          window.location.reload();
+        }
+      } catch (error) {
+        errorMessage.textContent = error.message || 'Не удалось продолжить';
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    button.addEventListener('click', continueToPage);
+    return function () { button.removeEventListener('click', continueToPage); };
+  }
+
   function mountPublicPage() {
     cleanupPublicPage();
     var page = document.body.getAttribute('data-page');
     if (page === 'home') currentRouteCleanup = initPublicHome();
     if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
     if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
+    if (page === 'maintenance') currentRouteCleanup = initMaintenancePage();
     var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
     var articleSlug = null;
     if (articleMatch) {
@@ -1933,8 +1974,9 @@
     if (page === 'profile' && window.PublicProfile) readyPromise = window.PublicProfile.init();
     if (currentRouteCleanup && currentRouteCleanup.ready) readyPromise = currentRouteCleanup.ready;
     currentMountedPage = page;
+    var activePage = document.body.dataset.maintenanceTarget || page;
     document.querySelectorAll('.site-nav-link[data-page]').forEach(function (link) {
-      link.classList.toggle('active', link.dataset.page === page);
+      link.classList.toggle('active', link.dataset.page === activePage);
     });
     initPageControls();
     return readyPromise;
