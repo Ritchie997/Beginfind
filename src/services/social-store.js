@@ -1,8 +1,5 @@
-// social-store.js — лайки и комментарии статей Antropedia (см. таблицы
-// article_likes/article_comments в src/db/connections.js). В отличие от
-// bookmarks-store.js это ПУБЛИЧНЫЕ данные: лайки считаются для всех, а
-// комментарии видит любой, кому доступна сама статья (проверка доступа —
-// в src/routes/articles.routes.js, canAccessArticle).
+// social-store.js — лайки, комментарии и реакции для Antropedia и AllTell
+// (см. таблицы article_* и franchise_post_* в src/db/connections.js).
 
 const { socialDb } = require('../db/connections');
 
@@ -236,10 +233,136 @@ function getViewCount(slug) {
   });
 }
 
+function rowToFranchisePostComment(row) {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    userId: row.user_id,
+    authorName: row.author_name,
+    content: row.content,
+    parentId: row.parent_id || null,
+    createdAt: row.created_at
+  };
+}
+
+function getFranchisePostCounts(postIds, userId) {
+  const ids = [...new Set((postIds || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return Promise.resolve(new Map());
+  const placeholders = ids.map(() => '?').join(',');
+  const result = new Map(ids.map((id) => [id, { likes: 0, comments: 0, liked: false }]));
+  return new Promise((resolve, reject) => {
+    socialDb.all(
+      `SELECT post_id, COUNT(*) AS count, MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS liked
+       FROM franchise_post_likes WHERE post_id IN (${placeholders}) GROUP BY post_id`,
+      [userId || 0, ...ids],
+      (err, likes) => {
+        if (err) return reject(err);
+        (likes || []).forEach((row) => {
+          const entry = result.get(row.post_id);
+          if (entry) Object.assign(entry, { likes: row.count, liked: !!row.liked });
+        });
+        socialDb.all(
+          `SELECT post_id, COUNT(*) AS count FROM franchise_post_comments
+           WHERE post_id IN (${placeholders}) GROUP BY post_id`,
+          ids,
+          (commentErr, comments) => {
+            if (commentErr) return reject(commentErr);
+            (comments || []).forEach((row) => {
+              const entry = result.get(row.post_id);
+              if (entry) entry.comments = row.count;
+            });
+            resolve(result);
+          }
+        );
+      }
+    );
+  });
+}
+
+function getFranchisePostLikeSummary(postId, userId) {
+  return new Promise((resolve, reject) => {
+    socialDb.get(
+      `SELECT COUNT(*) AS count, MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS liked
+       FROM franchise_post_likes WHERE post_id = ?`,
+      [userId, postId],
+      (err, row) => err ? reject(err) : resolve({ count: row?.count || 0, liked: !!row?.liked })
+    );
+  });
+}
+
+function toggleFranchisePostLike(userId, postId) {
+  return new Promise((resolve, reject) => {
+    socialDb.get(
+      'SELECT id FROM franchise_post_likes WHERE user_id = ? AND post_id = ?',
+      [userId, postId],
+      (err, row) => {
+        if (err) return reject(err);
+        const callback = (runErr) => {
+          if (runErr) return reject(runErr);
+          getFranchisePostLikeSummary(postId, userId).then(resolve, reject);
+        };
+        if (row) socialDb.run('DELETE FROM franchise_post_likes WHERE id = ?', [row.id], callback);
+        else socialDb.run('INSERT INTO franchise_post_likes (user_id, post_id) VALUES (?, ?)', [userId, postId], callback);
+      }
+    );
+  });
+}
+
+function listFranchisePostComments(postId) {
+  return new Promise((resolve, reject) => {
+    socialDb.all(
+      'SELECT * FROM franchise_post_comments WHERE post_id = ? ORDER BY created_at ASC, id ASC',
+      [postId],
+      (err, rows) => err ? reject(err) : resolve((rows || []).map(rowToFranchisePostComment))
+    );
+  });
+}
+
+function addFranchisePostComment(userId, authorName, postId, content, parentId) {
+  const trimmed = String(content || '').trim().slice(0, COMMENT_MAX_LEN);
+  if (!trimmed) return Promise.reject(new Error('Комментарий не может быть пустым'));
+  return new Promise((resolve, reject) => {
+    socialDb.run(
+      `INSERT INTO franchise_post_comments (user_id, author_name, post_id, content, parent_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, authorName, postId, trimmed, parentId || null],
+      function (err) {
+        if (err) return reject(err);
+        socialDb.get('SELECT * FROM franchise_post_comments WHERE id = ?', [this.lastID], (getErr, row) => {
+          if (getErr || !row) return reject(getErr || new Error('Не удалось добавить комментарий'));
+          resolve(rowToFranchisePostComment(row));
+        });
+      }
+    );
+  });
+}
+
+function getFranchisePostComment(id) {
+  return new Promise((resolve, reject) => {
+    socialDb.get('SELECT * FROM franchise_post_comments WHERE id = ?', [id], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? rowToFranchisePostComment(row) : null);
+    });
+  });
+}
+
+function deleteFranchisePostCommentCascade(id) {
+  return new Promise((resolve, reject) => {
+    socialDb.run(
+      'DELETE FROM franchise_post_comments WHERE id = ? OR parent_id = ?',
+      [id, id],
+      function (err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      }
+    );
+  });
+}
+
 // ========================================
 // Реакции (эмодзи/стикером) на статью или комментарий — см. таблицу
-// reactions в src/db/connections.js. targetType — 'article' | 'comment',
-// targetId — slug статьи или id комментария (оба хранятся как TEXT).
+// reactions в src/db/connections.js. targetType is 'article', 'comment',
+// 'franchise_post' or 'franchise_post_comment'; targetId is stored as TEXT.
 // Валидация "стикер принадлежит добавленному одобренному набору" — на
 // вызывающей стороне (см. stickers.canUseShortcode в articles.routes.js),
 // этот модуль ничего не знает о наборах стикеров.
@@ -316,6 +439,13 @@ module.exports = {
   recordView,
   getViewCount,
   getAllViewCounts,
+  getFranchisePostCounts,
+  getFranchisePostLikeSummary,
+  toggleFranchisePostLike,
+  listFranchisePostComments,
+  addFranchisePostComment,
+  getFranchisePostComment,
+  deleteFranchisePostCommentCascade,
   toggleReaction,
   getReactionsForTargets
 };

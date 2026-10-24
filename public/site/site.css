@@ -2278,6 +2278,60 @@
 .alltell-post-review-rejected { background: rgba(237, 66, 69, .18); color: #ff9b9e; }
 .alltell-post-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; color: var(--text-muted); font-size: 11px; }
 .alltell-post-actions { display: flex; gap: 6px; }
+.alltell-post-social { position: relative; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--background-accent); }
+.alltell-social-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.alltell-like-button,
+.alltell-comments-toggle,
+.alltell-comment-reply,
+.alltell-comment-delete,
+.alltell-sticker-insert { padding: 4px 0; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; }
+.alltell-like-button.active { color: #ff6b81; }
+.alltell-like-button:hover,
+.alltell-comments-toggle:hover,
+.alltell-comment-reply:hover,
+.alltell-comment-delete:hover,
+.alltell-sticker-insert:hover { color: var(--header-primary); }
+.alltell-reaction-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; }
+.alltell-reaction-pill,
+.alltell-reaction-add { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 30px; padding: 3px 8px; border: 1px solid var(--background-accent); border-radius: 16px; background: var(--background-secondary); color: var(--text-normal); cursor: pointer; }
+.alltell-reaction-pill.active { border-color: var(--blurple); background: rgba(88, 101, 242, .2); }
+.alltell-reaction-pill img { width: 22px; height: 22px; object-fit: contain; }
+.alltell-reaction-pill span { font-size: 12px; }
+.alltell-reaction-add { width: 30px; padding: 0; color: var(--text-muted); }
+.alltell-comments-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--background-accent); }
+.alltell-comments-list { display: grid; gap: 9px; }
+.alltell-comments-empty,
+.alltell-comment-login { margin: 5px 0; color: var(--text-muted); font-size: 13px; }
+.alltell-comment-login button { border: 0; background: transparent; color: var(--blurple); cursor: pointer; }
+.alltell-comment { min-width: 0; padding: 10px 12px; border-radius: 9px; background: var(--background-secondary); }
+.alltell-comment-replies { display: grid; gap: 7px; margin: 8px 0 0 20px; padding-left: 10px; border-left: 2px solid var(--background-accent); }
+.alltell-comment-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; }
+.alltell-comment-heading img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.alltell-comment-heading strong { color: var(--header-primary); }
+.alltell-comment-heading time { color: var(--text-muted); font-size: 10px; }
+.alltell-comment-content { margin-top: 5px; color: var(--text-normal); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.alltell-comment-sticker { width: 48px; height: 48px; margin: 2px; object-fit: contain; vertical-align: middle; }
+.alltell-comment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.alltell-comment-actions .alltell-reaction-bar { margin-top: 4px; }
+.alltell-comment-reply,
+.alltell-comment-delete { font-size: 11px; }
+.alltell-comment-form { margin-top: 10px; }
+.alltell-comment-form textarea { box-sizing: border-box; width: 100%; min-height: 56px; padding: 9px 10px; resize: vertical; border: 1px solid var(--background-accent); border-radius: 8px; background: var(--background-primary); color: var(--text-normal); font: inherit; }
+.alltell-comment-form-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; }
+.alltell-comment-form-actions .btn { padding: 5px 10px; }
+.alltell-replying { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--text-muted); font-size: 11px; }
+.alltell-replying button { border: 0; background: transparent; color: var(--blurple); cursor: pointer; }
+.alltell-sticker-picker { position: absolute; z-index: 5; right: 0; bottom: 42px; width: min(360px, calc(100vw - 48px)); max-height: min(360px, 60vh); overflow: auto; padding: 10px; border: 1px solid var(--background-accent); border-radius: 10px; background: var(--background-secondary); box-shadow: 0 12px 32px rgba(0, 0, 0, .35); }
+.alltell-sticker-picker[hidden] { display: none; }
+.alltell-sticker-picker-heading { position: sticky; top: -10px; z-index: 1; display: flex; justify-content: space-between; align-items: center; padding: 2px 0 8px; background: var(--background-secondary); color: var(--header-primary); }
+.alltell-sticker-picker-heading button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 20px; }
+.alltell-sticker-picker-group { margin-top: 6px; }
+.alltell-sticker-picker-group > strong { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 11px; }
+.alltell-sticker-picker-group > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 4px; }
+.alltell-picker-sticker { display: grid; place-items: center; aspect-ratio: 1; padding: 4px; border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; }
+.alltell-picker-sticker:hover { border-color: var(--blurple); background: var(--background-primary); }
+.alltell-picker-sticker img { width: 100%; height: 100%; object-fit: contain; }
+.alltell-picker-empty { margin: 8px 0; color: var(--text-muted); font-size: 12px; }
 .alltell-post-form { margin-bottom: 16px; padding: 18px; border: 1px solid var(--background-accent); border-radius: var(--site-radius-md); background: var(--background-secondary); }
 .alltell-post-form h3 { margin: 0 0 14px; color: var(--header-primary); }
 .alltell-post-form label { display: grid; gap: 6px; margin-bottom: 12px; color: var(--text-muted); font-size: 12px; }

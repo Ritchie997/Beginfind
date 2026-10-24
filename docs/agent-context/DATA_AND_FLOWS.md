@@ -15,7 +15,7 @@
 | Вспомогательная таблица цветов тегов | `articles.db` | `src/services/tag-colors.js` |
 | Закладки | `bookmarks.db` | `src/services/bookmarks-store.js` |
 | Черновики и папки | `drafts.db` | `src/services/drafts-store.js` |
-| Лайки, просмотры, комментарии, реакции и уведомления | `social.db` | `src/services/social-store.js`, `user-notifications.js` |
+| Лайки, просмотры, комментарии, реакции и уведомления (в т. ч. лайки/комментарии AllTell-постов) | `social.db` | `src/services/social-store.js`, `user-notifications.js` |
 | Наборы, стикеры, подписки и коллаборации | `stickers.db` + файлы в `public/uploads/stickers/` | `src/services/stickers-store.js` |
 | Обращения и кейсы | `feedback.db` | `src/services/feedback-store.js` |
 | Работы галереи, страницы и связи | `gallery.db` + файлы в `public/uploads/gallery/` | `src/services/gallery-store.js` |
@@ -27,6 +27,12 @@
 В `feedback.db` комментарии к багам и идеям хранятся в `feedback_comments`.
 Читать и добавлять комментарии может только автор соответствующего обращения;
 общей ленты обсуждений нет.
+
+Социальные данные опубликованных постов AllTell находятся в `social.db`:
+`franchise_post_likes`, `franchise_post_comments` и общая таблица `reactions`
+(target types `franchise_post` и `franchise_post_comment`). Комментарии
+поддерживают ответы одного уровня; стикер-коды валидируются по доступным
+одобренным наборам.
 
 `articles.db` не содержит сами статьи. Отдельные маршруты могут открывать
 SQLite-соединения самостоятельно; `connections.js` — не единственное место,

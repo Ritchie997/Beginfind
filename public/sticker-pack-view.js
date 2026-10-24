@@ -24,6 +24,32 @@
 
   const STATUS_LABELS = { draft: 'Черновик', pending: 'На модерации', approved: 'Подтверждён', rejected: 'Отклонён' };
 
+  function notifyError(message) {
+    if (typeof window.showMessage === 'function') {
+      window.showMessage(message, 'error');
+      return;
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-error';
+    toast.setAttribute('role', 'alert');
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10001;max-width:min(420px,calc(100vw - 40px));';
+    document.body.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 5000);
+  }
+
+  async function apiRequest(method, path) {
+    const accessToken = window.authManager?.getToken();
+    const response = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+    });
+    let data = {};
+    try { data = await response.json(); } catch (error) { /* The error response may be empty. */ }
+    return { success: response.ok, data, error: data.error || '' };
+  }
+
   const STYLES = `
     .spv-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
     .spv-description { color: var(--text-normal); font-size: 14px; line-height: 1.5; margin: -6px 0 14px; }
@@ -117,16 +143,18 @@
       els.footer.innerHTML = '';
 
       try {
-        const result = await window.apiClient.getStickerPack(packId);
+        const result = window.apiClient && window.apiClient.getStickerPack
+          ? await window.apiClient.getStickerPack(packId)
+          : await apiRequest('GET', `/api/stickers/packs/${encodeURIComponent(packId)}`);
         if (!result.success) {
-          showMessage(`Не удалось открыть набор: ${result.data?.error || result.error || ''}`, 'error');
+          notifyError(`Не удалось открыть набор: ${result.data?.error || result.error || ''}`);
           this.close();
           return;
         }
         this.currentPack = result.data;
         this.render();
       } catch (e) {
-        showMessage('Неожиданная ошибка при открытии набора', 'error');
+        notifyError('Неожиданная ошибка при открытии набора');
         this.close();
       }
     }
@@ -194,7 +222,7 @@
             const done = await target.send(shortcode);
             if (done) this.close();
           } catch (err) {
-            showMessage('Не удалось отправить стикер', 'error');
+            notifyError(err.message || 'Не удалось отправить стикер');
           } finally {
             delete tile.dataset.busy;
           }
@@ -227,11 +255,16 @@
         const btn = e.currentTarget;
         btn.disabled = true;
         try {
-          if (pack.subscribed) await window.apiClient.unsubscribeStickerPack(pack.id);
-          else await window.apiClient.subscribeStickerPack(pack.id);
+          if (window.apiClient && window.apiClient.unsubscribeStickerPack && window.apiClient.subscribeStickerPack) {
+            if (pack.subscribed) await window.apiClient.unsubscribeStickerPack(pack.id);
+            else await window.apiClient.subscribeStickerPack(pack.id);
+          } else {
+            const result = await apiRequest(pack.subscribed ? 'DELETE' : 'POST', `/api/stickers/packs/${encodeURIComponent(pack.id)}/subscribe`);
+            if (!result.success) throw new Error(result.data?.error || 'Не удалось изменить подписку');
+          }
           await this.open(pack.id);
         } catch (err) {
-          showMessage('Не удалось изменить подписку на набор', 'error');
+          notifyError(err.message || 'Не удалось изменить подписку на набор');
           btn.disabled = false;
         }
       });

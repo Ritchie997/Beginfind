@@ -9,6 +9,10 @@ const articlesStore = require('../services/articles-store');
 const articleLayers = require('../services/article-layers');
 const publicArticles = require('../services/public-articles');
 const { serversSchemaReady } = require('../db/connections');
+const social = require('../services/social-store');
+const stickers = require('../services/stickers-store');
+const mentions = require('../services/mentions');
+const { getAvatarUrl } = require('../services/avatars');
 
 const router = express.Router();
 const POST_TYPES = new Set(['news', 'announcement', 'event']);
@@ -182,6 +186,54 @@ async function publicPost(row, user) {
   };
 }
 
+async function getEngageablePost(franchiseId, postId, user) {
+  const row = await dbGet(`
+    SELECT p.*, s.is_published AS franchise_published, h.is_public AS hub_public
+    FROM franchise_posts p
+    JOIN servers s ON s.id = p.server_id
+    LEFT JOIN franchise_hubs h ON h.id = p.hub_id AND h.server_id = p.server_id
+    WHERE p.id = ? AND p.server_id = ?
+  `, [postId, franchiseId]);
+  if (!row) return null;
+  const canManage = await canManageFranchise(user, franchiseId);
+  if (canManage) return row;
+  if (!row.franchise_published || row.approval_status !== 'published' ||
+      (row.hub_id && !row.hub_public)) return null;
+  return row;
+}
+
+async function attachPostCommentExtras(comments, userId) {
+  if (!comments.length) return comments;
+  const withStickers = await stickers.attachStickersToItems(comments);
+  const reactionsById = await social.getReactionsForTargets(
+    'franchise_post_comment',
+    comments.map((comment) => comment.id),
+    userId
+  );
+  const codes = [...reactionsById.values()].flat().map((reaction) => reaction.shortcode);
+  const stickerMeta = await stickers.resolveCodes(codes);
+  const withReactions = withStickers.map((comment) => ({
+    ...comment,
+    reactions: (reactionsById.get(String(comment.id)) || [])
+      .map((reaction) => ({ ...reaction, ...stickerMeta.get(reaction.shortcode) }))
+      .filter((reaction) => reaction.url),
+    authorAvatar: getAvatarUrl(comment.userId)
+  }));
+  return mentions.attachMentions(withReactions);
+}
+
+async function getPostReactions(postId, userId) {
+  const reactionsById = await social.getReactionsForTargets('franchise_post', [postId], userId);
+  return resolvePostReactions(reactionsById.get(String(postId)) || []);
+}
+
+async function resolvePostReactions(reactions) {
+  const stickerMeta = await stickers.resolveCodes(reactions.map((reaction) => reaction.shortcode));
+  return reactions
+    .map((reaction) => ({ ...reaction, ...stickerMeta.get(reaction.shortcode) }))
+    .filter((reaction) => reaction.url);
+}
+
 function parsePostImages(row) {
   if (typeof row.image_urls === 'string' && row.image_urls) {
     try {
@@ -248,10 +300,34 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
       `, [franchiseId, canManage ? 1 : 0, req.user ? req.user.id : -1, canManage ? 1 : 0]),
       req.user ? isMember(req.user.id, franchiseId) : false
     ]);
+    const postIds = rows.filter((row) => (row.approval_status || 'published') === 'published').map((row) => row.id);
+    const [postCounts, postReactionMap] = await Promise.all([
+      social.getFranchisePostCounts(postIds, req.user?.id),
+      social.getReactionsForTargets('franchise_post', postIds, req.user?.id)
+    ]);
+    const postReactionMeta = await stickers.resolveCodes([...postReactionMap.values()].flat().map((reaction) => reaction.shortcode));
+    const postIdSet = new Set(postIds);
+    const resPosts = await Promise.all(rows.map(async (row) => {
+      const post = await publicPost(row, req.user);
+      const counts = postCounts.get(row.id) || { likes: 0, comments: 0, liked: false };
+      const reactions = postIdSet.has(row.id)
+        ? (postReactionMap.get(String(row.id)) || []).map((reaction) => ({
+          ...reaction,
+          ...postReactionMeta.get(reaction.shortcode)
+        })).filter((reaction) => reaction.url)
+        : [];
+      return {
+        ...post,
+        likes_count: counts.likes,
+        comments_count: counts.comments,
+        liked: counts.liked,
+        reactions
+      };
+    }));
     res.json({
       franchise,
       hubs,
-      posts: await Promise.all(rows.map((row) => publicPost(row, req.user))),
+      posts: resPosts,
       is_member: member,
       can_manage: canManage
     });
@@ -284,6 +360,136 @@ router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async
       ORDER BY s.name COLLATE NOCASE
     `, [req.user.id, req.user.id, req.user.id]);
     res.json(franchises);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/franchises/:id/posts/:postId/likes', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    res.json(await social.getFranchisePostLikeSummary(post.id, req.user.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/likes/toggle', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    res.json(await social.toggleFranchisePostLike(req.user.id, post.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/franchises/:id/posts/:postId/comments', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    const comments = await social.listFranchisePostComments(post.id);
+    res.json(await attachPostCommentExtras(comments, req.user.id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/comments', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    try {
+      await stickers.validateContentForPosting(req.user.id, req.body.content);
+    } catch (error) {
+      error.status = 400;
+      throw error;
+    }
+    if (!String(req.body.content || '').trim()) {
+      return res.status(400).json({ error: 'Комментарий не может быть пустым' });
+    }
+    let parentId = req.body.parentId ? Number(req.body.parentId) : null;
+    if (parentId) {
+      const parent = await social.getFranchisePostComment(parentId);
+      if (!parent || Number(parent.postId) !== Number(post.id)) {
+        return res.status(400).json({ error: 'Комментарий, на который вы отвечаете, не найден' });
+      }
+      if (parent.parentId) parentId = parent.parentId;
+    }
+    const comment = await social.addFranchisePostComment(
+      req.user.id,
+      req.user.display_name || req.user.username || `Пользователь ${req.user.id}`,
+      post.id,
+      req.body.content,
+      parentId
+    );
+    const [result] = await attachPostCommentExtras([comment], req.user.id);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+router.delete('/franchises/:id/posts/:postId/comments/:commentId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    const comment = await social.getFranchisePostComment(Number(req.params.commentId));
+    if (!comment || Number(comment.postId) !== Number(post.id)) {
+      return res.status(404).json({ error: 'Комментарий не найден' });
+    }
+    if (Number(comment.userId) !== Number(req.user.id) &&
+        !(await canManageFranchise(req.user, Number(req.params.id)))) {
+      return res.status(403).json({ error: 'Недостаточно прав для удаления комментария' });
+    }
+    await social.deleteFranchisePostCommentCascade(comment.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/franchises/:id/posts/:postId/reactions', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    res.json({ reactions: await getPostReactions(post.id, req.user.id) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/reactions/toggle', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    const shortcode = String(req.body.shortcode || '');
+    if (!(await stickers.canUseShortcode(req.user.id, shortcode))) {
+      return res.status(400).json({ error: 'Этот стикер недоступен — набор не найден или ещё не подтверждён модератором' });
+    }
+    await social.toggleReaction(req.user.id, 'franchise_post', post.id, shortcode);
+    res.json({ reactions: await getPostReactions(post.id, req.user.id) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/comments/:commentId/reactions/toggle', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const post = await getEngageablePost(Number(req.params.id), Number(req.params.postId), req.user);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    const comment = await social.getFranchisePostComment(Number(req.params.commentId));
+    if (!comment || Number(comment.postId) !== Number(post.id)) {
+      return res.status(404).json({ error: 'Комментарий не найден' });
+    }
+    const shortcode = String(req.body.shortcode || '');
+    if (!(await stickers.canUseShortcode(req.user.id, shortcode))) {
+      return res.status(400).json({ error: 'Этот стикер недоступен — набор не найден или ещё не подтверждён модератором' });
+    }
+    await social.toggleReaction(req.user.id, 'franchise_post_comment', comment.id, shortcode);
+    const [withReactions] = await attachPostCommentExtras([comment], req.user.id);
+    res.json({ reactions: withReactions.reactions || [] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

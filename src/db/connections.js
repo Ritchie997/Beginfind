@@ -353,6 +353,15 @@ const socialDb = new sqlite3.Database(dbPath('social.db'), (err) => {
       )`);
       socialDb.run('CREATE INDEX IF NOT EXISTS idx_article_likes_slug ON article_likes (article_slug)');
 
+      socialDb.run(`CREATE TABLE IF NOT EXISTS franchise_post_likes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        post_id INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, post_id)
+      )`);
+      socialDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_post_likes_post ON franchise_post_likes (post_id)');
+
       // Реальная статистика просмотров — один просмотр на пользователя на
       // статью (UNIQUE), а не голая инкрементируемая цифра: повторные заходы
       // того же пользователя счётчик не увеличивают (см. recordView в
@@ -381,6 +390,18 @@ const socialDb = new sqlite3.Database(dbPath('social.db'), (err) => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       socialDb.run('CREATE INDEX IF NOT EXISTS idx_article_comments_slug ON article_comments (article_slug)');
+
+      socialDb.run(`CREATE TABLE IF NOT EXISTS franchise_post_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL,
+        post_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        parent_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      socialDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_post_comments_post ON franchise_post_comments (post_id)');
+      socialDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_post_comments_parent ON franchise_post_comments (parent_id)');
 
       // parent_id — ответы на комментарий (один уровень вложенности, как в
       // YouTube: ответ на ответ подшивается к тому же родителю, см.

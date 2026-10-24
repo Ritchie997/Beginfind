@@ -147,6 +147,14 @@
 - `GET /public/franchises`
 - `GET /public/franchises/:id`
 - `GET /franchises/mine`
+- `GET /franchises/:id/posts/:postId/likes`
+- `POST /franchises/:id/posts/:postId/likes/toggle`
+- `GET /franchises/:id/posts/:postId/comments`
+- `POST /franchises/:id/posts/:postId/comments`
+- `DELETE /franchises/:id/posts/:postId/comments/:commentId`
+- `GET /franchises/:id/posts/:postId/reactions`
+- `POST /franchises/:id/posts/:postId/reactions/toggle`
+- `POST /franchises/:id/posts/:postId/comments/:commentId/reactions/toggle`
 - `POST /franchises/:id/feed/read`
 - `POST /franchises/:id/posts`
 - `PUT /franchises/:id/posts/:postId`
