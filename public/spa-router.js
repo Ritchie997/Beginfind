@@ -4703,7 +4703,7 @@ class SPARouter {
     const { isAdmin, server } = this.currentServerData || {};
     const canManage = !!isAdmin;
     const editing = this.franchiseHubEditorId === 'new'
-      ? { name: '', description: '' }
+      ? { name: '', description: '', is_public: false }
       : this.currentFranchiseHubs.find(hub => String(hub.id) === String(this.franchiseHubEditorId));
     const form = editing ? `
       <form class="franchise-hub-form" data-franchise-hub-form>
@@ -4713,6 +4713,10 @@ class SPARouter {
         </label>
         <label class="form-label">Описание
           <textarea class="form-input" name="description" maxlength="1000" rows="3" data-autogrow>${this.escapeHtml(editing.description || '')}</textarea>
+        </label>
+        <label class="franchise-hub-public-toggle">
+          <input type="checkbox" name="is_public" ${editing.is_public ? 'checked' : ''}>
+          <span><strong>Показывать хаб в общем доступе</strong><small>Если выключено, хаб и связанные с ним публикации видны только создателю и администраторам.</small></span>
         </label>
         <div class="franchise-hub-form-actions">
           <button type="submit" class="btn btn-primary">${this.franchiseHubEditorId === 'new' ? 'Создать хаб' : 'Сохранить'}</button>
@@ -4734,6 +4738,7 @@ class SPARouter {
             <div class="franchise-hub-card-heading">
               <h3>${this.escapeHtml(hub.name)}</h3>
               ${this.franchiseHubStatusBadge(hub.status)}
+              <span class="franchise-hub-visibility ${hub.is_public ? 'is-public' : ''}">${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
             </div>
             <p>${this.escapeHtml(hub.description || 'Без описания')}</p>
             <div class="franchise-hub-meta">
@@ -4755,7 +4760,7 @@ class SPARouter {
       <div class="server-section-toolbar">
         <div>
           <h3 class="server-section-title">Хабы франшизы «${this.escapeHtml(server?.name || '')}»</h3>
-          <p class="franchise-hubs-help">Хабы могут быть активными, приостановленными или завершёнными. Завершение не удаляет связанные данные.</p>
+          <p class="franchise-hubs-help">Франшиза сразу видна в AllTell. Каждый хаб публикуется отдельно; скрытый хаб и его публикации доступны только создателю и администраторам. Завершение не удаляет связанные данные.</p>
         </div>
         ${canManage ? '<button type="button" class="btn btn-primary" data-hub-action="create"><i class="fas fa-plus"></i> Создать хаб</button>' : ''}
       </div>
@@ -4789,7 +4794,8 @@ class SPARouter {
     if (submit) submit.disabled = true;
     const payload = {
       name: form.elements.name.value.trim(),
-      description: form.elements.description.value.trim()
+      description: form.elements.description.value.trim(),
+      is_public: form.elements.is_public.checked
     };
     const isNew = this.franchiseHubEditorId === 'new';
     const result = isNew
@@ -5563,12 +5569,6 @@ class SPARouter {
         <label class="form-label" for="server-settings-description">Описание</label>
         <textarea id="server-settings-description" class="form-input server-settings-textarea" rows="3" maxlength="500" data-autogrow ${canEdit ? '' : 'disabled'}>${this.escapeHtml(server.description || '')}</textarea>
       </div>
-      <div class="form-group server-publication-setting">
-        <label class="server-publication-toggle">
-          <input type="checkbox" id="server-settings-published" ${server.is_published ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>
-          <span><strong>Опубликовать франшизу в AllTell</strong><small>Только опубликованные франшизы отображаются в публичном каталоге.</small></span>
-        </label>
-      </div>
       ${canEdit ? `<div class="server-settings-actions"><button class="btn btn-primary" onclick="spaRouter.saveServerSettings()"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button></div>` : ''}
 
       ${isRoot ? `
@@ -5610,7 +5610,6 @@ class SPARouter {
   async saveServerSettings() {
     const name = document.getElementById('server-settings-name').value.trim();
     const description = document.getElementById('server-settings-description').value.trim();
-    const isPublished = document.getElementById('server-settings-published').checked;
     if (!name) {
       showMessage('Название сервера обязательно', 'error');
       return;
@@ -5618,12 +5617,6 @@ class SPARouter {
     try {
       const result = await apiClient.updateServer(this.currentServerId, { name, description });
       if (result.success) {
-        const publicationResult = await apiClient.updateServerPublication(this.currentServerId, isPublished);
-        if (!publicationResult.success) {
-          showMessage(`Франшиза обновлена, но публикацию изменить не удалось: ${this.serverApiError(publicationResult)}`, 'error');
-          await this.refreshServerWorkspace();
-          return;
-        }
         showMessage('Сервер обновлён', 'success');
         await this.refreshServerWorkspace();
       } else {

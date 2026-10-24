@@ -73,8 +73,7 @@
           <div class="alltell-live-avatar">${escapeHtml(initials(franchise.name))}</div>
           <div class="alltell-live-title-row">
             <h3>${escapeHtml(franchise.name)}</h3>
-            ${Number(franchise.is_published) === 0 ? '<span class="alltell-unread-badge alltell-draft-badge">Черновик</span>' :
-              unread ? `<span class="alltell-unread-badge">${unread} новых</span>` : ''}
+            ${unread ? `<span class="alltell-unread-badge">${unread} новых</span>` : ''}
           </div>
           <p class="alltell-live-description">${escapeHtml(franchise.description || 'Описание пока не добавлено.')}</p>
           <p class="alltell-live-summary">

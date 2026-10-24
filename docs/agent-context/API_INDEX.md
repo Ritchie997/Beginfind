@@ -231,7 +231,6 @@
 - `GET /servers/:id`
 - `POST /servers`
 - `PUT /servers/:id`
-- `PUT /servers/:id/publication`
 - `DELETE /servers/:id`
 - `GET /servers/:id/users`
 - `GET /servers/:id/roles`

@@ -106,16 +106,18 @@ router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, r
 // Хабы франшизы (внутреннее имя верхнего уровня — server).
 router.get('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [req.params.id]);
+    const serverId = Number(req.params.id);
+    const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [serverId]);
     if (!server) return res.status(404).json({ error: 'Franchise not found' });
+    const canManage = await isServerAdmin(req.user, serverId);
     const hubs = await dbAll('servers.db', `
       SELECT id, server_id, name, description, status, created_by,
-             created_by_name, status_updated_at, status_updated_by,
+             created_by_name, is_public, status_updated_at, status_updated_by,
              status_updated_by_name, created_at, updated_at
       FROM franchise_hubs
-      WHERE server_id = ?
+      WHERE server_id = ? AND (is_public = 1 OR ? = 1)
       ORDER BY created_at DESC, id DESC
-    `, [req.params.id]);
+    `, [serverId, canManage ? 1 : 0]);
     res.json(hubs);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -137,12 +139,13 @@ router.post('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, asy
     if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
     if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
     const actor = hubActorName(req.user);
+    const isPublic = req.body.is_public === true;
     const result = await dbRun('servers.db', `
-      INSERT INTO franchise_hubs (server_id, name, description, created_by, created_by_name, status_updated_by, status_updated_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [serverId, name, description, req.user.id, actor, req.user.id, actor]);
+      INSERT INTO franchise_hubs (server_id, name, description, is_public, created_by, created_by_name, status_updated_by, status_updated_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [serverId, name, description, isPublic ? 1 : 0, req.user.id, actor, req.user.id, actor]);
     const hub = await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [result.lastID]);
-    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_created', { hubId: hub.id, name });
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_created', { hubId: hub.id, name, isPublic });
     res.status(201).json(hub);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -162,12 +165,16 @@ router.put('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApprove
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
     if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
+    if (req.body.is_public != null && typeof req.body.is_public !== 'boolean') {
+      return res.status(400).json({ error: 'Visibility must be a boolean' });
+    }
+    const isPublic = req.body.is_public == null ? existing.is_public === 1 : req.body.is_public;
     await dbRun('servers.db', `
-      UPDATE franchise_hubs SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+      UPDATE franchise_hubs SET name = ?, description = ?, is_public = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
-    `, [name, description, hubId, serverId]);
+    `, [name, description, isPublic ? 1 : 0, hubId, serverId]);
     const actor = hubActorName(req.user);
-    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_updated', { hubId, name });
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_updated', { hubId, name, isPublic });
     res.json(await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [hubId]));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -301,26 +308,6 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
       }
       serversDb.close();
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/servers/:id/publication', auth.authenticateToken, auth.checkApproved, async (req, res) => {
-  try {
-    const serverId = Number(req.params.id);
-    if (!Number.isInteger(serverId) || serverId < 1) return res.status(400).json({ error: 'Некорректная франшиза' });
-    if (typeof req.body.is_published !== 'boolean') return res.status(400).json({ error: 'Укажите состояние публикации' });
-    if (!(await isServerAdmin(req.user, serverId))) return res.status(403).json({ error: 'Недостаточно прав для публикации франшизы' });
-    const result = await dbRun('servers.db', `
-      UPDATE servers SET is_published = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `, [req.body.is_published ? 1 : 0, serverId]);
-    if (!result.changes) return res.status(404).json({ error: 'Франшиза не найдена' });
-    const actor = hubActorName(req.user);
-    await serverSystem.logServerAction(serverId, req.user.id, actor, 'publication_changed', {
-      is_published: req.body.is_published
-    });
-    res.json({ id: serverId, is_published: req.body.is_published });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

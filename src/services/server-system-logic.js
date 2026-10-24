@@ -14,13 +14,13 @@ function getDatabaseConnection() {
 function createServer(name, description, ownerId) {
   return new Promise((resolve, reject) => {
     const db = getDatabaseConnection();
-    const query = 'INSERT INTO servers (name, description, owner_id) VALUES (?, ?, ?)';
+    const query = 'INSERT INTO servers (name, description, owner_id, is_published) VALUES (?, ?, ?, 1)';
     
     db.run(query, [name, description, ownerId], function(err) {
       if (err) {
         reject(err);
       } else {
-        resolve({ id: this.lastID, name, description, owner_id: ownerId });
+        resolve({ id: this.lastID, name, description, owner_id: ownerId, is_published: 1 });
       }
       db.close();
     });

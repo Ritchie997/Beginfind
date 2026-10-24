@@ -92,13 +92,34 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         completeSchemaTask(new Error('The servers table is missing'));
         return;
       }
-      if (!columns.some((column) => column.name === 'is_published')) {
-        serversDb.run('ALTER TABLE servers ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0', (migrationErr) => {
-          completeSchemaTask(migrationErr);
+      const ensurePublicationColumn = (callback) => {
+        if (columns.some((column) => column.name === 'is_published')) return callback();
+        serversDb.run('ALTER TABLE servers ADD COLUMN is_published INTEGER NOT NULL DEFAULT 1', callback);
+      };
+      ensurePublicationColumn((migrationErr) => {
+        if (migrationErr) return completeSchemaTask(migrationErr);
+        serversDb.run('CREATE TABLE IF NOT EXISTS franchise_schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)', (tableErr) => {
+          if (tableErr) return completeSchemaTask(tableErr);
+          serversDb.get('SELECT version FROM franchise_schema_migrations WHERE version = ?', ['publish-existing-franchises'], (readErr, row) => {
+            if (readErr) return completeSchemaTask(readErr);
+            if (row) return completeSchemaTask();
+            serversDb.run('BEGIN TRANSACTION', (beginErr) => {
+              if (beginErr) return completeSchemaTask(beginErr);
+              serversDb.run('UPDATE servers SET is_published = 1', (updateErr) => {
+                if (updateErr) {
+                  return serversDb.run('ROLLBACK', () => completeSchemaTask(updateErr));
+                }
+                serversDb.run('INSERT INTO franchise_schema_migrations (version) VALUES (?)', ['publish-existing-franchises'], (insertErr) => {
+                  if (insertErr) {
+                    return serversDb.run('ROLLBACK', () => completeSchemaTask(insertErr));
+                  }
+                  serversDb.run('COMMIT', completeSchemaTask);
+                });
+              });
+            });
+          });
         });
-      } else {
-        completeSchemaTask();
-      }
+      });
     });
     serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,7 +169,12 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         return;
       }
       serversDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_hubs_server_status ON franchise_hubs (server_id, status)', (hubIndexErr) => {
-        completeSchemaTask(hubIndexErr);
+        if (hubIndexErr) return completeSchemaTask(hubIndexErr);
+        serversDb.all('PRAGMA table_info(franchise_hubs)', (hubSchemaErr, columns) => {
+          if (hubSchemaErr) return completeSchemaTask(hubSchemaErr);
+          if (columns.some((column) => column.name === 'is_public')) return completeSchemaTask();
+          serversDb.run('ALTER TABLE franchise_hubs ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0', completeSchemaTask);
+        });
       });
     });
     // Журнал действий на сервере (кто/что/когда) — вкладка "Журнал" в

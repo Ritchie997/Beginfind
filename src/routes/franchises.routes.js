@@ -149,11 +149,14 @@ router.get('/public/franchises', async (req, res) => {
     const franchises = await dbAll(`
       SELECT s.id, s.name, s.description, s.created_at, s.updated_at,
              (SELECT COUNT(*) FROM user_server_memberships m WHERE m.server_id = s.id) AS member_count,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id) AS hub_count,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active') AS active_hubs,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'paused') AS paused_hubs,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished') AS finished_hubs,
-             (SELECT COUNT(*) FROM franchise_posts p WHERE p.server_id = s.id) AS post_count
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.is_public = 1) AS hub_count,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active' AND h.is_public = 1) AS active_hubs,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'paused' AND h.is_public = 1) AS paused_hubs,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished' AND h.is_public = 1) AS finished_hubs,
+             (SELECT COUNT(*) FROM franchise_posts p
+               LEFT JOIN franchise_hubs h ON h.id = p.hub_id
+               WHERE p.server_id = s.id AND (p.hub_id IS NULL OR h.is_public = 1)
+             ) AS post_count
       FROM servers s
       WHERE s.is_published = 1
       ORDER BY s.created_at DESC, s.id DESC
@@ -179,10 +182,17 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
 
     const [hubs, rows, member] = await Promise.all([
       dbAll(`
-        SELECT id, server_id, name, description, status, created_at, updated_at
-        FROM franchise_hubs WHERE server_id = ? ORDER BY created_at DESC, id DESC
-      `, [franchiseId]),
-      dbAll('SELECT * FROM franchise_posts WHERE server_id = ? ORDER BY created_at DESC, id DESC LIMIT 100', [franchiseId]),
+        SELECT id, server_id, name, description, status, is_public, created_at, updated_at
+        FROM franchise_hubs
+        WHERE server_id = ? AND (is_public = 1 OR ? = 1)
+        ORDER BY created_at DESC, id DESC
+      `, [franchiseId, canManage ? 1 : 0]),
+      dbAll(`
+        SELECT p.* FROM franchise_posts p
+        LEFT JOIN franchise_hubs h ON h.id = p.hub_id AND h.server_id = p.server_id
+        WHERE p.server_id = ? AND (p.hub_id IS NULL OR h.is_public = 1 OR ? = 1)
+        ORDER BY p.created_at DESC, p.id DESC LIMIT 100
+      `, [franchiseId, canManage ? 1 : 0]),
       req.user ? isMember(req.user.id, franchiseId) : false
     ]);
     res.json({
@@ -202,12 +212,14 @@ router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async
     const franchises = await dbAll(`
       SELECT s.id, s.name, s.description, s.is_published,
              (SELECT COUNT(*) FROM user_server_memberships members WHERE members.server_id = s.id) AS member_count,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id) AS hub_count,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active') AS active_hubs,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'paused') AS paused_hubs,
-             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished') AS finished_hubs,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.is_public = 1) AS hub_count,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active' AND h.is_public = 1) AS active_hubs,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'paused' AND h.is_public = 1) AS paused_hubs,
+             (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished' AND h.is_public = 1) AS finished_hubs,
              (SELECT COUNT(*) FROM franchise_posts p
+               LEFT JOIN franchise_hubs h ON h.id = p.hub_id
                WHERE p.server_id = s.id
+                 AND (p.hub_id IS NULL OR h.is_public = 1)
                  AND p.id > COALESCE(
                    (SELECT r.last_seen_post_id FROM franchise_feed_reads r
                     WHERE r.server_id = s.id AND r.user_id = ?), 0

@@ -623,6 +623,16 @@
 }
 .franchise-hub-form h3 { margin: 0; font-size: 15px; color: var(--text-normal); }
 .franchise-hub-form .form-label { display: grid; gap: 6px; }
+.franchise-hub-public-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+.franchise-hub-public-toggle input { margin-top: 3px; }
+.franchise-hub-public-toggle span { display: grid; gap: 4px; }
+.franchise-hub-public-toggle small { color: var(--text-muted); font-size: 12px; }
 .franchise-hub-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .franchise-hub-card {
   display: flex;
@@ -634,6 +644,16 @@
 }
 .franchise-hub-card-main { flex: 1; min-width: 0; }
 .franchise-hub-card-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.franchise-hub-visibility {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(148, 155, 164, .18);
+  color: #c3c8ce;
+  font-size: 10px;
+  font-weight: 700;
+}
+.franchise-hub-visibility.is-public { background: rgba(59, 165, 93, .17); color: #57d98a; }
 .franchise-hub-card h3 { margin: 0; color: var(--text-normal); font-size: 15px; }
 .franchise-hub-card p { margin: 8px 0; color: var(--header-secondary); font-size: 13px; }
 .franchise-hub-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text-muted); font-size: 11px; }

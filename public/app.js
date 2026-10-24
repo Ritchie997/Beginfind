@@ -682,10 +682,6 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/servers/${serverId}`, 'PUT', serverData);
   }
 
-  async updateServerPublication(serverId, isPublished) {
-    return this.makeAuthenticatedRequest(`/api/servers/${serverId}/publication`, 'PUT', { is_published: isPublished });
-  }
-
   async deleteServer(serverId) {
     return this.makeAuthenticatedRequest(`/api/servers/${serverId}`, 'DELETE');
   }
