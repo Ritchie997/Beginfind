@@ -226,7 +226,8 @@
           <label>Тип
             <select name="type">
               ${Object.keys(POST_TYPES).map(function (type) {
-                return `<option value="${type}" ${post && post.type === type ? 'selected' : ''}>${POST_TYPES[type]}</option>`;
+                var selected = post ? post.type === type : type === 'news';
+                return `<option value="${type}" ${selected ? 'selected' : ''}>${POST_TYPES[type]}</option>`;
               }).join('')}
             </select>
           </label>
@@ -514,8 +515,7 @@
       showToast('Вы вступили во франшизу');
     }
 
-    async function savePost(form) {
-      var formData = new FormData(form);
+    async function savePost(form, formData) {
       var pendingImages = state.postImages.filter(function (image) { return image.file && !image.url; });
       var done = 0;
       for (var i = 0; i < pendingImages.length; i += IMAGE_UPLOAD_CHUNK) {
@@ -769,13 +769,13 @@
       } else if (event.target.matches('[data-post-form]')) {
         event.preventDefault();
         if (state.uploadingImages) return;
-        var submitButton = event.target.querySelector('[type="submit"]');
+        var formData = new FormData(event.target);
         state.uploadingImages = true;
         event.target.querySelectorAll('input, select, textarea, button').forEach(function (control) {
           control.disabled = true;
         });
         renderPostImageQueue();
-        savePost(event.target).catch(function (error) {
+        savePost(event.target, formData).catch(function (error) {
           notifyError(error.message);
           state.uploadingImages = false;
           var progress = root.querySelector('[data-image-progress]');
