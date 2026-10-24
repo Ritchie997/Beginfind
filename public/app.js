@@ -54,7 +54,7 @@ window.avatarHtml = function ({ name, avatar } = {}, size = 32, className = '') 
   const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;`;
   if (avatar) {
     // onerror: файл пропал — показываем букву вместо битой картинки.
-    return `<span class="${cls}" style="${style}" data-initial="${letter}"><img src="${escapeAvatarAttr(avatar)}" alt="" loading="lazy" onerror="this.parentElement.textContent=this.parentElement.dataset.initial"></span>`;
+    return `<span class="${cls} has-image" style="${style}" data-initial="${letter}"><img src="${escapeAvatarAttr(avatar)}" alt="" loading="lazy" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`;
   }
   return `<span class="${cls}" style="${style}">${letter}</span>`;
 };

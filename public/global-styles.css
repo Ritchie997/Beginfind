@@ -1887,6 +1887,9 @@ html {
     vertical-align: middle;
     user-select: none;
 }
+.user-ava.has-image {
+    background: #000;
+}
 .user-ava > img {
     width: 100%;
     height: 100%;

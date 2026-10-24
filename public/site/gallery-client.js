@@ -142,7 +142,7 @@
       const cls = `user-ava${className ? ` ${className}` : ''}`;
       const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;`;
       return avatar
-        ? `<span class="${cls}" style="${style}" data-initial="${safeLetter}"><img src="${safeAvatar}" alt="" loading="lazy" onerror="this.parentElement.textContent=this.parentElement.dataset.initial"></span>`
+        ? `<span class="${cls} has-image" style="${style}" data-initial="${safeLetter}"><img src="${safeAvatar}" alt="" loading="lazy" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`
         : `<span class="${cls}" style="${style}">${safeLetter}</span>`;
     };
   }
