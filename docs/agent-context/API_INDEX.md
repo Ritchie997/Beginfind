@@ -151,6 +151,8 @@
 - `POST /franchises/:id/posts`
 - `PUT /franchises/:id/posts/:postId`
 - `DELETE /franchises/:id/posts/:postId`
+- `POST /franchises/:id/posts/:postId/approve`
+- `POST /franchises/:id/posts/:postId/reject`
 
 ## `gallery.routes.js`
 

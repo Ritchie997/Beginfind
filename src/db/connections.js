@@ -139,8 +139,28 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         completeSchemaTask(postTableErr);
         return;
       }
-      serversDb.run('CREATE INDEX IF NOT EXISTS idx_franchise_posts_server_created ON franchise_posts (server_id, created_at DESC, id DESC)', (postIndexErr) => {
-        completeSchemaTask(postIndexErr);
+      serversDb.all('PRAGMA table_info(franchise_posts)', (postSchemaErr, columns) => {
+        if (postSchemaErr) return completeSchemaTask(postSchemaErr);
+        const existingColumns = new Set(columns.map((column) => column.name));
+        const migrations = [
+          ['approval_status', "ALTER TABLE franchise_posts ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'published'"],
+          ['image_url', 'ALTER TABLE franchise_posts ADD COLUMN image_url TEXT'],
+          ['hub_status', 'ALTER TABLE franchise_posts ADD COLUMN hub_status TEXT']
+        ].filter(([name]) => !existingColumns.has(name));
+        const addNextColumn = () => {
+          const migration = migrations.shift();
+          if (!migration) {
+            return serversDb.run(
+              'CREATE INDEX IF NOT EXISTS idx_franchise_posts_server_status_created ON franchise_posts (server_id, approval_status, created_at DESC, id DESC)',
+              completeSchemaTask
+            );
+          }
+          serversDb.run(migration[1], (migrationErr) => {
+            if (migrationErr) return completeSchemaTask(migrationErr);
+            addNextColumn();
+          });
+        };
+        addNextColumn();
       });
     });
     serversDb.run(`CREATE TABLE IF NOT EXISTS franchise_feed_reads (

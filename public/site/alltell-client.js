@@ -9,8 +9,14 @@
   var POST_TYPES = {
     news: 'Новость',
     announcement: 'Объявление',
-    event: 'Событие'
+    event: 'Событие',
+    hub_update: 'Статус хаба'
   };
+  var POST_STATUS_LABELS = {
+    pending: 'На подтверждении',
+    rejected: 'Отклонено'
+  };
+  var HUB_STATUSES = { active: 'Запущен', paused: 'Приостановлен', finished: 'Завершён' };
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
@@ -133,47 +139,51 @@
           }).join('')}</div>` :
             `<div class="alltell-state"><i class="fas fa-compass" aria-hidden="true"></i><h3>${state.franchises.length ? 'Ничего не найдено' : 'Каталог пока пуст'}</h3><p>${state.franchises.length ? 'Измените поисковый запрос.' : 'Франшизы появятся здесь после публикации создателями.'}</p></div>`}
       </section>
-      <p class="alltell-create-note">Создаёте собственный мир? <a href="/admin-panel">Создайте франшизу в AllTell</a>, а затем опубликуйте её.</p>
+      <p class="alltell-create-note">Создаёте собственный мир? <a href="/admin-panel">Создайте франшизу в AllTell</a> — она появится в каталоге автоматически.</p>
     `;
   }
 
   function renderPost(post, hubMap, canManage) {
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
+    var canEdit = canManage || post.can_edit;
+    var articleHref = post.article && (post.article.is_public
+      ? '/antropedia/' + encodeURIComponent(post.article.slug)
+      : '/admin-panel/antropedia/' + encodeURIComponent(post.article.slug));
     return `
       <article class="alltell-post-card">
         <div class="alltell-post-topline">
           <span class="alltell-post-type alltell-post-type-${escapeHtml(post.type)}">${escapeHtml(POST_TYPES[post.type] || 'Публикация')}</span>
           ${hub ? `<span class="alltell-post-hub"><i class="fas fa-layer-group" aria-hidden="true"></i> ${escapeHtml(hub.name)}</span>` : ''}
-          ${post.type === 'event' && post.event_at ? `<time>${escapeHtml(dateLabel(post.event_at))}</time>` : ''}
+          ${post.hub_status ? `<span class="alltell-hub-status alltell-hub-status-${escapeHtml(post.hub_status)}">${escapeHtml(HUB_STATUSES[post.hub_status] || '')}</span>` : ''}
+          ${post.approval_status !== 'published' ? `<span class="alltell-post-review alltell-post-review-${escapeHtml(post.approval_status)}">${escapeHtml(POST_STATUS_LABELS[post.approval_status] || '')}</span>` : ''}
         </div>
         <h3>${escapeHtml(post.title)}</h3>
-        <p class="alltell-post-body">${escapeHtml(post.body)}</p>
-        ${post.article ? `<a class="alltell-post-article" href="/antropedia/${encodeURIComponent(post.article.slug)}"><i class="fas fa-book-open" aria-hidden="true"></i> ${escapeHtml(post.article.title)}</a>` : ''}
+        ${post.image_url ? `<img class="alltell-post-image" src="${escapeHtml(post.image_url)}" alt="">` : ''}
+        ${post.body ? `<p class="alltell-post-body">${escapeHtml(post.body)}</p>` : ''}
+        ${post.article && articleHref ? `<a class="alltell-post-article" href="${escapeHtml(articleHref)}"><i class="fas fa-book-open" aria-hidden="true"></i> Статья: ${escapeHtml(post.article.title)}</a>` : ''}
         <div class="alltell-post-footer">
           <span>${escapeHtml(post.created_by_name)} · ${escapeHtml(dateLabel(post.created_at))}</span>
-          ${canManage ? `<div class="alltell-post-actions">
+          ${canEdit || (canManage && post.approval_status === 'pending') ? `<div class="alltell-post-actions">
+            ${canManage && post.approval_status === 'pending' ? `<button type="button" class="btn btn-primary btn-sm" data-action="approve-post" data-post-id="${Number(post.id)}">Подтвердить</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="reject-post" data-post-id="${Number(post.id)}">Отклонить</button>` : ''}
+            ${canEdit ? `
             <button type="button" class="btn btn-secondary btn-sm" data-action="edit-post" data-post-id="${Number(post.id)}">Изменить</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-action="delete-post" data-post-id="${Number(post.id)}">Удалить</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="delete-post" data-post-id="${Number(post.id)}">Удалить</button>` : ''}
           </div>` : ''}
         </div>
       </article>`;
   }
 
-  function renderPostForm(state, hubs) {
+  function renderPostForm(state, hubs, canManage) {
     var post = state.editingPost;
     var hubOptions = hubs.map(function (hub) {
       return `<option value="${Number(hub.id)}" ${post && Number(post.hub_id) === Number(hub.id) ? 'selected' : ''}>${escapeHtml(hub.name)}</option>`;
     }).join('');
-    var dateValue = '';
-    if (post && post.event_at) {
-      var date = new Date(post.event_at);
-      if (!Number.isNaN(date.getTime())) {
-        dateValue = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      }
-    }
+    var article = post && post.article;
+    var articleTitle = article ? article.title : '';
     return `
       <form class="alltell-post-form" data-post-form>
-        <h3>${post ? 'Редактировать публикацию' : 'Новая публикация'}</h3>
+        <h3>${post ? 'Редактировать публикацию' : (canManage ? 'Новая публикация' : 'Предложить публикацию')}</h3>
         <div class="alltell-form-row">
           <label>Тип
             <select name="type">
@@ -188,19 +198,34 @@
             </select>
           </label>
         </div>
+        <label>Статус хаба для новости
+          <select name="hub_status">
+            <option value="">Выберите статус</option>
+            ${Object.keys(HUB_STATUSES).map(function (status) {
+              return `<option value="${status}" ${post && post.hub_status === status ? 'selected' : ''}>${HUB_STATUSES[status]}</option>`;
+            }).join('')}
+          </select>
+        </label>
         <label>Заголовок<input name="title" maxlength="160" required value="${escapeHtml(post ? post.title : '')}"></label>
-        <label>Текст<textarea name="body" maxlength="10000" rows="5" required>${escapeHtml(post ? post.body : '')}</textarea></label>
+        <label>Текст<textarea name="body" maxlength="10000" rows="5">${escapeHtml(post ? post.body : '')}</textarea></label>
         <div class="alltell-form-row">
-          <label>Дата и время события
-            <input name="event_at" type="datetime-local" value="${escapeHtml(dateValue)}">
+          <label>Статья
+            <input name="article_search" type="search" autocomplete="off" value="${escapeHtml(articleTitle)}" placeholder="Начните вводить название статьи…" data-article-search>
+            <input name="article_slug" type="hidden" value="${escapeHtml(article ? article.slug : '')}" data-article-slug>
+            <div class="alltell-article-options" data-article-options hidden></div>
           </label>
-          <label>Ссылка на открытую статью (slug)
-            <input name="article_slug" maxlength="160" value="${escapeHtml(post && post.article ? post.article.slug : '')}" placeholder="например, istoriya-mira">
+          <label>Картинка
+            <input name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+            <input name="image_url" type="hidden" value="${escapeHtml(post && post.image_url || '')}">
+            ${post && post.image_url ? `<img class="alltell-form-image-preview" src="${escapeHtml(post.image_url)}" alt="">` : ''}
+            ${post && post.image_url ? '<button class="btn btn-secondary btn-sm" type="button" data-action="remove-image">Убрать картинку</button>' : ''}
           </label>
         </div>
-        <p class="alltell-form-hint">Дата нужна только для публикации типа «Событие». Ссылки разрешены только на статьи, доступные публично.</p>
+        <p class="alltell-form-hint">${canManage
+          ? 'Запись датируется автоматически. Для публикации в чужой франшизе отправьте предложение создателю.'
+          : 'Запись датируется автоматически и появится в ленте после подтверждения создателем франшизы.'}</p>
         <div class="alltell-post-form-actions">
-          <button class="btn btn-primary" type="submit">${post ? 'Сохранить' : 'Опубликовать'}</button>
+          <button class="btn btn-primary" type="submit">${post ? 'Сохранить' : (canManage ? 'Опубликовать' : 'Отправить на подтверждение')}</button>
           ${post ? '<button class="btn btn-secondary" type="button" data-action="cancel-edit">Отмена</button>' : ''}
         </div>
       </form>`;
@@ -210,7 +235,10 @@
     var data = state.detail;
     var franchise = data.franchise;
     var member = data.is_member;
+    var canManage = data.can_manage;
     var hubMap = new Map(data.hubs.map(function (hub) { return [String(hub.id), hub]; }));
+    var posts = data.posts.filter(function (post) { return post.approval_status === 'published'; });
+    var suggestions = data.posts.filter(function (post) { return post.approval_status !== 'published'; });
     root.innerHTML = `
       <a class="alltell-back-link" href="/alltell"><i class="fas fa-arrow-left" aria-hidden="true"></i> К каталогу</a>
       ${state.error ? `<div class="alltell-state alltell-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
@@ -237,12 +265,16 @@
       <section class="alltell-live-section">
         <div class="alltell-live-section-heading">
           <h2><i class="fas fa-bullhorn" aria-hidden="true"></i> Новости и события</h2>
-          <span>${data.posts.length} публикаций</span>
+          <span>${posts.length} публикаций</span>
         </div>
-        ${data.can_manage ? renderPostForm(state, data.hubs) : ''}
-        ${data.posts.length ? `<div class="alltell-post-list">${data.posts.map(function (post) {
-          return renderPost(post, hubMap, data.can_manage);
-        }).join('')}</div>` : `<div class="alltell-state"><p>${data.can_manage ? 'Добавьте первую новость, объявление или событие.' : 'Публикаций пока нет.'}</p></div>`}
+        ${canManage || token() ? renderPostForm(state, data.hubs, canManage) : '<div class="alltell-state"><p><button class="btn btn-secondary" type="button" data-action="login">Войдите, чтобы предложить публикацию</button></p></div>'}
+        ${suggestions.length ? `<div class="alltell-live-section-heading"><h3>${canManage ? 'Предложения и модерация' : 'Мои предложения'}</h3><span>${canManage
+          ? suggestions.filter(function (post) { return post.approval_status === 'pending'; }).length + ' ожидают решения'
+          : suggestions.length + ' предложений'}</span></div>
+          <div class="alltell-post-list">${suggestions.map(function (post) { return renderPost(post, hubMap, canManage); }).join('')}</div>` : ''}
+        ${posts.length ? `<div class="alltell-post-list">${posts.map(function (post) {
+          return renderPost(post, hubMap, canManage);
+        }).join('')}</div>` : `<div class="alltell-state"><p>${canManage ? 'Добавьте первую новость, объявление или событие.' : 'Публикаций пока нет.'}</p></div>`}
       </section>
     `;
   }
@@ -258,6 +290,8 @@
       mine: [],
       detail: null,
       editingPost: null,
+      articleIndex: [],
+      articleIndexError: '',
       loading: true,
       error: '',
       mineError: '',
@@ -291,6 +325,23 @@
         console.error('Не удалось загрузить список франшиз пользователя:', error);
         state.mine = [];
         state.mineError = 'Не удалось загрузить «Моё AllTell»: ' + error.message;
+      }
+    }
+
+    async function loadArticleIndex() {
+      if (!token()) {
+        state.articleIndex = [];
+        state.articleIndexError = '';
+        return;
+      }
+      try {
+        var result = await request('/api/articles-index');
+        state.articleIndex = Array.isArray(result.accessible) ? result.accessible : [];
+        state.articleIndexError = '';
+      } catch (error) {
+        console.error('Не удалось загрузить доступные статьи:', error);
+        state.articleIndex = [];
+        state.articleIndexError = error.message;
       }
     }
 
@@ -358,20 +409,27 @@
 
     async function savePost(form) {
       var formData = new FormData(form);
+      var imageUrl = formData.get('image_url') || '';
+      var imageFile = formData.get('image');
+      if (imageFile && imageFile.size) {
+        if (!window.apiClient || typeof window.apiClient.uploadImage !== 'function') {
+          throw new Error('Загрузка изображений сейчас недоступна');
+        }
+        var uploaded = await window.apiClient.uploadImage(imageFile);
+        if (!uploaded.success || !uploaded.data || !uploaded.data.url) {
+          throw new Error(uploaded.error || 'Не удалось загрузить изображение');
+        }
+        imageUrl = uploaded.data.url;
+      }
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
+        hub_status: formData.get('type') === 'hub_update' ? formData.get('hub_status') : '',
         title: formData.get('title'),
         body: formData.get('body'),
         article_slug: formData.get('article_slug'),
-        event_at: formData.get('event_at')
+        image_url: imageUrl
       };
-      if (payload.type !== 'event') payload.event_at = '';
-      else if (payload.event_at) {
-        var eventDate = new Date(payload.event_at);
-        if (Number.isNaN(eventDate.getTime())) throw new Error('Укажите корректные дату и время события');
-        payload.event_at = eventDate.toISOString();
-      }
       var franchiseId = state.detail.franchise.id;
       var postId = state.editingPost && state.editingPost.id;
       var post = await request('/api/franchises/' + franchiseId + '/posts' + (postId ? '/' + postId : ''), postId ? 'PUT' : 'POST', payload);
@@ -382,10 +440,48 @@
       }
       state.editingPost = null;
       renderDetail(root, state);
-      showToast(postId ? 'Публикация обновлена' : 'Публикация добавлена');
+      showToast(post.approval_status === 'pending'
+        ? 'Предложение отправлено создателю франшизы'
+        : (postId ? 'Публикация обновлена' : 'Публикация добавлена'));
+    }
+
+    function renderArticleOptions(input) {
+      var form = input.closest('[data-post-form]');
+      if (!form) return;
+      var options = form.querySelector('[data-article-options]');
+      var slugInput = form.querySelector('[data-article-slug]');
+      var query = input.value.trim().toLocaleLowerCase();
+      if (!query) {
+        options.hidden = true;
+        options.replaceChildren();
+        slugInput.value = '';
+        return;
+      }
+      slugInput.value = '';
+      var matches = state.articleIndex.filter(function (article) {
+        return (article.title + ' ' + article.slug).toLocaleLowerCase().includes(query);
+      }).slice(0, 15);
+      if (!matches.length) {
+        options.innerHTML = state.articleIndexError
+          ? `<span class="alltell-article-option-empty">Не удалось загрузить список статей: ${escapeHtml(state.articleIndexError)}</span>`
+          : '<span class="alltell-article-option-empty">Доступные статьи не найдены</span>';
+      } else {
+        options.innerHTML = matches.map(function (article) {
+          return `<button type="button" data-article-choice data-article-slug="${escapeHtml(article.slug)}" data-article-title="${escapeHtml(article.title)}">${escapeHtml(article.title)}</button>`;
+        }).join('');
+      }
+      options.hidden = false;
     }
 
     function onClick(event) {
+      var articleChoice = event.target.closest('[data-article-choice]');
+      if (articleChoice) {
+        var articleForm = articleChoice.closest('[data-post-form]');
+        articleForm.querySelector('[data-article-search]').value = articleChoice.dataset.articleTitle;
+        articleForm.querySelector('[data-article-slug]').value = articleChoice.dataset.articleSlug;
+        articleForm.querySelector('[data-article-options]').hidden = true;
+        return;
+      }
       var button = event.target.closest('[data-action]');
       if (!button) return;
       var action = button.dataset.action;
@@ -407,6 +503,24 @@
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
         renderDetail(root, state);
+      } else if (action === 'remove-image') {
+        var imageForm = button.closest('[data-post-form]');
+        imageForm.querySelector('[name="image_url"]').value = '';
+        imageForm.querySelector('.alltell-form-image-preview')?.remove();
+        button.remove();
+      } else if (action === 'approve-post' || action === 'reject-post') {
+        var postId = button.dataset.postId;
+        button.disabled = true;
+        request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId + '/' + (action === 'approve-post' ? 'approve' : 'reject'), 'POST', {})
+          .then(function (post) {
+            state.detail.posts = state.detail.posts.map(function (item) { return item.id === post.id ? post : item; });
+            renderDetail(root, state);
+            showToast(action === 'approve-post' ? 'Предложение опубликовано' : 'Предложение отклонено');
+          })
+          .catch(function (error) {
+            state.error = error.message;
+            renderDetail(root, state);
+          });
       } else if (action === 'delete-post') {
         if (!window.confirm('Удалить эту публикацию?')) return;
         var postId = button.dataset.postId;
@@ -421,6 +535,23 @@
             state.error = error.message;
             renderDetail(root, state);
           });
+      }
+    }
+
+    function onInput(event) {
+      if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
+    }
+
+    function onChange(event) {
+      var form = event.target.closest('[data-post-form]');
+      if (!form || !event.target.matches('[name="type"], [name="hub_id"], [name="hub_status"]')) return;
+      if (form.querySelector('[name="type"]').value !== 'hub_update') return;
+      var title = form.querySelector('[name="title"]');
+      var hub = form.querySelector('[name="hub_id"]');
+      var status = form.querySelector('[name="hub_status"]');
+      var hubName = hub.selectedOptions[0] && hub.selectedOptions[0].textContent;
+      if (!title.value.trim() && hub.value && status.value) {
+        title.value = 'Хаб «' + hubName + '»: ' + HUB_STATUSES[status.value];
       }
     }
 
@@ -448,6 +579,7 @@
     }
 
     function onAuthChanged() {
+      loadArticleIndex();
       if (new URLSearchParams(window.location.search).has('franchise')) {
         loadDetail(new URLSearchParams(window.location.search).get('franchise'));
       } else {
@@ -456,12 +588,17 @@
     }
 
     root.addEventListener('click', onClick);
+    root.addEventListener('input', onInput);
+    root.addEventListener('change', onChange);
     root.addEventListener('submit', onSubmit);
     window.addEventListener('authChanged', onAuthChanged);
+    await loadArticleIndex();
     await refreshCurrentView();
     return function () {
       state.disposed = true;
       root.removeEventListener('click', onClick);
+      root.removeEventListener('input', onInput);
+      root.removeEventListener('change', onChange);
       root.removeEventListener('submit', onSubmit);
       window.removeEventListener('authChanged', onAuthChanged);
       window.clearTimeout(state.toastTimer);

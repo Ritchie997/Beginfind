@@ -1,14 +1,18 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const { dbPath } = require('../config/paths');
+const { dbPath, UPLOADS_DIR } = require('../config/paths');
 const auth = require('../middleware/auth');
 const { isAdminOnServer } = require('../services/server-permissions');
 const articlesStore = require('../services/articles-store');
+const articleLayers = require('../services/article-layers');
 const publicArticles = require('../services/public-articles');
 const { serversSchemaReady } = require('../db/connections');
 
 const router = express.Router();
 const POST_TYPES = new Set(['news', 'announcement', 'event']);
+const HUB_STATUSES = new Set(['active', 'paused', 'finished']);
 
 router.use((req, res, next) => {
   serversSchemaReady.then(() => next()).catch(() => {
@@ -86,57 +90,92 @@ async function isMember(userId, franchiseId) {
   ));
 }
 
-async function validatePostInput(body, franchiseId) {
+async function validatePostInput(body, franchiseId, user, canManage) {
   body = body && typeof body === 'object' ? body : {};
-  const type = POST_TYPES.has(body.type) ? body.type : '';
+  const requestedType = body.type === 'hub_update' ? 'hub_update' : body.type;
+  const type = POST_TYPES.has(requestedType) || requestedType === 'hub_update' ? requestedType : '';
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const text = typeof body.body === 'string' ? body.body.trim() : '';
   const articleSlug = typeof body.article_slug === 'string' ? body.article_slug.trim() : '';
+  const imageUrl = typeof body.image_url === 'string' ? body.image_url.trim() : '';
   const hubId = body.hub_id === '' || body.hub_id == null ? null : Number(body.hub_id);
-  const eventAt = typeof body.event_at === 'string' && body.event_at.trim() ? new Date(body.event_at) : null;
+  const hubStatus = typeof body.hub_status === 'string' ? body.hub_status : '';
 
   if (!type) throw Object.assign(new Error('Выберите тип публикации'), { status: 400 });
   if (!title || title.length > 160) throw Object.assign(new Error('Заголовок обязателен и должен быть не длиннее 160 символов'), { status: 400 });
-  if (!text || text.length > 10000) throw Object.assign(new Error('Текст обязателен и должен быть не длиннее 10 000 символов'), { status: 400 });
+  if (text.length > 10000) throw Object.assign(new Error('Текст не должен быть длиннее 10 000 символов'), { status: 400 });
   if (body.hub_id != null && body.hub_id !== '' && (!Number.isInteger(hubId) || hubId < 1)) {
     throw Object.assign(new Error('Некорректный хаб'), { status: 400 });
   }
-  if (hubId && !(await dbGet('SELECT id FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, franchiseId]))) {
+  const hub = hubId
+    ? await dbGet('SELECT id, name, is_public FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, franchiseId])
+    : null;
+  if (hubId && !hub) {
     throw Object.assign(new Error('Хаб не принадлежит этой франшизе'), { status: 400 });
   }
-  if (type === 'event' && (!eventAt || Number.isNaN(eventAt.getTime()))) {
-    throw Object.assign(new Error('Для события укажите корректные дату и время'), { status: 400 });
+  if (type === 'hub_update' && (!hub || !HUB_STATUSES.has(hubStatus))) {
+    throw Object.assign(new Error('Для новости о хабе выберите хаб и его статус'), { status: 400 });
   }
-  if (type !== 'event' && body.event_at) {
-    throw Object.assign(new Error('Дата и время используются только для событий'), { status: 400 });
+  if (hub && !hub.is_public && !canManage) {
+    throw Object.assign(new Error('Предлагать публикации можно только для хабов, открытых в общем доступе'), { status: 400 });
+  }
+  if (type !== 'hub_update' && hubStatus) {
+    throw Object.assign(new Error('Статус хаба используется только в новости о хабе'), { status: 400 });
+  }
+  if (imageUrl && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) {
+    throw Object.assign(new Error('Изображение должно быть загружено через форму публикации'), { status: 400 });
+  }
+  if (imageUrl) {
+    const imageName = imageUrl.slice('/uploads/'.length);
+    const imagePath = path.join(UPLOADS_DIR, imageName);
+    if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(path.extname(imageName).toLowerCase()) ||
+      !fs.existsSync(imagePath)) {
+      throw Object.assign(new Error('Загруженное изображение не найдено'), { status: 400 });
+    }
   }
   if (articleSlug) {
     const record = articlesStore.getArticle(articleSlug);
-    if (!record || !publicArticles.getPublicArticle(record)) {
+    if (!record || !(await articleLayers.hasArticleAccess(record, user))) {
       throw Object.assign(new Error('Указанная статья недоступна для публикации'), { status: 400 });
     }
   }
 
   return {
-    type,
+    type: type === 'hub_update' ? 'news' : type,
     title,
     body: text,
     hub_id: hubId,
     article_slug: articleSlug || null,
-    event_at: type === 'event' ? eventAt.toISOString() : null
+    image_url: imageUrl || null,
+    hub_status: type === 'hub_update' ? hubStatus : null,
+    event_at: null
   };
 }
 
-async function publicPost(row) {
+async function publicPost(row, user) {
   const articleRecord = row.article_slug ? articlesStore.getArticle(row.article_slug) : null;
-  const article = articleRecord && publicArticles.getPublicArticle(articleRecord);
+  const publicArticle = articleRecord && publicArticles.getPublicArticle(articleRecord);
+  const authorizedArticle = articleRecord && user && !publicArticle &&
+    await articleLayers.resolveArticleLayer(articleRecord, user);
+  const article = publicArticle || (authorizedArticle
+    ? { slug: articleRecord.slug, title: authorizedArticle.layer.title || articleRecord.title || articleRecord.slug }
+    : null);
   return {
     id: row.id,
     hub_id: row.hub_id,
-    type: row.type,
+    type: row.hub_status ? 'hub_update' : row.type,
     title: row.title,
     body: row.body,
-    article: article ? { slug: article.slug, title: article.title, excerpt: article.excerpt } : null,
+    image_url: row.image_url || null,
+    article: article ? {
+      slug: article.slug,
+      title: article.title,
+      is_public: !!publicArticle
+    } : null,
+    hub_status: row.hub_status || null,
+    approval_status: row.approval_status || 'published',
+    can_edit: !!user && Number(row.created_by) === Number(user.id) &&
+      (row.approval_status || 'published') !== 'published',
     event_at: row.event_at,
     created_by_name: row.created_by_name,
     created_at: row.created_at,
@@ -155,7 +194,8 @@ router.get('/public/franchises', async (req, res) => {
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished' AND h.is_public = 1) AS finished_hubs,
              (SELECT COUNT(*) FROM franchise_posts p
                LEFT JOIN franchise_hubs h ON h.id = p.hub_id
-               WHERE p.server_id = s.id AND (p.hub_id IS NULL OR h.is_public = 1)
+               WHERE p.server_id = s.id AND p.approval_status = 'published'
+                 AND (p.hub_id IS NULL OR h.is_public = 1)
              ) AS post_count
       FROM servers s
       WHERE s.is_published = 1
@@ -190,15 +230,17 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
       dbAll(`
         SELECT p.* FROM franchise_posts p
         LEFT JOIN franchise_hubs h ON h.id = p.hub_id AND h.server_id = p.server_id
-        WHERE p.server_id = ? AND (p.hub_id IS NULL OR h.is_public = 1 OR ? = 1)
+        WHERE p.server_id = ?
+          AND (p.approval_status = 'published' OR ? = 1 OR p.created_by = ?)
+          AND (p.hub_id IS NULL OR h.is_public = 1 OR ? = 1)
         ORDER BY p.created_at DESC, p.id DESC LIMIT 100
-      `, [franchiseId, canManage ? 1 : 0]),
+      `, [franchiseId, canManage ? 1 : 0, req.user ? req.user.id : -1, canManage ? 1 : 0]),
       req.user ? isMember(req.user.id, franchiseId) : false
     ]);
     res.json({
       franchise,
       hubs,
-      posts: await Promise.all(rows.map(publicPost)),
+      posts: await Promise.all(rows.map((row) => publicPost(row, req.user))),
       is_member: member,
       can_manage: canManage
     });
@@ -218,7 +260,7 @@ router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'finished' AND h.is_public = 1) AS finished_hubs,
              (SELECT COUNT(*) FROM franchise_posts p
                LEFT JOIN franchise_hubs h ON h.id = p.hub_id
-               WHERE p.server_id = s.id
+               WHERE p.server_id = s.id AND p.approval_status = 'published'
                  AND (p.hub_id IS NULL OR h.is_public = 1)
                  AND p.id > COALESCE(
                    (SELECT r.last_seen_post_id FROM franchise_feed_reads r
@@ -243,10 +285,10 @@ router.post('/franchises/:id/feed/read', auth.authenticateToken, auth.checkAppro
     if (!(await isMember(req.user.id, franchiseId))) return res.status(403).json({ error: 'Вступите во франшизу, чтобы отмечать публикации прочитанными' });
     await dbRun(`
       INSERT INTO franchise_feed_reads (user_id, server_id, last_seen_at, last_seen_post_id)
-      VALUES (?, ?, CURRENT_TIMESTAMP, COALESCE((SELECT MAX(id) FROM franchise_posts WHERE server_id = ?), 0))
+      VALUES (?, ?, CURRENT_TIMESTAMP, COALESCE((SELECT MAX(id) FROM franchise_posts WHERE server_id = ? AND approval_status = 'published'), 0))
       ON CONFLICT(user_id, server_id) DO UPDATE SET
         last_seen_at = CURRENT_TIMESTAMP,
-        last_seen_post_id = COALESCE((SELECT MAX(id) FROM franchise_posts WHERE server_id = ?), 0)
+        last_seen_post_id = COALESCE((SELECT MAX(id) FROM franchise_posts WHERE server_id = ? AND approval_status = 'published'), 0)
     `, [req.user.id, franchiseId, franchiseId, franchiseId]);
     res.json({ unread_count: 0 });
   } catch (error) {
@@ -258,17 +300,21 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
   try {
     const franchiseId = Number(req.params.id);
     if (!Number.isInteger(franchiseId) || franchiseId < 1) return res.status(400).json({ error: 'Некорректная франшиза' });
-    if (!(await canManageFranchise(req.user, franchiseId))) return res.status(403).json({ error: 'Недостаточно прав для публикации' });
-    if (!(await dbGet('SELECT id FROM servers WHERE id = ?', [franchiseId]))) return res.status(404).json({ error: 'Франшиза не найдена' });
-    const post = await validatePostInput(req.body, franchiseId);
+    const franchise = await dbGet('SELECT id FROM servers WHERE id = ?', [franchiseId]);
+    if (!franchise) return res.status(404).json({ error: 'Франшиза не найдена' });
+    const canManage = await canManageFranchise(req.user, franchiseId);
+    const post = await validatePostInput(req.body, franchiseId, req.user, canManage);
     const authorName = req.user.display_name || req.user.username || `Пользователь ${req.user.id}`;
     const result = await dbRun(`
       INSERT INTO franchise_posts
-        (server_id, hub_id, type, title, body, article_slug, event_at, created_by, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug, post.event_at, req.user.id, authorName]);
+        (server_id, hub_id, type, title, body, article_slug, event_at, image_url, hub_status, approval_status, created_by, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug,
+      post.event_at, post.image_url, post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
+    ]);
     const row = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [result.lastID]);
-    res.status(201).json(await publicPost(row));
+    res.status(201).json(await publicPost(row, req.user));
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -281,17 +327,27 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
     if (!Number.isInteger(franchiseId) || franchiseId < 1 || !Number.isInteger(postId) || postId < 1) {
       return res.status(400).json({ error: 'Некорректный идентификатор' });
     }
-    if (!(await canManageFranchise(req.user, franchiseId))) return res.status(403).json({ error: 'Недостаточно прав для редактирования' });
-    if (!(await dbGet('SELECT id FROM franchise_posts WHERE id = ? AND server_id = ?', [postId, franchiseId]))) {
+    const canManage = await canManageFranchise(req.user, franchiseId);
+    const existing = await dbGet('SELECT * FROM franchise_posts WHERE id = ? AND server_id = ?', [postId, franchiseId]);
+    if (!existing) {
       return res.status(404).json({ error: 'Публикация не найдена' });
     }
-    const post = await validatePostInput(req.body, franchiseId);
+    const canEditSuggestion = Number(existing.created_by) === Number(req.user.id) &&
+      existing.approval_status !== 'published';
+    if (!canManage && !canEditSuggestion) return res.status(403).json({ error: 'Недостаточно прав для редактирования' });
+    const post = await validatePostInput(req.body, franchiseId, req.user, canManage);
     await dbRun(`
       UPDATE franchise_posts
-      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, event_at = ?, updated_at = CURRENT_TIMESTAMP
+      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, event_at = ?,
+          image_url = ?, hub_status = ?,
+          approval_status = CASE WHEN created_by = ? AND approval_status != 'published' THEN 'pending' ELSE approval_status END,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
-    `, [post.hub_id, post.type, post.title, post.body, post.article_slug, post.event_at, postId, franchiseId]);
-    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId])));
+    `, [
+      post.hub_id, post.type, post.title, post.body, post.article_slug, post.event_at,
+      post.image_url, post.hub_status, req.user.id, postId, franchiseId
+    ]);
+    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -304,10 +360,52 @@ router.delete('/franchises/:id/posts/:postId', auth.authenticateToken, auth.chec
     if (!Number.isInteger(franchiseId) || franchiseId < 1 || !Number.isInteger(postId) || postId < 1) {
       return res.status(400).json({ error: 'Некорректный идентификатор' });
     }
-    if (!(await canManageFranchise(req.user, franchiseId))) return res.status(403).json({ error: 'Недостаточно прав для удаления' });
+    const canManage = await canManageFranchise(req.user, franchiseId);
+    const post = await dbGet('SELECT created_by, approval_status FROM franchise_posts WHERE id = ? AND server_id = ?', [postId, franchiseId]);
+    if (!post) return res.status(404).json({ error: 'Публикация не найдена' });
+    if (!canManage && !(Number(post.created_by) === Number(req.user.id) && post.approval_status !== 'published')) {
+      return res.status(403).json({ error: 'Недостаточно прав для удаления' });
+    }
     const result = await dbRun('DELETE FROM franchise_posts WHERE id = ? AND server_id = ?', [postId, franchiseId]);
-    if (!result.changes) return res.status(404).json({ error: 'Публикация не найдена' });
     res.json({ deleted: result.changes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/approve', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const franchiseId = Number(req.params.id);
+    const postId = Number(req.params.postId);
+    if (!Number.isInteger(franchiseId) || franchiseId < 1 || !Number.isInteger(postId) || postId < 1) {
+      return res.status(400).json({ error: 'Некорректный идентификатор' });
+    }
+    if (!(await canManageFranchise(req.user, franchiseId))) return res.status(403).json({ error: 'Подтверждать публикации может только создатель франшизы или администратор' });
+    const result = await dbRun(`
+      UPDATE franchise_posts SET approval_status = 'published', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND server_id = ? AND approval_status = 'pending'
+    `, [postId, franchiseId]);
+    if (!result.changes) return res.status(404).json({ error: 'Предложение не найдено или уже обработано' });
+    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/franchises/:id/posts/:postId/reject', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const franchiseId = Number(req.params.id);
+    const postId = Number(req.params.postId);
+    if (!Number.isInteger(franchiseId) || franchiseId < 1 || !Number.isInteger(postId) || postId < 1) {
+      return res.status(400).json({ error: 'Некорректный идентификатор' });
+    }
+    if (!(await canManageFranchise(req.user, franchiseId))) return res.status(403).json({ error: 'Отклонять публикации может только создатель франшизы или администратор' });
+    const result = await dbRun(`
+      UPDATE franchise_posts SET approval_status = 'rejected', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND server_id = ? AND approval_status = 'pending'
+    `, [postId, franchiseId]);
+    if (!result.changes) return res.status(404).json({ error: 'Предложение не найдено или уже обработано' });
+    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
