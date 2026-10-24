@@ -683,28 +683,9 @@
     border-radius: var(--site-radius-lg);
     background: var(--background-secondary);
     border: 1px solid var(--background-accent);
-    text-decoration: none;
     color: var(--text-normal);
     overflow: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
 }
-
-.hub-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    background: var(--hub-glow, linear-gradient(135deg, var(--blurple), transparent 70%));
-    transition: opacity 0.3s ease;
-}
-
-.hub-card:hover {
-    transform: translateY(-6px);
-    border-color: var(--hub-color, var(--blurple));
-    box-shadow: var(--site-shadow-soft);
-}
-
-.hub-card:hover::before { opacity: 0.14; }
 
 .hub-card-icon {
     position: relative;
@@ -735,21 +716,8 @@
     color: var(--text-muted);
     font-size: 13.5px;
     line-height: 1.55;
-    margin-bottom: 18px;
+    margin-bottom: 0;
 }
-
-.hub-card-cta {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #fff;
-}
-
-.hub-card:hover .hub-card-cta i { transform: translateX(4px); }
-.hub-card-cta i { transition: transform 0.25s ease; }
 
 .hub-card--antropedia { --hub-color: var(--blurple); }
 .hub-card--alltell { --hub-color: var(--accent-pink); }
@@ -2192,6 +2160,10 @@
     display: grid;
     grid-template-columns: 1.4fr repeat(3, 1fr);
     gap: 30px;
+}
+
+.site-footer-inner--home {
+    grid-template-columns: 1fr;
 }
 
 .site-footer-brand p {
