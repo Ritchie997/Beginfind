@@ -875,15 +875,28 @@ function beginArchivedUserTransfer(archiveId) {
   });
 }
 
-function finishArchivedUserTransfer(archiveId, success, recipientUsername) {
-  const status = success ? 'transferred' : 'available';
+function finishArchivedUserTransfer(archiveId, success) {
   return new Promise((resolve, reject) => {
+    if (success) {
+      db.run(
+        "DELETE FROM archived_users WHERE id = ? AND transfer_status = 'transferring'",
+        [archiveId],
+        function (err) {
+          if (err) return reject(err);
+          if (!this.changes) return reject(new Error('Архивная запись не найдена для завершения передачи'));
+          resolve();
+        }
+      );
+      return;
+    }
+
     db.run(
-      'UPDATE archived_users SET transfer_status = ?, transferred_to = ? WHERE id = ?',
-      [status, success ? recipientUsername : null, archiveId],
-      (err) => {
-        if (err) reject(err);
-        else resolve();
+      "UPDATE archived_users SET transfer_status = 'available', transferred_to = NULL WHERE id = ? AND transfer_status = 'transferring'",
+      [archiveId],
+      function (err) {
+        if (err) return reject(err);
+        if (!this.changes) return reject(new Error('Не удалось восстановить статус архивной записи'));
+        resolve();
       }
     );
   });

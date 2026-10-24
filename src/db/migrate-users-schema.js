@@ -263,6 +263,7 @@ function ensureUserSchema(db) {
             )`
           )
         )
+        .then(() => run(db, "DELETE FROM archived_users WHERE transfer_status = 'transferred'"))
         .then(
           () =>
             new Promise((res2, rej2) => {

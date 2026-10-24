@@ -384,6 +384,7 @@ router.delete('/users/:id', auth.authenticateToken, auth.checkApproved, auth.che
 // галереи из архивной записи существующему пользователю по логину.
 router.post('/archived-users/:id/transfer-content', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
   let archive = null;
+  let contentTransferred = false;
   try {
     const targetUsername = String(req.body.username || '').trim();
     if (!targetUsername) return res.status(400).json({ error: 'Укажите логин пользователя-получателя' });
@@ -402,10 +403,11 @@ router.post('/archived-users/:id/transfer-content', auth.authenticateToken, auth
       sourceNames,
       target
     );
-    await auth.finishArchivedUserTransfer(archive.id, true, target.username);
+    contentTransferred = true;
+    await auth.finishArchivedUserTransfer(archive.id, true);
     res.json({ transferred: true, recipient: target.username, ...result });
   } catch (error) {
-    if (archive) {
+    if (archive && !contentTransferred) {
       try {
         await auth.finishArchivedUserTransfer(archive.id, false);
       } catch (resetError) {
@@ -413,6 +415,9 @@ router.post('/archived-users/:id/transfer-content', auth.authenticateToken, auth
       }
     }
     console.error('[auth] Не удалось передать пользовательские данные:', error);
+    if (contentTransferred) {
+      return res.status(500).json({ error: 'Данные переданы, но не удалось удалить запись из архива' });
+    }
     res.status(400).json({ error: error.message });
   }
 });
