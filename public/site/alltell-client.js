@@ -171,9 +171,16 @@
           ${post.approval_status !== 'published' ? `<span class="alltell-post-review alltell-post-review-${escapeHtml(post.approval_status)}">${escapeHtml(POST_STATUS_LABELS[post.approval_status] || '')}</span>` : ''}
         </div>
         <h3>${escapeHtml(post.title)}</h3>
-        ${images.length ? `<div class="alltell-post-images">${images.map(function (image) {
-          return `<img class="alltell-post-image" src="${escapeHtml(image)}" alt="" loading="lazy">`;
-        }).join('')}</div>` : ''}
+        ${images.length ? `<div class="alltell-post-carousel" data-image-carousel>
+          <div class="alltell-post-images" data-image-track>
+            ${images.map(function (image, index) {
+              return `<img class="alltell-post-image" src="${escapeHtml(image)}" alt="" loading="lazy" data-image-index="${index}">`;
+            }).join('')}
+          </div>
+          ${images.length > 1 ? `<button class="alltell-image-arrow alltell-image-prev" type="button" data-image-step="-1" aria-label="Предыдущее изображение"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+          <button class="alltell-image-arrow alltell-image-next" type="button" data-image-step="1" aria-label="Следующее изображение"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+          <span class="alltell-image-count" data-image-count>1 / ${images.length}</span>` : ''}
+        </div>` : ''}
         ${post.body ? `<p class="alltell-post-body">${escapeHtml(post.body)}</p>` : ''}
         ${post.article && articleHref ? `<a class="alltell-post-article" href="${escapeHtml(articleHref)}"><i class="fas fa-book-open" aria-hidden="true"></i> Статья: ${escapeHtml(post.article.title)}</a>` : ''}
         <div class="alltell-post-footer">
@@ -234,6 +241,7 @@
           </label>
           <label>Картинки
             <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+            <span class="alltell-image-selection" data-image-selection>Можно выбрать несколько изображений.</span>
             <input name="image_urls" type="hidden" value="${escapeHtml(JSON.stringify(images))}">
             ${images.length ? `<div class="alltell-form-images">${images.map(function (image, index) {
               return `<div class="alltell-form-image-item">
@@ -284,7 +292,7 @@
           </article>`;
         }).join('')}</div>` : '<div class="alltell-state"><p>В этой франшизе пока нет хабов.</p></div>'}
       </section>
-      <section class="alltell-live-section">
+      <section class="alltell-live-section alltell-feed-section">
         <div class="alltell-live-section-heading">
           <h2><i class="fas fa-bullhorn" aria-hidden="true"></i> Новости и события</h2>
           <span>${posts.length} публикаций</span>
@@ -439,9 +447,6 @@
       }
       if (!Array.isArray(imageUrls)) imageUrls = [];
       var imageFiles = Array.from(form.querySelector('[name="images"]').files || []);
-      if (imageUrls.length + imageFiles.length > 60) {
-        throw new Error('Можно прикрепить не более 60 изображений');
-      }
       for (var i = 0; i < imageFiles.length; i++) {
         var uploadData = new FormData();
         uploadData.append('image', imageFiles[i]);
@@ -458,6 +463,9 @@
         }
         imageUrls.push(uploadResult.url);
       }
+      form.querySelector('[name="image_urls"]').value = JSON.stringify(imageUrls);
+      form.querySelector('[name="images"]').value = '';
+      form.querySelector('[data-image-selection]').textContent = 'Можно выбрать несколько изображений.';
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
@@ -511,6 +519,12 @@
     }
 
     function onClick(event) {
+      var imageStep = event.target.closest('[data-image-step]');
+      if (imageStep) {
+        var track = imageStep.closest('[data-image-carousel]').querySelector('[data-image-track]');
+        track.scrollBy({ left: Number(imageStep.dataset.imageStep) * track.clientWidth, behavior: 'smooth' });
+        return;
+      }
       var articleChoice = event.target.closest('[data-article-choice]');
       if (articleChoice) {
         var articleForm = articleChoice.closest('[data-post-form]');
@@ -578,7 +592,25 @@
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
     }
 
+    function onScroll(event) {
+      var track = event.target.closest('[data-image-track]');
+      if (!track) return;
+      var carousel = track.closest('[data-image-carousel]');
+      var count = carousel.querySelector('[data-image-count]');
+      if (!count) return;
+      var images = track.querySelectorAll('[data-image-index]');
+      var activeIndex = Math.min(images.length - 1, Math.round(track.scrollLeft / track.clientWidth));
+      count.textContent = (activeIndex + 1) + ' / ' + images.length;
+    }
+
     function onChange(event) {
+      if (event.target.matches('[name="images"]')) {
+        var selected = event.target.closest('[data-post-form]').querySelector('[data-image-selection]');
+        selected.textContent = event.target.files.length
+          ? 'Выбрано изображений: ' + event.target.files.length
+          : 'Можно выбрать несколько изображений.';
+        return;
+      }
       var form = event.target.closest('[data-post-form]');
       if (!form || !event.target.matches('[name="hub_id"]')) return;
       var hubSelected = !!event.target.value;
@@ -617,6 +649,7 @@
 
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
+    root.addEventListener('scroll', onScroll, true);
     root.addEventListener('change', onChange);
     root.addEventListener('submit', onSubmit);
     window.addEventListener('authChanged', onAuthChanged);
@@ -626,6 +659,7 @@
       state.disposed = true;
       root.removeEventListener('click', onClick);
       root.removeEventListener('input', onInput);
+      root.removeEventListener('scroll', onScroll, true);
       root.removeEventListener('change', onChange);
       root.removeEventListener('submit', onSubmit);
       window.removeEventListener('authChanged', onAuthChanged);

@@ -120,9 +120,6 @@ async function validatePostInput(body, franchiseId, user, canManage) {
   if (hub && !hub.is_public && !canManage) {
     throw Object.assign(new Error('Предлагать публикации можно только для хабов, открытых в общем доступе'), { status: 400 });
   }
-  if (imageUrls.length > 60) {
-    throw Object.assign(new Error('Можно прикрепить не более 60 изображений'), { status: 400 });
-  }
   for (const imageUrl of imageUrls) {
     if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(imageUrl)) {
       throw Object.assign(new Error('Изображение должно быть загружено через форму публикации'), { status: 400 });
