@@ -6281,7 +6281,13 @@ SPARouter.prototype.renderUsersList = async function() {
       if (!user.is_root) {
         const buttons = [];
         if (can('manage_admin_roles')) {
-          buttons.push(`<button class="btn btn-primary btn-sm btn-assign-role" data-id="${user.id}" data-name="${displayName}" data-role-id="${user.admin_role_id || ''}">${user.role_name ? 'Изменить роль' : 'Сделать админом'}</button>`);
+          if (user.status === 'blocked') {
+            if (user.admin_role_id) {
+              buttons.push(`<button class="btn btn-secondary btn-sm btn-remove-blocked-role" data-id="${user.id}" data-name="${displayName}">Снять роль</button>`);
+            }
+          } else {
+            buttons.push(`<button class="btn btn-primary btn-sm btn-assign-role" data-id="${user.id}" data-name="${displayName}" data-role-id="${user.admin_role_id || ''}">${user.role_name ? 'Изменить роль' : 'Сделать админом'}</button>`);
+          }
         }
         if (can('rename_users')) {
           buttons.push(`<button class="btn btn-secondary btn-sm btn-rename-user" data-id="${user.id}" data-name="${displayName}" data-username="${username}">Переименовать</button>`);
@@ -6302,6 +6308,7 @@ SPARouter.prototype.renderUsersList = async function() {
           buttons.push(user.is_role_manager
             ? `<button class="users-btn-star btn-revoke-role-manager" data-id="${user.id}" data-name="${displayName}" title="Снять статус доверенного администратора">★ доверенный</button>`
             : `<button class="users-btn-ghost btn-grant-role-manager" data-id="${user.id}" data-name="${displayName}" title="Назначить доверенным администратором (право редактировать роли)">☆ сделать доверенным</button>`);
+          buttons.push(`<button class="btn btn-danger btn-sm btn-delete-user" data-id="${user.id}" data-name="${displayName}" data-username="${username}">Удалить</button>`);
         }
         actionsHtml = buttons.join(' ') || '<span style="color: var(--text-muted);">—</span>';
       }
@@ -6329,6 +6336,9 @@ SPARouter.prototype.renderUsersList = async function() {
     tbodyEl.querySelectorAll('.btn-assign-role').forEach(btn => {
       btn.addEventListener('click', () => this.showAssignRoleModal(btn.dataset.id, btn.dataset.name, btn.dataset.roleId));
     });
+    tbodyEl.querySelectorAll('.btn-remove-blocked-role').forEach(btn => {
+      btn.addEventListener('click', () => this.removeBlockedUserRole(btn.dataset.id, btn.dataset.name));
+    });
     tbodyEl.querySelectorAll('.btn-rename-user').forEach(btn => {
       btn.addEventListener('click', () => this.showRenameModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
     });
@@ -6349,6 +6359,9 @@ SPARouter.prototype.renderUsersList = async function() {
     });
     tbodyEl.querySelectorAll('.btn-revoke-role-manager').forEach(btn => {
       btn.addEventListener('click', () => this.setRoleManager(btn.dataset.id, btn.dataset.name, false));
+    });
+    tbodyEl.querySelectorAll('.btn-delete-user').forEach(btn => {
+      btn.addEventListener('click', () => this.showDeleteUserModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
     });
   } catch (error) {
     if (loadingEl) loadingEl.style.display = 'none';
@@ -6505,6 +6518,124 @@ SPARouter.prototype.unblockUser = async function(userId, userName) {
   } catch (error) {
     this.showUsersToast(error.message, 'error');
   }
+};
+
+SPARouter.prototype.removeBlockedUserRole = async function(userId, userName) {
+  try {
+    const res = await fetch(`/api/users/${userId}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roleId: null })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Не удалось снять роль');
+    this.showUsersToast(`Роль пользователя «${userName}» снята`, 'success');
+    await this.renderUsersList();
+  } catch (error) {
+    this.showUsersToast(error.message, 'error');
+  }
+};
+
+SPARouter.prototype.showDeleteUserModal = function(userId, userName, username) {
+  const modal = document.getElementById('delete-user-modal');
+  const choice = document.getElementById('delete-user-choice');
+  const success = document.getElementById('delete-user-success');
+  const choiceActions = document.getElementById('delete-user-choice-actions');
+  const successActions = document.getElementById('delete-user-success-actions');
+  const transfer = document.getElementById('delete-user-transfer');
+  const transferInput = document.getElementById('delete-user-transfer-login');
+  const transferButton = document.getElementById('delete-user-transfer-btn');
+  const confirmButton = document.getElementById('delete-user-confirm-btn');
+  const finish = () => { modal.style.display = 'none'; };
+
+  document.getElementById('delete-user-modal-title').textContent = `Удалить пользователя «${userName}»?`;
+  document.getElementById('delete-user-result').textContent = '';
+  document.querySelector('input[name="delete-user-mode"][value="keep"]').checked = true;
+  choice.hidden = false;
+  success.hidden = true;
+  transfer.hidden = true;
+  choiceActions.hidden = false;
+  successActions.hidden = true;
+  transferInput.value = '';
+  transferInput.disabled = false;
+  transferButton.disabled = false;
+  transferButton.textContent = 'Передать данные';
+  if (modal) modal.style.display = 'flex';
+
+  confirmButton.onclick = async () => {
+    const mode = document.querySelector('input[name="delete-user-mode"]:checked').value;
+    confirmButton.disabled = true;
+    confirmButton.textContent = 'Удаление...';
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось удалить пользователя');
+
+      choice.hidden = true;
+      success.hidden = false;
+      choiceActions.hidden = true;
+      successActions.hidden = false;
+      if (mode === 'keep') {
+        document.getElementById('delete-user-result').textContent = `Аккаунт «${userName}» удалён. Его данные сохранены.`;
+        transfer.hidden = false;
+      } else {
+        const details = data.cleanup || {};
+        const summary = [
+          `статей: ${details.deletedArticles || 0}`,
+          `работ галереи: ${details.deletedGalleryWorks || 0}`,
+          `сообщений: ${details.deletedMessages || 0}`,
+          `карт: ${details.deletedMaps || 0}`,
+          `наборов стикеров: ${details.deletedStickerPacks || 0}`
+        ].join(', ');
+        const warnings = Array.isArray(details.warnings) && details.warnings.length
+          ? ` ${details.warnings.join(' ')}`
+          : '';
+        document.getElementById('delete-user-result').textContent = `Аккаунт и связанные данные удалены (${summary}).${warnings}`;
+      }
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+    } finally {
+      confirmButton.disabled = false;
+      confirmButton.textContent = 'Удалить';
+    }
+  };
+
+  transferButton.onclick = async () => {
+    const recipientLogin = transferInput.value.trim();
+    if (!recipientLogin) {
+      this.showUsersToast('Введите логин пользователя-получателя', 'error');
+      return;
+    }
+    transferButton.disabled = true;
+    transferButton.textContent = 'Передача...';
+    try {
+      const res = await fetch(`/api/users/${userId}/transfer-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceUsername: username, sourceDisplayName: userName, username: recipientLogin })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось передать данные');
+      document.getElementById('delete-user-result').textContent =
+        `Данные переданы пользователю «${data.recipient}»: статей — ${data.transferredArticles}, работ галереи — ${data.transferredWorks}.`;
+      transferInput.disabled = true;
+      transferButton.textContent = 'Передано';
+      await this.renderUsersList();
+    } catch (error) {
+      this.showUsersToast(error.message, 'error');
+      transferButton.disabled = false;
+      transferButton.textContent = 'Передать данные';
+    }
+  };
+
+  document.getElementById('delete-user-cancel-btn').onclick = finish;
+  document.getElementById('delete-user-close-btn').onclick = finish;
+  document.getElementById('delete-user-done-btn').onclick = finish;
 };
 
 SPARouter.prototype.showMuteUserModal = function(userId, userName) {

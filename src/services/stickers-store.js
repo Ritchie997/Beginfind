@@ -454,7 +454,7 @@ async function deletePack(packId) {
   await run('DELETE FROM sticker_collab_requests WHERE pack_id = ?', [packId]);
   await run('DELETE FROM sticker_pack_coauthors WHERE pack_id = ?', [packId]);
   await run('DELETE FROM sticker_packs WHERE id = ?', [packId]);
-  fs.rm(packDir(packId), { recursive: true, force: true }, () => {}); // не критично, если папки уже нет
+  await fs.promises.rm(packDir(packId), { recursive: true, force: true });
   return true;
 }
 
@@ -694,6 +694,15 @@ async function cancelCollab(userId, requestId) {
   await discardCollabStickers(requestId);
   await run('DELETE FROM sticker_collab_requests WHERE id = ?', [requestId]);
   return true;
+}
+
+async function deleteCollabsByProposer(userId) {
+  const requests = await all('SELECT id FROM sticker_collab_requests WHERE proposer_id = ?', [userId]);
+  for (const request of requests) {
+    await discardCollabStickers(request.id);
+    await run('DELETE FROM sticker_collab_requests WHERE id = ?', [request.id]);
+  }
+  return requests.length;
 }
 
 // Довешивает на заявки название набора/slug и стикеры (первые previewLimit —
@@ -971,6 +980,7 @@ module.exports = {
   stageCollabSticker,
   removeCollabSticker,
   submitCollab,
+  deleteCollabsByProposer,
   cancelCollab,
   listIncomingCollabs,
   countIncomingCollabs,

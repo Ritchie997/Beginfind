@@ -453,6 +453,22 @@ function deleteArticle(slug) {
   return true;
 }
 
+function permanentlyDeleteArticle(slug) {
+  if (!isSafeSlug(slug)) return false;
+  const filePath = articlePath(slug);
+  if (!fs.existsSync(filePath)) return false;
+
+  fs.unlinkSync(filePath);
+  if (fs.existsSync(TRASH_DIR)) {
+    fs.readdirSync(TRASH_DIR)
+      .filter((name) => name.startsWith(`${slug}.`) && name.endsWith(FILE_EXT))
+      .forEach((name) => fs.unlinkSync(path.join(TRASH_DIR, name)));
+  }
+  invalidateCache();
+  rewriteMentions((link) => (link.slug === slug ? DELETED_MENTION_TEXT : null));
+  return true;
+}
+
 /**
  * Переименовывает статью: меняет заголовок и slug (а значит — и имя файла),
  * и обновляет wiki-ссылки на неё во всех остальных статьях (внутри
@@ -780,6 +796,7 @@ module.exports = {
   importArticle,
   updateArticle,
   deleteArticle,
+  permanentlyDeleteArticle,
   renameArticle,
   searchArticles,
   filterArticles,

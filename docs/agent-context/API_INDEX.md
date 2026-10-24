@@ -69,6 +69,8 @@
 - `DELETE /admin-roles/:id`
 - `PUT /users/:id/role-manager`
 - `PUT /users/:id/role`
+- `DELETE /users/:id`
+- `POST /users/:id/transfer-content`
 - `PUT /users/:id/rename`
 - `PUT /users/:id/block`
 - `PUT /users/:id/unblock`

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const auth = require('../middleware/auth');
 const avatars = require('../services/avatars');
+const userDeletion = require('../services/user-deletion');
 const { uploadAvatar } = require('../uploads/multer-config');
 const { readSettings } = require('../services/system-settings');
 const { getServersForUser } = require('../services/server-system-logic');
@@ -335,6 +336,70 @@ router.put('/users/:id/role', auth.authenticateToken, auth.checkApproved, auth.c
     const result = await auth.assignUserRole(req.user, id, roleId || null);
     res.json({ message: roleId ? 'Роль назначена' : 'Роль снята', ...result });
   } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE /api/users/:id — удалить аккаунт. Доступно только владельцу; тип
+// очистки выбирается явно на экране управления пользователями.
+router.delete('/users/:id', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const target = await auth.getUserById(req.params.id);
+    if (target.is_root) return res.status(400).json({ error: 'Удалить владельца нельзя' });
+    const { mode } = req.body || {};
+    if (mode !== 'keep' && mode !== 'all') {
+      return res.status(400).json({ error: 'Выберите, оставить или удалить данные пользователя' });
+    }
+
+    const users = mode === 'all' ? await auth.getAllUsers() : [];
+    const cleanup = mode === 'all'
+      ? await userDeletion.deleteAllUserData(target, req.user.id, users)
+      : null;
+    await auth.deleteUser(req.user, target.id);
+    if (mode === 'all') avatars.removeAvatar(target.id);
+    res.json({
+      deleted: true,
+      mode,
+      user: { id: target.id, username: target.username, display_name: target.display_name },
+      cleanup
+    });
+  } catch (error) {
+    console.error('[auth] Не удалось удалить пользователя:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// POST /api/users/:id/transfer-content — передать сохранённые статьи и
+// работы галереи после удаления аккаунта.
+router.post('/users/:id/transfer-content', auth.authenticateToken, auth.checkApproved, auth.checkRoot, async (req, res) => {
+  try {
+    const sourceId = Number(req.params.id);
+    const sourceUsername = String(req.body.sourceUsername || '').trim();
+    const sourceDisplayName = String(req.body.sourceDisplayName || '').trim();
+    const targetUsername = String(req.body.username || '').trim();
+    if (!Number.isInteger(sourceId) || sourceId <= 0 || (!sourceUsername && !sourceDisplayName) || !targetUsername) {
+      return res.status(400).json({ error: 'Укажите исходного и целевого пользователя' });
+    }
+    try {
+      await auth.getUserById(sourceId);
+      return res.status(400).json({ error: 'Сначала удалите исходный аккаунт с сохранением данных' });
+    } catch (error) {
+      if (error.message !== 'Пользователь не найден') throw error;
+    }
+
+    const users = await auth.getAllUsers();
+    const target = users.find((user) => user.username.toLowerCase() === targetUsername.toLowerCase());
+    if (!target) return res.status(404).json({ error: 'Пользователь-получатель не найден по логину' });
+    if (Number(target.id) === sourceId) return res.status(400).json({ error: 'Нельзя передать данные самому себе' });
+
+    const sourceNames = [sourceUsername];
+    if (sourceDisplayName && !users.some((user) => user.display_name === sourceDisplayName)) {
+      sourceNames.push(sourceDisplayName);
+    }
+    const result = await userDeletion.transferPreservedContent(sourceId, sourceNames, target);
+    res.json({ transferred: true, recipient: target.username, ...result });
+  } catch (error) {
+    console.error('[auth] Не удалось передать пользовательские данные:', error);
     res.status(400).json({ error: error.message });
   }
 });

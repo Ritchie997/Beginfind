@@ -642,6 +642,8 @@ function removeImageFiles(img) {
 }
 
 async function deleteWork(workId) {
+  const images = await all('SELECT * FROM gallery_images WHERE work_id = ?', [workId]);
+  images.forEach(removeImageFiles);
   await run('DELETE FROM gallery_images WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_pages WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_associations WHERE work_id = ? OR related_id = ?', [workId, workId]);
@@ -649,7 +651,16 @@ async function deleteWork(workId) {
   await run('DELETE FROM gallery_views WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_comments WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_works WHERE id = ?', [workId]);
-  fs.rm(path.join(GALLERY_DIR, String(workId)), { recursive: true, force: true }, () => {});
+  await fs.promises.rm(path.join(GALLERY_DIR, String(workId)), { recursive: true, force: true });
+}
+
+async function transferWorksByAuthor(sourceUserId, targetUserId, targetName) {
+  const rows = await all('SELECT id FROM gallery_works WHERE author_id = ?', [sourceUserId]);
+  for (const row of rows) {
+    await run('UPDATE gallery_works SET author_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [targetUserId, row.id]);
+    await syncSearchText(row.id, targetName);
+  }
+  return rows.length;
 }
 
 // ===== Загрузка страниц =====
@@ -812,6 +823,7 @@ module.exports = {
   createWork,
   updateWork,
   deleteWork,
+  transferWorksByAuthor,
   addImages,
   getPage,
   removeImageFiles,

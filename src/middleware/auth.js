@@ -920,7 +920,6 @@ async function setRoleManager(userId, enabled) {
 async function assignUserRole(actingUser, userId, roleId) {
   requirePermission(actingUser, 'manage_admin_roles');
   const target = await assertCanManage(actingUser, userId);
-  if (target.status !== 'approved') throw new Error('Роль можно выдать только подтверждённому пользователю');
 
   if (!roleId) {
     return new Promise((resolve, reject) => {
@@ -930,6 +929,8 @@ async function assignUserRole(actingUser, userId, roleId) {
       });
     });
   }
+
+  if (target.status !== 'approved') throw new Error('Роль можно выдать только подтверждённому пользователю');
 
   const role = await new Promise((resolve, reject) => {
     db.get('SELECT * FROM admin_roles WHERE id = ?', [roleId], (err, row) => (err ? reject(err) : resolve(row)));
@@ -944,6 +945,20 @@ async function assignUserRole(actingUser, userId, roleId) {
     db.run('UPDATE users SET admin_role_id = ?, admin_level = ? WHERE id = ?', [role.id, role.level, userId], function (err) {
       if (err) reject(err);
       else resolve({ success: true, userId, admin_role_id: role.id, role_name: role.name, admin_level: role.level });
+    });
+  });
+}
+
+async function deleteUser(actingUser, userId) {
+  if (!actingUser.is_root) throw new Error('Удалять пользователей может только владелец');
+  const target = await assertCanManage(actingUser, userId);
+  if (target.is_root) throw new Error('Удалить владельца нельзя');
+
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM users WHERE id = ? AND is_root = 0', [userId], function (err) {
+      if (err) reject(err);
+      else if (!this.changes) reject(new Error('Пользователь не найден'));
+      else resolve({ success: true, userId });
     });
   });
 }
@@ -1155,6 +1170,7 @@ module.exports = {
   deleteRole,
   setRoleManager,
   assignUserRole,
+  deleteUser,
   renameUser,
   blockUser,
   unblockUser,

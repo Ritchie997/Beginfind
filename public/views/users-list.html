@@ -157,6 +157,45 @@
   </div>
 </div>
 
+<!-- Модальное окно: удалить пользователя -->
+<div id="delete-user-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="delete-user-modal-title">Удалить пользователя?</h3>
+      <button type="button" class="modal-close" id="delete-user-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="delete-user-choice">
+        <p>Выберите, что сделать с данными пользователя. Удаление аккаунта нельзя отменить.</p>
+        <label class="form-label">
+          <input type="radio" name="delete-user-mode" value="keep" checked>
+          Удалить только аккаунт, сохранить материалы и вложения
+        </label>
+        <label class="form-label">
+          <input type="radio" name="delete-user-mode" value="all">
+          Удалить аккаунт и все связанные данные, включая статьи, галерею и сообщения
+        </label>
+      </div>
+      <div id="delete-user-success" hidden>
+        <p id="delete-user-result"></p>
+        <div id="delete-user-transfer" hidden>
+          <p>Можно передать сохранённые статьи и работы галереи другому пользователю.</p>
+          <label class="form-label" for="delete-user-transfer-login">Логин получателя</label>
+          <input id="delete-user-transfer-login" class="form-input" autocomplete="off">
+          <button id="delete-user-transfer-btn" type="button" class="btn btn-primary">Передать данные</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" id="delete-user-choice-actions">
+      <button id="delete-user-cancel-btn" class="btn btn-secondary">Отмена</button>
+      <button id="delete-user-confirm-btn" class="btn btn-danger">Удалить</button>
+    </div>
+    <div class="modal-footer" id="delete-user-success-actions" hidden>
+      <button id="delete-user-done-btn" class="btn btn-secondary">Готово</button>
+    </div>
+  </div>
+</div>
+
 <!-- Модальное окно: создать/редактировать роль -->
 <div id="role-editor-modal" class="modal-overlay" style="display: none;">
   <div class="modal-box">
