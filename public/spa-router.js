@@ -3974,7 +3974,7 @@ class SPARouter {
   }
 
   // Edit article functionality
-  async editArticle(articleId) {
+  async editArticle(articleId, { fallbackToView = false } = {}) {
     try {
       const result = await apiClient.getArticle(articleId);
       if (!result.success) {
@@ -3986,6 +3986,7 @@ class SPARouter {
       // Иерархия: нижестоящий не правит статьи вышестоящих (сервер всё равно
       // вернёт 403 на сохранение — см. canEditArticle в articles.routes.js).
       if (article.can_edit === false) {
+        if (fallbackToView) return this.openAntropediaArticle(article.slug || articleId);
         showMessage('Недостаточно прав для редактирования этой статьи: автор выше вас по иерархии', 'error');
         return;
       }

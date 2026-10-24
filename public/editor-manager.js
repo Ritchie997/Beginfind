@@ -2985,7 +2985,7 @@
 
     navigateToWikiLink(slug, exists) {
       if (!window.spaRouter) return;
-      if (exists) { window.spaRouter.editArticle(slug); return; }
+      if (exists) { window.spaRouter.editArticle(slug, { fallbackToView: true }); return; }
       const article = this.articlesIndex.find(a => a.slug === slug);
       const title = article ? article.title : slug;
       if (confirm(`Статьи «${title}» ещё нет. Создать новую?`)) {
