@@ -1705,14 +1705,15 @@
     var engagement = document.createElement('div');
     engagement.className = 'engage-group';
     [
-      ['far fa-heart', article.likesCount, 'Лайки'],
-      ['far fa-comment', article.commentsCount, 'Комментарии']
+      ['far fa-heart', article.likesCount, 'Лайки', 'likes'],
+      ['far fa-comment', article.commentsCount, 'Комментарии', 'comments']
     ].forEach(function (entry) {
       var item = document.createElement('span');
-      item.className = 'engage-item';
+      var isLiked = entry[3] === 'likes' && !!article.liked;
+      item.className = 'engage-item' + (isLiked ? ' is-like active' : '');
       item.title = entry[2];
       var icon = document.createElement('i');
-      icon.className = entry[0];
+      icon.className = isLiked ? 'fas fa-heart' : entry[0];
       icon.setAttribute('aria-hidden', 'true');
       var count = document.createElement('span');
       count.textContent = formatCount(entry[1]);
@@ -1835,7 +1836,28 @@
           setError(articlesRoot, 'Пока нет открытых статей для показа.');
           return;
         }
-        result.data.forEach(function (article) {
+        var token = window.authManager && window.authManager.getToken();
+        var articles = result.data;
+        if (token) {
+          articles = await Promise.all(result.data.map(async function (article) {
+            try {
+              var response = await fetch('/api/articles/' + encodeURIComponent(article.slug) + '/likes', {
+                headers: { Authorization: 'Bearer ' + token },
+                signal: controller.signal
+              });
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              var likes = await response.json();
+              return Object.assign({}, article, { liked: !!likes.liked });
+            } catch (error) {
+              if (error.name !== 'AbortError') {
+                console.warn('Не удалось загрузить состояние лайка статьи:', article.slug, error);
+              }
+              return Object.assign({}, article, { liked: false });
+            }
+          }));
+        }
+        if (!mounted) return;
+        articles.forEach(function (article) {
           articlesRoot.appendChild(createHomeArticleCard(article));
         });
       } catch (error) {
