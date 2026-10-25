@@ -55,7 +55,7 @@
 
 <main class="site-main">
   <section class="site-section gallery-section">
-    <div class="gallery-page" id="galleryPage">
+    <div class="gallery-page" id="galleryPage" data-gallery-surface="public">
       <div class="antropedia-toolbar gallery-toolbar">
         <div class="antropedia-toolbar-row antropedia-toolbar-row-main">
           <h2 class="antropedia-heading"><i class="fas fa-images"></i> Работы сообщества</h2>
@@ -80,6 +80,29 @@
         </div>
       </div>
 
+      <section id="galleryFolderSection" class="gallery-folder-section" hidden>
+        <div class="gallery-folder-header">
+          <nav id="galleryFolderBreadcrumb" class="gallery-folder-breadcrumb" aria-label="Путь по папкам"></nav>
+          <div class="gallery-folder-actions">
+            <div class="gallery-folder-tools">
+              <button type="button" id="galleryFolderToolsToggle" class="gallery-folder-tools-toggle" aria-label="Действия с папками" title="Действия с папками" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+              <div id="galleryFolderToolsMenu" class="gallery-folder-tools-menu" role="menu" hidden>
+                <button type="button" id="galleryFolderCreate" role="menuitem"><i class="fas fa-folder-plus"></i> Создать папку</button>
+                <button type="button" id="galleryToggleSelect" role="menuitem"><i class="far fa-check-square"></i> Выбрать работы</button>
+              </div>
+            </div>
+            <div id="gallerySelectionActions" class="gallery-selection-actions" hidden>
+              <span id="gallerySelectionCount"></span>
+              <button type="button" id="gallerySelectAll" class="btn btn-secondary">Выбрать все</button>
+              <button type="button" id="galleryMoveSelected" class="btn btn-secondary"><i class="fas fa-folder"></i> В папку</button>
+              <button type="button" id="galleryCancelSelect" class="btn btn-secondary">Отмена</button>
+            </div>
+          </div>
+        </div>
+        <div id="galleryFolderMoveMenu" class="gallery-folder-move-menu" role="menu" hidden></div>
+      </section>
+
+      <input type="file" id="galleryFolderUploadInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
       <div id="galleryGrid" class="gallery-grid" aria-live="polite"></div>
       <div id="galleryEmpty" class="antropedia-empty gallery-empty" hidden>
         <i class="fas fa-images" aria-hidden="true"></i>
@@ -87,6 +110,22 @@
       </div>
       <div id="galleryLoadingMore" class="antropedia-loading-more" hidden><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Загружаем работы…</div>
       <div id="gallerySentinel" class="antropedia-sentinel" aria-hidden="true"></div>
+      <div id="galleryFolderNameModal" class="modal-overlay gallery-folder-name-modal" hidden>
+        <form class="modal-box gallery-folder-name-box" role="dialog" aria-modal="true" aria-labelledby="galleryFolderNameTitle">
+          <div class="modal-header">
+            <h3 id="galleryFolderNameTitle">Новая папка</h3>
+            <button type="button" class="modal-close" data-folder-name-cancel aria-label="Закрыть">&times;</button>
+          </div>
+          <div class="modal-body">
+            <label for="galleryFolderNameInput">Название папки</label>
+            <input id="galleryFolderNameInput" class="form-input" type="text" maxlength="100" autocomplete="off">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-folder-name-cancel>Отмена</button>
+            <button type="submit" class="btn btn-primary" data-folder-name-submit>Создать</button>
+          </div>
+        </form>
+      </div>
     </div>
   </section>
 </main>

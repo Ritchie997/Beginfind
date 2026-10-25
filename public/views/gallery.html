@@ -30,8 +30,13 @@
     <div class="gallery-folder-header">
       <nav id="galleryFolderBreadcrumb" class="gallery-folder-breadcrumb" aria-label="Путь по папкам"></nav>
       <div class="gallery-folder-actions">
-        <button type="button" id="galleryFolderCreate" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Новая папка</button>
-        <button type="button" id="galleryToggleSelect" class="btn btn-secondary"><i class="far fa-check-square"></i> Выбрать</button>
+        <div class="gallery-folder-tools">
+          <button type="button" id="galleryFolderToolsToggle" class="gallery-folder-tools-toggle" aria-label="Действия с папками" title="Действия с папками" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+          <div id="galleryFolderToolsMenu" class="gallery-folder-tools-menu" role="menu" hidden>
+            <button type="button" id="galleryFolderCreate" role="menuitem"><i class="fas fa-folder-plus"></i> Создать папку</button>
+            <button type="button" id="galleryToggleSelect" role="menuitem"><i class="far fa-check-square"></i> Выбрать работы</button>
+          </div>
+        </div>
         <div id="gallerySelectionActions" class="gallery-selection-actions" hidden>
           <span id="gallerySelectionCount"></span>
           <button type="button" id="gallerySelectAll" class="btn btn-secondary">Выбрать все</button>
@@ -40,7 +45,6 @@
         </div>
       </div>
     </div>
-    <div id="galleryFolderGrid" class="gallery-folder-grid"></div>
     <div id="galleryFolderMoveMenu" class="gallery-folder-move-menu" role="menu" hidden></div>
   </section>
 

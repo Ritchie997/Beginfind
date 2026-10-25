@@ -78,6 +78,61 @@
 .gallery-folder-breadcrumb button:hover { color: var(--text-normal); }
 .gallery-folder-breadcrumb span { color: var(--text-muted); }
 .gallery-folder-actions .btn { white-space: nowrap; }
+.gallery-folder-tools { position: relative; }
+.gallery-folder-tools-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.gallery-folder-tools-toggle:hover,
+.gallery-folder-tools-toggle[aria-expanded="true"] {
+  border-color: var(--blurple);
+  color: var(--text-normal);
+}
+.gallery-folder-tools-menu {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 5px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--background-accent);
+  border-radius: 10px;
+  background: var(--background-floating, var(--background-secondary));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+.gallery-folder-tools-menu[hidden] { display: none; }
+.gallery-folder-tools-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-normal);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gallery-folder-tools-menu > button:hover,
+.gallery-folder-tools-menu > button:focus-visible {
+  background: var(--background-tertiary);
+  outline: none;
+}
 .gallery-selection-actions {
   display: flex;
   align-items: center;
@@ -111,16 +166,12 @@
   border-color: var(--blurple) !important;
   color: var(--blurple) !important;
 }
-.gallery-folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(247px, 100%), 1fr));
-  gap: 18px 14px;
-}
 .gallery-folder-card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  width: 100%;
   min-width: 0;
 }
 .gallery-folder-open {

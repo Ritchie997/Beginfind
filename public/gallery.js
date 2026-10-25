@@ -740,6 +740,7 @@
       this._loadSeq = 0;
       this.columnCount = 0;
       this.folderTree = [];
+      this.visibleFolders = [];
       this.activeFolderId = null;
       this.selectMode = false;
       this.selectedWorkIds = new Set();
@@ -761,9 +762,9 @@
       this.loadingEl = document.getElementById('galleryLoadingMore');
       this.sentinelEl = document.getElementById('gallerySentinel');
       this.folderSectionEl = document.getElementById('galleryFolderSection');
-      this.folderGridEl = document.getElementById('galleryFolderGrid');
       this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
       this.folderMoveMenuEl = document.getElementById('galleryFolderMoveMenu');
+      this.folderToolsMenuEl = document.getElementById('galleryFolderToolsMenu');
       this.selectionActionsEl = document.getElementById('gallerySelectionActions');
       this.folderNameModalEl = document.getElementById('galleryFolderNameModal');
       this.folderNameFormEl = this.folderNameModalEl?.querySelector('form');
@@ -771,6 +772,8 @@
       this.folderNameTitleEl = document.getElementById('galleryFolderNameTitle');
       this.folderNameSubmitEl = this.folderNameFormEl?.querySelector('[data-folder-name-submit]');
       this.activeFolderId = null;
+      this.isPublicGallery = this.rootEl.dataset.gallerySurface === 'public';
+      this.canManageFolders = !this.isPublicGallery || !!window.authManager?.isAuthenticated?.();
       this.folderUploadInput = document.getElementById('galleryFolderUploadInput');
       this.folderUploading = false;
       this.activeTag = '';
@@ -810,6 +813,13 @@
         this.resetAndLoad();
       });
       document.getElementById('galleryFolderCreate')?.addEventListener('click', () => this.createFolder());
+      document.getElementById('galleryFolderToolsToggle')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleFolderToolsMenu();
+      });
+      this.folderToolsMenuEl?.addEventListener('click', (e) => {
+        if (e.target.closest('#galleryFolderCreate, #galleryToggleSelect')) this.closeFolderToolsMenu();
+      });
       this.folderNameFormEl?.addEventListener('submit', (e) => {
         e.preventDefault();
         const name = this.folderNameInputEl?.value.trim() || '';
@@ -837,23 +847,6 @@
       document.getElementById('galleryMoveSelected')?.addEventListener('click', (e) => {
         if (this.selectedWorkIds.size) this.openFolderMoveMenu(e.currentTarget, { workIds: [...this.selectedWorkIds] });
       });
-      this.folderGridEl?.addEventListener('click', (e) => {
-        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
-        if (!folder) return;
-        const trigger = e.target.closest('[data-folder-menu-trigger]');
-        if (trigger) {
-          e.stopPropagation();
-          this.toggleCardActionsMenu(folder, trigger);
-          return;
-        }
-        const action = e.target.closest('[data-folder-menu-action]');
-        if (action) {
-          e.stopPropagation();
-          this.handleFolderMenuAction(folder.dataset.folderId, action.dataset.folderMenuAction, action);
-          return;
-        }
-        if (e.target.closest('.gallery-folder-open')) this.openFolder(folder.dataset.folderId);
-      });
       this.folderBreadcrumbEl?.addEventListener('click', (e) => {
         if (e.target.closest('#galleryFolderRename')) { this.renameCurrentFolder(); return; }
         if (e.target.closest('#galleryFolderMove')) {
@@ -880,6 +873,23 @@
         else if (moveState?.workIds?.length) this.moveWorksToFolder(moveState.workIds, folderId);
       });
       this.gridEl.addEventListener('click', (e) => {
+        const folderCard = e.target.closest('.gallery-folder-card[data-folder-id]');
+        if (folderCard) {
+          const folderTrigger = e.target.closest('[data-folder-menu-trigger]');
+          if (folderTrigger) {
+            e.stopPropagation();
+            this.toggleCardActionsMenu(folderCard, folderTrigger);
+            return;
+          }
+          const folderAction = e.target.closest('[data-folder-menu-action]');
+          if (folderAction) {
+            e.stopPropagation();
+            this.handleFolderMenuAction(folderCard.dataset.folderId, folderAction.dataset.folderMenuAction, folderAction);
+            return;
+          }
+          if (e.target.closest('.gallery-folder-open')) this.openFolder(folderCard.dataset.folderId);
+          return;
+        }
         const menuTrigger = e.target.closest('[data-work-menu-trigger]');
         if (menuTrigger) {
           e.stopPropagation();
@@ -907,6 +917,12 @@
         window.galleryViewer.openWork(card.dataset.workId);
       });
       this.gridEl.addEventListener('keydown', (e) => {
+        const folderButton = e.target.closest('.gallery-folder-open');
+        if (folderButton && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          this.openFolder(folderButton.closest('.gallery-folder-card')?.dataset.folderId);
+          return;
+        }
         const card = e.target.closest('[data-work-id]');
         if (!card || e.target.closest('[data-select-work]')) return;
         if (e.key === 'Enter' || e.key === ' ') {
@@ -916,6 +932,18 @@
         }
       });
       this.gridEl.addEventListener('dragstart', (e) => {
+        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
+        if (folder) {
+          if (e.target.closest('[data-folder-menu-trigger], [data-folder-menu-action]')) {
+            e.preventDefault();
+            return;
+          }
+          this.dragging = { folderId: folder.dataset.folderId };
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', folder.dataset.folderId);
+          folder.classList.add('is-dragging');
+          return;
+        }
         const card = e.target.closest('.gallery-card[data-work-id]');
         if (!card || e.target.closest('[data-work-menu-trigger], [data-work-menu-action], [data-select-work]') ||
             this.selectMode || card.dataset.draggable !== 'true') {
@@ -926,17 +954,6 @@
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', card.dataset.workId);
         card.classList.add('is-dragging');
-      });
-      this.folderGridEl?.addEventListener('dragstart', (e) => {
-        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
-        if (!folder || e.target.closest('[data-folder-menu-trigger], [data-folder-menu-action]')) {
-          e.preventDefault();
-          return;
-        }
-        this.dragging = { folderId: folder.dataset.folderId };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', folder.dataset.folderId);
-        folder.classList.add('is-dragging');
       });
       this.rootEl.addEventListener('dragend', () => {
         this.rootEl.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) => el.classList.remove('is-dragging', 'is-drop-target'));
@@ -972,6 +989,7 @@
         else if (drag.workId) this.moveWorksToFolder([drag.workId], folderId);
       });
       this.rootEl.addEventListener('click', (e) => {
+        if (!e.target.closest('#galleryFolderToolsMenu, #galleryFolderToolsToggle')) this.closeFolderToolsMenu();
         if (!e.target.closest('.gallery-card-actions-menu, [data-work-menu-trigger], [data-folder-menu-trigger]')) {
           this.closeCardActionsMenus();
         }
@@ -981,6 +999,12 @@
       });
       this.rootEl.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
+        if (this.folderToolsMenuEl && !this.folderToolsMenuEl.hidden) {
+          e.preventDefault();
+          this.closeFolderToolsMenu();
+          document.getElementById('galleryFolderToolsToggle')?.focus();
+          return;
+        }
         const openMenu = this.rootEl.querySelector('.gallery-card-actions-menu:not([hidden])');
         if (!openMenu) return;
         e.preventDefault();
@@ -1000,7 +1024,8 @@
       if (this.sentinelEl) this._observer.observe(this.sentinelEl);
 
       this.loadTags();
-      await this.loadFolders();
+      if (this.canManageFolders) await this.loadFolders();
+      else if (this.folderSectionEl) this.folderSectionEl.hidden = true;
       await this.resetAndLoad();
     }
 
@@ -1009,6 +1034,7 @@
       if (this._resizeHandler) { window.removeEventListener('resize', this._resizeHandler); this._resizeHandler = null; }
       clearTimeout(this._searchDebounce);
       this.closeFolderMoveMenu();
+      this.closeFolderToolsMenu();
       this.setSelectMode(false);
       this.finishFolderNameDialog(null);
       this._loadSeq++;
@@ -1044,6 +1070,10 @@
     }
 
     async loadFolders() {
+      if (!this.canManageFolders) {
+        if (this.folderSectionEl) this.folderSectionEl.hidden = true;
+        return false;
+      }
       try {
         const result = await window.apiClient.getGalleryFolders();
         if (!result.success || !Array.isArray(result.data)) {
@@ -1095,7 +1125,7 @@
     }
 
     renderFolders() {
-      if (!this.folderSectionEl || !this.folderGridEl) return;
+      if (!this.folderSectionEl) return;
       const current = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
       if (this.activeFolderId && !current) this.activeFolderId = null;
       const active = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
@@ -1106,7 +1136,7 @@
         parent = parent.parentId ? this.findFolder(parent.parentId) : null;
       }
       this.folderBreadcrumbEl.innerHTML = [
-        '<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">Галерея</button>',
+        `<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">${this.isPublicGallery ? 'Мои папки' : 'Галерея'}</button>`,
         ...breadcrumb.slice(0, -1).map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`),
         ...(active ? [
           '<span aria-hidden="true">/</span>',
@@ -1119,32 +1149,7 @@
       const children = active
         ? (active.children || [])
         : this.folderTree;
-      this.folderGridEl.innerHTML = children.map((folder) => {
-        const previewImages = Array.isArray(folder.preview)
-          ? folder.preview.filter((image) => typeof image?.url === 'string' && image.url.trim())
-          : [];
-        const previewMarkup = previewImages.length
-          ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
-          : '<i class="fas fa-folder"></i>';
-        return `
-          <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="true">
-            <button type="button" class="gallery-folder-open" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
-              <span class="gallery-folder-preview" aria-hidden="true">
-                ${previewMarkup}
-              </span>
-              <span class="gallery-folder-card-info">
-                <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
-                <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
-              </span>
-            </button>
-            <button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
-            <div class="gallery-card-actions-menu" role="menu" hidden>
-              <button type="button" role="menuitem" data-folder-menu-action="rename"><i class="fas fa-pen"></i> Переименовать</button>
-              <button type="button" role="menuitem" data-folder-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
-              <button type="button" role="menuitem" data-folder-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
-            </div>
-          </div>`;
-      }).join('');
+      this.visibleFolders = children;
       if (this.mineBtn) {
         this.mineBtn.disabled = !!active;
         this.mineBtn.classList.toggle('active', !!active || this.mine);
@@ -1155,6 +1160,32 @@
       }
       this.folderSectionEl.hidden = false;
       this.updateSelectionUi();
+      if (this.items.length) this.layout();
+    }
+
+    folderCardHtml(folder) {
+      const previewImages = Array.isArray(folder.preview)
+        ? folder.preview.filter((image) => typeof image?.url === 'string' && image.url.trim())
+        : [];
+      const previewMarkup = previewImages.length
+        ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
+        : '<i class="fas fa-folder"></i>';
+      return `
+        <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="true">
+          <button type="button" class="gallery-folder-open" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
+            <span class="gallery-folder-preview" aria-hidden="true">${previewMarkup}</span>
+            <span class="gallery-folder-card-info">
+              <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+              <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
+            </span>
+          </button>
+          <button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+          <div class="gallery-card-actions-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-folder-menu-action="rename"><i class="fas fa-pen"></i> Переименовать</button>
+            <button type="button" role="menuitem" data-folder-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
+            <button type="button" role="menuitem" data-folder-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
+          </div>
+        </div>`;
     }
 
     async openFolder(id) {
@@ -1165,6 +1196,7 @@
     }
 
     async createFolder(workIds = null) {
+      if (!this.canManageFolders) return;
       const name = await this.openFolderNameDialog({
         title: this.activeFolderId ? 'Новая подпапка' : 'Новая папка',
         submitLabel: 'Создать'
@@ -1208,6 +1240,22 @@
       const resolve = this.folderNameDialogResolve;
       this.folderNameDialogResolve = null;
       resolve?.(value);
+    }
+
+    toggleFolderToolsMenu() {
+      const menu = this.folderToolsMenuEl;
+      const trigger = document.getElementById('galleryFolderToolsToggle');
+      if (!menu || !trigger) return;
+      const open = menu.hidden;
+      this.closeFolderToolsMenu();
+      menu.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) menu.querySelector('button:not([hidden])')?.focus();
+    }
+
+    closeFolderToolsMenu() {
+      if (this.folderToolsMenuEl) this.folderToolsMenuEl.hidden = true;
+      document.getElementById('galleryFolderToolsToggle')?.setAttribute('aria-expanded', 'false');
     }
 
     toggleCardActionsMenu(card, trigger) {
@@ -1437,8 +1485,8 @@
       if (toggle) {
         toggle.classList.toggle('active', this.selectMode);
         toggle.innerHTML = this.selectMode
-          ? '<i class="fas fa-times"></i> Отмена'
-          : '<i class="far fa-check-square"></i> Выбрать';
+          ? '<i class="fas fa-times"></i> Отменить выбор'
+          : '<i class="far fa-check-square"></i> Выбрать работы';
       }
       if (this.selectionActionsEl) this.selectionActionsEl.hidden = !this.selectMode;
       const count = document.getElementById('gallerySelectionCount');
@@ -1548,7 +1596,9 @@
         sort: this.sortEl ? this.sortEl.value : 'newest',
         tag: this.activeTag,
         author: this.activeFolderId && me ? me.id : (this.mine && me ? me.id : ''),
-        folder: this.activeFolderId || 'root'
+        ...((this.activeFolderId || !this.isPublicGallery)
+          ? { folder: this.activeFolderId || 'root' }
+          : {})
       };
     }
 
@@ -1560,7 +1610,7 @@
       this.hasMore = true;
       this.loading = false;
       this.items = [];
-      this.layout();
+      this.layout(false);
       await this.loadMore();
     }
 
@@ -1575,17 +1625,23 @@
         if (!result.success) {
           showMessage(errorText(result, 'Не удалось загрузить галерею'), 'error');
           this.hasMore = false;
+          this.layout();
           return;
         }
         const data = result.data.data || [];
+        const isFirstPage = this.offset === 0;
         this.total = result.data.total || 0;
         this.offset += data.length;
         this.hasMore = this.offset < this.total && data.length > 0;
         this.items.push(...data);
-        this.appendCards(data);
+        if (isFirstPage) this.layout();
+        else this.appendCards(data);
         this.renderCount();
       } catch (e) {
-        if (seq === this._loadSeq) showMessage('Не удалось загрузить галерею', 'error');
+        if (seq === this._loadSeq) {
+          showMessage('Не удалось загрузить галерею', 'error');
+          this.layout();
+        }
       } finally {
         if (seq === this._loadSeq) {
           this.loading = false;
@@ -1602,9 +1658,9 @@
     renderCount() {
       if (this.countEl) this.countEl.textContent = this.total ? `${this.total} ${plural(this.total, 'работа', 'работы', 'работ')}` : '';
       if (this.emptyEl) {
-        const hasFolders = this.folderGridEl && this.folderGridEl.children.length > 0;
+        const hasFolders = this.visibleFolders.length > 0;
         const filtered = !!(this.searchEl?.value.trim() || this.activeTag || this.mine);
-        this.emptyEl.hidden = this.items.length > 0 || this.loading || (hasFolders && !this.activeFolderId && !filtered);
+        this.emptyEl.hidden = this.items.length > 0 || this.loading || (hasFolders && !filtered);
         const text = this.emptyEl.querySelector('p');
         if (text) {
           text.textContent = this.activeFolderId
@@ -1623,7 +1679,7 @@
       return Math.max(2, Math.min(7, Math.floor(width / 250)));
     }
 
-    layout() {
+    layout(includeFolders = true) {
       if (!this.gridEl) return;
       this.columnCount = this.computeColumnCount();
       this.gridEl.innerHTML = '';
@@ -1636,21 +1692,48 @@
         this.columns.push(col);
         this.columnHeights.push(0);
       }
-      this.appendCards(this.items);
+      this.appendCards(this.items, includeFolders ? this.visibleFolders : []);
       this.renderCount();
     }
 
-    appendCards(items) {
+    appendCards(items, folders = []) {
       if (!this.columns || !this.columns.length) return;
-      items.forEach((work) => {
-        const c = work.cover;
-        const ratio = c && c.width && c.height ? c.height / c.width : 1.25;
-        const userId = window.authManager?.getCurrentUser?.()?.id;
-        const isOwned = String(work.author_id) === String(userId);
+      const entries = [];
+      let nextFolder = 0;
+      const folderInterval = folders.length
+        ? Math.max(1, Math.floor(PAGE_SIZE / (folders.length + 1)))
+        : Infinity;
+      items.forEach((work, index) => {
+        entries.push({ type: 'work', work });
+        if ((index + 1) % folderInterval === 0 && nextFolder < folders.length) {
+          entries.push({ type: 'folder', folder: folders[nextFolder++] });
+        }
+      });
+      while (nextFolder < folders.length) entries.push({ type: 'folder', folder: folders[nextFolder++] });
+
+      const shortestColumn = () => {
         let target = 0;
         for (let i = 1; i < this.columnHeights.length; i++) {
           if (this.columnHeights[i] < this.columnHeights[target] - 0.01) target = i;
         }
+        return target;
+      };
+      entries.forEach((entry) => {
+        if (entry.type === 'folder') {
+          const wrap = document.createElement('div');
+          wrap.innerHTML = this.folderCardHtml(entry.folder);
+          const card = wrap.firstElementChild;
+          const target = shortestColumn();
+          this.columns[target].appendChild(card);
+          this.columnHeights[target] += 1.05;
+          return;
+        }
+        const work = entry.work;
+        const c = work.cover;
+        const ratio = c && c.width && c.height ? c.height / c.width : 1.25;
+        const userId = window.authManager?.getCurrentUser?.()?.id;
+        const isOwned = String(work.author_id) === String(userId);
+        const target = shortestColumn();
         const wrap = document.createElement('div');
         wrap.innerHTML = cardHtml(work, { selectable: isOwned });
         const card = wrap.firstElementChild;

@@ -77,6 +77,27 @@
     getGalleryTags() {
       return request('/api/gallery/tags', 'GET');
     },
+    getGalleryFolders() {
+      return request('/api/gallery/folders', 'GET');
+    },
+    createGalleryFolder(name, parentId = null) {
+      return request('/api/gallery/folders', 'POST', { name, parentId });
+    },
+    renameGalleryFolder(id, name) {
+      return request(`/api/gallery/folders/${encodeURIComponent(id)}`, 'PUT', { name });
+    },
+    moveGalleryFolder(id, parentId) {
+      return request(`/api/gallery/folders/${encodeURIComponent(id)}`, 'PATCH', { parentId });
+    },
+    deleteGalleryFolder(id) {
+      return request(`/api/gallery/folders/${encodeURIComponent(id)}`, 'DELETE');
+    },
+    setGalleryWorkFolder(workId, folderId) {
+      return request(`/api/gallery/works/${encodeURIComponent(workId)}/folder`, 'PUT', { folderId });
+    },
+    setGalleryWorksFolder(workIds, folderId) {
+      return request('/api/gallery/works/move-to-folder', 'POST', { workIds, folderId });
+    },
     getGalleryWorksForArticle(slug) {
       return request(`/api/gallery/by-article/${encodeURIComponent(slug)}`, 'GET');
     },
