@@ -282,13 +282,10 @@ function resolvePublicArticleLayers(article) {
   const layers = getEffectiveLayers(article);
   if (!layers.length) return null;
 
-  const hasRestrictedLayers = layers.some((layer) =>
-    layer.lockedNoRoles || (Array.isArray(layer.roles) && layer.roles.length > 0)
-  );
+  const hasRestrictedLayers = layers.some((layer) => isRestrictedLayer(layer));
   const accessible = [];
   layers.forEach((layer, index) => {
-    const hasRoles = Array.isArray(layer.roles) && layer.roles.length > 0;
-    if (layer.lockedNoRoles || hasRoles) return;
+    if (isRestrictedLayer(layer)) return;
     if (hasRestrictedLayers && layer.public !== true) return;
     accessible.push(index);
   });
@@ -339,11 +336,15 @@ async function canCreateLayerWithRoles(article, user, roles) {
  * скорее всего, просто забыли настроить, а не намеренно оставили дырой.
  * @returns {object|null} первый такой слой или null, если всё однозначно.
  */
+function isRestrictedLayer(layer) {
+  return !!(layer && (layer.lockedNoRoles || (Array.isArray(layer.roles) && layer.roles.length > 0)));
+}
+
 function findAmbiguousPublicLayer(layers) {
   if (!Array.isArray(layers) || layers.length < 2) return null;
-  const hasRestricted = layers.some((l) => l && Array.isArray(l.roles) && l.roles.length > 0);
+  const hasRestricted = layers.some((layer) => isRestrictedLayer(layer));
   if (!hasRestricted) return null;
-  return layers.find((l) => l && (!Array.isArray(l.roles) || l.roles.length === 0) && l.public !== true) || null;
+  return layers.find((layer) => layer && !isRestrictedLayer(layer) && layer.public !== true) || null;
 }
 
 // === Слияние слоёв при PUT /articles/:id ===
