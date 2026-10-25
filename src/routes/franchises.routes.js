@@ -275,11 +275,14 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
     const franchiseId = Number(req.params.id);
     if (!Number.isInteger(franchiseId) || franchiseId < 1) return res.status(404).json({ error: 'Франшиза не найдена' });
     const franchise = await dbGet(`
-      SELECT s.id, s.name, s.description, s.is_published, s.created_at, s.updated_at,
+      SELECT s.id, s.owner_id, s.name, s.description, s.is_published, s.created_at, s.updated_at,
              (SELECT COUNT(*) FROM user_server_memberships m WHERE m.server_id = s.id) AS member_count
       FROM servers s WHERE s.id = ?
     `, [franchiseId]);
     if (!franchise) return res.status(404).json({ error: 'Франшиза не найдена' });
+    const isOwner = !!req.user && Number(franchise.owner_id) === Number(req.user.id);
+    const publicFranchise = { ...franchise };
+    delete publicFranchise.owner_id;
     const canManage = await canManageFranchise(req.user, franchiseId);
     if (!franchise.is_published && !canManage) return res.status(404).json({ error: 'Франшиза не найдена' });
 
@@ -325,10 +328,11 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
       };
     }));
     res.json({
-      franchise,
+      franchise: publicFranchise,
       hubs,
       posts: resPosts,
       is_member: member,
+      is_owner: isOwner,
       can_manage: canManage
     });
   } catch (error) {

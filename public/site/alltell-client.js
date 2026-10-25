@@ -411,7 +411,7 @@
           : 'Запись датируется автоматически и появится в ленте после подтверждения создателем франшизы.'}</p>
         <div class="alltell-post-form-actions">
           <button class="btn btn-primary" type="submit">${post ? 'Сохранить' : (canManage ? 'Опубликовать' : 'Отправить на подтверждение')}</button>
-          ${post ? '<button class="btn btn-secondary" type="button" data-action="cancel-edit">Отмена</button>' : ''}
+          <button class="btn btn-secondary" type="button" data-action="${post ? 'cancel-edit' : 'cancel-post-form'}">Закрыть</button>
         </div>
       </form>`;
   }
@@ -421,49 +421,62 @@
     var franchise = data.franchise;
     var member = data.is_member;
     var canManage = data.can_manage;
+    var isOwner = data.is_owner;
     var currentUser = window.authManager && window.authManager.getUser();
     var userId = currentUser && currentUser.id;
     var hubMap = new Map(data.hubs.map(function (hub) { return [String(hub.id), hub]; }));
     var posts = data.posts.filter(function (post) { return post.approval_status === 'published'; });
     var suggestions = data.posts.filter(function (post) { return post.approval_status !== 'published'; });
     root.innerHTML = `
-      <a class="alltell-back-link" href="/alltell?view=catalog"><i class="fas fa-arrow-left" aria-hidden="true"></i> К каталогу</a>
-      ${state.error ? `<div class="alltell-state alltell-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
-      <header class="alltell-detail-header">
-        <div class="alltell-live-avatar alltell-detail-avatar">${escapeHtml(initials(franchise.name))}</div>
-        <div class="alltell-detail-heading">
-          <h2>${escapeHtml(franchise.name)}</h2>
-          <p>${escapeHtml(franchise.description || 'Описание пока не добавлено.')}</p>
-          <span><i class="fas fa-user-group" aria-hidden="true"></i> ${Number(franchise.member_count || 0)} участников</span>
-        </div>
-        ${member ? '<span class="alltell-member-label"><i class="fas fa-check" aria-hidden="true"></i> Вы участник</span>' :
-          `<button class="btn btn-primary" type="button" data-action="${token() ? 'join' : 'login'}">${token() ? 'Вступить во франшизу' : 'Войти, чтобы вступить'}</button>`}
-      </header>
-      <section class="alltell-live-section">
-        <div class="alltell-live-section-heading"><h2><i class="fas fa-layer-group" aria-hidden="true"></i> Хабы</h2><span>${data.hubs.length} направлений</span></div>
-        ${data.hubs.length ? `<div class="alltell-hub-grid">${data.hubs.map(function (hub) {
-          return `<article class="alltell-hub-card">
-            <div class="alltell-hub-heading"><h3>${escapeHtml(hub.name)}</h3><span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}</span></div>
-            <p>${escapeHtml(hub.description || 'Описание пока не добавлено.')}</p>
-            <span class="alltell-hub-date">Создан ${escapeHtml(dateLabel(hub.created_at))}</span>
-          </article>`;
-        }).join('')}</div>` : '<div class="alltell-state"><p>В этой франшизе пока нет хабов.</p></div>'}
-      </section>
-      <section class="alltell-live-section alltell-feed-section">
-        <div class="alltell-live-section-heading">
-          <h2><i class="fas fa-bullhorn" aria-hidden="true"></i> Новости и события</h2>
-          <span>${posts.length} публикаций</span>
-        </div>
-        ${canManage || token() ? renderPostForm(state, data.hubs, canManage) : '<div class="alltell-state"><p><button class="btn btn-secondary" type="button" data-action="login">Войдите, чтобы предложить публикацию</button></p></div>'}
-        ${suggestions.length ? `<div class="alltell-live-section-heading"><h3>${canManage ? 'Предложения и модерация' : 'Мои предложения'}</h3><span>${canManage
-          ? suggestions.filter(function (post) { return post.approval_status === 'pending'; }).length + ' ожидают решения'
-          : suggestions.length + ' предложений'}</span></div>
-          <div class="alltell-post-list">${suggestions.map(function (post) { return renderPost(post, hubMap, canManage, null, userId, !!token(), franchise.id); }).join('')}</div>` : ''}
-        ${posts.length ? `<div class="alltell-post-list">${posts.map(function (post) {
-          var postSocial = state.postSocial[postSocialKey(franchise.id, post.id)];
-          return renderPost(post, hubMap, canManage, postSocial, userId, !!token(), franchise.id);
-        }).join('')}</div>` : `<div class="alltell-state"><p>${canManage ? 'Добавьте первую новость, объявление или событие.' : 'Публикаций пока нет.'}</p></div>`}
-      </section>
+      <div class="alltell-detail">
+        <a class="alltell-back-link" href="/alltell?view=catalog"><i class="fas fa-arrow-left" aria-hidden="true"></i> Каталог</a>
+        ${state.error ? `<div class="alltell-state alltell-error" role="alert">${escapeHtml(state.error)}</div>` : ''}
+        <header class="alltell-detail-header">
+          <div class="alltell-live-avatar alltell-detail-avatar">${escapeHtml(initials(franchise.name))}</div>
+          <div class="alltell-detail-heading">
+            <h2>${escapeHtml(franchise.name)}</h2>
+            ${franchise.description ? `<p>${escapeHtml(franchise.description)}</p>` : ''}
+            <span><i class="fas fa-user-group" aria-hidden="true"></i> ${Number(franchise.member_count || 0)} участников</span>
+          </div>
+          <div class="alltell-detail-actions">
+            ${isOwner
+              ? '<span class="alltell-member-label"><i class="fas fa-crown" aria-hidden="true"></i> Создатель</span>'
+              : (member
+                ? '<button class="btn btn-secondary btn-sm" type="button" data-action="leave">Отписаться</button>'
+                : `<button class="btn btn-primary" type="button" data-action="${token() ? 'join' : 'login'}">${token() ? 'Подписаться' : 'Войти, чтобы подписаться'}</button>`)}
+          </div>
+        </header>
+        ${data.hubs.length ? `
+          <section class="alltell-live-section alltell-detail-hubs">
+            <div class="alltell-live-section-heading"><h2><i class="fas fa-layer-group" aria-hidden="true"></i> Хабы</h2><span>${data.hubs.length}</span></div>
+            <div class="alltell-hub-grid">${data.hubs.map(function (hub) {
+              return `<article class="alltell-hub-card">
+                <div class="alltell-hub-heading"><h3>${escapeHtml(hub.name)}</h3><span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}</span></div>
+                ${hub.description ? `<p>${escapeHtml(hub.description)}</p>` : ''}
+              </article>`;
+            }).join('')}</div>
+          </section>` : ''}
+        <section class="alltell-live-section alltell-feed-section">
+          <div class="alltell-live-section-heading alltell-detail-feed-heading">
+            <div><h2><i class="fas fa-bullhorn" aria-hidden="true"></i> Лента</h2>
+              <span>${posts.length} ${posts.length === 1 ? 'публикация' : 'публикаций'}</span></div>
+            ${(canManage || token())
+              ? (state.showPostForm ? '' : `<button class="btn btn-primary btn-sm" type="button" data-action="toggle-post-form" aria-expanded="false">
+                  <i class="fas fa-plus" aria-hidden="true"></i> ${canManage ? 'Создать публикацию' : 'Предложить публикацию'}
+                </button>`)
+              : '<button class="btn btn-secondary btn-sm" type="button" data-action="login">Войти, чтобы предложить публикацию</button>'}
+          </div>
+          ${state.showPostForm && (canManage || token()) ? renderPostForm(state, data.hubs, canManage) : ''}
+          ${suggestions.length ? `<div class="alltell-live-section-heading alltell-suggestions-heading"><h3>${canManage ? 'Предложения и модерация' : 'Мои предложения'}</h3><span>${canManage
+            ? suggestions.filter(function (post) { return post.approval_status === 'pending'; }).length + ' ожидают решения'
+            : suggestions.length + ' предложений'}</span></div>
+            <div class="alltell-post-list">${suggestions.map(function (post) { return renderPost(post, hubMap, canManage, null, userId, !!token(), franchise.id); }).join('')}</div>` : ''}
+          ${posts.length ? `<div class="alltell-post-list">${posts.map(function (post) {
+            var postSocial = state.postSocial[postSocialKey(franchise.id, post.id)];
+            return renderPost(post, hubMap, canManage, postSocial, userId, !!token(), franchise.id);
+          }).join('')}</div>` : `<div class="alltell-detail-empty"><i class="fas fa-comment-dots" aria-hidden="true"></i><p>Публикаций пока нет.</p></div>`}
+        </section>
+      </div>
     `;
   }
 
@@ -481,6 +494,7 @@
       feedPosts: [],
       followedCount: 0,
       editingPost: null,
+      showPostForm: false,
       postSocial: {},
       stickerPacks: null,
       favoriteStickers: null,
@@ -959,6 +973,16 @@
       showToast('Вы вступили во франшизу');
     }
 
+    async function leaveFranchise() {
+      var user = window.authManager && window.authManager.getUser();
+      if (!user || !user.id) throw new Error('Не удалось определить пользователя. Обновите страницу и повторите попытку.');
+      var id = state.detail.franchise.id;
+      await request('/api/servers/' + encodeURIComponent(id) + '/users/' + encodeURIComponent(user.id), 'DELETE');
+      await loadDetail(id);
+      await loadMine();
+      showToast('Вы отписались от франшизы');
+    }
+
     async function savePost(form, formData) {
       var pendingImages = state.postImages.filter(function (image) { return image.file && !image.url; });
       var done = 0;
@@ -1009,6 +1033,7 @@
         state.detail.posts.unshift(post);
       }
       state.editingPost = null;
+      state.showPostForm = false;
       releasePostImages();
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
@@ -1160,17 +1185,36 @@
       } else if (action === 'join') {
         button.disabled = true;
         joinFranchise().catch(function (error) {
+          button.disabled = false;
           notifyError(error.message);
         });
+      } else if (action === 'leave') {
+        if (!window.confirm('Отписаться от этой франшизы? Вы больше не будете участником и не увидите её в своей ленте.')) return;
+        button.disabled = true;
+        leaveFranchise().catch(function (error) {
+          button.disabled = false;
+          notifyError(error.message);
+        });
+      } else if (action === 'toggle-post-form') {
+        state.showPostForm = true;
+        renderDetail(root, state);
+        root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'edit-post') {
         state.editingPost = state.detail.posts.find(function (post) {
           return String(post.id) === button.dataset.postId;
         }) || null;
+        state.showPostForm = true;
         setPostImages(state.editingPost);
         renderDetail(root, state);
         root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
+        state.showPostForm = false;
+        releasePostImages();
+        renderDetail(root, state);
+      } else if (action === 'cancel-post-form') {
+        state.editingPost = null;
+        state.showPostForm = false;
         releasePostImages();
         renderDetail(root, state);
       } else if (action === 'move-image') {

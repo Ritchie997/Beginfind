@@ -2062,13 +2062,14 @@
 .alltell-back-link,
 .alltell-post-article { color: #aeb5ff; }
 .alltell-back-link { display: inline-block; margin-bottom: 20px; font-size: 13px; }
+.alltell-detail { width: min(100%, 920px); margin: 0 auto; }
+.alltell-detail .alltell-back-link { margin-bottom: 14px; }
 .alltell-detail-header {
     display: flex;
     align-items: center;
     gap: 18px;
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 24px;
+    margin: 0;
+    padding: 22px 24px;
     border: 1px solid var(--background-accent);
     border-radius: var(--site-radius-lg);
     background: linear-gradient(120deg, rgba(88, 101, 242, .13), var(--background-secondary));
@@ -2080,6 +2081,16 @@
 .alltell-detail-heading > span,
 .alltell-member-label { color: var(--text-muted); font-size: 12px; }
 .alltell-member-label { color: #6fdb9a; white-space: nowrap; }
+.alltell-detail-actions { display: flex; align-items: center; justify-content: flex-end; }
+.alltell-detail .alltell-live-section { margin-top: 26px; }
+.alltell-detail .alltell-live-section-heading { margin-bottom: 12px; }
+.alltell-detail-feed-heading > div > span { display: inline-block; margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.alltell-detail .alltell-post-form { margin-bottom: 14px; }
+.alltell-suggestions-heading { margin-top: 20px; }
+.alltell-suggestions-heading h3 { margin: 0; color: var(--header-primary); font-size: 15px; }
+.alltell-detail-empty { padding: 22px 12px; color: var(--text-muted); text-align: center; }
+.alltell-detail-empty i { color: var(--blurple); font-size: 20px; }
+.alltell-detail-empty p { margin: 8px 0 0; font-size: 13px; }
 .alltell-hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .alltell-hub-card,
 .alltell-post-card {
@@ -2354,8 +2365,9 @@
     .alltell-detail-header { align-items: flex-start; flex-wrap: wrap; padding: 18px; }
     .alltell-feed-section { width: 100%; }
     .alltell-detail-heading { flex-basis: calc(100% - 88px); }
-    .alltell-detail-header > button,
-    .alltell-member-label { margin-left: 86px; }
+    .alltell-detail-actions { margin-left: 86px; }
+    .alltell-detail-feed-heading { align-items: stretch; }
+    .alltell-detail-feed-heading > button { align-self: flex-start; }
     .alltell-form-row { grid-template-columns: 1fr; gap: 0; }
     .alltell-post-footer { align-items: flex-start; flex-direction: column; }
 }
