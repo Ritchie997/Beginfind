@@ -69,6 +69,7 @@
     } else {
       var image = document.createElement('img');
       image.src = src;
+      image.srcset = window.avatarSrcSet(src);
       image.alt = '';
       image.onerror = function () {
         avatar.classList.remove('has-image');

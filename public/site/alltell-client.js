@@ -80,6 +80,10 @@
     return words.slice(0, 2).map(function (word) { return word.charAt(0); }).join('').toLocaleUpperCase() || '✶';
   }
 
+  function avatarSrcSet(url) {
+    return typeof window.avatarSrcSet === 'function' ? window.avatarSrcSet(url) : '';
+  }
+
   function franchiseCard(franchise, member) {
     var hubSummary = [
       franchise.active_hubs ? franchise.active_hubs + ' активных' : '',
@@ -229,7 +233,7 @@
     var own = Number(comment.userId) === Number(userId);
     var reactions = renderReactionBar(comment.reactions, 'franchise_post_comment', comment.id);
     return `<article class="alltell-comment${replies ? ' alltell-comment-top' : ''}" data-comment-id="${Number(comment.id)}">
-      <div class="alltell-comment-heading">${comment.authorAvatar ? `<img src="${escapeHtml(comment.authorAvatar)}" alt="">` : ''}<strong>${escapeHtml(comment.authorName)}</strong><time>${escapeHtml(dateLabel(comment.createdAt))}</time></div>
+      <div class="alltell-comment-heading">${comment.authorAvatar ? `<img src="${escapeHtml(comment.authorAvatar)}"${avatarSrcSet(comment.authorAvatar) ? ` srcset="${escapeHtml(avatarSrcSet(comment.authorAvatar))}"` : ''} alt="">` : ''}<strong>${escapeHtml(comment.authorName)}</strong><time>${escapeHtml(dateLabel(comment.createdAt))}</time></div>
       <div class="alltell-comment-content">${renderStickerText(comment)}</div>
       <div class="alltell-comment-actions">${reactions}
         <button type="button" class="alltell-comment-reply" data-action="reply-comment" data-comment-id="${Number(comment.id)}" data-author="${escapeHtml(comment.authorName)}"><i class="far fa-message" aria-hidden="true"></i> Ответить</button>

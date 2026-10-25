@@ -58,6 +58,14 @@
     }
   }
 
+  window.avatarSrcSet = function (value) {
+    var match = String(value || '').match(/^(\/uploads\/avatar\/[1-9][0-9]*\/)\d+\.webp(\?.*)?$/);
+    if (!match) return '';
+    return [104, 208, 312].map(function (size, index) {
+      return match[1] + size + '.webp' + (match[2] || '') + ' ' + (index + 1) + 'x';
+    }).join(', ');
+  };
+
   function updateAdminLinks(slug) {
     var destination = slug ? '/admin-panel?editArticle=' + encodeURIComponent(slug) : '/admin-panel';
     document.querySelectorAll('.site-admin-toggle').forEach(function (link) {
@@ -95,6 +103,7 @@
       if (avatarUrl) {
         var image = document.createElement('img');
         image.src = avatarUrl;
+        image.srcset = window.avatarSrcSet(avatarUrl);
         image.alt = '';
         image.onerror = function () {
           avatar.classList.remove('has-image');
@@ -541,6 +550,7 @@
           if (authorImage) {
             var avatar = document.createElement('img');
             avatar.src = authorImage;
+            avatar.srcset = window.avatarSrcSet(authorImage);
             avatar.alt = '';
             avatar.width = 28;
             avatar.height = 28;
@@ -988,6 +998,7 @@
           if (authorImage) {
             var avatar = document.createElement('img');
             avatar.src = authorImage;
+            avatar.srcset = window.avatarSrcSet(authorImage);
             avatar.alt = '';
             avatar.width = 44;
             avatar.height = 44;
@@ -1126,6 +1137,7 @@
       var img = document.createElement('img');
       img.className = solo ? 'pub-comment-sticker-solo' : 'pub-comment-sticker';
       img.src = src;
+      img.srcset = window.avatarSrcSet(src);
       img.alt = code;
       img.title = code;
       img.loading = 'lazy';

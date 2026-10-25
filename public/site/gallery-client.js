@@ -135,14 +135,23 @@
   }
 
   if (typeof window.avatarHtml !== 'function') {
+    function avatarSrcSet(url) {
+      const match = String(url || '').match(/^(\/uploads\/avatar\/[1-9][0-9]*\/)\d+\.webp(\?.*)?$/);
+      if (!match) return '';
+      return [104, 208, 312].map((size, index) =>
+        `${match[1]}${size}.webp${match[2] || ''} ${index + 1}x`
+      ).join(', ');
+    }
+
     window.avatarHtml = function ({ name, avatar } = {}, size = 32, className = '') {
       const letter = String(name || '?').trim().charAt(0).toUpperCase() || '?';
       const safeLetter = letter.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
       const safeAvatar = String(avatar || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
       const cls = `user-ava${className ? ` ${className}` : ''}`;
       const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;`;
+      const srcSet = avatarSrcSet(avatar);
       return avatar
-        ? `<span class="${cls} has-image" style="${style}" data-initial="${safeLetter}"><img src="${safeAvatar}" alt="" loading="lazy" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`
+        ? `<span class="${cls} has-image" style="${style}" data-initial="${safeLetter}"><img src="${safeAvatar}"${srcSet ? ` srcset="${srcSet}"` : ''} alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`
         : `<span class="${cls}" style="${style}">${safeLetter}</span>`;
     };
   }

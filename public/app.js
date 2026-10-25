@@ -37,14 +37,21 @@ window.showMessage = function(text, type = 'info') {
 };
 
 // ===== Аватарки пользователей =====
-// Файл лежит в /uploads/avatar/<id>.<ext>, URL приходит с сервера полем
-// avatar (у автора статьи, в профиле) или authorAvatar (у комментария).
+// Оригинал лежит в /uploads/avatar/<id>.<ext>; URL поля avatar/authorAvatar
+// указывает на высококачественную миниатюру и версии для экранов 1x/2x/3x.
 // Нет картинки или она не загрузилась — кружок с первой буквой имени.
 function avatarInitial(name) {
   return (String(name || '').trim().charAt(0) || '?').toUpperCase();
 }
 function escapeAvatarAttr(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function avatarSrcSet(url) {
+  const match = String(url || '').match(/^(\/uploads\/avatar\/[1-9][0-9]*\/)\d+\.webp(\?.*)?$/);
+  if (!match) return '';
+  return [104, 208, 312].map((size, index) =>
+    `${match[1]}${size}.webp${match[2] || ''} ${index + 1}x`
+  ).join(', ');
 }
 
 // HTML кружка-аватарки. size — px; className — доп. класс для места показа.
@@ -54,7 +61,8 @@ window.avatarHtml = function ({ name, avatar } = {}, size = 32, className = '') 
   const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;`;
   if (avatar) {
     // onerror: файл пропал — показываем букву вместо битой картинки.
-    return `<span class="${cls} has-image" style="${style}" data-initial="${letter}"><img src="${escapeAvatarAttr(avatar)}" alt="" loading="lazy" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`;
+    const srcSet = avatarSrcSet(avatar);
+    return `<span class="${cls} has-image" style="${style}" data-initial="${letter}"><img src="${escapeAvatarAttr(avatar)}"${srcSet ? ` srcset="${escapeAvatarAttr(srcSet)}"` : ''} alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('has-image');this.parentElement.textContent=this.parentElement.dataset.initial"></span>`;
   }
   return `<span class="${cls}" style="${style}">${letter}</span>`;
 };
@@ -69,6 +77,8 @@ window.applyAvatarTo = function (el, { name, avatar } = {}) {
     el.textContent = '';
     const img = document.createElement('img');
     img.src = avatar;
+    const srcSet = avatarSrcSet(avatar);
+    if (srcSet) img.srcset = srcSet;
     img.alt = '';
     img.style.backgroundColor = 'var(--background-tertiary)';
     img.onerror = () => {

@@ -9,6 +9,7 @@
 | Объект | Хранилище | Код-владелец |
 | --- | --- | --- |
 | Пользователи | `users.db` | `src/middleware/auth.js`, миграция `src/db/migrate-users-schema.js` |
+| Оригиналы аватарок | `public/uploads/avatar/<userId>.<ext>`; квадратные WebP-варианты создаются по запросу в системном временном каталоге | `src/services/avatars.js`, `/uploads/avatar/:userId/:size.webp` в `src/server.js` |
 | Сообщения | `messenger.db` | `src/db/connections.js`, `src/routes/messages.routes.js` |
 | Франшизы/серверы, публикация, хабы, членства, лента и отметки прочтения | `servers.db` | `src/db/connections.js`, `src/routes/servers.routes.js`, `src/routes/franchises.routes.js`, `src/services/server-system-logic.js`, `server-permissions.js` |
 | Документы Antropedia | `content/<slug>.json`; удалённое — `content/.trash/` | `src/services/articles-store.js`, `blocks.js` |

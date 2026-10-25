@@ -50,6 +50,7 @@ const mapsRoutes = require('./routes/maps.routes');
 const feedbackRoutes = require('./routes/feedback.routes');
 const galleryRoutes = require('./routes/gallery.routes');
 const mapTiler = require('./services/map-tiler');
+const avatars = require('./services/avatars');
 
 const app = express();
 
@@ -65,6 +66,28 @@ app.use(/\.js$/, (req, res, next) => {
 // публичную основу на /, не меняя прямой legacy-доступ к /index.html (админка).
 app.use(maintenancePageGate);
 app.use(express.static(PUBLIC_DIR, { index: false }));
+app.get('/uploads/avatar/:userId/:size.webp', async (req, res) => {
+  try {
+    const thumbnailPath = await avatars.getThumbnailPath(
+      req.params.userId,
+      Number(req.params.size),
+      req.query.v
+    );
+    res.sendFile(thumbnailPath, {
+      headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }
+    }, (sendError) => {
+      if (!sendError || res.headersSent) return;
+      console.error('[avatars] Failed to serve avatar thumbnail:', sendError);
+      res.status(sendError.statusCode || 500).json({ error: 'Не удалось загрузить аватарку' });
+    });
+  } catch (error) {
+    if (error.status === 404 || error.status === 400) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('[avatars] Failed to generate avatar thumbnail:', error);
+    res.status(500).json({ error: 'Не удалось подготовить аватарку' });
+  }
+});
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Совместимые URL SPA админки (/articles.html, /dashboard.html и т.д.).
