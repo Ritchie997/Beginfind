@@ -76,11 +76,14 @@ app.get('/uploads/avatar/:userId/:size.webp', async (req, res) => {
     res.sendFile(thumbnailPath, {
       headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }
     }, (sendError) => {
-      if (!sendError || res.headersSent) return;
+      if (!sendError || sendError.code === 'ECONNABORTED' || req.aborted || res.destroyed) return;
       console.error('[avatars] Failed to serve avatar thumbnail:', sendError);
-      res.status(sendError.statusCode || 500).json({ error: 'Не удалось загрузить аватарку' });
+      if (!res.headersSent) {
+        res.status(sendError.statusCode || 500).json({ error: 'Не удалось загрузить аватарку' });
+      }
     });
   } catch (error) {
+    if (req.aborted || res.destroyed) return;
     if (error.status === 404 || error.status === 400) {
       return res.status(error.status).json({ error: error.message });
     }
