@@ -109,6 +109,13 @@
             <span><i class="far fa-eye"></i> ${work.views || 0}</span>
           </div>`}
         </div>
+        ${selectable && !compact ? `
+          <button type="button" class="gallery-card-menu-trigger" data-work-menu-trigger aria-label="Действия с работой «${escapeHtml(work.title)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+          <div class="gallery-card-actions-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-work-menu-action="edit"><i class="fas fa-pen"></i> Изменить</button>
+            <button type="button" role="menuitem" data-work-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
+            <button type="button" role="menuitem" data-work-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
+          </div>` : ''}
         <div class="gallery-card-caption">
           <div class="gallery-card-title">${escapeHtml(work.title)}</div>
           ${compact || !work.author ? '' : `<div class="gallery-card-author">${window.avatarHtml({ name: work.author.display_name, avatar: work.author.avatar }, 18)} ${escapeHtml(work.author.display_name)}</div>`}
@@ -708,6 +715,7 @@
       }
       await this.close();
       window.galleryManager?.removeCard(work.id);
+      await window.galleryManager?.loadFolders();
       // Карточки вне страницы галереи (вкладка «Арты» в профиле, полоса под
       // статьёй) — тоже убираем.
       document.querySelectorAll(`.gallery-card[data-work-id="${work.id}"]`).forEach((el) => el.remove());
@@ -804,14 +812,20 @@
       });
       this.folderGridEl?.addEventListener('click', (e) => {
         const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
-        if (folder) this.openFolder(folder.dataset.folderId);
-      });
-      this.folderGridEl?.addEventListener('keydown', (e) => {
-        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
-        if (folder && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          this.openFolder(folder.dataset.folderId);
+        if (!folder) return;
+        const trigger = e.target.closest('[data-folder-menu-trigger]');
+        if (trigger) {
+          e.stopPropagation();
+          this.toggleCardActionsMenu(folder, trigger);
+          return;
         }
+        const action = e.target.closest('[data-folder-menu-action]');
+        if (action) {
+          e.stopPropagation();
+          this.handleFolderMenuAction(folder.dataset.folderId, action.dataset.folderMenuAction, action);
+          return;
+        }
+        if (e.target.closest('.gallery-folder-open')) this.openFolder(folder.dataset.folderId);
       });
       this.folderBreadcrumbEl?.addEventListener('click', (e) => {
         if (e.target.closest('#galleryFolderRename')) { this.renameCurrentFolder(); return; }
@@ -839,6 +853,18 @@
         else if (moveState?.workIds?.length) this.moveWorksToFolder(moveState.workIds, folderId);
       });
       this.gridEl.addEventListener('click', (e) => {
+        const menuTrigger = e.target.closest('[data-work-menu-trigger]');
+        if (menuTrigger) {
+          e.stopPropagation();
+          this.toggleCardActionsMenu(menuTrigger.closest('.gallery-card'), menuTrigger);
+          return;
+        }
+        const menuAction = e.target.closest('[data-work-menu-action]');
+        if (menuAction) {
+          e.stopPropagation();
+          this.handleWorkMenuAction(menuAction.closest('.gallery-card')?.dataset.workId, menuAction.dataset.workMenuAction, menuAction);
+          return;
+        }
         const selectButton = e.target.closest('[data-select-work]');
         if (selectButton) {
           e.stopPropagation();
@@ -864,7 +890,8 @@
       });
       this.gridEl.addEventListener('dragstart', (e) => {
         const card = e.target.closest('.gallery-card[data-work-id]');
-        if (!card || this.selectMode || card.dataset.draggable !== 'true') {
+        if (!card || e.target.closest('[data-work-menu-trigger], [data-work-menu-action], [data-select-work]') ||
+            this.selectMode || card.dataset.draggable !== 'true') {
           e.preventDefault();
           return;
         }
@@ -875,7 +902,10 @@
       });
       this.folderGridEl?.addEventListener('dragstart', (e) => {
         const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
-        if (!folder) return;
+        if (!folder || e.target.closest('[data-folder-menu-trigger], [data-folder-menu-action]')) {
+          e.preventDefault();
+          return;
+        }
         this.dragging = { folderId: folder.dataset.folderId };
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', folder.dataset.folderId);
@@ -915,9 +945,22 @@
         else if (drag.workId) this.moveWorksToFolder([drag.workId], folderId);
       });
       this.rootEl.addEventListener('click', (e) => {
+        if (!e.target.closest('.gallery-card-actions-menu, [data-work-menu-trigger], [data-folder-menu-trigger]')) {
+          this.closeCardActionsMenus();
+        }
         if (!this.folderMoveMenuEl || this.folderMoveMenuEl.hidden || e.target.closest('#galleryFolderMoveMenu')) return;
-        if (e.target.closest('#galleryMoveSelected, #galleryFolderMove')) return;
+        if (e.target.closest('#galleryMoveSelected, #galleryFolderMove, [data-work-menu-action="move"], [data-folder-menu-action="move"]')) return;
         this.closeFolderMoveMenu();
+      });
+      this.rootEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const openMenu = this.rootEl.querySelector('.gallery-card-actions-menu:not([hidden])');
+        if (!openMenu) return;
+        e.preventDefault();
+        const trigger = openMenu.closest('.gallery-card, .gallery-folder-card')
+          ?.querySelector('[data-work-menu-trigger], [data-folder-menu-trigger]');
+        this.closeCardActionsMenus();
+        trigger?.focus();
       });
 
       this._resizeHandler = () => {
@@ -1056,14 +1099,22 @@
           ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
           : '<i class="fas fa-folder"></i>';
         return `
-          <div class="gallery-folder-card" data-folder-id="${folder.id}" tabindex="0" draggable="true" role="button" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
-            <span class="gallery-folder-preview" aria-hidden="true">
-              ${previewMarkup}
-            </span>
-            <span class="gallery-folder-card-info">
-              <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
-              <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
-            </span>
+          <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="true">
+            <button type="button" class="gallery-folder-open" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
+              <span class="gallery-folder-preview" aria-hidden="true">
+                ${previewMarkup}
+              </span>
+              <span class="gallery-folder-card-info">
+                <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+                <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
+              </span>
+            </button>
+            <button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+            <div class="gallery-card-actions-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-folder-menu-action="rename"><i class="fas fa-pen"></i> Переименовать</button>
+              <button type="button" role="menuitem" data-folder-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
+              <button type="button" role="menuitem" data-folder-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
+            </div>
           </div>`;
       }).join('');
       if (this.mineBtn) {
@@ -1106,8 +1157,53 @@
       }
     }
 
+    toggleCardActionsMenu(card, trigger) {
+      if (!card || !trigger) return;
+      const menu = card.querySelector('.gallery-card-actions-menu');
+      if (!menu) return;
+      const shouldOpen = menu.hidden;
+      this.closeCardActionsMenus();
+      menu.hidden = !shouldOpen;
+      trigger.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) menu.querySelector('button')?.focus();
+    }
+
+    closeCardActionsMenus() {
+      this.rootEl?.querySelectorAll('.gallery-card-actions-menu:not([hidden])').forEach((menu) => {
+        menu.hidden = true;
+        menu.closest('.gallery-card, .gallery-folder-card')
+          ?.querySelector('[data-work-menu-trigger], [data-folder-menu-trigger]')
+          ?.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    async handleWorkMenuAction(workId, action, menuItem) {
+      const work = this.items.find((item) => String(item.id) === String(workId));
+      if (!work) return;
+      this.closeCardActionsMenus();
+      if (action === 'move') {
+        this.openFolderMoveMenu(menuItem, { workIds: [String(workId)] });
+        return;
+      }
+      const opened = await window.galleryViewer.openWork(workId);
+      if (!opened) return;
+      if (action === 'edit') await window.galleryViewer.edit();
+      else if (action === 'delete') await window.galleryViewer.remove();
+    }
+
+    handleFolderMenuAction(folderId, action, menuItem) {
+      this.closeCardActionsMenus();
+      if (action === 'rename') this.renameFolder(folderId);
+      else if (action === 'move') this.openFolderMoveMenu(menuItem, { folderId });
+      else if (action === 'delete') this.deleteFolder(folderId);
+    }
+
     async renameCurrentFolder() {
-      const folder = this.findFolder(this.activeFolderId);
+      return this.renameFolder(this.activeFolderId);
+    }
+
+    async renameFolder(folderId) {
+      const folder = this.findFolder(folderId);
       if (!folder) return;
       const name = window.prompt('Новое название папки:', folder.name);
       if (name == null || !name.trim()) return;
@@ -1126,7 +1222,11 @@
     }
 
     async deleteCurrentFolder() {
-      const folder = this.findFolder(this.activeFolderId);
+      return this.deleteFolder(this.activeFolderId);
+    }
+
+    async deleteFolder(folderId) {
+      const folder = this.findFolder(folderId);
       if (!folder) return;
       const ok = await window.confirmDialog.open({
         title: 'Удалить папку?',
@@ -1140,7 +1240,9 @@
           showMessage(errorText(result, 'Не удалось удалить папку'), 'error');
           return;
         }
-        this.activeFolderId = folder.parentId ? String(folder.parentId) : null;
+        if (String(this.activeFolderId || '') === String(folder.id)) {
+          this.activeFolderId = folder.parentId ? String(folder.parentId) : null;
+        }
         await this.loadFolders();
         await this.resetAndLoad();
         showMessage('Папка удалена', 'success');
