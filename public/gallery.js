@@ -86,7 +86,7 @@
 
   // Карточка работы — общая для сетки галереи, полосы под статьёй,
   // ассоциированных работ и пикера в редакторе.
-  function cardHtml(work, { compact = false, selectable = false } = {}) {
+  function cardHtml(work, { compact = false, selectable = false, inFolder = false } = {}) {
     const cover = work.cover;
     const ratio = cover && cover.width && cover.height ? `${cover.width} / ${cover.height}` : '4 / 5';
     const badges = [];
@@ -112,7 +112,7 @@
         ${selectable && !compact ? `
           <button type="button" class="gallery-card-menu-trigger" data-work-menu-trigger aria-label="Действия с работой «${escapeHtml(work.title)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
           <div class="gallery-card-actions-menu" role="menu" hidden>
-            <button type="button" role="menuitem" data-work-menu-action="edit"><i class="fas fa-pen"></i> Изменить</button>
+            ${inFolder ? '' : '<button type="button" role="menuitem" data-work-menu-action="edit"><i class="fas fa-pen"></i> Изменить</button>'}
             <button type="button" role="menuitem" data-work-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
             <button type="button" role="menuitem" data-work-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
           </div>` : ''}
@@ -183,6 +183,7 @@
       // же именем, если она там есть ("Ч/Б" — так всю работу в ч/б).
       this.variantChoice = new Map();
       this.preferredVariantName = null;
+      this.folderNavigation = false;
       this.el = null;
       this._histId = null;
       this._openSeq = 0;
@@ -433,7 +434,7 @@
     }
 
     isHorizontal() {
-      return !this.work || this.work.scrollMode !== 'vertical';
+      return this.folderNavigation || !this.work || this.work.scrollMode !== 'vertical';
     }
 
     currentPages() {
@@ -472,6 +473,7 @@
         return false;
       }
       const work = result.data;
+      this.folderNavigation = !!opts.folderNavigation;
       this.work = work;
       this.currentSlug = work.id;
 
@@ -521,6 +523,7 @@
       document.body.classList.remove('gallery-viewer-open');
       this.work = null;
       this.currentSlug = null;
+      this.folderNavigation = false;
       this.$('pages').innerHTML = '';
       const hist = this._histId;
       this._histId = null;
@@ -532,7 +535,7 @@
       this.$('title').textContent = w.title;
       const badges = [];
       if (w.restricted) badges.push('<span class="gallery-badge gallery-badge-inline"><i class="fas fa-lock"></i> Доступ по ролям</span>');
-      if (w.scrollMode === 'vertical') badges.push('<span class="gallery-badge gallery-badge-inline"><i class="fas fa-scroll"></i> Вертикальная лента</span>');
+      if (w.scrollMode === 'vertical' && !this.folderNavigation) badges.push('<span class="gallery-badge gallery-badge-inline"><i class="fas fa-scroll"></i> Вертикальная лента</span>');
       this.$('badges').innerHTML = badges.join('');
       this.$('author').innerHTML = `<span class="antropedia-person" data-action="open-profile" data-value="${w.author.id}" title="Открыть профиль">${window.avatarHtml({ name: w.author.display_name, avatar: w.author.avatar }, 28)} <b>${escapeHtml(w.author.display_name)}</b></span>`;
       const meta = [
@@ -553,7 +556,7 @@
         }).catch(() => { descEl.textContent = w.description; });
       }
       this.$('tags').innerHTML = (w.tags || []).map((t) => `<span class="antropedia-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('');
-      this.$('edit').hidden = !w.can_edit;
+      this.$('edit').hidden = !w.can_edit || !!w.inFolder || this.folderNavigation;
       this.$('delete').hidden = !w.can_delete;
 
       this.$('articles-wrap').hidden = !(w.articles && w.articles.length);
@@ -654,6 +657,7 @@
       this.$('counter').textContent = pages.length > 1 ? `${this.pageIndex + 1} / ${pages.length}` : '';
       this.$('prev').hidden = this.pageIndex === 0;
       this.$('next').hidden = this.pageIndex >= pages.length - 1;
+      this.syncFolderNavigation();
       this.$('strip').querySelectorAll('.gv-thumb').forEach((t, i) => t.classList.toggle('active', i === this.pageIndex));
       this.$('strip').querySelector('.gv-thumb.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
       // Соседние страницы — заранее, чтобы листание было мгновенным.
@@ -664,6 +668,10 @@
 
     step(delta, { wrap = false, animate } = {}) {
       if (!this.isHorizontal()) return;
+      if (this.folderNavigation) {
+        window.galleryManager?.navigateFolderWork(this.work?.id, delta);
+        return;
+      }
       const pages = this.currentPages();
       if (pages.length < 2) return;
       let next = this.pageIndex + delta;
@@ -672,6 +680,20 @@
         next = (next + pages.length) % pages.length;
       }
       this.showPage(next, { animate: animate || (delta > 0 ? 'next' : 'prev') });
+    }
+
+    syncFolderNavigation() {
+      if (!this.folderNavigation || !this.work) return;
+      const position = window.galleryManager?.getFolderWorkPosition(this.work.id);
+      if (!position) {
+        this.$('prev').hidden = true;
+        this.$('next').hidden = true;
+        this.$('counter').textContent = '';
+        return;
+      }
+      this.$('counter').textContent = `${position.index + 1} / ${position.total}`;
+      this.$('prev').hidden = position.index === 0;
+      this.$('next').hidden = !position.hasNext;
     }
 
     async share() {
@@ -738,6 +760,7 @@
       this._resizeHandler = null;
       this._searchDebounce = null;
       this._loadSeq = 0;
+      this._loadPromise = null;
       this.columnCount = 0;
       this.folderTree = [];
       this.visibleFolders = [];
@@ -924,7 +947,7 @@
           this.toggleWorkSelected(card.dataset.workId);
           return;
         }
-        window.galleryViewer.openWork(card.dataset.workId);
+        window.galleryViewer.openWork(card.dataset.workId, { folderNavigation: !!this.activeFolderId });
       });
       this.gridEl.addEventListener('keydown', (e) => {
         const folderButton = e.target.closest('.gallery-folder-open');
@@ -938,7 +961,7 @@
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           if (this.selectMode) this.toggleWorkSelected(card.dataset.workId);
-          else window.galleryViewer.openWork(card.dataset.workId);
+          else window.galleryViewer.openWork(card.dataset.workId, { folderNavigation: !!this.activeFolderId });
         }
       });
       this.gridEl.addEventListener('dragstart', (e) => {
@@ -1058,6 +1081,7 @@
       this.finishFolderNameDialog(null);
       this._loadSeq++;
       this.loading = false;
+      this._loadPromise = null;
     }
 
     async loadTags() {
@@ -1204,21 +1228,20 @@
       const previewMarkup = previewImages.length
         ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
         : '<i class="fas fa-folder"></i>';
-      const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+      const currentUser = window.authManager?.getCurrentUser?.();
+      const currentUserId = currentUser?.id;
       const isOwner = this.canManageFolders && Number(folder.ownerId) === Number(currentUserId);
-      const authorName = folder.author?.display_name ||
-        (Number(folder.ownerId) === Number(currentUserId)
-          ? window.authManager?.getCurrentUser?.()?.display_name
-          : '');
+      const author = folder.author || (isOwner ? {
+        display_name: currentUser.display_name || currentUser.username,
+        avatar: currentUser.avatar
+      } : null);
       return `
         <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="${isOwner ? 'true' : 'false'}">
           <button type="button" class="gallery-folder-open" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
             <span class="gallery-folder-preview" aria-hidden="true">${previewMarkup}</span>
             <span class="gallery-folder-card-info">
-              <span class="gallery-folder-title-row">
-                <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
-                ${authorName ? `<span class="gallery-folder-author">${escapeHtml(authorName)}</span>` : ''}
-              </span>
+              <span class="gallery-card-title gallery-folder-name">${escapeHtml(folder.name)}</span>
+              ${author ? `<span class="gallery-card-author">${window.avatarHtml({ name: author.display_name, avatar: author.avatar }, 18)} ${escapeHtml(author.display_name)}</span>` : ''}
               <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
             </span>
           </button>
@@ -1253,10 +1276,12 @@
         }
         await this.loadFolders();
         if (workIds && workIds.length) {
+          this.activeFolderId = String(result.data.id);
+          this.renderFolders();
           await this.moveWorksToFolder(workIds, result.data.id);
           return;
         }
-        await this.resetAndLoad();
+        await this.openFolder(result.data.id);
         showMessage('Папка создана', 'success');
       } catch (e) {
         showMessage('Не удалось создать папку', 'error');
@@ -1642,7 +1667,9 @@
         q: this.searchEl ? this.searchEl.value.trim() : '',
         sort: this.sortEl ? this.sortEl.value : 'newest',
         tag: this.activeTag,
-        author: this.activeFolderId && !this.isPublicGallery && me ? me.id : (this.mine && me ? me.id : ''),
+        author: this.activeFolderId
+          ? (!this.isPublicGallery && me ? me.id : '')
+          : (this.mine && me ? me.id : ''),
         ...((this.isPublicGallery && !this.activeFolderId)
           ? { excludeFolderedWorks: '1' }
           : {}),
@@ -1654,6 +1681,7 @@
 
     async resetAndLoad() {
       this._loadSeq++;
+      this._loadPromise = null;
       if (this.selectMode || this.selectedWorkIds.size) this.setSelectMode(false);
       this.offset = 0;
       this.total = 0;
@@ -1664,7 +1692,17 @@
       await this.loadMore();
     }
 
-    async loadMore() {
+    loadMore() {
+      if (this._loadPromise) return this._loadPromise;
+      if (!this.hasMore || !this.gridEl) return Promise.resolve();
+      const pending = this.loadMorePage().finally(() => {
+        if (this._loadPromise === pending) this._loadPromise = null;
+      });
+      this._loadPromise = pending;
+      return pending;
+    }
+
+    async loadMorePage() {
       if (this.loading || !this.hasMore || !this.gridEl) return;
       this.loading = true;
       const seq = this._loadSeq;
@@ -1679,13 +1717,11 @@
           return;
         }
         const data = result.data.data || [];
-        const isFirstPage = this.offset === 0;
         this.total = result.data.total || 0;
         this.offset += data.length;
         this.hasMore = this.offset < this.total && data.length > 0;
         this.items.push(...data);
-        if (isFirstPage) this.layout();
-        else this.appendCards(data);
+        this.layout();
         this.renderCount();
       } catch (e) {
         if (seq === this._loadSeq) {
@@ -1703,6 +1739,31 @@
           }
         }
       }
+    }
+
+    getFolderWorkPosition(workId) {
+      if (!this.activeFolderId) return null;
+      const index = this.items.findIndex((item) => String(item.id) === String(workId));
+      if (index < 0) return null;
+      return {
+        index,
+        total: this.total,
+        hasNext: index < this.items.length - 1 || this.hasMore
+      };
+    }
+
+    async navigateFolderWork(workId, delta) {
+      if (!this.activeFolderId) return false;
+      const index = this.items.findIndex((item) => String(item.id) === String(workId));
+      if (index < 0) return false;
+      let nextIndex = index + delta;
+      while (nextIndex >= this.items.length && this.hasMore) {
+        const before = this.items.length;
+        await this.loadMore();
+        if (this.items.length === before) break;
+      }
+      if (nextIndex < 0 || nextIndex >= this.items.length) return false;
+      return window.galleryViewer.openWork(this.items[nextIndex].id, { folderNavigation: true });
     }
 
     renderCount() {
@@ -1748,18 +1809,7 @@
 
     appendCards(items, folders = []) {
       if (!this.columns || !this.columns.length) return;
-      const entries = [];
-      let nextFolder = 0;
-      const folderInterval = folders.length
-        ? Math.max(1, Math.floor(PAGE_SIZE / (folders.length + 1)))
-        : Infinity;
-      items.forEach((work, index) => {
-        entries.push({ type: 'work', work });
-        if ((index + 1) % folderInterval === 0 && nextFolder < folders.length) {
-          entries.push({ type: 'folder', folder: folders[nextFolder++] });
-        }
-      });
-      while (nextFolder < folders.length) entries.push({ type: 'folder', folder: folders[nextFolder++] });
+      const entries = this.buildFeedEntries(items, folders);
 
       const shortestColumn = () => {
         let target = 0;
@@ -1785,7 +1835,7 @@
         const isOwned = String(work.author_id) === String(userId);
         const target = shortestColumn();
         const wrap = document.createElement('div');
-        wrap.innerHTML = cardHtml(work, { selectable: isOwned });
+        wrap.innerHTML = cardHtml(work, { selectable: isOwned, inFolder: !!this.activeFolderId });
         const card = wrap.firstElementChild;
         card.dataset.draggable = isOwned ? 'true' : 'false';
         card.draggable = isOwned && !this.selectMode;
@@ -1794,6 +1844,29 @@
         this.columnHeights[target] += ratio + 0.28;
       });
       this.updateSelectionUi();
+    }
+
+    buildFeedEntries(items, folders) {
+      const works = items.map((work) => ({ type: 'work', work }));
+      const orderedFolders = folders.map((folder) => ({ type: 'folder', folder }));
+      if (this.sortEl?.value !== 'newest') return [...orderedFolders, ...works];
+
+      const entries = [];
+      let workIndex = 0;
+      let folderIndex = 0;
+      const getTime = (value) => {
+        if (!value) return 0;
+        const normalized = String(value).includes('T') ? String(value) : `${String(value).replace(' ', 'T')}Z`;
+        const time = Date.parse(normalized);
+        return Number.isNaN(time) ? 0 : time;
+      };
+      while (workIndex < works.length && folderIndex < orderedFolders.length) {
+        const workTime = getTime(works[workIndex].work.created_at);
+        const folderTime = getTime(orderedFolders[folderIndex].folder.createdAt);
+        if (folderTime >= workTime) entries.push(orderedFolders[folderIndex++]);
+        else entries.push(works[workIndex++]);
+      }
+      return entries.concat(works.slice(workIndex), orderedFolders.slice(folderIndex));
     }
 
     refreshCard(work) {

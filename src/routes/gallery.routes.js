@@ -115,6 +115,22 @@ async function cardsFor(items, options) {
   return items.map((i) => workCard(i, usersMap, options));
 }
 
+async function addFolderAuthors(folders) {
+  const ownerIds = [];
+  const collectOwners = (items) => items.forEach((folder) => {
+    ownerIds.push(folder.ownerId);
+    collectOwners(folder.children || []);
+  });
+  collectOwners(folders);
+  const usersMap = await getUsersByIds(ownerIds);
+  const addAuthors = (items) => items.forEach((folder) => {
+    folder.author = authorInfo(folder.ownerId, usersMap);
+    addAuthors(folder.children || []);
+  });
+  addAuthors(folders);
+  return folders;
+}
+
 // Работа + проверка доступа одним шагом: 404, если нет, 403 — если закрыта.
 async function loadAccessibleWork(req, res) {
   const work = await gallery.getWorkRow(req.params.id);
@@ -223,6 +239,7 @@ async function fullWork(work, user) {
     views: c.views,
     created_at: work.created_at,
     updated_at: work.updated_at,
+    inFolder: !!work.folder_id,
     can_edit: canManage,
     can_delete: canManage,
     can_change_author: !!(user.is_root || user.is_role_manager)
@@ -277,6 +294,7 @@ async function publicFullWork(work) {
     views: count.views,
     created_at: work.created_at,
     updated_at: work.updated_at,
+    inFolder: !!work.folder_id,
     can_edit: false,
     can_delete: false,
     can_change_author: false
@@ -285,20 +303,7 @@ async function publicFullWork(work) {
 
 router.get('/public/gallery/folders', async (req, res) => {
   try {
-    const folders = await gallery.listPublicFolders();
-    const ownerIds = [];
-    const collectOwners = (items) => items.forEach((folder) => {
-      ownerIds.push(folder.ownerId);
-      collectOwners(folder.children || []);
-    });
-    collectOwners(folders);
-    const usersMap = await getUsersByIds(ownerIds);
-    const addAuthors = (items) => items.forEach((folder) => {
-      folder.author = authorInfo(folder.ownerId, usersMap);
-      addAuthors(folder.children || []);
-    });
-    addAuthors(folders);
-    res.json(folders);
+    res.json(await addFolderAuthors(await gallery.listPublicFolders()));
   } catch (err) {
     console.error('[gallery] public folders:', err);
     res.status(500).json({ error: err.message });
@@ -397,7 +402,7 @@ router.get('/public/gallery/works/:id/comments', async (req, res) => {
 
 router.get('/gallery/folders', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    res.json(await gallery.listFolders(req.user.id));
+    res.json(await addFolderAuthors(await gallery.listFolders(req.user.id)));
   } catch (err) {
     console.error('[gallery] list folders:', err);
     res.status(500).json({ error: err.message });

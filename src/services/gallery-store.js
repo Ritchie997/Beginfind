@@ -253,6 +253,7 @@ function buildFolderTree(rows, counts, previews) {
     ownerId: row.user_id,
     parentId: row.parent_id || null,
     name: row.name,
+    createdAt: row.created_at || null,
     imageCount: countByFolder.get(row.id) || 0,
     preview: previewsByFolder.get(row.id) || [],
     children: []
@@ -278,7 +279,7 @@ function buildFolderTree(rows, counts, previews) {
 
 async function listFolders(userId) {
   const [rows, counts, previews] = await Promise.all([
-    all('SELECT id, user_id, parent_id, name FROM gallery_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE, id', [userId]),
+    all('SELECT id, user_id, parent_id, name, created_at FROM gallery_folders WHERE user_id = ? ORDER BY created_at DESC, id DESC', [userId]),
     all(
       `SELECT wf.folder_id, COUNT(i.id) AS image_count
        FROM gallery_work_folders wf
@@ -306,7 +307,7 @@ async function listFolders(userId) {
 
 async function listPublicFolders() {
   const [folders, images] = await Promise.all([
-    all('SELECT id, user_id, parent_id, name FROM gallery_folders ORDER BY name COLLATE NOCASE, id'),
+    all('SELECT id, user_id, parent_id, name, created_at FROM gallery_folders ORDER BY created_at DESC, id DESC'),
     all(
       `SELECT wf.folder_id, i.id AS image_id, COALESCE(i.thumb_url, i.file_url) AS url
        FROM gallery_work_folders wf
@@ -390,6 +391,7 @@ async function setWorkFolder(userId, workId, folderId) {
   const folder = folderId == null ? null : await getFolder(userId, folderId);
   if (folderId != null && !folder) throw new Error('Папка не найдена');
   if (folder) {
+    await ensureFolderCompatibleWorks([work.id]);
     await run(
       'INSERT INTO gallery_work_folders (work_id, folder_id) VALUES (?, ?) ON CONFLICT(work_id) DO UPDATE SET folder_id = excluded.folder_id',
       [work.id, folder.id]
@@ -414,6 +416,7 @@ async function setWorksFolder(userId, workIds, folderId) {
     error.status = 403;
     throw error;
   }
+  if (folder) await ensureFolderCompatibleWorks(ids);
   for (const id of ids) {
     if (folder) {
       await run(
@@ -425,6 +428,20 @@ async function setWorksFolder(userId, workIds, folderId) {
     }
   }
   return ids.length;
+}
+
+async function ensureFolderCompatibleWorks(workIds) {
+  const rows = await all(
+    `SELECT w.id, COUNT(i.id) AS image_count
+     FROM gallery_works w
+     LEFT JOIN gallery_images i ON i.work_id = w.id
+     WHERE w.id IN (${placeholders(workIds)})
+     GROUP BY w.id`,
+    workIds
+  );
+  if (rows.some((row) => Number(row.image_count) !== 1)) {
+    throw new Error('В папку можно перемещать только работы с одним изображением');
+  }
 }
 
 async function deleteFoldersForUser(userId) {
@@ -785,6 +802,9 @@ async function getVariantRolesMap(workId) {
  */
 async function updateWork(workId, body, authorName, editorCtx) {
   const current = await getWorkRow(workId);
+  if (current.folder_id) {
+    throw new Error('Работы в папках нельзя изменять. Сначала переместите работу из папки.');
+  }
   const meta = cleanMeta({
     title: body.title !== undefined ? body.title : current.title,
     description: body.description !== undefined ? body.description : current.description,
@@ -955,6 +975,8 @@ async function processUploadedFile(file) {
  * @returns {Promise<object[]>} новые вариации (rowToVariant, с pageId)
  */
 async function addImages(workId, files, pageId) {
+  const folderWork = await get('SELECT folder_id FROM gallery_work_folders WHERE work_id = ?', [workId]);
+  if (folderWork) throw new Error('Нельзя добавлять изображения к работе в папке');
   const countRow = await get('SELECT COUNT(*) as count FROM gallery_images WHERE work_id = ?', [workId]);
   if ((countRow ? countRow.count : 0) + files.length > MAX_IMAGES_PER_WORK) {
     throw new Error(`В одной работе не больше ${MAX_IMAGES_PER_WORK} картинок`);
