@@ -931,10 +931,6 @@
 
       this.loadTags();
       await this.loadFolders();
-      if (workIds && workIds.length) {
-        await this.moveWorksToFolder(workIds, result.data.id);
-        return;
-      }
       await this.resetAndLoad();
     }
 
