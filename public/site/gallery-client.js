@@ -80,6 +80,9 @@
     getGalleryFolders() {
       return request('/api/gallery/folders', 'GET');
     },
+    getPublicGalleryFolders() {
+      return request('/api/public/gallery/folders', 'GET');
+    },
     createGalleryFolder(name, parentId = null) {
       return request('/api/gallery/folders', 'POST', { name, parentId });
     },

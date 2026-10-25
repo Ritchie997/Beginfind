@@ -166,6 +166,7 @@
 
 ## `gallery.routes.js`
 
+- `GET /public/gallery/folders`
 - `GET /public/gallery/works`
 - `GET /public/gallery/tags`
 - `GET /public/gallery/works/:id`

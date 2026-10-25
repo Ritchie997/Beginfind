@@ -154,11 +154,12 @@ function getUserServerRoleIdSet(userId) {
   });
 }
 
-async function getAccessContext(user) {
+async function getAccessContext(user, { publicFolderContents = false } = {}) {
   const bypass = !!(user && (user.is_root || user.is_role_manager));
   return {
     user,
     bypass,
+    publicFolderContents,
     serverRoleIds: bypass || !user ? new Set() : await getUserServerRoleIdSet(user.id)
   };
 }
@@ -178,6 +179,8 @@ function seesEverything(work, ctx) {
 
 function canViewWork(work, ctx) {
   if (!ctx) return false;
+  // Public folder membership explicitly makes the work visible to every reader.
+  if (ctx.publicFolderContents) return true;
   if (!ctx.user) return !work.roles || work.roles.length === 0;
   return seesEverything(work, ctx) || rolesMatch(work.roles, ctx);
 }
@@ -186,6 +189,7 @@ function canViewWork(work, ctx) {
 // вариации ролей нет). roles — разобранный массив или JSON-строка из БД.
 function canViewVariant(work, roles, ctx) {
   if (!canViewWork(work, ctx)) return false;
+  if (ctx.publicFolderContents) return true;
   if (seesEverything(work, ctx)) return true;
   const list = typeof roles === 'string' ? articleLayers.normalizeLayerRoles(parseJson(roles, [])) : roles;
   return rolesMatch(list, ctx);
@@ -230,40 +234,23 @@ async function getFolder(userId, folderId) {
   return get('SELECT id, user_id, parent_id, name FROM gallery_folders WHERE id = ? AND user_id = ?', [id, userId]);
 }
 
-async function listFolders(userId) {
-  const [rows, counts, previews] = await Promise.all([
-    all('SELECT id, parent_id, name FROM gallery_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE, id', [userId]),
-    all(
-      `SELECT wf.folder_id, COUNT(i.id) AS image_count
-       FROM gallery_work_folders wf
-       JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
-       JOIN gallery_works w ON w.id = wf.work_id
-       LEFT JOIN gallery_images i ON i.work_id = w.id
-       GROUP BY wf.folder_id`,
-      [userId]
-    ),
-    all(
-      `SELECT folder_id, id, url FROM (
-         SELECT wf.folder_id, i.id, COALESCE(i.thumb_url, i.file_url) AS url,
-           ROW_NUMBER() OVER (PARTITION BY wf.folder_id ORDER BY i.id DESC) AS position
-         FROM gallery_work_folders wf
-         JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
-         JOIN gallery_images i ON i.work_id = wf.work_id
-       )
-       WHERE url IS NOT NULL AND url != '' AND position <= 3
-       ORDER BY folder_id, position`,
-      [userId]
-    )
-  ]);
+async function getFolderById(folderId) {
+  const id = toId(folderId);
+  if (!id) return null;
+  return get('SELECT id, user_id, parent_id, name FROM gallery_folders WHERE id = ?', [id]);
+}
+
+function buildFolderTree(rows, counts, previews) {
   const countByFolder = new Map(counts.map((row) => [row.folder_id, row.image_count]));
   const previewsByFolder = new Map();
   previews.forEach((row) => {
     const images = previewsByFolder.get(row.folder_id) || [];
-    if (images.length < 3 && row.url) images.push({ id: row.id, url: row.url });
+    if (images.length < 3 && row.url) images.push({ id: row.image_id, url: row.url });
     previewsByFolder.set(row.folder_id, images);
   });
   const byId = new Map(rows.map((row) => [row.id, {
     id: row.id,
+    ownerId: row.user_id,
     parentId: row.parent_id || null,
     name: row.name,
     imageCount: countByFolder.get(row.id) || 0,
@@ -287,6 +274,59 @@ async function listFolders(userId) {
   };
   roots.forEach(addNestedCounts);
   return roots;
+}
+
+async function listFolders(userId) {
+  const [rows, counts, previews] = await Promise.all([
+    all('SELECT id, user_id, parent_id, name FROM gallery_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE, id', [userId]),
+    all(
+      `SELECT wf.folder_id, COUNT(i.id) AS image_count
+       FROM gallery_work_folders wf
+       JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
+       JOIN gallery_works w ON w.id = wf.work_id
+       LEFT JOIN gallery_images i ON i.work_id = w.id
+       GROUP BY wf.folder_id`,
+      [userId]
+    ),
+    all(
+      `SELECT folder_id, image_id, url FROM (
+         SELECT wf.folder_id, i.id AS image_id, COALESCE(i.thumb_url, i.file_url) AS url,
+           ROW_NUMBER() OVER (PARTITION BY wf.folder_id ORDER BY i.id DESC) AS position
+         FROM gallery_work_folders wf
+         JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
+         JOIN gallery_images i ON i.work_id = wf.work_id
+       )
+       WHERE url IS NOT NULL AND url != '' AND position <= 3
+       ORDER BY folder_id, position`,
+      [userId]
+    )
+  ]);
+  return buildFolderTree(rows, counts, previews);
+}
+
+async function listPublicFolders() {
+  const [folders, images] = await Promise.all([
+    all('SELECT id, user_id, parent_id, name FROM gallery_folders ORDER BY name COLLATE NOCASE, id'),
+    all(
+      `SELECT wf.folder_id, i.id AS image_id, COALESCE(i.thumb_url, i.file_url) AS url
+       FROM gallery_work_folders wf
+       JOIN gallery_images i ON i.work_id = wf.work_id
+       ORDER BY wf.folder_id, i.id DESC`
+    )
+  ]);
+  const countsByFolder = new Map();
+  const previewCounts = new Map();
+  const previewRows = [];
+  images.forEach((image) => {
+    countsByFolder.set(image.folder_id, (countsByFolder.get(image.folder_id) || 0) + 1);
+    const previewCount = previewCounts.get(image.folder_id) || 0;
+    if (image.url && previewCount < 3) {
+      previewRows.push(image);
+      previewCounts.set(image.folder_id, previewCount + 1);
+    }
+  });
+  const counts = [...countsByFolder].map(([folder_id, image_count]) => ({ folder_id, image_count }));
+  return buildFolderTree(folders, counts, previewRows);
 }
 
 async function createFolder(userId, parentId, name) {
@@ -559,15 +599,12 @@ const SORTS = {
  * @returns {Promise<{items:object[], total:number}>} items — строки работ
  *   (rowToWork) + cover/pagesCount/hasVariations + counts.
  */
-async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids, folderId, hideOwnFolderContents = false } = {}) {
+async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids, folderId, excludeFolderedWorks = false, publicFolderContents = false } = {}) {
   const userId = user ? user.id : null;
   const where = ['(EXISTS (SELECT 1 FROM gallery_images i WHERE i.work_id = w.id) OR w.author_id = ?)'];
   const params = [userId];
-  if (hideOwnFolderContents && userId) {
-    where.push(`NOT (w.author_id = ? AND EXISTS (
-      SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id
-    ))`);
-    params.push(userId);
+  if (excludeFolderedWorks && !toId(folderId)) {
+    where.push('NOT EXISTS (SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id)');
   }
   if (folderId === 'root') {
     where.push('NOT EXISTS (SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id)');
@@ -599,7 +636,7 @@ async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0,
      LEFT JOIN gallery_work_folders wf ON wf.work_id = w.id WHERE ${where.join(' AND ')}`,
     params
   );
-  const ctx = await getAccessContext(user);
+  const ctx = await getAccessContext(user, { publicFolderContents: !!toId(folderId) && publicFolderContents });
   const tagKey = String(tag || '').trim().replace(/^#+/, '').toLowerCase();
   let works = rows.map(rowToWork).filter((w) => canViewWork(w, ctx));
   if (tagKey) works = works.filter((w) => workTagKeys(w).includes(tagKey));
@@ -1018,7 +1055,9 @@ module.exports = {
   canAssignRoles,
   getWorkRow,
   getFolder,
+  getFolderById,
   listFolders,
+  listPublicFolders,
   createFolder,
   renameFolder,
   moveFolder,

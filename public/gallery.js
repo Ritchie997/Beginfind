@@ -765,6 +765,9 @@
       this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
       this.folderMoveMenuEl = document.getElementById('galleryFolderMoveMenu');
       this.folderToolsMenuEl = document.getElementById('galleryFolderToolsMenu');
+      this.folderToolsToggleEl = document.getElementById('galleryFolderToolsToggle');
+      this.folderCreateButtonEl = document.getElementById('galleryFolderCreate');
+      this.toggleSelectButtonEl = document.getElementById('galleryToggleSelect');
       this.selectionActionsEl = document.getElementById('gallerySelectionActions');
       this.folderNameModalEl = document.getElementById('galleryFolderNameModal');
       this.folderNameFormEl = this.folderNameModalEl?.querySelector('form');
@@ -774,13 +777,19 @@
       this.activeFolderId = null;
       this.isPublicGallery = this.rootEl.dataset.gallerySurface === 'public';
       this.canManageFolders = !this.isPublicGallery || !!window.authManager?.isAuthenticated?.();
+      if (this.isPublicGallery && !this.canManageFolders && this.folderToolsToggleEl) {
+        const tools = this.folderToolsToggleEl.closest('.gallery-folder-tools');
+        if (tools) tools.hidden = true;
+      }
       this.folderUploadInput = document.getElementById('galleryFolderUploadInput');
       this.folderUploading = false;
       this.activeTag = '';
       this.mine = false;
 
       document.getElementById('galleryUploadBtn')?.addEventListener('click', async () => {
-        if (this.activeFolderId) {
+        const activeFolder = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
+        const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+        if (activeFolder && Number(activeFolder.ownerId) === Number(currentUserId)) {
           if (!this.folderUploading) this.folderUploadInput?.click();
           return;
         }
@@ -848,6 +857,7 @@
         if (this.selectedWorkIds.size) this.openFolderMoveMenu(e.currentTarget, { workIds: [...this.selectedWorkIds] });
       });
       this.folderBreadcrumbEl?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-folder-exit]')) { this.openFolder(null); return; }
         if (e.target.closest('#galleryFolderRename')) { this.renameCurrentFolder(); return; }
         if (e.target.closest('#galleryFolderMove')) {
           if (this.activeFolderId) this.openFolderMoveMenu(e.target.closest('#galleryFolderMove'), { folderId: this.activeFolderId });
@@ -934,7 +944,10 @@
       this.gridEl.addEventListener('dragstart', (e) => {
         const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
         if (folder) {
-          if (e.target.closest('[data-folder-menu-trigger], [data-folder-menu-action]')) {
+          const folderData = this.findFolder(folder.dataset.folderId);
+          const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+          if (!this.canManageFolders || Number(folderData?.ownerId) !== Number(currentUserId) ||
+              e.target.closest('[data-folder-menu-trigger], [data-folder-menu-action]')) {
             e.preventDefault();
             return;
           }
@@ -963,6 +976,12 @@
         if (!this.dragging) return null;
         const target = event.target.closest('.gallery-folder-card[data-folder-id], [data-folder-parent]');
         if (!target) return null;
+        const targetFolderId = target.dataset.folderId || target.dataset.folderParent;
+        if (this.isPublicGallery && targetFolderId) {
+          const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+          const folder = this.findFolder(targetFolderId);
+          if (!folder || Number(folder.ownerId) !== Number(currentUserId)) return null;
+        }
         if (this.dragging.folderId && String(target.dataset.folderId || '') === String(this.dragging.folderId)) return null;
         return target;
       };
@@ -1024,7 +1043,7 @@
       if (this.sentinelEl) this._observer.observe(this.sentinelEl);
 
       this.loadTags();
-      if (this.canManageFolders) await this.loadFolders();
+      if (this.isPublicGallery || this.canManageFolders) await this.loadFolders();
       else if (this.folderSectionEl) this.folderSectionEl.hidden = true;
       await this.resetAndLoad();
     }
@@ -1070,12 +1089,14 @@
     }
 
     async loadFolders() {
-      if (!this.canManageFolders) {
+      if (!this.isPublicGallery && !this.canManageFolders) {
         if (this.folderSectionEl) this.folderSectionEl.hidden = true;
         return false;
       }
       try {
-        const result = await window.apiClient.getGalleryFolders();
+        const result = this.isPublicGallery
+          ? await window.apiClient.getPublicGalleryFolders()
+          : await window.apiClient.getGalleryFolders();
         if (!result.success || !Array.isArray(result.data)) {
           showMessage(errorText(result, 'Не удалось загрузить папки галереи'), 'error');
           return false;
@@ -1135,29 +1156,42 @@
         breadcrumb.unshift(parent);
         parent = parent.parentId ? this.findFolder(parent.parentId) : null;
       }
+      const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+      const isForeignFolder = !!(active && Number(active.ownerId) !== Number(currentUserId));
+      const activeAuthor = active?.author?.display_name || '';
       this.folderBreadcrumbEl.innerHTML = [
-        `<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">${this.isPublicGallery ? 'Мои папки' : 'Галерея'}</button>`,
+        '<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">Галерея</button>',
         ...breadcrumb.slice(0, -1).map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`),
         ...(active ? [
           '<span aria-hidden="true">/</span>',
           `<span class="gallery-folder-crumb-current">${escapeHtml(active.name)}</span>`,
-          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
-          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
-          '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
+          ...(activeAuthor ? [`<span class="gallery-folder-crumb-author">Автор: ${escapeHtml(activeAuthor)}</span>`] : []),
+          ...(isForeignFolder ? ['<button type="button" class="gallery-folder-exit" data-folder-exit><i class="fas fa-arrow-left"></i> Выйти из папки</button>'] : []),
+          ...(!isForeignFolder && this.canManageFolders ? [
+            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
+            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
+            '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
+          ] : [])
         ] : [])
       ].join('');
       const children = active
         ? (active.children || [])
         : this.folderTree;
       this.visibleFolders = children;
+      const canManageActive = !active || (this.canManageFolders && Number(active.ownerId) === Number(currentUserId));
+      if (this.folderCreateButtonEl) this.folderCreateButtonEl.hidden = !canManageActive;
+      if (this.toggleSelectButtonEl) this.toggleSelectButtonEl.hidden = !canManageActive;
       if (this.mineBtn) {
         this.mineBtn.disabled = !!active;
         this.mineBtn.classList.toggle('active', !!active || this.mine);
       }
       const uploadLabel = document.querySelector('#galleryUploadBtn .antropedia-btn-label');
+      const canUploadToActive = active && this.canManageFolders && Number(active.ownerId) === Number(currentUserId);
       if (uploadLabel && !this.folderUploading) {
-        uploadLabel.textContent = active ? 'Добавить изображения' : 'Выложить работу';
+        uploadLabel.textContent = canUploadToActive ? 'Добавить изображения' : 'Выложить работу';
       }
+      const tools = this.folderToolsToggleEl?.closest('.gallery-folder-tools');
+      if (tools && this.isPublicGallery) tools.hidden = !this.canManageFolders || !canManageActive;
       this.folderSectionEl.hidden = false;
       this.updateSelectionUi();
       if (this.items.length) this.layout();
@@ -1170,21 +1204,30 @@
       const previewMarkup = previewImages.length
         ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
         : '<i class="fas fa-folder"></i>';
+      const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+      const isOwner = this.canManageFolders && Number(folder.ownerId) === Number(currentUserId);
+      const authorName = folder.author?.display_name ||
+        (Number(folder.ownerId) === Number(currentUserId)
+          ? window.authManager?.getCurrentUser?.()?.display_name
+          : '');
       return `
-        <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="true">
+        <div class="gallery-folder-card" data-folder-id="${folder.id}" draggable="${isOwner ? 'true' : 'false'}">
           <button type="button" class="gallery-folder-open" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
             <span class="gallery-folder-preview" aria-hidden="true">${previewMarkup}</span>
             <span class="gallery-folder-card-info">
-              <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+              <span class="gallery-folder-title-row">
+                <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+                ${authorName ? `<span class="gallery-folder-author">${escapeHtml(authorName)}</span>` : ''}
+              </span>
               <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
             </span>
           </button>
-          <button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
+          ${isOwner ? `<button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
           <div class="gallery-card-actions-menu" role="menu" hidden>
             <button type="button" role="menuitem" data-folder-menu-action="rename"><i class="fas fa-pen"></i> Переименовать</button>
             <button type="button" role="menuitem" data-folder-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
             <button type="button" role="menuitem" data-folder-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
-          </div>
+          </div>` : ''}
         </div>`;
     }
 
@@ -1375,10 +1418,14 @@
         <button type="button" class="gallery-folder-move-item${String(currentFolderId) === String(id) ? ' is-current' : ''}" role="menuitem" data-action="move-to" data-folder-id="${escapeHtml(id)}" style="padding-left:${10 + depth * 16}px">
           <i class="${id ? 'fas fa-folder' : 'fas fa-home'}"></i><span>${escapeHtml(label)}</span>${String(currentFolderId) === String(id) ? '<i class="fas fa-check gallery-folder-move-check"></i>' : ''}
         </button>`;
+      const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+      const destinationFolders = this.isPublicGallery
+        ? tree.flat.filter(({ folder }) => Number(folder.ownerId) === Number(currentUserId))
+        : tree.flat;
       menu.innerHTML = `
         <div class="gallery-folder-move-title">${folderId ? 'Переместить папку в' : 'Перенести в папку'}</div>
         ${itemHtml('', folderId ? 'Верхний уровень' : 'Без папки')}
-        ${tree.flat.filter(({ folder }) => !excluded.has(String(folder.id))).map(({ folder, depth }) => itemHtml(folder.id, folder.name, depth + 1)).join('')}
+        ${destinationFolders.filter(({ folder }) => !excluded.has(String(folder.id))).map(({ folder, depth }) => itemHtml(folder.id, folder.name, depth + 1)).join('')}
         ${folderId ? '' : '<button type="button" class="gallery-folder-move-item is-new" data-action="create-folder-for-selection"><i class="fas fa-folder-plus"></i><span>Новая папка...</span></button>'}`;
       this.folderMoveState = folderId
         ? { folderId: String(folderId) }
@@ -1595,9 +1642,9 @@
         q: this.searchEl ? this.searchEl.value.trim() : '',
         sort: this.sortEl ? this.sortEl.value : 'newest',
         tag: this.activeTag,
-        author: this.activeFolderId && me ? me.id : (this.mine && me ? me.id : ''),
-        ...((this.isPublicGallery && me && !this.activeFolderId)
-          ? { hideOwnFolderContents: '1' }
+        author: this.activeFolderId && !this.isPublicGallery && me ? me.id : (this.mine && me ? me.id : ''),
+        ...((this.isPublicGallery && !this.activeFolderId)
+          ? { excludeFolderedWorks: '1' }
           : {}),
         ...((this.activeFolderId || !this.isPublicGallery)
           ? { folder: this.activeFolderId || 'root' }

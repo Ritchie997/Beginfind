@@ -88,7 +88,7 @@ async function resolveRequestedAuthor(req, currentAuthorId) {
   return { id, name: user.display_name || user.username };
 }
 
-function workCard(item, usersMap, { includeFolder = false, userId } = {}) {
+function workCard(item, usersMap, { includeFolder = false, userId, publicFolderContents = false } = {}) {
   return {
     id: item.id,
     title: item.title,
@@ -96,7 +96,7 @@ function workCard(item, usersMap, { includeFolder = false, userId } = {}) {
       ? { author_id: item.author_id, folder_id: item.folder_id }
       : {}),
     tags: item.tags,
-    restricted: item.roles.length > 0,
+    restricted: !publicFolderContents && item.roles.length > 0,
     scrollMode: item.scroll_mode,
     author: authorInfo(item.author_id, usersMap),
     cover: item.cover,
@@ -122,7 +122,7 @@ async function loadAccessibleWork(req, res) {
     res.status(404).json({ error: 'Работа не найдена' });
     return null;
   }
-  const ctx = await gallery.getAccessContext(req.user);
+  const ctx = await gallery.getAccessContext(req.user, { publicFolderContents: !!work.folder_id });
   if (!gallery.canViewWork(work, ctx)) {
     res.status(403).json({ error: 'Доступ к этой работе ограничен' });
     return null;
@@ -189,7 +189,7 @@ async function filterArticleSlugs(slugs, user) {
 async function fullWork(work, user) {
   const usersMap = await getUsersByIds([work.author_id]);
   const canManage = canManageWork(user, work.author_id, usersMap);
-  const ctx = await gallery.getAccessContext(user);
+  const ctx = await gallery.getAccessContext(user, { publicFolderContents: !!work.folder_id });
   const [pages, associatedIds, counts, serverName] = await Promise.all([
     // Только доступные читателю вариации; роли вариаций — тем, кто правит.
     gallery.getPagesForUser(work, ctx, { withRoles: canManage }),
@@ -209,10 +209,9 @@ async function fullWork(work, user) {
     scrollMode: work.scroll_mode,
     serverId: work.server_id,
     serverName,
-    // Список ролей — только тем, кто может править работу (форма правки);
-    // остальным достаточно знать, что работа закрытая.
+    // Список ролей показываем только тем, кто может править работу.
     roles: canManage ? work.roles : undefined,
-    restricted: work.roles.length > 0,
+    restricted: !work.folder_id && work.roles.length > 0,
     author: authorInfo(work.author_id, usersMap),
     pages,
     associated,
@@ -230,15 +229,15 @@ async function fullWork(work, user) {
   };
 }
 
-// Публичная витрина доступна без аккаунта, но только для открытых работ и
-// вариаций. Изменяющие действия по-прежнему используют защищённые маршруты.
+// Папки и находящиеся в них работы публичны; остальные работы остаются
+// под обычными ограничениями доступа. Изменяющие действия защищены отдельно.
 async function loadPublicWork(req, res) {
   const work = await gallery.getWorkRow(req.params.id);
   if (!work) {
     res.status(404).json({ error: 'Работа не найдена' });
     return null;
   }
-  const ctx = await gallery.getAccessContext(null);
+  const ctx = await gallery.getAccessContext(null, { publicFolderContents: !!work.folder_id });
   if (!gallery.canViewWork(work, ctx) || !(await gallery.getPagesForUser(work, ctx)).length) {
     res.status(404).json({ error: 'Работа не найдена' });
     return null;
@@ -247,7 +246,7 @@ async function loadPublicWork(req, res) {
 }
 
 async function publicFullWork(work) {
-  const ctx = await gallery.getAccessContext(null);
+  const ctx = await gallery.getAccessContext(null, { publicFolderContents: !!work.folder_id });
   const [pages, associatedIds, counts, serverName] = await Promise.all([
     gallery.getPagesForUser(work, ctx),
     gallery.getAssociatedIds(work.id),
@@ -284,17 +283,44 @@ async function publicFullWork(work) {
   };
 }
 
+router.get('/public/gallery/folders', async (req, res) => {
+  try {
+    const folders = await gallery.listPublicFolders();
+    const ownerIds = [];
+    const collectOwners = (items) => items.forEach((folder) => {
+      ownerIds.push(folder.ownerId);
+      collectOwners(folder.children || []);
+    });
+    collectOwners(folders);
+    const usersMap = await getUsersByIds(ownerIds);
+    const addAuthors = (items) => items.forEach((folder) => {
+      folder.author = authorInfo(folder.ownerId, usersMap);
+      addAuthors(folder.children || []);
+    });
+    addAuthors(folders);
+    res.json(folders);
+  } catch (err) {
+    console.error('[gallery] public folders:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/public/gallery/works', async (req, res) => {
   try {
+    const folder = req.query.folder ? await gallery.getFolderById(req.query.folder) : null;
+    if (req.query.folder && !folder) return res.status(404).json({ error: 'Папка не найдена' });
     const { items, total } = await gallery.listWorks(null, {
       q: req.query.q,
       tag: req.query.tag,
       authorId: req.query.author,
       sort: req.query.sort,
       limit: req.query.limit,
-      offset: req.query.offset
+      offset: req.query.offset,
+      folderId: folder ? folder.id : undefined,
+      excludeFolderedWorks: !folder,
+      publicFolderContents: !!folder
     });
-    res.json({ data: await cardsFor(items), total });
+    res.json({ data: await cardsFor(items, { publicFolderContents: !!folder }), total });
   } catch (err) {
     console.error('[gallery] public list:', err);
     res.status(500).json({ error: err.message });
@@ -453,7 +479,7 @@ router.get('/gallery/works', auth.authenticateToken, auth.checkApproved, async (
   try {
     let folderId = req.query.folder;
     if (folderId != null && folderId !== 'root') {
-      const folder = await gallery.getFolder(req.user.id, folderId);
+      const folder = await gallery.getFolderById(folderId);
       if (!folder) return res.status(404).json({ error: 'Папка не найдена' });
       folderId = folder.id;
     }
@@ -465,9 +491,17 @@ router.get('/gallery/works', auth.authenticateToken, auth.checkApproved, async (
       limit: req.query.limit,
       offset: req.query.offset,
       folderId,
-      hideOwnFolderContents: req.query.hideOwnFolderContents === '1'
+      excludeFolderedWorks: req.query.excludeFolderedWorks === '1',
+      publicFolderContents: !!folderId && folderId !== 'root'
     });
-    res.json({ data: await cardsFor(items, { includeFolder: true, userId: req.user.id }), total });
+    res.json({
+      data: await cardsFor(items, {
+        includeFolder: true,
+        userId: req.user.id,
+        publicFolderContents: !!folderId && folderId !== 'root'
+      }),
+      total
+    });
   } catch (err) {
     console.error('[gallery] list:', err);
     res.status(500).json({ error: err.message });
