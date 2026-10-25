@@ -464,7 +464,8 @@ router.get('/gallery/works', auth.authenticateToken, auth.checkApproved, async (
       sort: req.query.sort,
       limit: req.query.limit,
       offset: req.query.offset,
-      folderId
+      folderId,
+      hideOwnFolderContents: req.query.hideOwnFolderContents === '1'
     });
     res.json({ data: await cardsFor(items, { includeFolder: true, userId: req.user.id }), total });
   } catch (err) {

@@ -1596,6 +1596,9 @@
         sort: this.sortEl ? this.sortEl.value : 'newest',
         tag: this.activeTag,
         author: this.activeFolderId && me ? me.id : (this.mine && me ? me.id : ''),
+        ...((this.isPublicGallery && me && !this.activeFolderId)
+          ? { hideOwnFolderContents: '1' }
+          : {}),
         ...((this.activeFolderId || !this.isPublicGallery)
           ? { folder: this.activeFolderId || 'root' }
           : {})

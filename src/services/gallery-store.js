@@ -559,10 +559,16 @@ const SORTS = {
  * @returns {Promise<{items:object[], total:number}>} items — строки работ
  *   (rowToWork) + cover/pagesCount/hasVariations + counts.
  */
-async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids, folderId } = {}) {
+async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids, folderId, hideOwnFolderContents = false } = {}) {
   const userId = user ? user.id : null;
   const where = ['(EXISTS (SELECT 1 FROM gallery_images i WHERE i.work_id = w.id) OR w.author_id = ?)'];
   const params = [userId];
+  if (hideOwnFolderContents && userId) {
+    where.push(`NOT (w.author_id = ? AND EXISTS (
+      SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id
+    ))`);
+    params.push(userId);
+  }
   if (folderId === 'root') {
     where.push('NOT EXISTS (SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id)');
   } else if (toId(folderId)) {
