@@ -86,18 +86,9 @@
 
   // Карточка работы — общая для сетки галереи, полосы под статьёй,
   // ассоциированных работ и пикера в редакторе.
-  function cardHtml(work, { compact = false, folderOptions = null } = {}) {
+  function cardHtml(work, { compact = false, selectable = false } = {}) {
     const cover = work.cover;
     const ratio = cover && cover.width && cover.height ? `${cover.width} / ${cover.height}` : '4 / 5';
-    const currentUser = window.authManager?.getCurrentUser?.();
-    const folderControl = Array.isArray(folderOptions) && folderOptions.length > 0 && currentUser && String(work.author_id) === String(currentUser.id)
-      ? `<label class="gallery-card-folder-control">
-          <select class="form-select" data-folder-work="${work.id}" aria-label="Папка работы «${escapeHtml(work.title)}»">
-            <option value=""${work.folder_id ? '' : ' selected'}>Без папки</option>
-            ${folderOptions.map((folder) => `<option value="${folder.id}"${String(work.folder_id) === String(folder.id) ? ' selected' : ''}>${escapeHtml(folder.path)}</option>`).join('')}
-          </select>
-        </label>`
-      : '';
     const badges = [];
     if (work.restricted) badges.push('<span class="gallery-badge" title="Видна не всем — доступ по ролям"><i class="fas fa-lock"></i></span>');
     if (cover && (cover.animated || isAnimatedUrl(cover.url))) badges.push('<span class="gallery-badge">GIF</span>');
@@ -111,6 +102,7 @@
         <div class="gallery-card-media" style="aspect-ratio:${ratio}">
           ${media}
           ${badges.length ? `<div class="gallery-card-badges">${badges.join('')}</div>` : ''}
+          ${selectable ? `<button type="button" class="gallery-card-select" data-select-work="${work.id}" aria-label="Выбрать работу «${escapeHtml(work.title)}»"><i class="fas fa-check"></i></button>` : ''}
           ${compact ? '' : `<div class="gallery-card-foot">
             <span class="${work.liked ? 'is-liked' : ''}"><i class="${work.liked ? 'fas' : 'far'} fa-heart"></i> ${work.likes || 0}</span>
             <span><i class="far fa-comment"></i> ${work.comments || 0}</span>
@@ -121,7 +113,6 @@
           <div class="gallery-card-title">${escapeHtml(work.title)}</div>
           ${compact || !work.author ? '' : `<div class="gallery-card-author">${window.avatarHtml({ name: work.author.display_name, avatar: work.author.avatar }, 18)} ${escapeHtml(work.author.display_name)}</div>`}
         </div>
-        ${folderControl}
       </article>`;
   }
 
@@ -741,8 +732,10 @@
       this._loadSeq = 0;
       this.columnCount = 0;
       this.folderTree = [];
-      this.folderOptions = [];
       this.activeFolderId = null;
+      this.selectMode = false;
+      this.selectedWorkIds = new Set();
+      this.dragging = null;
     }
 
     async init() {
@@ -761,6 +754,8 @@
       this.folderSectionEl = document.getElementById('galleryFolderSection');
       this.folderGridEl = document.getElementById('galleryFolderGrid');
       this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
+      this.folderMoveMenuEl = document.getElementById('galleryFolderMoveMenu');
+      this.selectionActionsEl = document.getElementById('gallerySelectionActions');
       this.activeFolderId = null;
       this.folderUploadInput = document.getElementById('galleryFolderUploadInput');
       this.folderUploading = false;
@@ -801,29 +796,128 @@
         this.resetAndLoad();
       });
       document.getElementById('galleryFolderCreate')?.addEventListener('click', () => this.createFolder());
-      document.getElementById('galleryFolderRename')?.addEventListener('click', () => this.renameCurrentFolder());
-      document.getElementById('galleryFolderDelete')?.addEventListener('click', () => this.deleteCurrentFolder());
+      document.getElementById('galleryToggleSelect')?.addEventListener('click', () => this.setSelectMode(!this.selectMode));
+      document.getElementById('galleryCancelSelect')?.addEventListener('click', () => this.setSelectMode(false));
+      document.getElementById('gallerySelectAll')?.addEventListener('click', () => this.selectAllVisibleWorks());
+      document.getElementById('galleryMoveSelected')?.addEventListener('click', (e) => {
+        if (this.selectedWorkIds.size) this.openFolderMoveMenu(e.currentTarget, { workIds: [...this.selectedWorkIds] });
+      });
       this.folderGridEl?.addEventListener('click', (e) => {
-        const folder = e.target.closest('[data-folder-id]');
+        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
         if (folder) this.openFolder(folder.dataset.folderId);
       });
+      this.folderGridEl?.addEventListener('keydown', (e) => {
+        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
+        if (folder && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          this.openFolder(folder.dataset.folderId);
+        }
+      });
       this.folderBreadcrumbEl?.addEventListener('click', (e) => {
+        if (e.target.closest('#galleryFolderRename')) { this.renameCurrentFolder(); return; }
+        if (e.target.closest('#galleryFolderMove')) {
+          if (this.activeFolderId) this.openFolderMoveMenu(e.target.closest('#galleryFolderMove'), { folderId: this.activeFolderId });
+          return;
+        }
+        if (e.target.closest('#galleryFolderDelete')) { this.deleteCurrentFolder(); return; }
         const button = e.target.closest('[data-folder-parent]');
-        if (button) this.openFolder(button.dataset.folderParent === 'root' ? null : button.dataset.folderParent);
+        if (button) this.openFolder(button.dataset.folderParent || null);
+      });
+      this.folderMoveMenuEl?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="create-folder-for-selection"]')) {
+          const workIds = this.folderMoveState?.workIds || null;
+          this.closeFolderMoveMenu();
+          this.createFolder(workIds);
+          return;
+        }
+        const item = e.target.closest('[data-action="move-to"]');
+        if (!item) return;
+        const folderId = item.dataset.folderId || null;
+        const moveState = this.folderMoveState;
+        this.closeFolderMoveMenu();
+        if (moveState?.folderId) this.moveFolderToParent(moveState.folderId, folderId);
+        else if (moveState?.workIds?.length) this.moveWorksToFolder(moveState.workIds, folderId);
       });
       this.gridEl.addEventListener('click', (e) => {
-        if (e.target.closest('[data-folder-work]')) return;
+        const selectButton = e.target.closest('[data-select-work]');
+        if (selectButton) {
+          e.stopPropagation();
+          this.toggleWorkSelected(selectButton.dataset.selectWork);
+          return;
+        }
         const card = e.target.closest('[data-work-id]');
-        if (card) window.galleryViewer.openWork(card.dataset.workId);
+        if (!card) return;
+        if (this.selectMode) {
+          this.toggleWorkSelected(card.dataset.workId);
+          return;
+        }
+        window.galleryViewer.openWork(card.dataset.workId);
       });
       this.gridEl.addEventListener('keydown', (e) => {
-        if (e.target.closest('[data-folder-work]')) return;
         const card = e.target.closest('[data-work-id]');
-        if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); window.galleryViewer.openWork(card.dataset.workId); }
+        if (!card || e.target.closest('[data-select-work]')) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (this.selectMode) this.toggleWorkSelected(card.dataset.workId);
+          else window.galleryViewer.openWork(card.dataset.workId);
+        }
       });
-      this.gridEl.addEventListener('change', (e) => {
-        const select = e.target.closest('[data-folder-work]');
-        if (select) this.moveWork(select.dataset.folderWork, select.value || null);
+      this.gridEl.addEventListener('dragstart', (e) => {
+        const card = e.target.closest('.gallery-card[data-work-id]');
+        if (!card || this.selectMode || card.dataset.draggable !== 'true') {
+          e.preventDefault();
+          return;
+        }
+        this.dragging = { workId: card.dataset.workId };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.dataset.workId);
+        card.classList.add('is-dragging');
+      });
+      this.folderGridEl?.addEventListener('dragstart', (e) => {
+        const folder = e.target.closest('.gallery-folder-card[data-folder-id]');
+        if (!folder) return;
+        this.dragging = { folderId: folder.dataset.folderId };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', folder.dataset.folderId);
+        folder.classList.add('is-dragging');
+      });
+      this.rootEl.addEventListener('dragend', () => {
+        this.rootEl.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) => el.classList.remove('is-dragging', 'is-drop-target'));
+        this.dragging = null;
+      });
+      const findDropTarget = (event) => {
+        if (!this.dragging) return null;
+        const target = event.target.closest('.gallery-folder-card[data-folder-id], [data-folder-parent]');
+        if (!target) return null;
+        if (this.dragging.folderId && String(target.dataset.folderId || '') === String(this.dragging.folderId)) return null;
+        return target;
+      };
+      this.rootEl.addEventListener('dragover', (e) => {
+        const target = findDropTarget(e);
+        if (!target) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        target.classList.add('is-drop-target');
+      });
+      this.rootEl.addEventListener('dragleave', (e) => {
+        const target = findDropTarget(e);
+        if (target && !target.contains(e.relatedTarget)) target.classList.remove('is-drop-target');
+      });
+      this.rootEl.addEventListener('drop', (e) => {
+        const target = findDropTarget(e);
+        if (!target) return;
+        e.preventDefault();
+        target.classList.remove('is-drop-target');
+        const drag = this.dragging;
+        this.dragging = null;
+        const folderId = target.dataset.folderId || target.dataset.folderParent || null;
+        if (drag.folderId) this.moveFolderToParent(drag.folderId, folderId);
+        else if (drag.workId) this.moveWorksToFolder([drag.workId], folderId);
+      });
+      this.rootEl.addEventListener('click', (e) => {
+        if (!this.folderMoveMenuEl || this.folderMoveMenuEl.hidden || e.target.closest('#galleryFolderMoveMenu')) return;
+        if (e.target.closest('#galleryMoveSelected, #galleryFolderMove')) return;
+        this.closeFolderMoveMenu();
       });
 
       this._resizeHandler = () => {
@@ -837,6 +931,10 @@
 
       this.loadTags();
       await this.loadFolders();
+      if (workIds && workIds.length) {
+        await this.moveWorksToFolder(workIds, result.data.id);
+        return;
+      }
       await this.resetAndLoad();
     }
 
@@ -844,6 +942,8 @@
       if (this._observer) { this._observer.disconnect(); this._observer = null; }
       if (this._resizeHandler) { window.removeEventListener('resize', this._resizeHandler); this._resizeHandler = null; }
       clearTimeout(this._searchDebounce);
+      this.closeFolderMoveMenu();
+      this.setSelectMode(false);
       this._loadSeq++;
       this.loading = false;
     }
@@ -884,13 +984,6 @@
           return false;
         }
         this.folderTree = result.data;
-        this.folderOptions = [];
-        const flatten = (folders, parentPath) => folders.forEach((folder) => {
-          const path = parentPath ? `${parentPath} / ${folder.name}` : folder.name;
-          this.folderOptions.push({ id: folder.id, path });
-          flatten(folder.children || [], path);
-        });
-        flatten(this.folderTree, '');
         this.renderFolders();
         return true;
       } catch (e) {
@@ -908,6 +1001,32 @@
       return null;
     }
 
+    buildFolderIndex() {
+      const byId = new Map();
+      const children = new Map();
+      const flat = [];
+      const walk = (folders, parentId = null, depth = 0) => folders.forEach((folder) => {
+        const id = String(folder.id);
+        byId.set(id, folder);
+        if (!children.has(parentId || '')) children.set(parentId || '', []);
+        children.get(parentId || '').push(folder);
+        flat.push({ folder, depth });
+        walk(folder.children || [], id, depth + 1);
+      });
+      walk(this.folderTree);
+      const descendants = (folderId) => {
+        const result = new Set([String(folderId)]);
+        const addChildren = (id) => (children.get(String(id)) || []).forEach((folder) => {
+          if (result.has(String(folder.id))) return;
+          result.add(String(folder.id));
+          addChildren(folder.id);
+        });
+        addChildren(folderId);
+        return result;
+      };
+      return { byId, children, flat, descendants };
+    }
+
     renderFolders() {
       if (!this.folderSectionEl || !this.folderGridEl) return;
       const current = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
@@ -920,14 +1039,21 @@
         parent = parent.parentId ? this.findFolder(parent.parentId) : null;
       }
       this.folderBreadcrumbEl.innerHTML = [
-        '<button type="button" data-folder-parent="root">Галерея</button>',
-        ...breadcrumb.map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`)
+        '<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">Галерея</button>',
+        ...breadcrumb.slice(0, -1).map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`),
+        ...(active ? [
+          '<span aria-hidden="true">/</span>',
+          `<span class="gallery-folder-crumb-current">${escapeHtml(active.name)}</span>`,
+          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
+          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
+          '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
+        ] : [])
       ].join('');
       const children = active
         ? (active.children || [])
         : this.folderTree;
       this.folderGridEl.innerHTML = children.map((folder) => `
-        <button type="button" class="gallery-folder-card" data-folder-id="${folder.id}">
+        <div class="gallery-folder-card" data-folder-id="${folder.id}" tabindex="0" draggable="true" role="button" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
           <span class="gallery-folder-preview" aria-hidden="true">
             ${folder.preview.length
               ? folder.preview.map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
@@ -937,11 +1063,7 @@
             <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
             <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
           </span>
-        </button>`).join('');
-      const renameButton = document.getElementById('galleryFolderRename');
-      const deleteButton = document.getElementById('galleryFolderDelete');
-      if (renameButton) renameButton.hidden = !active;
-      if (deleteButton) deleteButton.hidden = !active;
+        </div>`).join('');
       if (this.mineBtn) {
         this.mineBtn.disabled = !!active;
         this.mineBtn.classList.toggle('active', !!active || this.mine);
@@ -951,15 +1073,17 @@
         uploadLabel.textContent = active ? 'Добавить изображения' : 'Выложить работу';
       }
       this.folderSectionEl.hidden = false;
+      this.updateSelectionUi();
     }
 
     async openFolder(id) {
       this.activeFolderId = id ? String(id) : null;
+      this.setSelectMode(false);
       this.renderFolders();
       await this.resetAndLoad();
     }
 
-    async createFolder() {
+    async createFolder(workIds = null) {
       const name = window.prompt(this.activeFolderId ? 'Название подпапки:' : 'Название папки:');
       if (name == null || !name.trim()) return;
       try {
@@ -969,6 +1093,10 @@
           return;
         }
         await this.loadFolders();
+        if (workIds && workIds.length) {
+          await this.moveWorksToFolder(workIds, result.data.id);
+          return;
+        }
         await this.resetAndLoad();
         showMessage('Папка создана', 'success');
       } catch (e) {
@@ -1019,20 +1147,153 @@
       }
     }
 
-    async moveWork(workId, folderId) {
+    openFolderMoveMenu(anchor, { workIds = null, folderId = null } = {}) {
+      const menu = this.folderMoveMenuEl;
+      if (!menu || (!folderId && !workIds?.length)) return;
+      const tree = this.buildFolderIndex();
+      const excluded = folderId ? tree.descendants(folderId) : new Set();
+      let currentFolderId;
+      if (folderId) {
+        currentFolderId = tree.byId.get(String(folderId))?.parentId || '';
+      } else {
+        const current = new Set((workIds || []).map((id) => {
+          const work = this.items.find((item) => String(item.id) === String(id));
+          return work?.folder_id ? String(work.folder_id) : '';
+        }));
+        if (current.size === 1) currentFolderId = [...current][0];
+      }
+      const itemHtml = (id, label, depth = 0) => `
+        <button type="button" class="gallery-folder-move-item${String(currentFolderId) === String(id) ? ' is-current' : ''}" role="menuitem" data-action="move-to" data-folder-id="${escapeHtml(id)}" style="padding-left:${10 + depth * 16}px">
+          <i class="${id ? 'fas fa-folder' : 'fas fa-home'}"></i><span>${escapeHtml(label)}</span>${String(currentFolderId) === String(id) ? '<i class="fas fa-check gallery-folder-move-check"></i>' : ''}
+        </button>`;
+      menu.innerHTML = `
+        <div class="gallery-folder-move-title">${folderId ? 'Переместить папку в' : 'Перенести в папку'}</div>
+        ${itemHtml('', folderId ? 'Верхний уровень' : 'Без папки')}
+        ${tree.flat.filter(({ folder }) => !excluded.has(String(folder.id))).map(({ folder, depth }) => itemHtml(folder.id, folder.name, depth + 1)).join('')}
+        ${folderId ? '' : '<button type="button" class="gallery-folder-move-item is-new" data-action="create-folder-for-selection"><i class="fas fa-folder-plus"></i><span>Новая папка...</span></button>'}`;
+      this.folderMoveState = folderId
+        ? { folderId: String(folderId) }
+        : { workIds: workIds.map(String) };
+      const sectionRect = this.folderSectionEl.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      menu.hidden = false;
+      menu.style.top = `${anchorRect.bottom - sectionRect.top + this.folderSectionEl.scrollTop + 4}px`;
+      menu.style.left = `${Math.max(8, Math.min(anchorRect.left - sectionRect.left, this.folderSectionEl.clientWidth - menu.offsetWidth - 8))}px`;
+      menu.querySelector('[data-action="move-to"]')?.focus();
+    }
+
+    closeFolderMoveMenu() {
+      if (this.folderMoveMenuEl) this.folderMoveMenuEl.hidden = true;
+      this.folderMoveState = null;
+    }
+
+    async moveWorksToFolder(workIds, folderId) {
       try {
-        const result = await window.apiClient.setGalleryWorkFolder(workId, folderId);
+        const result = await window.apiClient.setGalleryWorksFolder(workIds, folderId);
         if (!result.success) {
-          showMessage(errorText(result, 'Не удалось переместить работу'), 'error');
+          showMessage(errorText(result, 'Не удалось переместить работы'), 'error');
           await this.resetAndLoad();
           return;
         }
+        this.setSelectMode(false);
         await this.loadFolders();
         await this.resetAndLoad();
-        showMessage('Работа перемещена', 'success');
+        showMessage(`Перемещено работ: ${result.data.moved ?? workIds.length}`, 'success');
       } catch (e) {
-        showMessage('Не удалось переместить работу', 'error');
+        showMessage('Не удалось переместить работы', 'error');
         await this.resetAndLoad();
+      }
+    }
+
+    async moveFolderToParent(folderId, parentId) {
+      const tree = this.buildFolderIndex();
+      const folder = tree.byId.get(String(folderId));
+      if (!folder) return;
+      const target = parentId ? tree.byId.get(String(parentId)) : null;
+      if (parentId && !target) {
+        showMessage('Папка назначения не найдена', 'error');
+        return;
+      }
+      if (String(folder.parentId || '') === String(parentId || '')) return;
+      if (parentId && tree.descendants(folderId).has(String(parentId))) {
+        showMessage('Нельзя переместить папку в неё саму или во вложенную в неё папку', 'warning');
+        return;
+      }
+      try {
+        const result = await window.apiClient.moveGalleryFolder(folderId, parentId);
+        if (!result.success) {
+          showMessage(errorText(result, 'Не удалось переместить папку'), 'error');
+          return;
+        }
+        await this.loadFolders();
+        this.renderFolders();
+        showMessage(`Папка «${folder.name}» перемещена`, 'success');
+      } catch (e) {
+        showMessage('Не удалось переместить папку', 'error');
+      }
+    }
+
+    setSelectMode(on) {
+      this.selectMode = !!on;
+      this.selectedWorkIds = new Set();
+      this.updateSelectionUi();
+      if (this.gridEl) {
+        this.gridEl.classList.toggle('is-selecting', this.selectMode);
+        this.gridEl.querySelectorAll('.gallery-card[data-work-id]').forEach((card) => {
+          card.classList.remove('is-selected');
+          card.draggable = !this.selectMode && card.dataset.draggable === 'true';
+        });
+      }
+    }
+
+    toggleWorkSelected(workId) {
+      const work = this.items.find((item) => String(item.id) === String(workId));
+      const userId = window.authManager?.getCurrentUser?.()?.id;
+      if (!work || String(work.author_id) !== String(userId)) return;
+      if (this.selectedWorkIds.has(String(workId))) this.selectedWorkIds.delete(String(workId));
+      else if (this.selectedWorkIds.size < 100) this.selectedWorkIds.add(String(workId));
+      else {
+        showMessage('За один раз можно выбрать не больше 100 работ', 'warning');
+        return;
+      }
+      this.updateSelectionUi();
+    }
+
+    selectAllVisibleWorks() {
+      const userId = window.authManager?.getCurrentUser?.()?.id;
+      let omitted = 0;
+      this.items.forEach((work) => {
+        if (String(work.author_id) !== String(userId) || this.selectedWorkIds.has(String(work.id))) return;
+        if (this.selectedWorkIds.size < 100) this.selectedWorkIds.add(String(work.id));
+        else omitted++;
+      });
+      this.updateSelectionUi();
+      if (omitted) showMessage('Выбраны первые 100 загруженных работ', 'warning');
+    }
+
+    updateSelectionUi() {
+      const toggle = document.getElementById('galleryToggleSelect');
+      if (toggle) {
+        toggle.classList.toggle('active', this.selectMode);
+        toggle.innerHTML = this.selectMode
+          ? '<i class="fas fa-times"></i> Отмена'
+          : '<i class="far fa-check-square"></i> Выбрать';
+      }
+      if (this.selectionActionsEl) this.selectionActionsEl.hidden = !this.selectMode;
+      const count = document.getElementById('gallerySelectionCount');
+      if (count) count.textContent = this.selectedWorkIds.size
+        ? `Выбрано: ${this.selectedWorkIds.size}`
+        : 'Нажмите на свои работы для выбора';
+      const move = document.getElementById('galleryMoveSelected');
+      if (move) move.disabled = this.selectedWorkIds.size === 0;
+      if (this.gridEl) {
+        this.gridEl.classList.toggle('is-selecting', this.selectMode);
+        this.gridEl.querySelectorAll('.gallery-card[data-work-id]').forEach((card) => {
+          const selected = this.selectedWorkIds.has(String(card.dataset.workId));
+          card.classList.toggle('is-selected', selected);
+          const icon = card.querySelector('.gallery-card-select i');
+          if (icon) icon.className = selected ? 'fas fa-check' : 'fas fa-plus';
+        });
       }
     }
 
@@ -1132,6 +1393,7 @@
 
     async resetAndLoad() {
       this._loadSeq++;
+      if (this.selectMode || this.selectedWorkIds.size) this.setSelectMode(false);
       this.offset = 0;
       this.total = 0;
       this.hasMore = true;
@@ -1223,16 +1485,21 @@
         const c = work.cover;
         const ratio = c && c.width && c.height ? c.height / c.width : 1.25;
         const userId = window.authManager?.getCurrentUser?.()?.id;
-        const hasFolderControl = this.folderOptions.length > 0 && String(work.author_id) === String(userId);
+        const isOwned = String(work.author_id) === String(userId);
         let target = 0;
         for (let i = 1; i < this.columnHeights.length; i++) {
           if (this.columnHeights[i] < this.columnHeights[target] - 0.01) target = i;
         }
         const wrap = document.createElement('div');
-        wrap.innerHTML = cardHtml(work, { folderOptions: this.folderOptions });
-        this.columns[target].appendChild(wrap.firstElementChild);
-        this.columnHeights[target] += ratio + (hasFolderControl ? 0.52 : 0.28);
+        wrap.innerHTML = cardHtml(work, { selectable: isOwned });
+        const card = wrap.firstElementChild;
+        card.dataset.draggable = isOwned ? 'true' : 'false';
+        card.draggable = isOwned && !this.selectMode;
+        card.classList.toggle('is-selected', this.selectedWorkIds.has(String(work.id)));
+        this.columns[target].appendChild(card);
+        this.columnHeights[target] += ratio + 0.28;
       });
+      this.updateSelectionUi();
     }
 
     refreshCard(work) {

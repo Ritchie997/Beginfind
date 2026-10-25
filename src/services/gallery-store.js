@@ -310,6 +310,27 @@ async function renameFolder(userId, folderId, name) {
   return true;
 }
 
+async function moveFolder(userId, folderId, parentId) {
+  const folder = await getFolder(userId, folderId);
+  if (!folder) return false;
+  const parent = parentId == null ? null : await getFolder(userId, parentId);
+  if (parentId != null && !parent) throw new Error('Папка назначения не найдена');
+  if (parent && parent.id === folder.id) throw new Error('Нельзя переместить папку в саму себя');
+
+  let ancestor = parent;
+  while (ancestor) {
+    if (ancestor.id === folder.id) throw new Error('Нельзя переместить папку во вложенную в неё папку');
+    ancestor = ancestor.parent_id ? await getFolder(userId, ancestor.parent_id) : null;
+  }
+
+  await run('UPDATE gallery_folders SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', [
+    parent ? parent.id : null,
+    folder.id,
+    userId
+  ]);
+  return true;
+}
+
 async function deleteFolder(userId, folderId) {
   const folder = await getFolder(userId, folderId);
   if (!folder) return false;
@@ -336,6 +357,34 @@ async function setWorkFolder(userId, workId, folderId) {
   } else {
     await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [work.id]);
   }
+}
+
+async function setWorksFolder(userId, workIds, folderId) {
+  const requestedIds = Array.isArray(workIds) ? workIds : [];
+  if (requestedIds.length > 100) throw new Error('За один раз можно переместить не больше 100 работ');
+  const normalizedIds = requestedIds.map(Number);
+  if (normalizedIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Некорректный список работ');
+  const ids = [...new Set(normalizedIds)];
+  if (!ids.length) throw new Error('Выберите работы для перемещения');
+  const folder = folderId == null ? null : await getFolder(userId, folderId);
+  if (folderId != null && !folder) throw new Error('Папка не найдена');
+  const works = await all(`SELECT id, author_id FROM gallery_works WHERE id IN (${placeholders(ids)})`, ids);
+  if (works.length !== ids.length || works.some((work) => Number(work.author_id) !== Number(userId))) {
+    const error = new Error('Перемещать можно только свои работы');
+    error.status = 403;
+    throw error;
+  }
+  for (const id of ids) {
+    if (folder) {
+      await run(
+        'INSERT INTO gallery_work_folders (work_id, folder_id) VALUES (?, ?) ON CONFLICT(work_id) DO UPDATE SET folder_id = excluded.folder_id',
+        [id, folder.id]
+      );
+    } else {
+      await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [id]);
+    }
+  }
+  return ids.length;
 }
 
 async function deleteFoldersForUser(userId) {
@@ -966,9 +1015,11 @@ module.exports = {
   listFolders,
   createFolder,
   renameFolder,
+  moveFolder,
   deleteFolder,
   deleteFoldersForUser,
   setWorkFolder,
+  setWorksFolder,
   getPagesForUser,
   getVariantRolesMap,
   getCoversForWorks,

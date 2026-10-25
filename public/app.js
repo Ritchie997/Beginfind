@@ -177,7 +177,7 @@ class ApiClient {
       },
     };
 
-    if (data && (method === 'POST' || method === 'PUT')) {
+    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
       options.body = JSON.stringify(data);
     }
 
@@ -384,12 +384,20 @@ class ApiClient {
     return this.makeAuthenticatedRequest(`/api/gallery/folders/${id}`, 'PUT', { name });
   }
 
+  async moveGalleryFolder(id, parentId) {
+    return this.makeAuthenticatedRequest(`/api/gallery/folders/${id}`, 'PATCH', { parentId });
+  }
+
   async deleteGalleryFolder(id) {
     return this.makeAuthenticatedRequest(`/api/gallery/folders/${id}`, 'DELETE');
   }
 
   async setGalleryWorkFolder(workId, folderId) {
     return this.makeAuthenticatedRequest(`/api/gallery/works/${workId}/folder`, 'PUT', { folderId });
+  }
+
+  async setGalleryWorksFolder(workIds, folderId) {
+    return this.makeAuthenticatedRequest('/api/gallery/works/move-to-folder', 'POST', { workIds, folderId });
   }
 
   async getGalleryWorksForArticle(slug) {

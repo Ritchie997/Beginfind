@@ -175,8 +175,10 @@
 - `GET /gallery/folders`
 - `POST /gallery/folders`
 - `PUT /gallery/folders/:id`
+- `PATCH /gallery/folders/:id`
 - `DELETE /gallery/folders/:id`
 - `PUT /gallery/works/:id/folder`
+- `POST /gallery/works/move-to-folder`
 - `GET /gallery/works`
 - `GET /gallery/tags`
 - `GET /gallery/by-article/:slug`

@@ -397,6 +397,25 @@ router.put('/gallery/folders/:id', auth.authenticateToken, auth.checkApproved, a
   }
 });
 
+router.patch('/gallery/folders/:id', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const hasName = Object.prototype.hasOwnProperty.call(req.body, 'name');
+    const hasParentId = Object.prototype.hasOwnProperty.call(req.body, 'parentId');
+    if (!hasName && !hasParentId) throw new Error('Укажите новое название или родительскую папку');
+    if (hasName) {
+      const renamed = await gallery.renameFolder(req.user.id, req.params.id, req.body.name);
+      if (!renamed) return res.status(404).json({ error: 'Папка не найдена' });
+    }
+    if (hasParentId) {
+      const moved = await gallery.moveFolder(req.user.id, req.params.id, req.body.parentId);
+      if (!moved) return res.status(404).json({ error: 'Папка не найдена' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.delete('/gallery/folders/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const deleted = await gallery.deleteFolder(req.user.id, req.params.id);
@@ -416,6 +435,15 @@ router.put('/gallery/works/:id/folder', auth.authenticateToken, auth.checkApprov
     }
     await gallery.setWorkFolder(req.user.id, work.id, req.body.folderId ?? null);
     res.json({ success: true });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+router.post('/gallery/works/move-to-folder', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const moved = await gallery.setWorksFolder(req.user.id, req.body.workIds, req.body.folderId ?? null);
+    res.json({ success: true, moved });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }

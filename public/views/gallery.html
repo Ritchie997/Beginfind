@@ -31,11 +31,17 @@
       <nav id="galleryFolderBreadcrumb" class="gallery-folder-breadcrumb" aria-label="Путь по папкам"></nav>
       <div class="gallery-folder-actions">
         <button type="button" id="galleryFolderCreate" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Новая папка</button>
-        <button type="button" id="galleryFolderRename" class="btn btn-secondary" hidden>Переименовать</button>
-        <button type="button" id="galleryFolderDelete" class="btn btn-secondary" hidden>Удалить папку</button>
+        <button type="button" id="galleryToggleSelect" class="btn btn-secondary"><i class="far fa-check-square"></i> Выбрать</button>
+        <div id="gallerySelectionActions" class="gallery-selection-actions" hidden>
+          <span id="gallerySelectionCount"></span>
+          <button type="button" id="gallerySelectAll" class="btn btn-secondary">Выбрать все</button>
+          <button type="button" id="galleryMoveSelected" class="btn btn-secondary"><i class="fas fa-folder"></i> В папку</button>
+          <button type="button" id="galleryCancelSelect" class="btn btn-secondary">Отмена</button>
+        </div>
       </div>
     </div>
     <div id="galleryFolderGrid" class="gallery-folder-grid"></div>
+    <div id="galleryFolderMoveMenu" class="gallery-folder-move-menu" role="menu" hidden></div>
   </section>
 
   <div id="galleryGrid" class="gallery-grid"></div>
