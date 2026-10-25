@@ -250,7 +250,7 @@ async function listFolders(userId) {
          JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
          JOIN gallery_images i ON i.work_id = wf.work_id
        )
-       WHERE position <= 3
+       WHERE url IS NOT NULL AND url != '' AND position <= 3
        ORDER BY folder_id, position`,
       [userId]
     )
@@ -259,7 +259,7 @@ async function listFolders(userId) {
   const previewsByFolder = new Map();
   previews.forEach((row) => {
     const images = previewsByFolder.get(row.folder_id) || [];
-    if (images.length < 3) images.push({ id: row.id, url: row.url });
+    if (images.length < 3 && row.url) images.push({ id: row.id, url: row.url });
     previewsByFolder.set(row.folder_id, images);
   });
   const byId = new Map(rows.map((row) => [row.id, {

@@ -105,7 +105,7 @@
 }
 .gallery-folder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(247px, 100%), 1fr));
   gap: 18px 14px;
 }
 .gallery-folder-card {

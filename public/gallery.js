@@ -1048,18 +1048,24 @@
       const children = active
         ? (active.children || [])
         : this.folderTree;
-      this.folderGridEl.innerHTML = children.map((folder) => `
-        <div class="gallery-folder-card" data-folder-id="${folder.id}" tabindex="0" draggable="true" role="button" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
-          <span class="gallery-folder-preview" aria-hidden="true">
-            ${folder.preview.length
-              ? folder.preview.map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
-              : '<i class="fas fa-folder"></i>'}
-          </span>
-          <span class="gallery-folder-card-info">
-            <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
-            <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
-          </span>
-        </div>`).join('');
+      this.folderGridEl.innerHTML = children.map((folder) => {
+        const previewImages = Array.isArray(folder.preview)
+          ? folder.preview.filter((image) => typeof image?.url === 'string' && image.url.trim())
+          : [];
+        const previewMarkup = previewImages.length
+          ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
+          : '<i class="fas fa-folder"></i>';
+        return `
+          <div class="gallery-folder-card" data-folder-id="${folder.id}" tabindex="0" draggable="true" role="button" aria-label="Открыть папку «${escapeHtml(folder.name)}»">
+            <span class="gallery-folder-preview" aria-hidden="true">
+              ${previewMarkup}
+            </span>
+            <span class="gallery-folder-card-info">
+              <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+              <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
+            </span>
+          </div>`;
+      }).join('');
       if (this.mineBtn) {
         this.mineBtn.disabled = !!active;
         this.mineBtn.classList.toggle('active', !!active || this.mine);
