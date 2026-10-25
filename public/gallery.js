@@ -86,9 +86,18 @@
 
   // Карточка работы — общая для сетки галереи, полосы под статьёй,
   // ассоциированных работ и пикера в редакторе.
-  function cardHtml(work, { compact = false } = {}) {
+  function cardHtml(work, { compact = false, folderOptions = null } = {}) {
     const cover = work.cover;
     const ratio = cover && cover.width && cover.height ? `${cover.width} / ${cover.height}` : '4 / 5';
+    const currentUser = window.authManager?.getCurrentUser?.();
+    const folderControl = Array.isArray(folderOptions) && folderOptions.length > 0 && currentUser && String(work.author_id) === String(currentUser.id)
+      ? `<label class="gallery-card-folder-control">
+          <select class="form-select" data-folder-work="${work.id}" aria-label="Папка работы «${escapeHtml(work.title)}»">
+            <option value=""${work.folder_id ? '' : ' selected'}>Без папки</option>
+            ${folderOptions.map((folder) => `<option value="${folder.id}"${String(work.folder_id) === String(folder.id) ? ' selected' : ''}>${escapeHtml(folder.path)}</option>`).join('')}
+          </select>
+        </label>`
+      : '';
     const badges = [];
     if (work.restricted) badges.push('<span class="gallery-badge" title="Видна не всем — доступ по ролям"><i class="fas fa-lock"></i></span>');
     if (cover && (cover.animated || isAnimatedUrl(cover.url))) badges.push('<span class="gallery-badge">GIF</span>');
@@ -112,6 +121,7 @@
           <div class="gallery-card-title">${escapeHtml(work.title)}</div>
           ${compact || !work.author ? '' : `<div class="gallery-card-author">${window.avatarHtml({ name: work.author.display_name, avatar: work.author.avatar }, 18)} ${escapeHtml(work.author.display_name)}</div>`}
         </div>
+        ${folderControl}
       </article>`;
   }
 
@@ -730,6 +740,9 @@
       this._searchDebounce = null;
       this._loadSeq = 0;
       this.columnCount = 0;
+      this.folderTree = [];
+      this.folderOptions = [];
+      this.activeFolderId = null;
     }
 
     async init() {
@@ -745,12 +758,25 @@
       this.emptyEl = document.getElementById('galleryEmpty');
       this.loadingEl = document.getElementById('galleryLoadingMore');
       this.sentinelEl = document.getElementById('gallerySentinel');
+      this.folderSectionEl = document.getElementById('galleryFolderSection');
+      this.folderGridEl = document.getElementById('galleryFolderGrid');
+      this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
+      this.activeFolderId = null;
       this.activeTag = '';
       this.mine = false;
 
       document.getElementById('galleryUploadBtn')?.addEventListener('click', async () => {
         const saved = await window.galleryEditor.open(null);
         if (saved) {
+          if (this.activeFolderId) {
+            try {
+              const result = await window.apiClient.setGalleryWorkFolder(saved.id, this.activeFolderId);
+              if (result.success) await this.loadFolders();
+              else showMessage(errorText(result, 'Работа загружена, но не попала в папку'), 'error');
+            } catch (e) {
+              showMessage('Работа загружена, но не удалось поместить её в папку', 'error');
+            }
+          }
           await this.resetAndLoad();
           window.galleryViewer.openWork(saved.id);
         }
@@ -772,13 +798,30 @@
         this.renderTags();
         this.resetAndLoad();
       });
+      document.getElementById('galleryFolderCreate')?.addEventListener('click', () => this.createFolder());
+      document.getElementById('galleryFolderRename')?.addEventListener('click', () => this.renameCurrentFolder());
+      document.getElementById('galleryFolderDelete')?.addEventListener('click', () => this.deleteCurrentFolder());
+      this.folderGridEl?.addEventListener('click', (e) => {
+        const folder = e.target.closest('[data-folder-id]');
+        if (folder) this.openFolder(folder.dataset.folderId);
+      });
+      this.folderBreadcrumbEl?.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-folder-parent]');
+        if (button) this.openFolder(button.dataset.folderParent === 'root' ? null : button.dataset.folderParent);
+      });
       this.gridEl.addEventListener('click', (e) => {
+        if (e.target.closest('[data-folder-work]')) return;
         const card = e.target.closest('[data-work-id]');
         if (card) window.galleryViewer.openWork(card.dataset.workId);
       });
       this.gridEl.addEventListener('keydown', (e) => {
+        if (e.target.closest('[data-folder-work]')) return;
         const card = e.target.closest('[data-work-id]');
         if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); window.galleryViewer.openWork(card.dataset.workId); }
+      });
+      this.gridEl.addEventListener('change', (e) => {
+        const select = e.target.closest('[data-folder-work]');
+        if (select) this.moveWork(select.dataset.folderWork, select.value || null);
       });
 
       this._resizeHandler = () => {
@@ -791,6 +834,7 @@
       if (this.sentinelEl) this._observer.observe(this.sentinelEl);
 
       this.loadTags();
+      await this.loadFolders();
       await this.resetAndLoad();
     }
 
@@ -830,13 +874,166 @@
       this.resetAndLoad();
     }
 
+    async loadFolders() {
+      try {
+        const result = await window.apiClient.getGalleryFolders();
+        if (!result.success || !Array.isArray(result.data)) {
+          showMessage(errorText(result, 'Не удалось загрузить папки галереи'), 'error');
+          return false;
+        }
+        this.folderTree = result.data;
+        this.folderOptions = [];
+        const flatten = (folders, parentPath) => folders.forEach((folder) => {
+          const path = parentPath ? `${parentPath} / ${folder.name}` : folder.name;
+          this.folderOptions.push({ id: folder.id, path });
+          flatten(folder.children || [], path);
+        });
+        flatten(this.folderTree, '');
+        this.renderFolders();
+        return true;
+      } catch (e) {
+        showMessage('Не удалось загрузить папки галереи', 'error');
+        return false;
+      }
+    }
+
+    findFolder(id, folders = this.folderTree) {
+      for (const folder of folders) {
+        if (String(folder.id) === String(id)) return folder;
+        const child = this.findFolder(id, folder.children || []);
+        if (child) return child;
+      }
+      return null;
+    }
+
+    renderFolders() {
+      if (!this.folderSectionEl || !this.folderGridEl) return;
+      const current = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
+      if (this.activeFolderId && !current) this.activeFolderId = null;
+      const active = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
+      const breadcrumb = [];
+      let parent = active;
+      while (parent) {
+        breadcrumb.unshift(parent);
+        parent = parent.parentId ? this.findFolder(parent.parentId) : null;
+      }
+      this.folderBreadcrumbEl.innerHTML = [
+        '<button type="button" data-folder-parent="root">Галерея</button>',
+        ...breadcrumb.map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`)
+      ].join('');
+      const children = active
+        ? (active.children || [])
+        : this.folderTree;
+      this.folderGridEl.innerHTML = children.map((folder) => `
+        <button type="button" class="gallery-folder-card" data-folder-id="${folder.id}">
+          <i class="fas fa-folder" aria-hidden="true"></i>
+          <span class="gallery-folder-card-info">
+            <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
+            <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
+          </span>
+        </button>`).join('');
+      const renameButton = document.getElementById('galleryFolderRename');
+      const deleteButton = document.getElementById('galleryFolderDelete');
+      if (renameButton) renameButton.hidden = !active;
+      if (deleteButton) deleteButton.hidden = !active;
+      if (this.mineBtn) {
+        this.mineBtn.disabled = !!active;
+        this.mineBtn.classList.toggle('active', !!active || this.mine);
+      }
+      this.folderSectionEl.hidden = false;
+    }
+
+    async openFolder(id) {
+      this.activeFolderId = id ? String(id) : null;
+      this.renderFolders();
+      await this.resetAndLoad();
+    }
+
+    async createFolder() {
+      const name = window.prompt(this.activeFolderId ? 'Название подпапки:' : 'Название папки:');
+      if (name == null || !name.trim()) return;
+      try {
+        const result = await window.apiClient.createGalleryFolder(name, this.activeFolderId);
+        if (!result.success) {
+          showMessage(errorText(result, 'Не удалось создать папку'), 'error');
+          return;
+        }
+        await this.loadFolders();
+        await this.resetAndLoad();
+        showMessage('Папка создана', 'success');
+      } catch (e) {
+        showMessage('Не удалось создать папку', 'error');
+      }
+    }
+
+    async renameCurrentFolder() {
+      const folder = this.findFolder(this.activeFolderId);
+      if (!folder) return;
+      const name = window.prompt('Новое название папки:', folder.name);
+      if (name == null || !name.trim()) return;
+      try {
+        const result = await window.apiClient.renameGalleryFolder(folder.id, name);
+        if (!result.success) {
+          showMessage(errorText(result, 'Не удалось переименовать папку'), 'error');
+          return;
+        }
+        await this.loadFolders();
+        await this.resetAndLoad();
+        showMessage('Папка переименована', 'success');
+      } catch (e) {
+        showMessage('Не удалось переименовать папку', 'error');
+      }
+    }
+
+    async deleteCurrentFolder() {
+      const folder = this.findFolder(this.activeFolderId);
+      if (!folder) return;
+      const ok = await window.confirmDialog.open({
+        title: 'Удалить папку?',
+        message: 'Подпапки и работы будут перемещены на уровень выше. Изображения не удалятся.',
+        confirmLabel: 'Удалить'
+      });
+      if (!ok) return;
+      try {
+        const result = await window.apiClient.deleteGalleryFolder(folder.id);
+        if (!result.success) {
+          showMessage(errorText(result, 'Не удалось удалить папку'), 'error');
+          return;
+        }
+        this.activeFolderId = folder.parentId ? String(folder.parentId) : null;
+        await this.loadFolders();
+        await this.resetAndLoad();
+        showMessage('Папка удалена', 'success');
+      } catch (e) {
+        showMessage('Не удалось удалить папку', 'error');
+      }
+    }
+
+    async moveWork(workId, folderId) {
+      try {
+        const result = await window.apiClient.setGalleryWorkFolder(workId, folderId);
+        if (!result.success) {
+          showMessage(errorText(result, 'Не удалось переместить работу'), 'error');
+          await this.resetAndLoad();
+          return;
+        }
+        await this.loadFolders();
+        await this.resetAndLoad();
+        showMessage('Работа перемещена', 'success');
+      } catch (e) {
+        showMessage('Не удалось переместить работу', 'error');
+        await this.resetAndLoad();
+      }
+    }
+
     getFilters() {
       const me = window.authManager?.getCurrentUser?.();
       return {
         q: this.searchEl ? this.searchEl.value.trim() : '',
         sort: this.sortEl ? this.sortEl.value : 'newest',
         tag: this.activeTag,
-        author: this.mine && me ? me.id : ''
+        author: this.activeFolderId && me ? me.id : (this.mine && me ? me.id : ''),
+        folder: this.activeFolderId || 'root'
       };
     }
 
@@ -888,7 +1085,17 @@
 
     renderCount() {
       if (this.countEl) this.countEl.textContent = this.total ? `${this.total} ${plural(this.total, 'работа', 'работы', 'работ')}` : '';
-      if (this.emptyEl) this.emptyEl.hidden = this.items.length > 0 || this.loading;
+      if (this.emptyEl) {
+        const hasFolders = this.folderGridEl && this.folderGridEl.children.length > 0;
+        const filtered = !!(this.searchEl?.value.trim() || this.activeTag || this.mine);
+        this.emptyEl.hidden = this.items.length > 0 || this.loading || (hasFolders && !this.activeFolderId && !filtered);
+        const text = this.emptyEl.querySelector('p');
+        if (text) {
+          text.textContent = this.activeFolderId
+            ? 'В этой папке пока нет работ.'
+            : (filtered ? 'Работы не найдены.' : 'Здесь пока пусто — выложите первую работу.');
+        }
+      }
     }
 
     // Кладка как в Pinterest: колонки фиксированной ширины, каждая новая
@@ -922,14 +1129,16 @@
       items.forEach((work) => {
         const c = work.cover;
         const ratio = c && c.width && c.height ? c.height / c.width : 1.25;
+        const userId = window.authManager?.getCurrentUser?.()?.id;
+        const hasFolderControl = this.folderOptions.length > 0 && String(work.author_id) === String(userId);
         let target = 0;
         for (let i = 1; i < this.columnHeights.length; i++) {
           if (this.columnHeights[i] < this.columnHeights[target] - 0.01) target = i;
         }
         const wrap = document.createElement('div');
-        wrap.innerHTML = cardHtml(work);
+        wrap.innerHTML = cardHtml(work, { folderOptions: this.folderOptions });
         this.columns[target].appendChild(wrap.firstElementChild);
-        this.columnHeights[target] += ratio + 0.28; // + подпись карточки
+        this.columnHeights[target] += ratio + (hasFolderControl ? 0.52 : 0.28);
       });
     }
 

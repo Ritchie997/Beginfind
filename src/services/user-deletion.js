@@ -121,6 +121,7 @@ async function deleteAllUserData(user, actingUserId, otherUsers) {
     });
   }
   for (const row of workRows) await galleryStore.deleteWork(row.id);
+  await galleryStore.deleteFoldersForUser(userId);
   if (ownedSlugs.length) {
     const remainingWorks = await all(galleryDb, 'SELECT id, article_slugs FROM gallery_works');
     for (const work of remainingWorks) {

@@ -850,6 +850,21 @@ function createGalleryTables(legacy) {
     galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_images_page ON gallery_images (page_id, position)');
     galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_images_work ON gallery_images (work_id)');
 
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      parent_id INTEGER,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_folders_user_parent ON gallery_folders (user_id, parent_id)');
+    galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_work_folders (
+      work_id INTEGER PRIMARY KEY,
+      folder_id INTEGER NOT NULL
+    )`);
+    galleryDb.run('CREATE INDEX IF NOT EXISTS idx_gallery_work_folders_folder ON gallery_work_folders (folder_id)');
+
     // Ассоциированные работы — связь симметричная, хранится в обе стороны.
     galleryDb.run(`CREATE TABLE IF NOT EXISTS gallery_associations (
       work_id INTEGER NOT NULL,

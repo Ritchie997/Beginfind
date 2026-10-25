@@ -112,6 +112,7 @@ function rowToWork(row) {
     title: row.title,
     description: row.description || '',
     author_id: row.author_id,
+    folder_id: row.folder_id || null,
     server_id: row.server_id || null,
     roles: articleLayers.normalizeLayerRoles(parseJson(row.roles, [])),
     tags: parseJson(row.tags, []),
@@ -209,8 +210,119 @@ async function canAssignRoles(user, roles) {
 async function getWorkRow(id) {
   const workId = toId(id);
   if (!workId) return null;
-  const row = await get('SELECT * FROM gallery_works WHERE id = ?', [workId]);
+  const row = await get(
+    `SELECT w.*, wf.folder_id FROM gallery_works w
+     LEFT JOIN gallery_work_folders wf ON wf.work_id = w.id WHERE w.id = ?`,
+    [workId]
+  );
   return row ? rowToWork(row) : null;
+}
+
+function cleanFolderName(name) {
+  const value = String(name || '').trim().slice(0, 100);
+  if (!value) throw new Error('Укажите название папки');
+  return value;
+}
+
+async function getFolder(userId, folderId) {
+  const id = toId(folderId);
+  if (!id) return null;
+  return get('SELECT id, user_id, parent_id, name FROM gallery_folders WHERE id = ? AND user_id = ?', [id, userId]);
+}
+
+async function listFolders(userId) {
+  const [rows, counts] = await Promise.all([
+    all('SELECT id, parent_id, name FROM gallery_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE, id', [userId]),
+    all(
+      `SELECT wf.folder_id, COUNT(i.id) AS image_count
+       FROM gallery_work_folders wf
+       JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
+       JOIN gallery_works w ON w.id = wf.work_id
+       LEFT JOIN gallery_images i ON i.work_id = w.id
+       GROUP BY wf.folder_id`,
+      [userId]
+    )
+  ]);
+  const countByFolder = new Map(counts.map((row) => [row.folder_id, row.image_count]));
+  const byId = new Map(rows.map((row) => [row.id, {
+    id: row.id,
+    parentId: row.parent_id || null,
+    name: row.name,
+    imageCount: countByFolder.get(row.id) || 0,
+    children: []
+  }]));
+  const roots = [];
+  rows.forEach((row) => {
+    const folder = byId.get(row.id);
+    const parent = byId.get(row.parent_id);
+    if (parent) parent.children.push(folder);
+    else roots.push(folder);
+  });
+  const addNestedCounts = (folder) => {
+    folder.children.forEach((child) => {
+      folder.imageCount += addNestedCounts(child);
+    });
+    return folder.imageCount;
+  };
+  roots.forEach(addNestedCounts);
+  return roots;
+}
+
+async function createFolder(userId, parentId, name) {
+  const cleanName = cleanFolderName(name);
+  const parent = parentId == null ? null : await getFolder(userId, parentId);
+  if (parentId != null && !parent) throw new Error('Родительская папка не найдена');
+  const result = await run(
+    'INSERT INTO gallery_folders (user_id, parent_id, name) VALUES (?, ?, ?)',
+    [userId, parent ? parent.id : null, cleanName]
+  );
+  return result.lastID;
+}
+
+async function renameFolder(userId, folderId, name) {
+  const folder = await getFolder(userId, folderId);
+  if (!folder) return false;
+  await run(
+    'UPDATE gallery_folders SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+    [cleanFolderName(name), folder.id, userId]
+  );
+  return true;
+}
+
+async function deleteFolder(userId, folderId) {
+  const folder = await getFolder(userId, folderId);
+  if (!folder) return false;
+  await run('UPDATE gallery_folders SET parent_id = ? WHERE parent_id = ? AND user_id = ?', [folder.parent_id, folder.id, userId]);
+  if (folder.parent_id == null) {
+    await run('DELETE FROM gallery_work_folders WHERE folder_id = ?', [folder.id]);
+  } else {
+    await run('UPDATE gallery_work_folders SET folder_id = ? WHERE folder_id = ?', [folder.parent_id, folder.id]);
+  }
+  await run('DELETE FROM gallery_folders WHERE id = ? AND user_id = ?', [folder.id, userId]);
+  return true;
+}
+
+async function setWorkFolder(userId, workId, folderId) {
+  const work = await get('SELECT id, author_id FROM gallery_works WHERE id = ?', [workId]);
+  if (!work || Number(work.author_id) !== Number(userId)) throw new Error('Недостаточно прав для перемещения этой работы');
+  const folder = folderId == null ? null : await getFolder(userId, folderId);
+  if (folderId != null && !folder) throw new Error('Папка не найдена');
+  if (folder) {
+    await run(
+      'INSERT INTO gallery_work_folders (work_id, folder_id) VALUES (?, ?) ON CONFLICT(work_id) DO UPDATE SET folder_id = excluded.folder_id',
+      [work.id, folder.id]
+    );
+  } else {
+    await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [work.id]);
+  }
+}
+
+async function deleteFoldersForUser(userId) {
+  await run(
+    'DELETE FROM gallery_work_folders WHERE folder_id IN (SELECT id FROM gallery_folders WHERE user_id = ?)',
+    [userId]
+  );
+  await run('DELETE FROM gallery_folders WHERE user_id = ?', [userId]);
 }
 
 /**
@@ -377,10 +489,16 @@ const SORTS = {
  * @returns {Promise<{items:object[], total:number}>} items — строки работ
  *   (rowToWork) + cover/pagesCount/hasVariations + counts.
  */
-async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids } = {}) {
+async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0, ids, folderId } = {}) {
   const userId = user ? user.id : null;
   const where = ['(EXISTS (SELECT 1 FROM gallery_images i WHERE i.work_id = w.id) OR w.author_id = ?)'];
   const params = [userId];
+  if (folderId === 'root') {
+    where.push('NOT EXISTS (SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id)');
+  } else if (toId(folderId)) {
+    where.push('EXISTS (SELECT 1 FROM gallery_work_folders wf WHERE wf.work_id = w.id AND wf.folder_id = ?)');
+    params.push(toId(folderId));
+  }
   // Слова с # ("#персонаж") — фильтр по тегам работы (по началу тега), остальные — текст.
   const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
   const hashTerms = words.filter((w) => w.startsWith('#')).map((w) => w.replace(/^#+/, '')).filter(Boolean);
@@ -400,7 +518,11 @@ async function listWorks(user, { q, tag, authorId, sort, limit = 30, offset = 0,
     params.push(...clean);
   }
 
-  const rows = await all(`SELECT w.* FROM gallery_works w WHERE ${where.join(' AND ')}`, params);
+  const rows = await all(
+    `SELECT w.*, wf.folder_id FROM gallery_works w
+     LEFT JOIN gallery_work_folders wf ON wf.work_id = w.id WHERE ${where.join(' AND ')}`,
+    params
+  );
   const ctx = await getAccessContext(user);
   const tagKey = String(tag || '').trim().replace(/^#+/, '').toLowerCase();
   let works = rows.map(rowToWork).filter((w) => canViewWork(w, ctx));
@@ -564,7 +686,11 @@ async function updateWork(workId, body, authorName, editorCtx) {
        article_slugs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
     [meta.title, meta.description, meta.server_id, JSON.stringify(meta.roles), JSON.stringify(meta.tags), meta.scroll_mode, JSON.stringify(meta.article_slugs), workId]
   );
-  if (toId(body.authorId)) await run('UPDATE gallery_works SET author_id = ? WHERE id = ?', [toId(body.authorId), workId]);
+  const nextAuthorId = toId(body.authorId);
+  if (nextAuthorId && nextAuthorId !== Number(current.author_id)) {
+    await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [workId]);
+    await run('UPDATE gallery_works SET author_id = ? WHERE id = ?', [nextAuthorId, workId]);
+  }
 
   if (Array.isArray(body.pages)) {
     const existingPages = await all('SELECT * FROM gallery_pages WHERE work_id = ? ORDER BY position, id', [workId]);
@@ -644,6 +770,7 @@ function removeImageFiles(img) {
 async function deleteWork(workId) {
   const images = await all('SELECT * FROM gallery_images WHERE work_id = ?', [workId]);
   images.forEach(removeImageFiles);
+  await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_images WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_pages WHERE work_id = ?', [workId]);
   await run('DELETE FROM gallery_associations WHERE work_id = ? OR related_id = ?', [workId, workId]);
@@ -657,9 +784,11 @@ async function deleteWork(workId) {
 async function transferWorksByAuthor(sourceUserId, targetUserId, targetName) {
   const rows = await all('SELECT id FROM gallery_works WHERE author_id = ?', [sourceUserId]);
   for (const row of rows) {
+    await run('DELETE FROM gallery_work_folders WHERE work_id = ?', [row.id]);
     await run('UPDATE gallery_works SET author_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [targetUserId, row.id]);
     await syncSearchText(row.id, targetName);
   }
+  await deleteFoldersForUser(sourceUserId);
   return rows.length;
 }
 
@@ -812,6 +941,13 @@ module.exports = {
   canViewVariant,
   canAssignRoles,
   getWorkRow,
+  getFolder,
+  listFolders,
+  createFolder,
+  renameFolder,
+  deleteFolder,
+  deleteFoldersForUser,
+  setWorkFolder,
   getPagesForUser,
   getVariantRolesMap,
   getCoversForWorks,

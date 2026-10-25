@@ -40,6 +40,87 @@
 .gallery-tags .filter-chip:hover { color: var(--text-normal); }
 .gallery-tags .filter-chip.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
 
+/* === Папки === */
+
+.gallery-folder-section {
+  margin: 18px 0 24px;
+}
+.gallery-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.gallery-folder-breadcrumb,
+.gallery-folder-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gallery-folder-breadcrumb button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--header-secondary);
+  cursor: pointer;
+}
+.gallery-folder-breadcrumb button:hover { color: var(--text-normal); }
+.gallery-folder-breadcrumb span { color: var(--text-muted); }
+.gallery-folder-actions .btn { white-space: nowrap; }
+.gallery-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+  gap: 10px;
+}
+.gallery-folder-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--background-accent);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+}
+.gallery-folder-card:hover {
+  border-color: var(--blurple);
+  background: var(--background-tertiary);
+}
+.gallery-folder-card > i {
+  color: var(--blurple);
+  font-size: 22px;
+}
+.gallery-folder-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+.gallery-folder-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gallery-folder-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.gallery-card-folder-control {
+  display: block;
+  padding: 0 4px;
+}
+.gallery-card-folder-control select {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
 /* === Кладка === */
 
 .gallery-grid {
@@ -160,6 +241,7 @@
 
 @media (max-width: 640px) {
   .gallery-page { padding: 12px; }
+  .gallery-folder-header { align-items: flex-start; flex-direction: column; }
   .gallery-grid, .gallery-column { gap: 10px; }
   .gallery-card-media { border-radius: 10px; }
   .gallery-sort { min-width: 0; flex: 1 1 140px; }

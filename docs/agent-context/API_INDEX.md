@@ -172,6 +172,11 @@
 - `GET /public/gallery/works/:id/likes`
 - `GET /public/gallery/works/:id/reactions`
 - `GET /public/gallery/works/:id/comments`
+- `GET /gallery/folders`
+- `POST /gallery/folders`
+- `PUT /gallery/folders/:id`
+- `DELETE /gallery/folders/:id`
+- `PUT /gallery/works/:id/folder`
 - `GET /gallery/works`
 - `GET /gallery/tags`
 - `GET /gallery/by-article/:slug`

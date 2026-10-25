@@ -88,10 +88,13 @@ async function resolveRequestedAuthor(req, currentAuthorId) {
   return { id, name: user.display_name || user.username };
 }
 
-function workCard(item, usersMap) {
+function workCard(item, usersMap, { includeFolder = false, userId } = {}) {
   return {
     id: item.id,
     title: item.title,
+    ...(includeFolder && Number(item.author_id) === Number(userId)
+      ? { author_id: item.author_id, folder_id: item.folder_id }
+      : {}),
     tags: item.tags,
     restricted: item.roles.length > 0,
     scrollMode: item.scroll_mode,
@@ -107,9 +110,9 @@ function workCard(item, usersMap) {
   };
 }
 
-async function cardsFor(items) {
+async function cardsFor(items, options) {
   const usersMap = await getUsersByIds(items.map((i) => i.author_id));
-  return items.map((i) => workCard(i, usersMap));
+  return items.map((i) => workCard(i, usersMap, options));
 }
 
 // Работа + проверка доступа одним шагом: 404, если нет, 403 — если закрыта.
@@ -366,17 +369,76 @@ router.get('/public/gallery/works/:id/comments', async (req, res) => {
 
 // ===== Витрина / поиск =====
 
+router.get('/gallery/folders', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await gallery.listFolders(req.user.id));
+  } catch (err) {
+    console.error('[gallery] list folders:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/gallery/folders', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const id = await gallery.createFolder(req.user.id, req.body.parentId ?? null, req.body.name);
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/gallery/folders/:id', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const updated = await gallery.renameFolder(req.user.id, req.params.id, req.body.name);
+    if (!updated) return res.status(404).json({ error: 'Папка не найдена' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/gallery/folders/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const deleted = await gallery.deleteFolder(req.user.id, req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Папка не найдена' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/gallery/works/:id/folder', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const work = await loadManageableWork(req, res);
+    if (!work) return;
+    if (Number(work.author_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Перемещать можно только свои работы' });
+    }
+    await gallery.setWorkFolder(req.user.id, work.id, req.body.folderId ?? null);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 router.get('/gallery/works', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
+    let folderId = req.query.folder;
+    if (folderId != null && folderId !== 'root') {
+      const folder = await gallery.getFolder(req.user.id, folderId);
+      if (!folder) return res.status(404).json({ error: 'Папка не найдена' });
+      folderId = folder.id;
+    }
     const { items, total } = await gallery.listWorks(req.user, {
       q: req.query.q,
       tag: req.query.tag,
       authorId: req.query.author,
       sort: req.query.sort,
       limit: req.query.limit,
-      offset: req.query.offset
+      offset: req.query.offset,
+      folderId
     });
-    res.json({ data: await cardsFor(items), total });
+    res.json({ data: await cardsFor(items, { includeFolder: true, userId: req.user.id }), total });
   } catch (err) {
     console.error('[gallery] list:', err);
     res.status(500).json({ error: err.message });

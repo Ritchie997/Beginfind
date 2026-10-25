@@ -25,6 +25,18 @@
     </div>
   </div>
 
+  <section id="galleryFolderSection" class="gallery-folder-section" hidden>
+    <div class="gallery-folder-header">
+      <nav id="galleryFolderBreadcrumb" class="gallery-folder-breadcrumb" aria-label="Путь по папкам"></nav>
+      <div class="gallery-folder-actions">
+        <button type="button" id="galleryFolderCreate" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Новая папка</button>
+        <button type="button" id="galleryFolderRename" class="btn btn-secondary" hidden>Переименовать</button>
+        <button type="button" id="galleryFolderDelete" class="btn btn-secondary" hidden>Удалить папку</button>
+      </div>
+    </div>
+    <div id="galleryFolderGrid" class="gallery-folder-grid"></div>
+  </section>
+
   <div id="galleryGrid" class="gallery-grid"></div>
 
   <div id="galleryEmpty" class="antropedia-empty" hidden>

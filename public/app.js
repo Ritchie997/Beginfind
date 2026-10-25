@@ -339,7 +339,7 @@ class ApiClient {
   }
 
   // Галерея (см. src/routes/gallery.routes.js и public/gallery.js).
-  // filters — {q, tag, author, sort}.
+  // filters — {q, tag, author, sort, folder}.
   async getGalleryWorks(filters = {}, limit = 30, offset = 0) {
     const params = new URLSearchParams({ limit, offset });
     Object.entries(filters).forEach(([key, value]) => {
@@ -370,6 +370,26 @@ class ApiClient {
 
   async getGalleryTags() {
     return this.makeAuthenticatedRequest('/api/gallery/tags');
+  }
+
+  async getGalleryFolders() {
+    return this.makeAuthenticatedRequest('/api/gallery/folders');
+  }
+
+  async createGalleryFolder(name, parentId = null) {
+    return this.makeAuthenticatedRequest('/api/gallery/folders', 'POST', { name, parentId });
+  }
+
+  async renameGalleryFolder(id, name) {
+    return this.makeAuthenticatedRequest(`/api/gallery/folders/${id}`, 'PUT', { name });
+  }
+
+  async deleteGalleryFolder(id) {
+    return this.makeAuthenticatedRequest(`/api/gallery/folders/${id}`, 'DELETE');
+  }
+
+  async setGalleryWorkFolder(workId, folderId) {
+    return this.makeAuthenticatedRequest(`/api/gallery/works/${workId}/folder`, 'PUT', { folderId });
   }
 
   async getGalleryWorksForArticle(slug) {

@@ -19,7 +19,7 @@
 | Лайки, просмотры, комментарии, реакции и уведомления (в т. ч. лайки/комментарии AllTell-постов) | `social.db` | `src/services/social-store.js`, `user-notifications.js` |
 | Наборы, стикеры, подписки и коллаборации | `stickers.db` + файлы в `public/uploads/stickers/` | `src/services/stickers-store.js` |
 | Обращения и кейсы | `feedback.db` | `src/services/feedback-store.js` |
-| Работы галереи, страницы и связи | `gallery.db` + файлы в `public/uploads/gallery/` | `src/services/gallery-store.js` |
+| Работы галереи, страницы, связи и личные папки с изображениями | `gallery.db` + файлы в `public/uploads/gallery/` | `src/services/gallery-store.js` |
 | Карты и миры | JSON в `content/maps/` и `content/worlds/` | `src/services/maps-store.js`, `worlds-store.js` |
 | Исходники подложек | `map-sources/` | `src/services/map-tiler.js` |
 | Тайлы карт | `public/uploads/maps/` | `src/services/map-tiler.js` |
