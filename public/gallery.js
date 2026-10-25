@@ -881,6 +881,7 @@
       });
       this.folderBreadcrumbEl?.addEventListener('click', (e) => {
         if (e.target.closest('[data-folder-exit]')) { this.openFolder(null); return; }
+        if (e.target.closest('#galleryFolderCreateChild')) { this.createFolder(); return; }
         if (e.target.closest('#galleryFolderRename')) { this.renameCurrentFolder(); return; }
         if (e.target.closest('#galleryFolderMove')) {
           if (this.activeFolderId) this.openFolderMoveMenu(e.target.closest('#galleryFolderMove'), { folderId: this.activeFolderId });
@@ -1181,7 +1182,9 @@
         parent = parent.parentId ? this.findFolder(parent.parentId) : null;
       }
       const currentUserId = window.authManager?.getCurrentUser?.()?.id;
-      const isForeignFolder = !!(active && Number(active.ownerId) !== Number(currentUserId));
+      const isFolderOwner = !!active && Number(active.ownerId) === Number(currentUserId);
+      const isForeignFolder = !!active && !isFolderOwner;
+      const canManageActive = !active || (this.canManageFolders && isFolderOwner);
       const activeAuthor = active?.author?.display_name || '';
       this.folderBreadcrumbEl.innerHTML = [
         '<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">Галерея</button>',
@@ -1191,7 +1194,8 @@
           `<span class="gallery-folder-crumb-current">${escapeHtml(active.name)}</span>`,
           ...(activeAuthor ? [`<span class="gallery-folder-crumb-author">Автор: ${escapeHtml(activeAuthor)}</span>`] : []),
           ...(isForeignFolder ? ['<button type="button" class="gallery-folder-exit" data-folder-exit><i class="fas fa-arrow-left"></i> Выйти из папки</button>'] : []),
-          ...(!isForeignFolder && this.canManageFolders ? [
+          ...(active && canManageActive ? [
+            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderCreateChild" title="Создать подпапку" aria-label="Создать подпапку"><i class="fas fa-folder-plus"></i></button>',
             '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
             '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
             '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
@@ -1202,7 +1206,6 @@
         ? (active.children || [])
         : this.folderTree;
       this.visibleFolders = children;
-      const canManageActive = !active || (this.canManageFolders && Number(active.ownerId) === Number(currentUserId));
       if (this.folderCreateButtonEl) this.folderCreateButtonEl.hidden = !canManageActive;
       if (this.toggleSelectButtonEl) this.toggleSelectButtonEl.hidden = !canManageActive;
       if (this.mineBtn) {
