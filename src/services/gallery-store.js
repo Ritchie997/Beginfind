@@ -231,7 +231,7 @@ async function getFolder(userId, folderId) {
 }
 
 async function listFolders(userId) {
-  const [rows, counts] = await Promise.all([
+  const [rows, counts, previews] = await Promise.all([
     all('SELECT id, parent_id, name FROM gallery_folders WHERE user_id = ? ORDER BY name COLLATE NOCASE, id', [userId]),
     all(
       `SELECT wf.folder_id, COUNT(i.id) AS image_count
@@ -241,14 +241,33 @@ async function listFolders(userId) {
        LEFT JOIN gallery_images i ON i.work_id = w.id
        GROUP BY wf.folder_id`,
       [userId]
+    ),
+    all(
+      `SELECT folder_id, id, url FROM (
+         SELECT wf.folder_id, i.id, COALESCE(i.thumb_url, i.file_url) AS url,
+           ROW_NUMBER() OVER (PARTITION BY wf.folder_id ORDER BY i.id DESC) AS position
+         FROM gallery_work_folders wf
+         JOIN gallery_folders f ON f.id = wf.folder_id AND f.user_id = ?
+         JOIN gallery_images i ON i.work_id = wf.work_id
+       )
+       WHERE position <= 3
+       ORDER BY folder_id, position`,
+      [userId]
     )
   ]);
   const countByFolder = new Map(counts.map((row) => [row.folder_id, row.image_count]));
+  const previewsByFolder = new Map();
+  previews.forEach((row) => {
+    const images = previewsByFolder.get(row.folder_id) || [];
+    if (images.length < 3) images.push({ id: row.id, url: row.url });
+    previewsByFolder.set(row.folder_id, images);
+  });
   const byId = new Map(rows.map((row) => [row.id, {
     id: row.id,
     parentId: row.parent_id || null,
     name: row.name,
     imageCount: countByFolder.get(row.id) || 0,
+    preview: previewsByFolder.get(row.id) || [],
     children: []
   }]));
   const roots = [];
@@ -261,7 +280,9 @@ async function listFolders(userId) {
   const addNestedCounts = (folder) => {
     folder.children.forEach((child) => {
       folder.imageCount += addNestedCounts(child);
+      folder.preview.push(...child.preview);
     });
+    folder.preview = [...new Map(folder.preview.sort((a, b) => b.id - a.id).map((image) => [image.id, image])).values()].slice(0, 3);
     return folder.imageCount;
   };
   roots.forEach(addNestedCounts);

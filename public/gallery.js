@@ -926,7 +926,11 @@
         : this.folderTree;
       this.folderGridEl.innerHTML = children.map((folder) => `
         <button type="button" class="gallery-folder-card" data-folder-id="${folder.id}">
-          <i class="fas fa-folder" aria-hidden="true"></i>
+          <span class="gallery-folder-preview" aria-hidden="true">
+            ${folder.preview.length
+              ? folder.preview.map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
+              : '<i class="fas fa-folder"></i>'}
+          </span>
           <span class="gallery-folder-card-info">
             <span class="gallery-folder-name">${escapeHtml(folder.name)}</span>
             <span class="gallery-folder-count">${folder.imageCount} ${plural(folder.imageCount, 'изображение', 'изображения', 'изображений')}</span>
