@@ -762,24 +762,26 @@
       this.folderGridEl = document.getElementById('galleryFolderGrid');
       this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
       this.activeFolderId = null;
+      this.folderUploadInput = document.getElementById('galleryFolderUploadInput');
+      this.folderUploading = false;
       this.activeTag = '';
       this.mine = false;
 
       document.getElementById('galleryUploadBtn')?.addEventListener('click', async () => {
+        if (this.activeFolderId) {
+          if (!this.folderUploading) this.folderUploadInput?.click();
+          return;
+        }
         const saved = await window.galleryEditor.open(null);
         if (saved) {
-          if (this.activeFolderId) {
-            try {
-              const result = await window.apiClient.setGalleryWorkFolder(saved.id, this.activeFolderId);
-              if (result.success) await this.loadFolders();
-              else showMessage(errorText(result, 'Работа загружена, но не попала в папку'), 'error');
-            } catch (e) {
-              showMessage('Работа загружена, но не удалось поместить её в папку', 'error');
-            }
-          }
           await this.resetAndLoad();
           window.galleryViewer.openWork(saved.id);
         }
+      });
+      this.folderUploadInput?.addEventListener('change', async () => {
+        const files = Array.from(this.folderUploadInput.files || []);
+        this.folderUploadInput.value = '';
+        if (files.length) await this.uploadFolderImages(files);
       });
       this.searchEl?.addEventListener('input', () => {
         clearTimeout(this._searchDebounce);
@@ -944,6 +946,10 @@
         this.mineBtn.disabled = !!active;
         this.mineBtn.classList.toggle('active', !!active || this.mine);
       }
+      const uploadLabel = document.querySelector('#galleryUploadBtn .antropedia-btn-label');
+      if (uploadLabel && !this.folderUploading) {
+        uploadLabel.textContent = active ? 'Добавить изображения' : 'Выложить работу';
+      }
       this.folderSectionEl.hidden = false;
     }
 
@@ -1027,6 +1033,89 @@
       } catch (e) {
         showMessage('Не удалось переместить работу', 'error');
         await this.resetAndLoad();
+      }
+    }
+
+    async uploadFolderImages(files) {
+      const folderId = this.activeFolderId;
+      if (!folderId || this.folderUploading) return;
+      const uploadButton = document.getElementById('galleryUploadBtn');
+      const uploadLabel = uploadButton?.querySelector('.antropedia-btn-label');
+      const folderButtons = this.folderSectionEl?.querySelectorAll('button') || [];
+      this.folderUploading = true;
+      if (uploadButton) uploadButton.disabled = true;
+      folderButtons.forEach((button) => { button.disabled = true; });
+      this.folderSectionEl?.setAttribute('aria-busy', 'true');
+      if (uploadLabel) uploadLabel.textContent = `Загрузка 0/${files.length}`;
+
+      let uploaded = 0;
+      const failures = [];
+      try {
+        for (const [index, file] of files.entries()) {
+          if (uploadLabel) uploadLabel.textContent = `Загрузка ${index + 1}/${files.length}`;
+          const title = String(file.name || 'Изображение')
+            .replace(/\.[^.]+$/, '')
+            .trim()
+            .slice(0, 200) || 'Изображение';
+          let workId = null;
+          let imageUploaded = false;
+          try {
+            const created = await window.apiClient.createGalleryWork({
+              title,
+              description: '',
+              tags: [],
+              scrollMode: 'horizontal',
+              serverId: null,
+              roles: [],
+              articleSlugs: [],
+              associatedIds: []
+            });
+            if (!created.success || !created.data?.id) {
+              throw new Error(errorText(created, 'Не удалось создать работу'));
+            }
+            workId = created.data.id;
+            const result = await window.apiClient.uploadGalleryImages(workId, null, [file]);
+            if (!result.success) {
+              throw new Error(errorText(result, 'Не удалось загрузить изображение'));
+            }
+            imageUploaded = true;
+            const moved = await window.apiClient.setGalleryWorkFolder(workId, folderId);
+            if (!moved.success) {
+              throw new Error(`Изображение загружено, но не удалось добавить его в папку: ${errorText(moved, 'ошибка перемещения')}`);
+            }
+            uploaded++;
+          } catch (error) {
+            if (workId && !imageUploaded) {
+              try {
+                const cleanup = await window.apiClient.deleteGalleryWork(workId);
+                if (!cleanup.success) {
+                  failures.push(`${file.name}: ${error.message}; не удалось удалить незавершённую работу`);
+                  continue;
+                }
+              } catch (cleanupError) {
+                failures.push(`${file.name}: ${error.message}; не удалось удалить незавершённую работу: ${cleanupError.message}`);
+                continue;
+              }
+            }
+            failures.push(`${file.name}: ${error.message || 'ошибка загрузки'}`);
+          }
+        }
+      } finally {
+        this.folderUploading = false;
+        if (uploadButton) uploadButton.disabled = false;
+        folderButtons.forEach((button) => { button.disabled = false; });
+        this.folderSectionEl?.removeAttribute('aria-busy');
+        if (uploadLabel) uploadLabel.textContent = this.activeFolderId ? 'Добавить изображения' : 'Выложить работу';
+      }
+
+      await this.loadFolders();
+      if (this.activeFolderId === folderId) await this.resetAndLoad();
+      if (failures.length) {
+        const details = failures.slice(0, 3).join('\n');
+        const remainder = failures.length > 3 ? `\nИ ещё ошибок: ${failures.length - 3}` : '';
+        showMessage(`Добавлено в папку ${uploaded} из ${files.length}. Ошибки:\n${details}${remainder}`, 'warning');
+      } else {
+        showMessage(`Добавлено в папку изображений: ${uploaded}`, 'success');
       }
     }
 
