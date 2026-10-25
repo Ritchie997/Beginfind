@@ -835,6 +835,7 @@
       this.mineBtn?.addEventListener('click', () => {
         this.mine = !this.mine;
         this.mineBtn.classList.toggle('active', this.mine);
+        this.renderFolders();
         this.resetAndLoad();
       });
       this.tagsEl?.addEventListener('click', (e) => {
@@ -1202,9 +1203,12 @@
           ] : [])
         ] : [])
       ].join('');
-      const children = active
+      let children = active
         ? (active.children || [])
         : this.folderTree;
+      if (!active && this.mine && this.isPublicGallery) {
+        children = children.filter((folder) => Number(folder.ownerId) === Number(currentUserId));
+      }
       this.visibleFolders = children;
       if (this.folderCreateButtonEl) this.folderCreateButtonEl.hidden = !canManageActive;
       if (this.toggleSelectButtonEl) this.toggleSelectButtonEl.hidden = !canManageActive;
@@ -1250,6 +1254,7 @@
           </button>
           ${isOwner ? `<button type="button" class="gallery-folder-menu-trigger" data-folder-menu-trigger aria-label="Действия с папкой «${escapeHtml(folder.name)}»" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
           <div class="gallery-card-actions-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-folder-menu-action="create-child"><i class="fas fa-folder-plus"></i> Создать подпапку</button>
             <button type="button" role="menuitem" data-folder-menu-action="rename"><i class="fas fa-pen"></i> Переименовать</button>
             <button type="button" role="menuitem" data-folder-menu-action="move"><i class="fas fa-folder"></i> Переместить</button>
             <button type="button" role="menuitem" data-folder-menu-action="delete" class="is-danger"><i class="fas fa-trash"></i> Удалить</button>
@@ -1264,15 +1269,15 @@
       await this.resetAndLoad();
     }
 
-    async createFolder(workIds = null) {
+    async createFolder(workIds = null, parentFolderId = this.activeFolderId) {
       if (!this.canManageFolders) return;
       const name = await this.openFolderNameDialog({
-        title: this.activeFolderId ? 'Новая подпапка' : 'Новая папка',
+        title: parentFolderId ? 'Новая подпапка' : 'Новая папка',
         submitLabel: 'Создать'
       });
       if (name == null) return;
       try {
-        const result = await window.apiClient.createGalleryFolder(name, this.activeFolderId);
+        const result = await window.apiClient.createGalleryFolder(name, parentFolderId);
         if (!result.success) {
           showMessage(errorText(result, 'Не удалось создать папку'), 'error');
           return;
@@ -1365,7 +1370,8 @@
 
     handleFolderMenuAction(folderId, action, menuItem) {
       this.closeCardActionsMenus();
-      if (action === 'rename') this.renameFolder(folderId);
+      if (action === 'create-child') this.createFolder(null, folderId);
+      else if (action === 'rename') this.renameFolder(folderId);
       else if (action === 'move') this.openFolderMoveMenu(menuItem, { folderId });
       else if (action === 'delete') this.deleteFolder(folderId);
     }
@@ -1406,7 +1412,7 @@
       if (!folder) return;
       const ok = await window.confirmDialog.open({
         title: 'Удалить папку?',
-        message: 'Подпапки и работы будут перемещены на уровень выше. Изображения не удалятся.',
+        message: 'Папка, все её подпапки и вложенные работы с изображениями, лайками и комментариями будут удалены без возможности восстановления.',
         confirmLabel: 'Удалить'
       });
       if (!ok) return;

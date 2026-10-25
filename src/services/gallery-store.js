@@ -375,13 +375,31 @@ async function moveFolder(userId, folderId, parentId) {
 async function deleteFolder(userId, folderId) {
   const folder = await getFolder(userId, folderId);
   if (!folder) return false;
-  await run('UPDATE gallery_folders SET parent_id = ? WHERE parent_id = ? AND user_id = ?', [folder.parent_id, folder.id, userId]);
-  if (folder.parent_id == null) {
-    await run('DELETE FROM gallery_work_folders WHERE folder_id = ?', [folder.id]);
-  } else {
-    await run('UPDATE gallery_work_folders SET folder_id = ? WHERE folder_id = ?', [folder.parent_id, folder.id]);
-  }
-  await run('DELETE FROM gallery_folders WHERE id = ? AND user_id = ?', [folder.id, userId]);
+  const folders = await all('SELECT id, parent_id FROM gallery_folders WHERE user_id = ?', [userId]);
+  const folderIds = new Set([Number(folder.id)]);
+  let added;
+  do {
+    added = false;
+    for (const child of folders) {
+      if (child.parent_id != null && folderIds.has(Number(child.parent_id)) && !folderIds.has(Number(child.id))) {
+        folderIds.add(Number(child.id));
+        added = true;
+      }
+    }
+  } while (added);
+
+  const ids = [...folderIds];
+  const workRows = await all(
+    `SELECT work_id FROM gallery_work_folders WHERE folder_id IN (${placeholders(ids)})`,
+    ids
+  );
+  for (const row of workRows) await deleteWork(row.work_id);
+
+  await run(`DELETE FROM gallery_work_folders WHERE folder_id IN (${placeholders(ids)})`, ids);
+  await run(
+    `DELETE FROM gallery_folders WHERE user_id = ? AND id IN (${placeholders(ids)})`,
+    [userId, ...ids]
+  );
   return true;
 }
 
