@@ -46,6 +46,14 @@
   position: relative;
   margin: 18px 0 24px;
 }
+.gallery-folder-name-modal { z-index: 2050; }
+.gallery-folder-name-box { width: 420px; }
+.gallery-folder-name-box .modal-body label {
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 600;
+}
+.gallery-folder-name-box .form-input { box-sizing: border-box; }
 .gallery-folder-header {
   display: flex;
   align-items: center;

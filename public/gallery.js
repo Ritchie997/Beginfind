@@ -744,6 +744,7 @@
       this.selectMode = false;
       this.selectedWorkIds = new Set();
       this.dragging = null;
+      this.folderNameDialogResolve = null;
     }
 
     async init() {
@@ -764,6 +765,11 @@
       this.folderBreadcrumbEl = document.getElementById('galleryFolderBreadcrumb');
       this.folderMoveMenuEl = document.getElementById('galleryFolderMoveMenu');
       this.selectionActionsEl = document.getElementById('gallerySelectionActions');
+      this.folderNameModalEl = document.getElementById('galleryFolderNameModal');
+      this.folderNameFormEl = this.folderNameModalEl?.querySelector('form');
+      this.folderNameInputEl = document.getElementById('galleryFolderNameInput');
+      this.folderNameTitleEl = document.getElementById('galleryFolderNameTitle');
+      this.folderNameSubmitEl = this.folderNameFormEl?.querySelector('[data-folder-name-submit]');
       this.activeFolderId = null;
       this.folderUploadInput = document.getElementById('galleryFolderUploadInput');
       this.folderUploading = false;
@@ -804,6 +810,27 @@
         this.resetAndLoad();
       });
       document.getElementById('galleryFolderCreate')?.addEventListener('click', () => this.createFolder());
+      this.folderNameFormEl?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = this.folderNameInputEl?.value.trim() || '';
+        if (!name) {
+          this.folderNameInputEl?.focus();
+          return;
+        }
+        this.finishFolderNameDialog(name);
+      });
+      this.folderNameModalEl?.addEventListener('click', (e) => {
+        if (e.target === this.folderNameModalEl || e.target.closest('[data-folder-name-cancel]')) {
+          this.finishFolderNameDialog(null);
+        }
+      });
+      this.folderNameModalEl?.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          this.finishFolderNameDialog(null);
+        }
+      });
       document.getElementById('galleryToggleSelect')?.addEventListener('click', () => this.setSelectMode(!this.selectMode));
       document.getElementById('galleryCancelSelect')?.addEventListener('click', () => this.setSelectMode(false));
       document.getElementById('gallerySelectAll')?.addEventListener('click', () => this.selectAllVisibleWorks());
@@ -983,6 +1010,7 @@
       clearTimeout(this._searchDebounce);
       this.closeFolderMoveMenu();
       this.setSelectMode(false);
+      this.finishFolderNameDialog(null);
       this._loadSeq++;
       this.loading = false;
     }
@@ -1137,8 +1165,11 @@
     }
 
     async createFolder(workIds = null) {
-      const name = window.prompt(this.activeFolderId ? 'Название подпапки:' : 'Название папки:');
-      if (name == null || !name.trim()) return;
+      const name = await this.openFolderNameDialog({
+        title: this.activeFolderId ? 'Новая подпапка' : 'Новая папка',
+        submitLabel: 'Создать'
+      });
+      if (name == null) return;
       try {
         const result = await window.apiClient.createGalleryFolder(name, this.activeFolderId);
         if (!result.success) {
@@ -1155,6 +1186,28 @@
       } catch (e) {
         showMessage('Не удалось создать папку', 'error');
       }
+    }
+
+    openFolderNameDialog({ title, submitLabel, value = '' }) {
+      if (!this.folderNameModalEl || !this.folderNameFormEl || !this.folderNameInputEl) return Promise.resolve(null);
+      this.finishFolderNameDialog(null);
+      this.folderNameTitleEl.textContent = title;
+      this.folderNameSubmitEl.textContent = submitLabel;
+      this.folderNameInputEl.value = value;
+      this.folderNameModalEl.hidden = false;
+      this.folderNameInputEl.focus();
+      this.folderNameInputEl.select();
+      return new Promise((resolve) => {
+        this.folderNameDialogResolve = resolve;
+      });
+    }
+
+    finishFolderNameDialog(value) {
+      if (!this.folderNameModalEl || this.folderNameModalEl.hidden) return;
+      this.folderNameModalEl.hidden = true;
+      const resolve = this.folderNameDialogResolve;
+      this.folderNameDialogResolve = null;
+      resolve?.(value);
     }
 
     toggleCardActionsMenu(card, trigger) {
@@ -1205,8 +1258,12 @@
     async renameFolder(folderId) {
       const folder = this.findFolder(folderId);
       if (!folder) return;
-      const name = window.prompt('Новое название папки:', folder.name);
-      if (name == null || !name.trim()) return;
+      const name = await this.openFolderNameDialog({
+        title: 'Переименовать папку',
+        submitLabel: 'Сохранить',
+        value: folder.name
+      });
+      if (name == null) return;
       try {
         const result = await window.apiClient.renameGalleryFolder(folder.id, name);
         if (!result.success) {

@@ -52,4 +52,21 @@
   </div>
   <div id="galleryLoadingMore" class="antropedia-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
   <div id="gallerySentinel" class="antropedia-sentinel"></div>
+
+  <div id="galleryFolderNameModal" class="modal-overlay gallery-folder-name-modal" hidden>
+    <form class="modal-box gallery-folder-name-box" role="dialog" aria-modal="true" aria-labelledby="galleryFolderNameTitle">
+      <div class="modal-header">
+        <h3 id="galleryFolderNameTitle">Новая папка</h3>
+        <button type="button" class="modal-close" data-folder-name-cancel aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="galleryFolderNameInput">Название папки</label>
+        <input id="galleryFolderNameInput" class="form-input" type="text" maxlength="100" autocomplete="off">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-folder-name-cancel>Отмена</button>
+        <button type="submit" class="btn btn-primary" data-folder-name-submit>Создать</button>
+      </div>
+    </form>
+  </div>
 </div>
