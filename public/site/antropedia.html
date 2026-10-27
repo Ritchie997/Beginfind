@@ -79,12 +79,7 @@
             <span id="pubFiltersCount" class="pub-filters-count" hidden>0</span>
             <i class="fas fa-chevron-down pub-filters-chev"></i>
           </button>
-          <span id="publicArticleStatus" class="pub-count" role="status" aria-live="polite">Загружаем открытые статьи…</span>
-          <button type="button" id="pubRandomBtn" class="pub-icon-btn" title="Случайная статья"><i class="fas fa-dice"></i><span>Случайная</span></button>
-          <div class="pub-view-toggle" role="group" aria-label="Вид списка">
-            <button type="button" class="pub-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
-            <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
-          </div>
+          <span id="publicArticleStatus" class="pub-status" role="status" aria-live="polite">Загружаем открытые статьи…</span>
         </div>
 
         <div class="pub-toolbar-row pub-toolbar-row-filters is-open" id="pubFiltersPanel">
@@ -120,6 +115,14 @@
             </select>
           </div>
 
+          <div class="pub-list-controls">
+            <button type="button" id="pubRandomBtn" class="pub-icon-btn" title="Случайная статья"><i class="fas fa-dice"></i><span>Случайная</span></button>
+            <div class="pub-view-toggle" role="group" aria-label="Вид списка">
+              <button type="button" class="pub-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
+              <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
+            </div>
+          </div>
+
           <button type="button" id="pubResetFilters" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
         </div>
       </div>
@@ -134,7 +137,6 @@
 
       <div id="pubLoadingMore" class="pub-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
       <div id="pubSentinel" class="pub-sentinel"></div>
-      <div class="load-more-wrap"><button type="button" id="pubLoadMore" class="btn btn-secondary btn-lg" hidden>Загрузить ещё</button></div>
     </div>
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->

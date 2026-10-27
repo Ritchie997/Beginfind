@@ -246,7 +246,6 @@
     var emptyEl = document.getElementById('pubEmpty');
     var loadingMoreEl = document.getElementById('pubLoadingMore');
     var sentinel = document.getElementById('pubSentinel');
-    var loadMore = document.getElementById('pubLoadMore');
     var sortEl = document.getElementById('pubSort');
     var dateFromEl = document.getElementById('pubDateFrom');
     var dateToEl = document.getElementById('pubDateTo');
@@ -628,14 +627,7 @@
     // ---------- Загрузка списка ----------
 
     function updateStatus() {
-      if (state.loading && state.offset === 0) {
-        status.textContent = 'Загружаем открытые статьи…';
-      } else if (state.total > 0) {
-        var shown = grid.querySelectorAll('.public-wiki-card').length;
-        status.textContent = 'Показано ' + shown + ' из ' + state.total;
-      } else {
-        status.textContent = '';
-      }
+      status.textContent = state.loading && state.offset === 0 ? 'Загружаем открытые статьи…' : '';
     }
 
     async function loadArticles(append) {
@@ -658,7 +650,6 @@
         loadingMoreEl.hidden = false;
       }
       updateStatus();
-      loadMore.disabled = true;
 
       var f = getFilters();
       var query = new URLSearchParams({
@@ -692,7 +683,6 @@
         state.offset = (append ? state.offset : 0) + articles.length;
         state.total = Number(result.total) || 0;
         state.hasMore = articles.length > 0 && state.offset < state.total;
-        loadMore.hidden = !state.hasMore || 'IntersectionObserver' in window;
 
         var isEmpty = state.total === 0;
         emptyEl.hidden = !isEmpty;
@@ -712,7 +702,6 @@
         grid.querySelectorAll('.pub-skeleton').forEach(function (el) { el.remove(); });
         grid.appendChild(makePublicMessage('Не удалось загрузить статьи. Проверьте соединение и попробуйте ещё раз.'));
         state.hasMore = false;
-        loadMore.hidden = true;
         if (pendingListRestore) {
           pendingListRestore.scrollY = Math.min(
             pendingListRestore.scrollY,
@@ -723,7 +712,6 @@
       } finally {
         if (!state.disposed && generation === state.generation) {
           state.loading = false;
-          loadMore.disabled = false;
           loadingMoreEl.hidden = true;
           updateStatus();
           // Если после загрузки метка конца списка всё ещё на виду (мало
@@ -1623,10 +1611,7 @@
     document.getElementById('pubResetFilters').addEventListener('click', resetFilters);
     document.getElementById('pubEmptyReset').addEventListener('click', resetFilters);
     document.getElementById('pubRandomBtn').addEventListener('click', openRandomArticle);
-    loadMore.addEventListener('click', function () { loadArticles(true); });
 
-    // Подгрузка при прокрутке, как в админке; кнопка «Загрузить ещё» — только
-    // запасной вариант для браузеров без IntersectionObserver.
     if ('IntersectionObserver' in window) {
       state.observer = new IntersectionObserver(function (entries) {
         if (entries.some(function (e) { return e.isIntersecting; })) loadArticles(true);
