@@ -1,3 +1,16 @@
+
+/* Accessibility Utility */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
 /* ============================================================
    site.css — публичная витрина AllTell (лендинг/Antropedia/
    AllTell-сервера/Галерея).
@@ -2163,17 +2176,30 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    width: min(100%, 420px);
+    width: min(100%, 440px);
 }
 
+.alltell-search-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.alltell-search-input-wrap .alltell-search-icon,
 .alltell-search-icon {
     position: absolute;
     left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--text-muted);
     font-size: 14px;
     pointer-events: none;
+    z-index: 1;
 }
 
+.alltell-search-input-wrap input,
 .alltell-search-box input {
     width: 100%;
     padding: 10px 38px 10px 38px;
@@ -2186,6 +2212,7 @@
     transition: all 0.2s ease;
 }
 
+.alltell-search-input-wrap input:focus,
 .alltell-search-box input:focus {
     outline: none;
     border-color: var(--blurple);
@@ -2193,16 +2220,25 @@
     background: var(--background-secondary);
 }
 
+.alltell-search-input-wrap .alltell-search-clear,
 .alltell-search-clear {
     position: absolute;
-    right: 76px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     border: none;
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
     font-size: 14px;
     padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
 }
+
+.alltell-search-input-wrap .alltell-search-clear:hover,
 .alltell-search-clear:hover {
     color: var(--header-primary);
 }
@@ -3825,34 +3861,224 @@
     color: var(--header-secondary);
 }
 
+.alltell-image-editor-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.alltell-image-editor-heading strong {
+    color: var(--header-primary);
+    font-weight: 600;
+}
+
+.alltell-image-editor-heading span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .alltell-form-images {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
 }
 
 .alltell-form-image-item {
     position: relative;
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
     background: var(--background-primary);
     border: 1px solid var(--background-accent);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alltell-form-image-item:hover {
+    border-color: rgba(88, 101, 242, 0.5);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    transform: translateY(-2px);
+}
+
+.alltell-form-image-item.is-dragging {
+    opacity: 0.4;
+    transform: scale(0.95);
+}
+
+.alltell-form-image-item.is-drop-target {
+    border-color: var(--blurple);
+    box-shadow: 0 0 0 2px var(--blurple);
+}
+
+.alltell-form-image-thumb {
+    position: relative;
+    width: 100%;
+    height: 100px;
+    background: #14161a;
+    overflow: hidden;
 }
 
 .alltell-form-image-preview {
     width: 100%;
-    height: 90px;
+    height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform 0.2s ease;
 }
 
-.alltell-form-image-actions {
+.alltell-form-image-item:hover .alltell-form-image-preview {
+    transform: scale(1.04);
+}
+
+.alltell-form-image-order {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.alltell-form-image-delete {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
     display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    z-index: 2;
+    padding: 0;
+}
+
+.alltell-form-image-delete:hover:not(:disabled) {
+    background: var(--red, #ed4245);
+    border-color: var(--red, #ed4245);
+    transform: scale(1.12);
+}
+
+.alltell-form-image-delete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.alltell-image-pending {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    right: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.85);
+    backdrop-filter: blur(4px);
+    color: #111;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: center;
+    display: flex;
+    align-items: center;
     justify-content: center;
     gap: 4px;
-    padding: 4px;
-    background: rgba(0, 0, 0, 0.3);
+    z-index: 2;
+}
+
+.alltell-form-image-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 4px;
+}
+
+.alltell-form-image-nav {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.alltell-form-image-nav:hover:not(:disabled) {
+    background: var(--blurple);
+    border-color: var(--blurple);
+    color: #fff;
+}
+
+.alltell-form-image-nav:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: transparent;
+    border-color: transparent;
+}
+
+.alltell-form-image-pos {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.alltell-upload-progress {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-accent);
+}
+
+.alltell-upload-progress > div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.alltell-upload-progress progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.alltell-upload-progress progress::-webkit-progress-bar {
+    background: var(--background-tertiary);
+}
+
+.alltell-upload-progress progress::-webkit-progress-value {
+    background: var(--blurple);
 }
 
 .alltell-post-form-actions {

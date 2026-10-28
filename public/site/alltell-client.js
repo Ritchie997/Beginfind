@@ -245,11 +245,12 @@
               <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
               <p>Исследуйте сообщества AllTell, знакомьтесь с ролевыми мирами и следите за развитием историй.</p>
             </div>
-            <form class="alltell-search-box" data-search-form>
-              <label class="visually-hidden" for="alltell-search-input">Поиск франшиз</label>
-              <i class="fas fa-search alltell-search-icon" aria-hidden="true"></i>
-              <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off">
-              ${state.query ? `<button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск"><i class="fas fa-xmark"></i></button>` : ''}
+            <form class="alltell-search-box" data-search-form role="search">
+              <div class="alltell-search-input-wrap">
+                <i class="fas fa-search alltell-search-icon" aria-hidden="true"></i>
+                <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
+                ${state.query ? `<button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск"><i class="fas fa-xmark"></i></button>` : ''}
+              </div>
               <button class="btn btn-secondary alltell-search-btn" type="submit">Найти</button>
             </form>
           </div>
@@ -681,12 +682,22 @@
   function renderPostImageItems(images, disabled) {
     return images.map(function (image, index) {
       return `<article class="alltell-form-image-item${image.file ? ' is-pending' : ''}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
-        <img class="alltell-form-image-preview" src="${escapeHtml(image.preview || image.url)}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
-        ${image.file ? '<span class="alltell-image-pending">Ожидает загрузки</span>' : ''}
-        <div class="alltell-form-image-actions">
-          <button class="btn btn-secondary btn-sm" type="button" data-action="move-image" data-direction="-1" data-image-index="${index}" aria-label="Переместить влево" ${index === 0 || disabled ? 'disabled' : ''}><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-          <button class="btn btn-secondary btn-sm" type="button" data-action="move-image" data-direction="1" data-image-index="${index}" aria-label="Переместить вправо" ${index === images.length - 1 || disabled ? 'disabled' : ''}><i class="fas fa-arrow-right" aria-hidden="true"></i></button>
-          <button class="btn btn-secondary btn-sm" type="button" data-action="remove-image" data-image-index="${index}" ${disabled ? 'disabled' : ''}>Убрать</button>
+        <div class="alltell-form-image-thumb">
+          <img class="alltell-form-image-preview" src="${escapeHtml(image.preview || image.url)}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
+          <span class="alltell-form-image-order" title="Порядковый номер">${index + 1}</span>
+          <button class="alltell-form-image-delete" type="button" data-action="remove-image" data-image-index="${index}" title="Удалить изображение" aria-label="Удалить изображение" ${disabled ? 'disabled' : ''}>
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+          ${image.file ? '<span class="alltell-image-pending"><i class="fas fa-clock" aria-hidden="true"></i> Ожидает</span>' : ''}
+        </div>
+        <div class="alltell-form-image-bar">
+          <button class="alltell-form-image-nav" type="button" data-action="move-image" data-direction="-1" data-image-index="${index}" title="Переместить левее" aria-label="Переместить влево" ${index === 0 || disabled ? 'disabled' : ''}>
+            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+          </button>
+          <span class="alltell-form-image-pos">${index + 1} / ${images.length}</span>
+          <button class="alltell-form-image-nav" type="button" data-action="move-image" data-direction="1" data-image-index="${index}" title="Переместить правее" aria-label="Переместить вправо" ${index === images.length - 1 || disabled ? 'disabled' : ''}>
+            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+          </button>
         </div>
       </article>`;
     }).join('');
