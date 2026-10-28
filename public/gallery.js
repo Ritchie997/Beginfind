@@ -129,15 +129,6 @@
           </div>` : ''}
         <div class="gallery-card-caption">
           <div class="gallery-card-title">${escapeHtml(work.title)}</div>
-          ${work.reactions && work.reactions.length ? `
-            <div class="gallery-card-reactions-bar">
-              ${work.reactions.slice(0, 4).map((r) => `
-                <span class="gallery-card-reaction-pill" title="${escapeHtml(r.shortcode || '')}">
-                  <img src="${escapeHtml(r.url)}" alt="" loading="lazy">
-                  <span>${r.count}</span>
-                </span>
-              `).join('')}
-            </div>` : ''}
           ${compact || !work.author ? '' : `<div class="gallery-card-author">${window.avatarHtml({ name: work.author.display_name, avatar: work.author.avatar }, 18)} ${escapeHtml(work.author.display_name)}</div>`}
         </div>
       </article>`;
