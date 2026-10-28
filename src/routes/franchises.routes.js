@@ -8,6 +8,7 @@ const { isAdminOnServer } = require('../services/server-permissions');
 const articlesStore = require('../services/articles-store');
 const articleLayers = require('../services/article-layers');
 const publicArticles = require('../services/public-articles');
+const { toRelativeUploadPath } = require('../services/blocks');
 const { serversSchemaReady } = require('../db/connections');
 const social = require('../services/social-store');
 const stickers = require('../services/stickers-store');
@@ -169,7 +170,7 @@ async function publicPost(row, user) {
     title: row.title,
     body: row.body,
     images: parsePostImages(row),
-    image_url: row.image_url || null,
+    image_url: row.image_url ? toRelativeUploadPath(row.image_url) : (parsePostImages(row)[0] || null),
     article: article ? {
       slug: article.slug,
       title: article.title,
@@ -235,15 +236,21 @@ async function resolvePostReactions(reactions) {
 }
 
 function parsePostImages(row) {
-  if (typeof row.image_urls === 'string' && row.image_urls) {
+  let images = [];
+  if (typeof row.image_urls === 'string' && row.image_urls.trim()) {
     try {
-      const images = JSON.parse(row.image_urls);
-      if (Array.isArray(images)) return images.filter((image) => typeof image === 'string');
+      const parsed = JSON.parse(row.image_urls);
+      if (Array.isArray(parsed)) images = parsed.filter((item) => typeof item === 'string');
+      else if (typeof parsed === 'string') images = [parsed];
     } catch (error) {
-      console.error(`[franchises] Invalid image list for post ${row.id}:`, error.message);
+      images = [row.image_urls.trim()];
     }
+  } else if (Array.isArray(row.image_urls)) {
+    images = row.image_urls.filter((item) => typeof item === 'string');
+  } else if (row.image_url) {
+    images = [row.image_url];
   }
-  return row.image_url ? [row.image_url] : [];
+  return images.map(toRelativeUploadPath).filter(Boolean);
 }
 
 router.get('/public/franchises', async (req, res) => {

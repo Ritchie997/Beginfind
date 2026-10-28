@@ -75,6 +75,65 @@
     });
   }
 
+  function normalizeImageUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    var s = url.trim();
+    if (!s) return '';
+    if (s.charCodeAt(0) === 91 && s.charCodeAt(s.length - 1) === 93) {
+      try {
+        var arr = JSON.parse(s);
+        if (Array.isArray(arr) && arr.length) return normalizeImageUrl(arr[0]);
+      } catch (e) {}
+    }
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        var parsed = new URL(s);
+        if (parsed.pathname.startsWith('/uploads/')) return parsed.pathname + parsed.search;
+        if (window.location && window.location.protocol === 'https:' && s.startsWith('http://')) {
+          return 'https://' + s.slice(7);
+        }
+      } catch (e) {}
+      return s;
+    }
+    if (s.startsWith('uploads/')) return '/' + s;
+    if (s.startsWith('./uploads/')) return s.slice(1);
+    if (!s.includes('/') && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(s)) return '/uploads/' + s;
+    return s;
+  }
+
+  function extractPostImages(post) {
+    if (!post) return [];
+    var rawList = [];
+    if (Array.isArray(post.images) && post.images.length) {
+      rawList = post.images;
+    } else if (typeof post.images === 'string' && post.images.trim()) {
+      try {
+        var p = JSON.parse(post.images);
+        rawList = Array.isArray(p) ? p : [p];
+      } catch (e) {
+        rawList = [post.images.trim()];
+      }
+    } else if (Array.isArray(post.image_urls) && post.image_urls.length) {
+      rawList = post.image_urls;
+    } else if (typeof post.image_urls === 'string' && post.image_urls.trim()) {
+      try {
+        var p2 = JSON.parse(post.image_urls);
+        rawList = Array.isArray(p2) ? p2 : [p2];
+      } catch (e) {
+        rawList = [post.image_urls.trim()];
+      }
+    } else if (post.image_url && typeof post.image_url === 'string') {
+      rawList = [post.image_url.trim()];
+    }
+
+    var result = [];
+    rawList.forEach(function (item) {
+      var norm = normalizeImageUrl(item);
+      if (norm && !result.includes(norm)) result.push(norm);
+    });
+    return result;
+  }
+
   function initials(value) {
     var words = String(value || '').trim().split(/\s+/).filter(Boolean);
     return words.slice(0, 2).map(function (word) { return word.charAt(0); }).join('').toLocaleUpperCase() || '✶';
@@ -522,9 +581,7 @@
     franchiseId = franchiseId || post.franchise_id;
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
     var canEdit = canManage || post.can_edit;
-    var images = Array.isArray(post.images) && post.images.length
-      ? post.images
-      : (post.image_url ? [post.image_url] : []);
+    var images = extractPostImages(post);
     var articleHref = post.article && (post.article.is_public
       ? '/antropedia/' + encodeURIComponent(post.article.slug)
       : '/admin-panel/antropedia/' + encodeURIComponent(post.article.slug));
@@ -556,7 +613,21 @@
           <div class="alltell-post-carousel" data-image-carousel>
             <div class="alltell-post-images" data-image-track>
               ${images.map(function (image, index) {
-                return `<img class="alltell-post-image" src="${escapeHtml(image)}" alt="" loading="lazy" data-image-index="${index}" onerror="this.onerror=null;this.style.display='none';var p=this.closest('.alltell-post-carousel');if(p && !p.querySelector('.alltell-post-image:not([style*=\'none\'])')) p.style.display='none';">`;
+                return `
+                  <div class="alltell-image-slide" data-image-index="${index}">
+                    <img class="alltell-post-image"
+                         src="${escapeHtml(image)}"
+                         alt="Изображение к записи ${escapeHtml(post.title)}"
+                         loading="lazy"
+                         data-image-src="${escapeHtml(image)}"
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                         onload="this.classList.add('is-loaded');">
+                    <div class="alltell-image-fallback" style="display:none;">
+                      <i class="far fa-image" aria-hidden="true"></i>
+                      <span>Изображение недоступно</span>
+                    </div>
+                  </div>
+                `;
               }).join('')}
             </div>
             ${images.length > 1 ? `
