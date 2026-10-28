@@ -598,16 +598,14 @@
 
 /* ==========================================================================
    Gallery Viewer (Image Lightbox & Details Modal) Redesign
-   Unified dark Discord/fandom theme with glassmorphism and glowing accents
+   Classic Discord/Beginfind theme palette: #2f3136, #202225, #36393f, #4f545c
    ========================================================================== */
 
 .gallery-viewer {
   position: fixed;
   inset: 0;
   z-index: 1800;
-  background: rgba(9, 11, 15, 0.95);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  background: #0c0c0e;
   overflow: hidden;
 }
 
@@ -616,7 +614,7 @@ body.gallery-viewer-open {
 }
 
 body.gallery-viewer-open .antropedia-sticker-picker {
-  z-index: 1950;
+  z-index: 2100;
 }
 
 .gv-shell {
@@ -633,7 +631,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 50% 50%, rgba(88, 101, 242, 0.05) 0%, transparent 65%), rgba(6, 8, 12, 0.5);
+  background: #0c0c0e;
   user-select: none;
 }
 
@@ -641,36 +639,34 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
+  padding: 10px 18px;
   z-index: 10;
-  background: rgba(15, 18, 25, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(32, 34, 37, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--background-accent, #4f545c);
 }
 
 .gv-icon-btn {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  border: 1px solid var(--background-accent, #4f545c);
+  background: var(--background-secondary, #2f3136);
+  color: var(--text-normal, #dcddde);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 15px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.18s ease;
 }
 
 .gv-icon-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #f87171;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.3);
-  transform: scale(1.05);
+  background: rgba(237, 66, 69, 0.25);
+  border-color: var(--red, #ed4245);
+  color: #fff;
+  transform: scale(1.06);
 }
 
 .gv-icon-btn:disabled {
@@ -696,30 +692,30 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   flex-shrink: 0;
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
-  font-size: 12.5px;
+  border: 1px solid var(--background-accent, #4f545c);
+  background: var(--background-secondary, #2f3136);
+  color: var(--header-secondary, #b9bbbe);
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.18s ease;
 }
 
 .gv-variant:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--background-primary, #36393f);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--blurple, #5865f2);
 }
 
 .gv-variant.active {
-  background: linear-gradient(135deg, #5865f2, #4752c4);
-  border-color: rgba(165, 180, 252, 0.6);
+  background: var(--blurple, #5865f2);
+  border-color: var(--blurple, #5865f2);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
+  box-shadow: 0 2px 10px rgba(88, 101, 242, 0.4);
 }
 
 .gv-variant i {
@@ -730,14 +726,13 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 
 .gv-counter {
   margin-left: auto;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: var(--text-muted, #72767d);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.03em;
   white-space: nowrap;
 }
 
@@ -766,9 +761,9 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
@@ -815,29 +810,27 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 
 .gv-arrow-prev {
   left: 0;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.4), transparent);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.45), transparent);
 }
 
 .gv-arrow-next {
   right: 0;
-  background: linear-gradient(270deg, rgba(0, 0, 0, 0.4), transparent);
+  background: linear-gradient(270deg, rgba(0, 0, 0, 0.45), transparent);
 }
 
 .gv-arrow i {
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: rgba(18, 22, 30, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f1f5f9;
+  background: rgba(32, 34, 37, 0.88);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
 }
 
 .gv-frame:hover .gv-arrow {
@@ -849,11 +842,11 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-arrow:hover i {
-  background: #5865f2;
-  border-color: #818cf8;
+  background: var(--blurple, #5865f2);
+  border-color: var(--blurple, #5865f2);
   color: #fff;
-  transform: scale(1.12);
-  box-shadow: 0 0 20px rgba(88, 101, 242, 0.55);
+  transform: scale(1.1);
+  box-shadow: 0 0 18px rgba(88, 101, 242, 0.6);
 }
 
 @media (hover: none) {
@@ -868,10 +861,8 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   overflow-x: auto;
   scrollbar-width: thin;
   flex-shrink: 0;
-  background: rgba(15, 18, 25, 0.5);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(20, 22, 25, 0.85);
+  border-top: 1px solid var(--background-accent, #4f545c);
 }
 
 .gv-thumb {
@@ -883,10 +874,10 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   border: 2px solid transparent;
   border-radius: 8px;
   overflow: hidden;
-  background: #1a1e28;
+  background: var(--background-tertiary, #202225);
   cursor: pointer;
-  opacity: 0.55;
-  transition: all 0.2s ease;
+  opacity: 0.6;
+  transition: all 0.18s ease;
 }
 
 .gv-thumb img {
@@ -897,14 +888,14 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-thumb:hover {
-  opacity: 0.9;
+  opacity: 0.95;
   transform: translateY(-2px);
 }
 
 .gv-thumb.active {
-  border-color: #5865f2;
+  border-color: var(--blurple, #5865f2);
   opacity: 1;
-  box-shadow: 0 0 14px rgba(88, 101, 242, 0.5);
+  box-shadow: 0 0 12px rgba(88, 101, 242, 0.5);
   transform: scale(1.04);
 }
 
@@ -915,7 +906,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   font-size: 10px;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   padding: 1px 4px;
   border-radius: 4px;
 }
@@ -937,9 +928,9 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   width: 100%;
   max-width: 900px;
   height: auto;
-  background: #141720;
-  border-radius: 8px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: #1a1a1d;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .gv-page-block {
@@ -955,31 +946,29 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-no-pages {
-  color: #94a3b8;
+  color: var(--text-muted, #72767d);
   padding: 40px;
   text-align: center;
 }
 
 /* ==========================================================================
-   Right Panel: Info, Author, Engagement & Comments
+   Right Panel: Classic Site Color Palette
    ========================================================================== */
 
 .gv-panel {
-  flex: 0 0 430px;
-  max-width: 450px;
-  width: 430px;
-  background: rgba(18, 22, 29, 0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 420px;
+  max-width: 440px;
+  width: 420px;
+  background: var(--background-secondary, #2f3136);
+  border-left: 1px solid var(--background-accent, #4f545c);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  padding: 24px 20px 40px;
+  padding: 22px 20px 40px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-  box-shadow: -10px 0 32px rgba(0, 0, 0, 0.4);
+  scrollbar-color: var(--background-accent) transparent;
+  color: var(--text-normal, #dcddde);
 }
 
 .gv-panel::-webkit-scrollbar {
@@ -987,7 +976,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--background-accent, #4f545c);
   border-radius: 4px;
 }
 
@@ -998,12 +987,11 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 
 .gv-title {
   margin: 0 0 10px;
-  font-size: 22px;
-  font-weight: 800;
-  color: #f8fafc;
-  line-height: 1.3;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--header-primary, #fff);
+  line-height: 1.35;
   word-break: break-word;
-  letter-spacing: -0.015em;
 }
 
 .gv-badges {
@@ -1018,7 +1006,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-author {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .gv-author .antropedia-person {
@@ -1026,10 +1014,10 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #f1f5f9;
+  border-radius: 8px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: var(--header-primary, #fff);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1037,9 +1025,8 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-author .antropedia-person:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #5865f2;
+  border-color: var(--blurple, #5865f2);
+  color: #fff;
 }
 
 .gv-author .antropedia-person img,
@@ -1047,18 +1034,18 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.4);
+  box-shadow: 0 0 0 2px var(--blurple, #5865f2);
 }
 
 .gv-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  color: #94a3b8;
+  color: var(--text-muted, #72767d);
   font-size: 12.5px;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--background-accent, #4f545c);
 }
 
 .gv-meta span {
@@ -1068,7 +1055,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-meta span i {
-  color: #64748b;
+  color: var(--text-muted, #72767d);
   font-size: 12px;
 }
 
@@ -1076,12 +1063,12 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   min-height: 0;
   overflow: visible;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  font-size: 13.5px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 8px;
+  font-size: 14px;
   line-height: 1.6;
-  color: #cbd5e1;
+  color: var(--text-normal, #dcddde);
   word-break: break-word;
   margin-bottom: 14px;
 }
@@ -1110,9 +1097,9 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(45, 212, 191, 0.08);
-  border: 1px solid rgba(45, 212, 191, 0.2);
-  color: #2dd4bf;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: var(--text-muted, #72767d);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1120,11 +1107,10 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-tags .antropedia-tag-pill:hover {
-  background: rgba(45, 212, 191, 0.18);
-  border-color: rgba(45, 212, 191, 0.5);
-  color: #fff;
+  background: var(--background-primary, #36393f);
+  border-color: var(--blurple, #5865f2);
+  color: var(--text-normal, #dcddde);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(45, 212, 191, 0.25);
 }
 
 .gv-actions {
@@ -1135,7 +1121,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-actions .btn {
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 7px 14px;
   font-size: 12.5px;
   font-weight: 600;
@@ -1146,14 +1132,13 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gv-actions .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: var(--text-normal, #dcddde);
 }
 
 .gv-actions .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--background-accent, #4f545c);
   color: #fff;
   transform: translateY(-1px);
 }
@@ -1166,14 +1151,13 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 .gallery-viewer .antropedia-view-engagement {
   margin: 16px 0 !important;
   padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 /* General Engagement Button in Viewer */
@@ -1182,29 +1166,28 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   align-items: center;
   gap: 7px;
   padding: 7px 14px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  color: #cbd5e1;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 20px;
+  color: var(--text-normal, #dcddde);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.18s ease;
   user-select: none;
 }
 
 .gallery-viewer .antropedia-engagement-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--background-accent, #4f545c);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
 }
 
 /* Heart Like Button & Active State */
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"] .fa-heart {
-  color: #ff5d8f;
+  color: var(--accent-pink, #ff5d8f);
   font-size: 14px;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.2s ease;
 }
 
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"]:hover .fa-heart {
@@ -1213,28 +1196,26 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"].is-active,
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"].active {
-  background: linear-gradient(135deg, rgba(255, 93, 143, 0.28), rgba(244, 63, 94, 0.18));
-  border-color: #ff5d8f;
+  background: rgba(255, 93, 143, 0.18);
+  border-color: var(--accent-pink, #ff5d8f);
   color: #fff;
-  box-shadow: 0 0 16px rgba(255, 93, 143, 0.35);
 }
 
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"].is-active .fa-heart,
 .gallery-viewer .antropedia-engagement-btn[data-gv="like"].active .fa-heart {
   font-weight: 900;
   transform: scale(1.15);
-  filter: drop-shadow(0 0 6px #ff5d8f);
+  filter: drop-shadow(0 0 5px rgba(255, 93, 143, 0.6));
 }
 
 /* Comments Button */
 .gallery-viewer .antropedia-engagement-btn[data-gv="comments-btn"] i {
-  color: #818cf8;
+  color: var(--blurple, #5865f2);
 }
 
 .gallery-viewer .antropedia-engagement-btn[data-gv="comments-btn"]:hover {
-  background: rgba(88, 101, 242, 0.18);
-  border-color: rgba(88, 101, 242, 0.45);
-  color: #a5b4fc;
+  border-color: var(--blurple, #5865f2);
+  color: #fff;
 }
 
 /* Reactions Bar inside Viewer */
@@ -1250,63 +1231,68 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 999px;
-  color: #cbd5e1;
+  padding: 4px 10px;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 14px;
+  color: var(--text-normal, #dcddde);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
 }
 
 .gallery-viewer .antropedia-reaction-pill:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--background-accent, #4f545c);
   color: #fff;
+  border-color: var(--blurple, #5865f2);
   transform: translateY(-1px);
 }
 
 .gallery-viewer .antropedia-reaction-pill.active {
   background: rgba(88, 101, 242, 0.22);
-  border-color: #5865f2;
+  border-color: var(--blurple, #5865f2);
   color: #fff;
-  box-shadow: 0 0 10px rgba(88, 101, 242, 0.3);
 }
 
-.gallery-viewer .antropedia-reaction-pill img {
-  width: 17px;
-  height: 17px;
-  object-fit: contain;
+/* Ensure sticker images inside reaction pills are ALWAYS clearly visible */
+.gallery-viewer .antropedia-reaction-pill img,
+.antropedia-reaction-pill img {
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  object-fit: contain !important;
+  vertical-align: middle !important;
 }
 
 .gallery-viewer .antropedia-reaction-add {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  color: #94a3b8;
+  background: var(--background-secondary, #2f3136);
+  border: 1px dashed var(--background-accent, #4f545c);
+  color: var(--text-muted, #72767d);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
 }
 
 .gallery-viewer .antropedia-reaction-add:hover,
 .gallery-viewer .antropedia-reaction-add.active {
-  background: rgba(88, 101, 242, 0.18);
-  border-color: #5865f2;
+  background: var(--background-accent, #4f545c);
+  border-color: var(--blurple, #5865f2);
   border-style: solid;
   color: #fff;
   transform: scale(1.08);
 }
 
 /* ==========================================================================
-   Comments Section inside Viewer
+   Comments Section inside Viewer - Spacious, Comfortable Input Field
    ========================================================================== */
 
 .gallery-viewer .gv-comments,
@@ -1323,53 +1309,53 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #94a3b8;
+  letter-spacing: 0.5px;
+  color: var(--header-secondary, #b9bbbe);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .gallery-viewer .antropedia-comments h3 [data-gv="comments-header-count"] {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(88, 101, 242, 0.15);
-  color: #a5b4fc;
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--text-muted, #72767d);
+  font-weight: normal;
 }
 
-/* Comment Form */
+/* Comment Form: Spacious & Structured so input is never squeezed */
 .gallery-viewer .antropedia-comment-form {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 14px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 8px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-bottom: 18px;
   position: relative;
-  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .gallery-viewer .antropedia-comment-form:focus-within {
-  border-color: rgba(88, 101, 242, 0.65);
-  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
-  background: rgba(255, 255, 255, 0.045);
+  border-color: var(--blurple, #5865f2);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25);
 }
 
+/* Large and prominent comment field whether comments exist or not */
 .gallery-viewer .antropedia-comment-input {
-  min-height: 44px;
-  max-height: 160px;
+  display: block;
   width: 100%;
-  padding: 4px 6px;
+  min-height: 64px;
+  max-height: 220px;
+  padding: 8px 10px;
   background: transparent;
   border: none;
-  color: #f1f5f9;
-  font-size: 13.5px;
+  color: var(--text-normal, #dcddde);
+  font-size: 14px;
   line-height: 1.5;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .gallery-viewer .antropedia-comment-input:focus {
@@ -1378,7 +1364,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 
 .gallery-viewer .antropedia-comment-input:empty::before {
   content: attr(data-placeholder);
-  color: #64748b;
+  color: var(--text-muted, #72767d);
   font-size: 13.5px;
   pointer-events: none;
 }
@@ -1388,47 +1374,45 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .gallery-viewer .antropedia-sticker-picker-btn {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted, #72767d);
   font-size: 16px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
 }
 
 .gallery-viewer .antropedia-sticker-picker-btn:hover {
-  color: #facc15;
-  background: rgba(250, 204, 21, 0.12);
-  transform: scale(1.1);
+  color: var(--yellow, #faa81a);
+  background: rgba(250, 168, 26, 0.12);
+  transform: scale(1.08);
 }
 
 .gallery-viewer .antropedia-comment-form-actions .btn-primary {
   padding: 6px 16px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #5865f2, #4752c4);
+  border-radius: 6px;
+  background: var(--blurple, #5865f2);
   border: none;
   color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.35);
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
 }
 
 .gallery-viewer .antropedia-comment-form-actions .btn-primary:hover {
-  background: linear-gradient(135deg, #4752c4, #3c45a5);
-  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.5);
+  background: var(--blurple-hover, #4752c4);
   transform: translateY(-1px);
 }
 
@@ -1440,16 +1424,10 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gallery-viewer .antropedia-comment {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 8px;
   padding: 12px 14px;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.gallery-viewer .antropedia-comment:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .gallery-viewer .antropedia-comment-head {
@@ -1463,32 +1441,31 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #f1f5f9;
-  font-weight: 700;
+  color: var(--header-primary, #fff);
+  font-weight: 600;
   font-size: 13px;
   cursor: pointer;
 }
 
 .gallery-viewer .antropedia-comment-author:hover {
-  color: #5865f2;
+  color: var(--blurple, #5865f2);
   text-decoration: underline;
 }
 
 .gallery-viewer .antropedia-comment-date {
-  color: #64748b;
-  font-size: 11.5px;
-  font-weight: 500;
+  color: var(--text-muted, #72767d);
+  font-size: 11px;
 }
 
 .gallery-viewer .antropedia-comment-delete {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: #64748b;
+  color: var(--text-muted, #72767d);
   cursor: pointer;
   font-size: 12px;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: 4px;
   opacity: 0;
   transition: all 0.15s ease;
 }
@@ -1499,15 +1476,40 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gallery-viewer .antropedia-comment-delete:hover {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
+  color: var(--red, #ed4245);
 }
 
 .gallery-viewer .antropedia-comment-body {
-  color: #cbd5e1;
-  font-size: 13.5px;
+  color: var(--text-normal, #dcddde);
+  font-size: 14px;
   line-height: 1.55;
   word-break: break-word;
+}
+
+/* Sticker Display inside Comments: Guaranteed Visibility */
+.gallery-viewer .antropedia-inline-sticker,
+.antropedia-inline-sticker,
+.gallery-viewer .antropedia-inline-sticker-chip,
+.antropedia-inline-sticker-chip {
+  display: inline-block !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  object-fit: contain !important;
+  vertical-align: -5px !important;
+  margin: 0 2px !important;
+  cursor: pointer;
+}
+
+.gallery-viewer .antropedia-comment-body.antropedia-comment-sticker-only .antropedia-standalone-sticker,
+.antropedia-comment-body.antropedia-comment-sticker-only .antropedia-standalone-sticker {
+  display: block !important;
+  width: 128px !important;
+  height: 128px !important;
+  object-fit: contain !important;
+  cursor: pointer;
+  margin: 4px 0 !important;
 }
 
 .gallery-viewer .antropedia-comment-actions {
@@ -1521,12 +1523,12 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 .gallery-viewer .antropedia-comment-reply-btn {
   background: none;
   border: none;
-  color: #94a3b8;
-  font-size: 11.5px;
+  color: var(--text-muted, #72767d);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1534,29 +1536,28 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 }
 
 .gallery-viewer .antropedia-comment-reply-btn:hover {
-  color: #5865f2;
-  background: rgba(88, 101, 242, 0.12);
+  color: var(--text-normal, #dcddde);
 }
 
 .gallery-viewer .antropedia-replies {
   margin-top: 8px;
   padding-left: 14px;
-  border-left: 2px solid rgba(88, 101, 242, 0.4);
+  border-left: 2px solid var(--background-accent, #4f545c);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .gallery-viewer .antropedia-comment-reply {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 6px;
   padding: 10px 12px;
 }
 
 .gallery-viewer .antropedia-comments-empty {
-  color: #64748b;
-  font-size: 13px;
+  color: var(--text-muted, #72767d);
+  font-size: 13.5px;
   text-align: center;
   padding: 20px 0;
 }
@@ -1568,15 +1569,15 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 .gallery-viewer .gv-section {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--background-accent, #4f545c);
 }
 
 .gallery-viewer .gv-section h4 {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #94a3b8;
+  letter-spacing: 0.04em;
+  color: var(--header-secondary, #b9bbbe);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1587,19 +1588,17 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #818cf8;
+  border-radius: 8px;
+  background: var(--background-tertiary, #202225);
+  border: 1px solid var(--background-accent, #4f545c);
+  color: var(--text-link, #00b0f4);
   text-decoration: none;
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: 14px;
   transition: all 0.15s ease;
 }
 
 .gallery-viewer .gv-article-link:hover {
-  background: rgba(88, 101, 242, 0.12);
-  border-color: rgba(88, 101, 242, 0.35);
+  background: var(--background-accent, #4f545c);
   color: #fff;
   transform: translateX(2px);
 }
@@ -1613,6 +1612,112 @@ body.gallery-viewer-open .antropedia-sticker-picker {
 .gallery-viewer .gv-associated .gallery-card-media {
   aspect-ratio: 1 / 1 !important;
   border-radius: 8px;
+}
+
+/* ==========================================================================
+   Sticker Picker Modal Polish: Non-jumping, styled with Discord theme
+   ========================================================================== */
+
+.antropedia-sticker-picker {
+  position: fixed;
+  z-index: 2100;
+  width: min(400px, calc(100vw - 16px));
+  max-height: min(480px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--background-accent, #4f545c);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: stickerPickerIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes stickerPickerIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.antropedia-sticker-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--header-primary, #fff);
+  background: var(--background-secondary, #2f3136);
+  border-bottom: 1px solid var(--background-accent, #4f545c);
+}
+
+.antropedia-sticker-picker-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  background: var(--background-tertiary, #202225);
+  border-bottom: 1px solid var(--background-accent, #4f545c);
+}
+
+.antropedia-sticker-picker-tab {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-secondary, #2f3136);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text-muted, #72767d);
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.antropedia-sticker-picker-tab:hover {
+  background: var(--background-accent, #4f545c);
+}
+
+.antropedia-sticker-picker-tab.active {
+  border-color: var(--blurple, #5865f2);
+}
+
+.antropedia-sticker-picker-body {
+  overflow-y: auto;
+  padding: 10px;
+  flex: 1 1 auto;
+  background: var(--background-secondary, #2f3136);
+  overscroll-behavior: contain;
+}
+
+.antropedia-sticker-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.antropedia-sticker-picker-item {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.antropedia-sticker-picker-item:hover {
+  background: var(--background-accent, #4f545c);
+  transform: scale(1.08);
+}
+
+.antropedia-sticker-picker-item img {
+  width: 100%;
+  height: 56px;
+  object-fit: contain;
+  display: block;
 }
 
 /* ==========================================================================
@@ -1636,7 +1741,7 @@ body.gallery-viewer-open .antropedia-sticker-picker {
     position: sticky;
     top: 0;
     z-index: 20;
-    background: rgba(14, 17, 23, 0.94);
+    background: rgba(32, 34, 37, 0.95);
   }
   .gallery-viewer .gv-frame {
     flex: none;
@@ -1647,9 +1752,8 @@ body.gallery-viewer-open .antropedia-sticker-picker {
     width: 100%;
     max-width: 100%;
     border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--background-accent, #4f545c);
+    border-radius: 16px 16px 0 0;
     padding: 20px 16px 36px;
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
   }
 }

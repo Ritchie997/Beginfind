@@ -577,6 +577,7 @@
     }
 
     selectVariant(pageIndex, variantIndex) {
+      this.closeAllStickerPickers();
       const page = this.currentPages()[pageIndex];
       if (!page || !page.variants[variantIndex]) return;
       this.variantChoice.set(page.id, variantIndex);
@@ -641,6 +642,7 @@
     }
 
     showPage(index, { animate } = {}) {
+      this.closeAllStickerPickers();
       const pages = this.currentPages();
       if (!pages.length) return;
       this.pageIndex = Math.max(0, Math.min(index, pages.length - 1));
