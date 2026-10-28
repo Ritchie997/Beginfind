@@ -67,9 +67,17 @@
   };
 
   function updateAdminLinks(slug) {
+    if (window.SiteHeader) {
+      window.SiteHeader.updateAdminLink(slug);
+      return;
+    }
     var destination = slug ? '/admin-panel?editArticle=' + encodeURIComponent(slug) : '/admin-panel';
     document.querySelectorAll('.site-admin-toggle').forEach(function (link) {
       link.href = destination;
+      var icon = link.querySelector('i');
+      if (icon && !icon.classList.contains('fa-shield-halved')) {
+        link.innerHTML = '<i class="fas fa-shield-halved"></i><span>Админ-панель</span>';
+      }
     });
   }
 
@@ -2030,15 +2038,19 @@
       try { articleSlug = decodeURIComponent(articleMatch[1]); }
       catch (error) { articleSlug = articleMatch[1]; }
     }
-    updateAdminLinks(articleSlug);
     var readyPromise = Promise.resolve();
     if (page === 'profile' && window.PublicProfile) readyPromise = window.PublicProfile.init();
     if (currentRouteCleanup && currentRouteCleanup.ready) readyPromise = currentRouteCleanup.ready;
     currentMountedPage = page;
     var activePage = document.body.dataset.maintenanceTarget || page;
-    document.querySelectorAll('.site-nav-link[data-page]').forEach(function (link) {
-      link.classList.toggle('active', link.dataset.page === activePage);
-    });
+    if (window.SiteHeader) {
+      window.SiteHeader.update({ page: activePage, slug: articleSlug });
+    } else {
+      updateAdminLinks(articleSlug);
+      document.querySelectorAll('.site-nav-link[data-page]').forEach(function (link) {
+        link.classList.toggle('active', link.dataset.page === activePage);
+      });
+    }
     initPageControls();
     return readyPromise;
   }
@@ -2063,29 +2075,33 @@
   };
 
   ready(function () {
-    initSiteUserMenu();
+    if (window.SiteHeader) {
+      window.SiteHeader.init();
+    } else {
+      initSiteUserMenu();
 
-    // --- Мобильное меню ---
-    var burger = document.getElementById('siteBurger');
-    var nav = document.getElementById('siteNav');
-    var overlay = document.getElementById('siteNavOverlay');
+      // --- Мобильное меню ---
+      var burger = document.getElementById('siteBurger');
+      var nav = document.getElementById('siteNav');
+      var overlay = document.getElementById('siteNavOverlay');
 
-    function closeNav() {
-      if (nav) nav.classList.remove('open');
-      if (overlay) overlay.classList.remove('show');
-    }
+      function closeNav() {
+        if (nav) nav.classList.remove('open');
+        if (overlay) overlay.classList.remove('show');
+      }
 
-    if (burger && nav) {
-      burger.addEventListener('click', function () {
-        nav.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('show', nav.classList.contains('open'));
-      });
-    }
-    if (overlay) overlay.addEventListener('click', closeNav);
-    if (nav) {
-      nav.querySelectorAll('a').forEach(function (a) {
-        a.addEventListener('click', closeNav);
-      });
+      if (burger && nav) {
+        burger.addEventListener('click', function () {
+          nav.classList.toggle('open');
+          if (overlay) overlay.classList.toggle('show', nav.classList.contains('open'));
+        });
+      }
+      if (overlay) overlay.addEventListener('click', closeNav);
+      if (nav) {
+        nav.querySelectorAll('a').forEach(function (a) {
+          a.addEventListener('click', closeNav);
+        });
+      }
     }
 
     window.setTimeout(mountPublicPage, 0);

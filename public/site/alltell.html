@@ -6,11 +6,11 @@
 <title>AllTell — франшизы и сообщества</title>
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body data-page="alltell">
 
-<header class="site-header">
+<header class="site-header" id="siteHeader">
   <div class="site-header-inner">
     <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
     <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
@@ -21,7 +21,7 @@
       <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
     </nav>
     <div class="site-header-actions">
-      <div class="site-search"><i class="fas fa-search"></i><input type="text" placeholder="Поиск по сайту..."></div>
+      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
       <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
       <div class="site-user" id="siteUserMenu" hidden>
         <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
@@ -95,6 +95,7 @@
 
 <script src="/auth-system.js"></script>
 <script src="/sticker-pack-view.js"></script>
+<script src="/site/site-header.js"></script>
 <script src="/site/site.js"></script>
 <script src="/site/alltell-client.js"></script>
 <script src="/site/router.js"></script>

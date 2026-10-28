@@ -196,6 +196,9 @@
       var ready = window.PublicSite ? window.PublicSite.mountPage() : Promise.resolve();
       await ready;
       if (id !== navigationId) return false;
+      if (window.SiteHeader) {
+        window.SiteHeader.syncFromDom();
+      }
 
       if (url.hash && url.hash !== '#publicArticleListReturn') {
         var hashTarget = document.getElementById(decodeURIComponent(url.hash.slice(1)));

@@ -132,7 +132,7 @@ function maintenancePageHtml(page, message) {
   <title>Техническое обслуживание — AllTell</title>
   <link rel="stylesheet" href="/global-styles.css">
   <link rel="stylesheet" href="/site/site.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body data-page="maintenance" data-maintenance-page="true" data-maintenance-target="${page}">
   <header class="site-header">

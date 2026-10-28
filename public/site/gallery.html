@@ -18,7 +18,7 @@
 </head>
 <body data-page="gallery">
 
-<header class="site-header">
+<header class="site-header" id="siteHeader">
   <div class="site-header-inner">
     <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
     <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
@@ -26,10 +26,10 @@
       <a href="/" class="site-nav-link" data-page="home">Главная</a>
       <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
       <a href="/alltell?view=feed" class="site-nav-link" data-page="alltell">AllTell</a>
-      <a href="/site/gallery.html" class="site-nav-link active" data-page="gallery">Галерея</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
     </nav>
     <div class="site-header-actions">
-      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..."></div>
+      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
       <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
       <div class="site-user" id="siteUserMenu" hidden>
         <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
@@ -213,6 +213,7 @@
 <script src="/gallery.js"></script>
 <script src="/sticker-pack-view.js"></script>
 <script src="/sticker-store.js"></script>
+<script src="/site/site-header.js"></script>
 <script src="/site/site.js"></script>
 <script src="/site/router.js"></script>
 <script>
