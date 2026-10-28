@@ -595,3 +595,1061 @@
     gap: 12px;
   }
 }
+
+/* ==========================================================================
+   Gallery Viewer (Image Lightbox & Details Modal) Redesign
+   Unified dark Discord/fandom theme with glassmorphism and glowing accents
+   ========================================================================== */
+
+.gallery-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  background: rgba(9, 11, 15, 0.95);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  overflow: hidden;
+}
+
+body.gallery-viewer-open {
+  overflow: hidden !important;
+}
+
+body.gallery-viewer-open .antropedia-sticker-picker {
+  z-index: 1950;
+}
+
+.gv-shell {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* --- Left Stage (Image & Navigation) --- */
+.gv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 50%, rgba(88, 101, 242, 0.05) 0%, transparent 65%), rgba(6, 8, 12, 0.5);
+  user-select: none;
+}
+
+.gv-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  z-index: 10;
+  background: rgba(15, 18, 25, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gv-icon-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gv-icon-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.3);
+  transform: scale(1.05);
+}
+
+.gv-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gv-variants {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.gv-variants::-webkit-scrollbar {
+  display: none;
+}
+
+.gv-variant {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gv-variant:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gv-variant.active {
+  background: linear-gradient(135deg, #5865f2, #4752c4);
+  border-color: rgba(165, 180, 252, 0.6);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
+}
+
+.gv-variant i {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-right: 4px;
+}
+
+.gv-counter {
+  margin-left: auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Image Frame */
+.gv-frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+}
+
+.gv-track {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gv-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.gv-single .gv-image {
+  cursor: default;
+}
+
+.gv-image.gv-in-next {
+  animation: gvInNext 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gv-image.gv-in-prev {
+  animation: gvInPrev 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes gvInNext {
+  from { opacity: 0.2; transform: translateX(36px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes gvInPrev {
+  from { opacity: 0.2; transform: translateX(-36px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Navigation Chevrons */
+.gv-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 15%;
+  max-width: 120px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+}
+
+.gv-arrow-prev {
+  left: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.4), transparent);
+}
+
+.gv-arrow-next {
+  right: 0;
+  background: linear-gradient(270deg, rgba(0, 0, 0, 0.4), transparent);
+}
+
+.gv-arrow i {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(18, 22, 30, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gv-frame:hover .gv-arrow {
+  opacity: 0.85;
+}
+
+.gv-arrow:hover {
+  opacity: 1 !important;
+}
+
+.gv-arrow:hover i {
+  background: #5865f2;
+  border-color: #818cf8;
+  color: #fff;
+  transform: scale(1.12);
+  box-shadow: 0 0 20px rgba(88, 101, 242, 0.55);
+}
+
+@media (hover: none) {
+  .gv-arrow { display: none; }
+}
+
+/* Strip Thumbnails */
+.gv-strip {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px 14px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
+  background: rgba(15, 18, 25, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gv-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1e28;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: all 0.2s ease;
+}
+
+.gv-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gv-thumb:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.gv-thumb.active {
+  border-color: #5865f2;
+  opacity: 1;
+  box-shadow: 0 0 14px rgba(88, 101, 242, 0.5);
+  transform: scale(1.04);
+}
+
+.gv-thumb-layers {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* Vertical Feed Mode */
+.gv-pages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 16px 40px;
+  gap: 16px;
+}
+
+.gv-page {
+  display: block;
+  width: 100%;
+  max-width: 900px;
+  height: auto;
+  background: #141720;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.gv-page-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gv-page-variants {
+  padding: 10px 0 6px;
+  max-width: 100%;
+}
+
+.gv-no-pages {
+  color: #94a3b8;
+  padding: 40px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Right Panel: Info, Author, Engagement & Comments
+   ========================================================================== */
+
+.gv-panel {
+  flex: 0 0 430px;
+  max-width: 450px;
+  width: 430px;
+  background: rgba(18, 22, 29, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 20px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  box-shadow: -10px 0 32px rgba(0, 0, 0, 0.4);
+}
+
+.gv-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gv-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.gv-panel > *:not(.gv-engagement):not(.gv-comments) {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.gv-title {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.3;
+  word-break: break-word;
+  letter-spacing: -0.015em;
+}
+
+.gv-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.gv-badges:empty {
+  display: none;
+}
+
+.gv-author {
+  margin-bottom: 14px;
+}
+
+.gv-author .antropedia-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.gv-author .antropedia-person:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #5865f2;
+}
+
+.gv-author .antropedia-person img,
+.gv-author .antropedia-person .antropedia-avatar-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.4);
+}
+
+.gv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #94a3b8;
+  font-size: 12.5px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gv-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gv-meta span i {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.gv-desc.preview-pane {
+  min-height: 0;
+  overflow: visible;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  word-break: break-word;
+  margin-bottom: 14px;
+}
+
+.gv-desc.preview-pane p {
+  margin: 0 0 0.6em;
+}
+
+.gv-desc.preview-pane p:last-child {
+  margin-bottom: 0;
+}
+
+.gv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.gv-tags:empty {
+  display: none;
+}
+
+.gv-tags .antropedia-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  color: #2dd4bf;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.gv-tags .antropedia-tag-pill:hover {
+  background: rgba(45, 212, 191, 0.18);
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(45, 212, 191, 0.25);
+}
+
+.gv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.gv-actions .btn {
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+
+.gv-actions .btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+.gv-actions .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Engagement Section (Likes, Reactions, Jump to Comments)
+   ========================================================================== */
+
+.gallery-viewer .gv-engagement,
+.gallery-viewer .antropedia-view-engagement {
+  margin: 16px 0 !important;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* General Engagement Button in Viewer */
+.gallery-viewer .antropedia-engagement-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.gallery-viewer .antropedia-engagement-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Heart Like Button & Active State */
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"] .fa-heart {
+  color: #ff5d8f;
+  font-size: 14px;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"]:hover .fa-heart {
+  transform: scale(1.2);
+}
+
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"].is-active,
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"].active {
+  background: linear-gradient(135deg, rgba(255, 93, 143, 0.28), rgba(244, 63, 94, 0.18));
+  border-color: #ff5d8f;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 93, 143, 0.35);
+}
+
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"].is-active .fa-heart,
+.gallery-viewer .antropedia-engagement-btn[data-gv="like"].active .fa-heart {
+  font-weight: 900;
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 6px #ff5d8f);
+}
+
+/* Comments Button */
+.gallery-viewer .antropedia-engagement-btn[data-gv="comments-btn"] i {
+  color: #818cf8;
+}
+
+.gallery-viewer .antropedia-engagement-btn[data-gv="comments-btn"]:hover {
+  background: rgba(88, 101, 242, 0.18);
+  border-color: rgba(88, 101, 242, 0.45);
+  color: #a5b4fc;
+}
+
+/* Reactions Bar inside Viewer */
+.gallery-viewer .antropedia-reactions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gallery-viewer .antropedia-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.gallery-viewer .antropedia-reaction-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.gallery-viewer .antropedia-reaction-pill.active {
+  background: rgba(88, 101, 242, 0.22);
+  border-color: #5865f2;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(88, 101, 242, 0.3);
+}
+
+.gallery-viewer .antropedia-reaction-pill img {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+}
+
+.gallery-viewer .antropedia-reaction-add {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gallery-viewer .antropedia-reaction-add:hover,
+.gallery-viewer .antropedia-reaction-add.active {
+  background: rgba(88, 101, 242, 0.18);
+  border-color: #5865f2;
+  border-style: solid;
+  color: #fff;
+  transform: scale(1.08);
+}
+
+/* ==========================================================================
+   Comments Section inside Viewer
+   ========================================================================== */
+
+.gallery-viewer .gv-comments,
+.gallery-viewer .antropedia-comments {
+  margin-top: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.gallery-viewer .antropedia-comments h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gallery-viewer .antropedia-comments h3 [data-gv="comments-header-count"] {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(88, 101, 242, 0.15);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Comment Form */
+.gallery-viewer .antropedia-comment-form {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.gallery-viewer .antropedia-comment-form:focus-within {
+  border-color: rgba(88, 101, 242, 0.65);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.gallery-viewer .antropedia-comment-input {
+  min-height: 44px;
+  max-height: 160px;
+  width: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  color: #f1f5f9;
+  font-size: 13.5px;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+.gallery-viewer .antropedia-comment-input:focus {
+  outline: none;
+}
+
+.gallery-viewer .antropedia-comment-input:empty::before {
+  content: attr(data-placeholder);
+  color: #64748b;
+  font-size: 13.5px;
+  pointer-events: none;
+}
+
+.gallery-viewer .antropedia-comment-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gallery-viewer .antropedia-sticker-picker-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+}
+
+.gallery-viewer .antropedia-sticker-picker-btn:hover {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.12);
+  transform: scale(1.1);
+}
+
+.gallery-viewer .antropedia-comment-form-actions .btn-primary {
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #5865f2, #4752c4);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.35);
+  transition: all 0.18s ease;
+}
+
+.gallery-viewer .antropedia-comment-form-actions .btn-primary:hover {
+  background: linear-gradient(135deg, #4752c4, #3c45a5);
+  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Comments List */
+.gallery-viewer .antropedia-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gallery-viewer .antropedia-comment {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.gallery-viewer .antropedia-comment:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.gallery-viewer .antropedia-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.gallery-viewer .antropedia-comment-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f1f5f9;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.gallery-viewer .antropedia-comment-author:hover {
+  color: #5865f2;
+  text-decoration: underline;
+}
+
+.gallery-viewer .antropedia-comment-date {
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.gallery-viewer .antropedia-comment-delete {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.gallery-viewer .antropedia-comment:hover .antropedia-comment-delete,
+.gallery-viewer .antropedia-comment-delete:focus-visible {
+  opacity: 1;
+}
+
+.gallery-viewer .antropedia-comment-delete:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.gallery-viewer .antropedia-comment-body {
+  color: #cbd5e1;
+  font-size: 13.5px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.gallery-viewer .antropedia-comment-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.gallery-viewer .antropedia-comment-reply-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.gallery-viewer .antropedia-comment-reply-btn:hover {
+  color: #5865f2;
+  background: rgba(88, 101, 242, 0.12);
+}
+
+.gallery-viewer .antropedia-replies {
+  margin-top: 8px;
+  padding-left: 14px;
+  border-left: 2px solid rgba(88, 101, 242, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gallery-viewer .antropedia-comment-reply {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.gallery-viewer .antropedia-comments-empty {
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ==========================================================================
+   Encyclopedia & Associated Works in Viewer
+   ========================================================================== */
+
+.gallery-viewer .gv-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gallery-viewer .gv-section h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gallery-viewer .gv-article-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #818cf8;
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.gallery-viewer .gv-article-link:hover {
+  background: rgba(88, 101, 242, 0.12);
+  border-color: rgba(88, 101, 242, 0.35);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.gallery-viewer .gv-associated {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.gallery-viewer .gv-associated .gallery-card-media {
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 8px;
+}
+
+/* ==========================================================================
+   Responsive Viewer Layout
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .gallery-viewer {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .gallery-viewer .gv-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+  .gallery-viewer .gv-stage {
+    flex: none;
+  }
+  .gallery-viewer .gv-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(14, 17, 23, 0.94);
+  }
+  .gallery-viewer .gv-frame {
+    flex: none;
+    height: min(65vh, 600px);
+  }
+  .gallery-viewer .gv-panel {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 16px 36px;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
+  }
+}
