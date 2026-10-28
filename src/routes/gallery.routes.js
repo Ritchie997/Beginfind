@@ -110,9 +110,38 @@ function workCard(item, usersMap, { includeFolder = false, userId, publicFolderC
   };
 }
 
-async function cardsFor(items, options) {
+async function cardsFor(items, options = {}) {
   const usersMap = await getUsersByIds(items.map((i) => i.author_id));
-  return items.map((i) => workCard(i, usersMap, options));
+  const ids = items.map((i) => i.id).filter(Boolean);
+  const reactionsMap = new Map();
+  if (ids.length && social) {
+    try {
+      const rawMap = await social.getReactionsForTargets('gallery', ids, options.userId || null);
+      if (rawMap && rawMap.size) {
+        const allShortcodes = [];
+        for (const list of rawMap.values()) {
+          for (const r of (list || [])) {
+            if (r.shortcode) allShortcodes.push(r.shortcode);
+          }
+        }
+        const stickerMeta = await stickers.resolveCodes(allShortcodes);
+        for (const [targetId, list] of rawMap.entries()) {
+          const resolved = (list || []).map((r) => ({
+            ...r,
+            ...stickerMeta.get(r.shortcode)
+          })).filter((r) => r.url);
+          reactionsMap.set(String(targetId), resolved);
+        }
+      }
+    } catch (e) {
+      console.error('[gallery] cardsFor reactions error:', e);
+    }
+  }
+  return items.map((i) => {
+    const card = workCard(i, usersMap, options);
+    card.reactions = reactionsMap.get(String(i.id)) || [];
+    return card;
+  });
 }
 
 async function addFolderAuthors(folders) {

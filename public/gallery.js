@@ -104,9 +104,20 @@
           ${badges.length ? `<div class="gallery-card-badges">${badges.join('')}</div>` : ''}
           ${selectable ? `<button type="button" class="gallery-card-select" data-select-work="${work.id}" aria-label="Выбрать работу «${escapeHtml(work.title)}»"><i class="fas fa-check"></i></button>` : ''}
           ${compact ? '' : `<div class="gallery-card-foot">
-            <span class="${work.liked ? 'is-liked' : ''}"><i class="${work.liked ? 'fas' : 'far'} fa-heart"></i> ${work.likes || 0}</span>
-            <span><i class="far fa-comment"></i> ${work.comments || 0}</span>
-            <span><i class="far fa-eye"></i> ${work.views || 0}</span>
+            <div class="gallery-card-stats">
+              <span class="${work.liked ? 'is-liked' : ''}"><i class="${work.liked ? 'fas' : 'far'} fa-heart"></i> ${work.likes || 0}</span>
+              <span><i class="far fa-comment"></i> ${work.comments || 0}</span>
+              <span><i class="far fa-eye"></i> ${work.views || 0}</span>
+            </div>
+            ${work.reactions && work.reactions.length ? `
+              <div class="gallery-card-reactions">
+                ${work.reactions.slice(0, 3).map((r) => `
+                  <span class="gallery-card-reaction-pill" title="${escapeHtml(r.shortcode || '')}">
+                    <img src="${escapeHtml(r.url)}" alt="" loading="lazy">
+                    <span>${r.count}</span>
+                  </span>
+                `).join('')}
+              </div>` : ''}
           </div>`}
         </div>
         ${selectable && !compact ? `
@@ -118,6 +129,15 @@
           </div>` : ''}
         <div class="gallery-card-caption">
           <div class="gallery-card-title">${escapeHtml(work.title)}</div>
+          ${work.reactions && work.reactions.length ? `
+            <div class="gallery-card-reactions-bar">
+              ${work.reactions.slice(0, 4).map((r) => `
+                <span class="gallery-card-reaction-pill" title="${escapeHtml(r.shortcode || '')}">
+                  <img src="${escapeHtml(r.url)}" alt="" loading="lazy">
+                  <span>${r.count}</span>
+                </span>
+              `).join('')}
+            </div>` : ''}
           ${compact || !work.author ? '' : `<div class="gallery-card-author">${window.avatarHtml({ name: work.author.display_name, avatar: work.author.avatar }, 18)} ${escapeHtml(work.author.display_name)}</div>`}
         </div>
       </article>`;
@@ -230,7 +250,7 @@
             <div class="antropedia-view-engagement gv-engagement">
               <button type="button" class="antropedia-engagement-btn" data-gv="like" title="Нравится"><i class="far fa-heart"></i> <span data-gv="like-count">0</span></button>
               <div class="antropedia-reactions" data-gv="reactions" data-target-type="gallery" data-target-id=""></div>
-              <button type="button" class="antropedia-engagement-btn" data-gv="comments-btn" title="К комментариям"><i class="far fa-comment"></i> <span data-gv="comments-count">0</span></button>
+              <button type="button" class="antropedia-engagement-btn" data-gv="comments-btn" title="К комментариям" style="display:none !important;"><i class="far fa-comment"></i> <span data-gv="comments-count">0</span></button>
             </div>
             <div class="gv-section" data-gv="articles-wrap" hidden>
               <h4><i class="fas fa-book-open"></i> В энциклопедии</h4>
