@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Галерея AllTell — арт, скриншоты и косплей сообщества</title>
+<title>Галерея AllTell — арт, скриншоты и иллюстрации сообщества</title>
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/antropedia.css">
@@ -11,7 +11,10 @@
 <link rel="stylesheet" href="/editor-blocks.css">
 <link rel="stylesheet" href="/gallery.css">
 <link rel="stylesheet" href="/site/gallery.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body data-page="gallery">
 
@@ -23,10 +26,10 @@
       <a href="/" class="site-nav-link" data-page="home">Главная</a>
       <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
       <a href="/alltell?view=feed" class="site-nav-link" data-page="alltell">AllTell</a>
-      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+      <a href="/site/gallery.html" class="site-nav-link active" data-page="gallery">Галерея</a>
     </nav>
     <div class="site-header-actions">
-      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по галерее..."></div>
+      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..."></div>
       <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
       <div class="site-user" id="siteUserMenu" hidden>
         <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
@@ -47,36 +50,69 @@
 </header>
 <div class="site-nav-overlay" id="siteNavOverlay"></div>
 
-<section class="site-hero site-hero-small">
-  <span class="site-hero-badge"><i class="fas fa-images"></i> Творчество сообщества</span>
-  <h1>Галерея</h1>
-  <p>Арты, скриншоты ролевых сцен, косплей и мемы — находите работы сообщества, обсуждайте их и делитесь собственными.</p>
+<section class="site-hero site-hero-small gallery-hero-section">
+  <div class="gallery-hero-glow" aria-hidden="true"></div>
+  <span class="site-hero-badge"><i class="fas fa-palette"></i> Творчество AllTell</span>
+  <h1>Галерея артов, историй и персонажей</h1>
+  <p>Исследуйте авторские иллюстрации, концепт-арты, ролевые комиксы и скриншоты игровых сессий от авторов вселенной AllTell.</p>
+  <div class="gallery-hero-features">
+    <span class="gallery-hero-feature"><i class="fas fa-paintbrush"></i> Авторские арты</span>
+    <span class="gallery-hero-feature"><i class="fas fa-layer-group"></i> Многостраничные истории</span>
+    <span class="gallery-hero-feature"><i class="fas fa-wand-magic-sparkles"></i> Вариации сцен</span>
+    <span class="gallery-hero-feature"><i class="fas fa-folder-tree"></i> Тематические коллекции</span>
+  </div>
+  <div class="site-hero-actions">
+    <button type="button" class="btn btn-primary btn-lg" id="galleryHeroUploadBtn"><i class="fas fa-cloud-arrow-up"></i> Выложить работу</button>
+    <a class="btn btn-secondary btn-lg" href="#galleryPage"><i class="fas fa-compass"></i> Смотреть работы</a>
+  </div>
 </section>
 
 <main class="site-main">
   <section class="site-section gallery-section">
     <div class="gallery-page" id="galleryPage" data-gallery-surface="public">
-      <div class="antropedia-toolbar gallery-toolbar">
-        <div class="antropedia-toolbar-row antropedia-toolbar-row-main">
-          <h2 class="antropedia-heading"><i class="fas fa-images"></i> Работы сообщества</h2>
-          <div class="antropedia-search-wrap">
-            <i class="fas fa-search" aria-hidden="true"></i>
-            <input type="search" id="gallerySearch" class="antropedia-search-input" placeholder="Название, описание, тег или автор…" aria-label="Поиск по галерее">
+      <div class="gallery-toolbar-container">
+        <div class="gallery-toolbar">
+          <div class="gallery-toolbar-header">
+            <h2><i class="fas fa-images" aria-hidden="true"></i> Работы сообщества</h2>
+            <p>Находите арты по персонажам, сценам и событиям, ставьте реакции и сохраняйте лучшие работы.</p>
           </div>
-          <select id="gallerySort" class="form-select gallery-sort" title="Сортировка" aria-label="Сортировка работ">
-            <option value="newest">Сначала новые</option>
-            <option value="oldest">Сначала старые</option>
-            <option value="updated">Недавно обновлённые</option>
-            <option value="likes">По лайкам</option>
-            <option value="views">По просмотрам</option>
-            <option value="comments">По комментариям</option>
-          </select>
-          <button type="button" id="galleryMineBtn" class="btn btn-secondary gallery-mine-btn" title="Только мои работы"><i class="fas fa-user"></i> <span>Мои работы</span></button>
-          <button type="button" id="galleryUploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> <span class="antropedia-btn-label" aria-live="polite">Выложить работу</span></button>
-        </div>
-        <div class="antropedia-toolbar-row gallery-tags-row">
-          <div id="galleryTags" class="gallery-tags" aria-label="Фильтр по тегам"></div>
-          <span id="galleryCount" class="antropedia-count" aria-live="polite"></span>
+
+          <div class="gallery-toolbar-controls">
+            <div class="gallery-search-wrap">
+              <i class="fas fa-search gallery-search-icon" aria-hidden="true"></i>
+              <input type="search" id="gallerySearch" class="gallery-search-input" placeholder="Название, описание, тег или автор…" aria-label="Поиск по галерее" autocomplete="off">
+            </div>
+
+            <div class="gallery-actions-wrap">
+              <div class="gallery-select-wrapper">
+                <i class="fas fa-arrow-down-short-wide gallery-select-icon" aria-hidden="true"></i>
+                <select id="gallerySort" class="form-select gallery-sort" title="Сортировка" aria-label="Сортировка работ">
+                  <option value="newest">Сначала новые</option>
+                  <option value="oldest">Сначала старые</option>
+                  <option value="updated">Недавно обновлённые</option>
+                  <option value="likes">По лайкам</option>
+                  <option value="views">По просмотрам</option>
+                  <option value="comments">По комментариям</option>
+                </select>
+              </div>
+
+              <button type="button" id="galleryMineBtn" class="btn btn-secondary gallery-mine-btn" title="Только мои работы">
+                <i class="fas fa-bookmark" aria-hidden="true"></i>
+                <span>Мои работы</span>
+              </button>
+
+              <button type="button" id="galleryUploadBtn" class="btn btn-primary gallery-upload-btn">
+                <i class="fas fa-cloud-arrow-up" aria-hidden="true"></i>
+                <span class="antropedia-btn-label" aria-live="polite">Выложить работу</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="gallery-tags-bar">
+            <div class="gallery-tags-label"><i class="fas fa-hashtag" aria-hidden="true"></i> Теги:</div>
+            <div id="galleryTags" class="gallery-tags" aria-label="Фильтр по тегам"></div>
+            <span id="galleryCount" class="gallery-count-badge" aria-live="polite"></span>
+          </div>
         </div>
       </div>
 
@@ -103,13 +139,25 @@
       </section>
 
       <input type="file" id="galleryFolderUploadInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
+
       <div id="galleryGrid" class="gallery-grid" aria-live="polite"></div>
+
       <div id="galleryEmpty" class="antropedia-empty gallery-empty" hidden>
-        <i class="fas fa-images" aria-hidden="true"></i>
-        <p>Работы не найдены. Попробуйте изменить запрос или фильтры.</p>
+        <div class="gallery-empty-icon"><i class="fas fa-palette" aria-hidden="true"></i></div>
+        <h3>Здесь пока нет работ</h3>
+        <p>Попробуйте изменить поисковый запрос, выбрать другой тег или выложите первую работу в галерею!</p>
+        <div class="gallery-empty-actions">
+          <button type="button" class="btn btn-secondary btn-sm" id="galleryEmptyResetBtn"><i class="fas fa-rotate-left"></i> Сбросить фильтры</button>
+        </div>
       </div>
-      <div id="galleryLoadingMore" class="antropedia-loading-more" hidden><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Загружаем работы…</div>
+
+      <div id="galleryLoadingMore" class="gallery-loading-more" hidden>
+        <div class="alltell-spinner" aria-hidden="true"></div>
+        <span>Загружаем работы галереи…</span>
+      </div>
+
       <div id="gallerySentinel" class="antropedia-sentinel" aria-hidden="true"></div>
+
       <div id="galleryFolderNameModal" class="modal-overlay gallery-folder-name-modal" hidden>
         <form class="modal-box gallery-folder-name-box" role="dialog" aria-modal="true" aria-labelledby="galleryFolderNameTitle">
           <div class="modal-header">
@@ -118,7 +166,7 @@
           </div>
           <div class="modal-body">
             <label for="galleryFolderNameInput">Название папки</label>
-            <input id="galleryFolderNameInput" class="form-input" type="text" maxlength="100" autocomplete="off">
+            <input id="galleryFolderNameInput" class="form-input" type="text" maxlength="100" autocomplete="off" placeholder="Введите название папки…">
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-folder-name-cancel>Отмена</button>
@@ -138,7 +186,7 @@
     </div>
     <div><h5>Разделы</h5><div class="site-footer-links">
       <a href="/antropedia">Antropedia</a>
-      <a href="/site/alltell.html">AllTell сервера</a>
+      <a href="/alltell?view=feed">AllTell</a>
       <a href="/site/gallery.html">Галерея</a>
     </div></div>
     <div><h5>Сообщество</h5><div class="site-footer-links">
@@ -151,7 +199,7 @@
     </div></div>
   </div>
   <div class="site-footer-bottom">
-    <span>© AllTell.</span>
+    <span>© AllTell. Энциклопедия, сообщества и творчество.</span>
     <span>Работы доступны публично, а публикация и обсуждение требуют входа.</span>
   </div>
 </footer>
@@ -167,5 +215,21 @@
 <script src="/sticker-store.js"></script>
 <script src="/site/site.js"></script>
 <script src="/site/router.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('galleryHeroUploadBtn')?.addEventListener('click', function () {
+      document.getElementById('galleryUploadBtn')?.click();
+    });
+    document.getElementById('galleryEmptyResetBtn')?.addEventListener('click', function () {
+      const search = document.getElementById('gallerySearch');
+      if (search) {
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      const allTag = document.querySelector('#galleryTags .filter-chip:first-child');
+      if (allTag) allTag.click();
+    });
+  });
+</script>
 </body>
 </html>
