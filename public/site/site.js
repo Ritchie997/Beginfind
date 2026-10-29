@@ -252,6 +252,10 @@
     var hero = document.querySelector('.site-hero');
     var listView = document.getElementById('publicArticleListView');
     var detail = document.getElementById('publicArticleDetail');
+    var editorView = document.getElementById('publicArticleEditor');
+    var heroWriteBtn = document.getElementById('antropediaHeroWriteBtn');
+    var toolbarWriteBtn = document.getElementById('antropediaToolbarWriteBtn');
+    var bannerWriteBtn = document.getElementById('antropediaBannerWriteBtn');
     var input = document.getElementById('publicArticleSearch');
     if (!main || !listView || !detail || !input) return;
     main.hidden = false;
@@ -500,6 +504,96 @@
         applyView();
       });
     });
+
+    // ---------- Переключение экранов (Каталог / Статья / Редактор) ----------
+
+    function showEditorView(options) {
+      options = options || {};
+      if (hero) hero.hidden = true;
+      listView.hidden = true;
+      detail.hidden = true;
+      if (editorView) editorView.hidden = false;
+
+      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      if (window.antropediaEditor && typeof window.antropediaEditor.openEditor === 'function') {
+        window.antropediaEditor.openEditor({
+          draftId: options.draftId || null,
+          articleSlug: options.articleSlug || null
+        });
+      }
+
+      var curParams = new URLSearchParams(window.location.search);
+      var curView = curParams.get('view');
+      var curDraft = curParams.get('draft');
+      var curEdit = curParams.get('edit');
+      var targetDraft = options.draftId || null;
+      var targetEdit = options.articleSlug || null;
+
+      if (curView !== 'write' || curDraft !== targetDraft || curEdit !== targetEdit) {
+        var queryParts = ['view=write'];
+        if (targetDraft) queryParts.push('draft=' + encodeURIComponent(targetDraft));
+        if (targetEdit) queryParts.push('edit=' + encodeURIComponent(targetEdit));
+        var nextUrl = '/antropedia?' + queryParts.join('&');
+        window.history.pushState({ antropediaView: 'write', draftId: targetDraft, articleSlug: targetEdit }, '', nextUrl);
+      }
+    }
+
+    function showListView() {
+      if (hero && !state.slug) hero.hidden = false;
+      if (editorView) editorView.hidden = true;
+      if (window.antropediaEditor && typeof window.antropediaEditor.closeEditor === 'function') {
+        window.antropediaEditor.closeEditor();
+      }
+
+      if (state.slug) {
+        window.PublicSite.navigateTo('/antropedia');
+        return;
+      }
+
+      listView.hidden = false;
+      detail.hidden = true;
+
+      var curParams = new URLSearchParams(window.location.search);
+      if (curParams.get('view') === 'write' || curParams.get('draft') || curParams.get('edit')) {
+        window.history.pushState({ antropediaView: 'list' }, '', '/antropedia');
+      }
+
+      if (!state.offset && !state.total && !state.loading) {
+        loadArticles(false);
+      }
+    }
+
+    function showDetailView(slug) {
+      if (hero) hero.hidden = true;
+      listView.hidden = true;
+      if (editorView) editorView.hidden = true;
+      detail.hidden = false;
+      if (window.antropediaEditor && typeof window.antropediaEditor.closeEditor === 'function') {
+        window.antropediaEditor.closeEditor();
+      }
+    }
+
+    window.PublicAntropedia = {
+      showEditorView: showEditorView,
+      showListView: showListView,
+      showDetailView: showDetailView,
+      openEditor: showEditorView
+    };
+
+    function onWriteClick(e) {
+      if (e) e.preventDefault();
+      var token = getAuthToken();
+      if (!token) {
+        openLogin();
+        return;
+      }
+      showEditorView();
+    }
+
+    if (heroWriteBtn) heroWriteBtn.addEventListener('click', onWriteClick);
+    if (toolbarWriteBtn) toolbarWriteBtn.addEventListener('click', onWriteClick);
+    if (bannerWriteBtn) bannerWriteBtn.addEventListener('click', onWriteClick);
 
     // ---------- Карточки ----------
 
@@ -1051,6 +1145,15 @@
         back.href = listReturn.url + ARTICLE_LIST_RETURN_HASH;
       }
       if (article.can_edit) {
+        var editBtn = makeEl('button', 'btn btn-secondary btn-sm public-article-edit-btn');
+        editBtn.type = 'button';
+        editBtn.innerHTML = '<i class="fas fa-pen-to-square"></i><span> Редактировать</span>';
+        editBtn.style.marginRight = '8px';
+        editBtn.addEventListener('click', function () {
+          showEditorView({ articleSlug: article.slug });
+        });
+        toolbar.appendChild(editBtn);
+
         var adminLink = makeEl('a', 'public-article-admin-link');
         adminLink.href = '/admin-panel/antropedia/' + encodeURIComponent(article.slug);
         var adminIcon = document.createElement('i');
@@ -1632,6 +1735,7 @@
 
     async function loadDetail() {
       listView.hidden = true;
+      if (editorView) editorView.hidden = true;
       detail.hidden = false;
       detail.replaceChildren(makePublicMessage('Загружаем статью…'));
       try {
@@ -1699,12 +1803,26 @@
     }
     document.addEventListener('keydown', onSearchShortcut);
 
+    function onPopState() {
+      var currentParams = new URLSearchParams(window.location.search);
+      if (currentParams.get('view') === 'write' || currentParams.get('draft') || currentParams.get('edit')) {
+        showEditorView({ draftId: currentParams.get('draft'), articleSlug: currentParams.get('edit') });
+      } else if (!state.slug) {
+        showListView();
+      }
+    }
+    window.addEventListener('popstate', onPopState);
+
     if (state.slug) {
       var detailLoad = loadDetail();
       var detailCleanup = function cleanup() {
         state.disposed = true;
         if (state.controller) state.controller.abort();
         document.removeEventListener('keydown', onSearchShortcut);
+        window.removeEventListener('popstate', onPopState);
+        if (window.antropediaEditor && typeof window.antropediaEditor.closeEditor === 'function') {
+          window.antropediaEditor.closeEditor();
+        }
       };
       detailCleanup.ready = detailLoad;
       return detailCleanup;
@@ -1741,13 +1859,29 @@
     }
 
     updateFiltersCount();
-    var initialLoad = loadArticles(false);
+
+    var initialViewParam = params.get('view');
+    var initialDraftParam = params.get('draft');
+    var initialEditParam = params.get('edit');
+    var isInitialWrite = initialViewParam === 'write' || !!initialDraftParam || !!initialEditParam;
+
+    var initialLoad = null;
+    if (isInitialWrite) {
+      showEditorView({ draftId: initialDraftParam, articleSlug: initialEditParam });
+    } else {
+      initialLoad = loadArticles(false);
+    }
+
     var listCleanup = function cleanup() {
       state.disposed = true;
       if (state.controller) state.controller.abort();
       if (state.observer) state.observer.disconnect();
       clearTimeout(searchDebounce);
       document.removeEventListener('keydown', onSearchShortcut);
+      window.removeEventListener('popstate', onPopState);
+      if (window.antropediaEditor && typeof window.antropediaEditor.closeEditor === 'function') {
+        window.antropediaEditor.closeEditor();
+      }
     };
     listCleanup.ready = initialLoad;
     return listCleanup;

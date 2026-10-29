@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/editor-obsidian.css">
+<link rel="stylesheet" href="/editor-blocks.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
 <link rel="stylesheet" href="/maps/maps.css">
@@ -74,7 +75,7 @@
   </div>
   <div class="site-hero-actions">
     <a class="btn btn-primary btn-lg" href="#publicArticleListView" id="antropediaHeroExploreBtn"><i class="fas fa-compass"></i> Каталог статей</a>
-    <a class="btn btn-secondary btn-lg" href="/admin-panel" id="antropediaHeroWriteBtn"><i class="fas fa-pen-nib"></i> Написать статью</a>
+    <button type="button" class="btn btn-secondary btn-lg" id="antropediaHeroWriteBtn"><i class="fas fa-pen-nib"></i> Написать статью</button>
   </div>
 </section>
 
@@ -133,10 +134,10 @@
                 <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
               </div>
 
-              <a href="/admin-panel" class="btn btn-primary antropedia-write-btn" title="Написать статью в админ-панели">
+              <button type="button" class="btn btn-primary antropedia-write-btn" id="antropediaToolbarWriteBtn" title="Написать статью">
                 <i class="fas fa-pen-nib" aria-hidden="true"></i>
                 <span>Написать</span>
-              </a>
+              </button>
             </div>
           </div>
 
@@ -203,12 +204,307 @@
             <p>Каждый участник может писать статьи, создавать интерактивные карты и развивать историю вселенной AllTell через админ-панель.</p>
           </div>
         </div>
-        <a class="btn btn-primary" href="/admin-panel"><i class="fas fa-plus"></i> Написать статью</a>
+        <button type="button" class="btn btn-primary" id="antropediaBannerWriteBtn"><i class="fas fa-plus"></i> Написать статью</button>
       </aside>
     </div>
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
     <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail" hidden></article>
+
+    <!-- ===== Редактор статьи (заполняет antropedia-editor-client.js) ===== -->
+    <div class="antropedia-editor-view" id="publicArticleEditor" hidden>
+      <div class="antropedia-editor-header">
+        <div class="antropedia-editor-header-left">
+          <button type="button" class="btn btn-secondary btn-sm antropedia-editor-back-btn" id="editorBackBtn">
+            <i class="fas fa-arrow-left"></i> <span>К статьям</span>
+          </button>
+          <h2 id="article-form-title" class="antropedia-editor-title">Создать новую статью</h2>
+          <span id="draftSaveStatus" class="draft-save-status" hidden></span>
+        </div>
+        <div class="antropedia-editor-header-right">
+          <button type="button" id="saveDraftBtn" class="btn btn-secondary btn-sm" title="Сохранить черновик">
+            <i class="fas fa-floppy-disk"></i> <span>Черновик</span>
+          </button>
+          <button type="button" id="loadDraftBtn" class="btn btn-secondary btn-sm" title="Мои черновики">
+            <i class="fas fa-folder-open"></i> <span>Мои черновики</span>
+          </button>
+          <button type="button" id="resetArticleBtn" class="btn btn-ghost-warning btn-sm" title="Очистить форму">
+            <span>Сбросить</span>
+          </button>
+          <button type="button" id="saveArticleBtn" class="btn btn-primary btn-sm">
+            <i class="fas fa-paper-plane"></i> <span>Опубликовать</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="antropedia-editor-container">
+        <!-- СЕКЦИЯ 1: ПУБЛИКАЦИЯ -->
+        <details class="form-section antropedia-editor-section" open>
+          <summary>
+            <i class="fas fa-paper-plane"></i>
+            <span>Публикация</span>
+            <span class="form-section-hint">Заголовок, автор, франшиза и доступ</span>
+            <i class="fas fa-chevron-down form-section-chevron"></i>
+          </summary>
+          <div class="form-section-body">
+            <div class="form-section-grid">
+              <div class="form-group">
+                <label class="form-label" for="articleTitle">
+                  Заголовок статьи
+                  <span id="articleLayerEditingHint" class="layer-editing-hint" hidden></span>
+                </label>
+                <input type="text" id="articleTitle" class="form-input" placeholder="Введите заголовок статьи...">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Автор</label>
+                <div class="author-field">
+                  <span class="author-chip author-chip-primary" id="articleAuthorChip">—</span>
+                  <div id="coAuthorsList" class="author-coauthors" hidden></div>
+                </div>
+                <label class="checkbox-field" id="addAsCoauthorWrap" hidden>
+                  <input type="checkbox" id="addAsCoauthorCheckbox" checked>
+                  <span>Добавить себя как соавтора</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-section-grid">
+              <div class="form-group">
+                <label class="form-label" for="articleServer">Франшиза</label>
+                <select id="articleServer" class="form-select">
+                  <option value="">Выберите франшизу</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="articleHub">Хаб <span class="form-section-hint">необязательно</span></label>
+                <select id="articleHub" class="form-select" disabled>
+                  <option value="">Сначала выберите франшизу</option>
+                </select>
+                <select id="articleHubStatusFilter" class="form-select" aria-label="Фильтр статусов хабов" disabled style="display:none;">
+                  <option value="active">Только активные</option>
+                  <option value="all">Все статусы</option>
+                </select>
+              </div>
+
+              <div class="form-group" id="articleLegacyAccessRow">
+                <label class="form-label" for="articleLocked">Статус статьи</label>
+                <select id="articleLocked" class="form-select">
+                  <option value="false">🔓 Открытая</option>
+                  <option value="true">🔒 Закрытая (только по ролям)</option>
+                </select>
+              </div>
+            </div>
+            <p id="articleFranchisePath" class="article-franchise-path" aria-live="polite" hidden></p>
+
+            <div class="form-group full-width" id="articleLegacyRolesRow">
+              <label class="form-label">Доступ для (роли)</label>
+              <div id="articleRolesField" class="chip-field">
+                <div class="chip-field-box">
+                  <div class="chip-field-chips"></div>
+                  <input type="text" class="chip-field-input" placeholder="Сначала выберите франшизу...">
+                </div>
+                <div class="chip-field-dropdown" hidden></div>
+                <input type="hidden" class="chip-field-hidden">
+              </div>
+            </div>
+
+            <!-- Многослойность -->
+            <div class="form-group full-width">
+              <label class="checkbox-field">
+                <input type="checkbox" id="articleLayersToggle">
+                <span>Многослойная статья — разным ролям видна разная версия заголовка и текста</span>
+              </label>
+
+              <div id="articleLayersPanel" hidden>
+                <div id="articleLayersList" class="article-layers-list"></div>
+                <div class="article-layers-actions">
+                  <button type="button" id="articleLayersAddBtn" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-plus"></i> Добавить слой выше
+                  </button>
+                  <button type="button" id="articleLayersDuplicateBtn" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-copy"></i> Дублировать слой
+                  </button>
+                </div>
+
+                <div class="form-group full-width" style="margin-top:14px;">
+                  <label class="form-label">Доступ к выбранному слою</label>
+                  <div id="articleLayerRolesField" class="chip-field">
+                    <div class="chip-field-box">
+                      <div class="chip-field-chips"></div>
+                      <input type="text" class="chip-field-input" placeholder="Роли этого слоя...">
+                    </div>
+                    <div class="chip-field-dropdown" hidden></div>
+                    <input type="hidden" class="chip-field-hidden">
+                  </div>
+                  <label class="checkbox-field" id="articleLayerPublicRow" style="margin-top:8px;">
+                    <input type="checkbox" id="articleLayerPublicCheckbox">
+                    <span>🔓 Открыть этот слой всем читателям</span>
+                  </label>
+                  <div class="form-hint">Кто увидит слой: выбраны роли — только читатели с одной из этих ролей; ролей нет — отметьте «Открыть всем».</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- СЕКЦИЯ 2: МЕТАДАННЫЕ -->
+        <details class="form-section antropedia-editor-section">
+          <summary>
+            <i class="fas fa-tags"></i>
+            <span>Метаданные</span>
+            <span class="form-section-hint">Теги и обложка 16:9</span>
+            <i class="fas fa-chevron-down form-section-chevron"></i>
+          </summary>
+          <div class="form-section-body">
+            <div class="form-group full-width">
+              <label class="form-label">Теги <span id="articleTagsLayerHint" class="form-label-hint" hidden></span></label>
+              <div class="input-action-wrapper">
+                <div id="articleTagsField" class="chip-field">
+                  <div class="chip-field-box">
+                    <div class="chip-field-chips"></div>
+                    <input type="text" class="chip-field-input" placeholder="Введите тег и нажмите Enter...">
+                  </div>
+                  <div class="chip-field-dropdown" hidden></div>
+                  <input type="hidden" class="chip-field-hidden">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group full-width">
+              <label class="form-label">Обложка статьи</label>
+              <div class="cover-buttons-container">
+                <button type="button" class="btn btn-secondary btn-sm" id="editorCoverFileBtn">
+                  <i class="fas fa-folder"></i> 📁 Выбрать файл
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="editorCoverUrlBtn">
+                  <i class="fas fa-link"></i> 🔗 Вставить URL
+                </button>
+                <div id="articleCoverPreview" style="display: none; flex: 1; align-items: center; gap: 12px; padding: 8px 12px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                  <img id="articleCoverImagePreview" src="" alt="Предпросмотр обложки" style="max-width: 60px; max-height: 45px; border-radius: 6px; object-fit: cover;">
+                  <div style="flex: 1; overflow: hidden;">
+                    <div id="coverFileName" style="font-size: 12px; color: var(--header-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+                  </div>
+                  <button type="button" class="btn btn-danger btn-sm" id="editorCoverRemoveBtn">Удалить</button>
+                </div>
+                <input type="file" id="articleImageFileInput" class="form-input" accept="image/*" style="display: none;">
+                <input type="hidden" id="articleImageFile" value="">
+              </div>
+              <div class="form-hint">Рекомендуется формат 16:9 (например, 1200×675 px) для гармоничного отображения в карточках и при чтении статьи.</div>
+            </div>
+          </div>
+        </details>
+
+        <!-- СЕКЦИЯ 3: КОНТЕНТ -->
+        <details class="form-section antropedia-editor-section" open>
+          <summary>
+            <i class="fas fa-align-left"></i>
+            <span>Контент</span>
+            <span class="form-section-hint">Текст и блоки статьи</span>
+            <i class="fas fa-chevron-down form-section-chevron"></i>
+          </summary>
+          <div class="form-section-body">
+            <div class="form-group full-width">
+              <div class="editor-wrapper">
+                <div id="toolbar" class="editor-toolbar-sticky">
+                  <div class="toolbar-format-scroll" id="toolbarFormatScroll">
+                    <div class="toolbar-row toolbar-row-format" id="toolbarFormatRow">
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-block-command="paragraph" title="Текст — новый абзац"><i class="fas fa-paragraph"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">текст</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-inline-command="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="highlight" title="Выделение цветом"><i class="fas fa-highlighter"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="code" title="Код (строка)"><i class="fas fa-code"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">формат</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-inline-command="spoiler" title="Инлайн-спойлер — скрытая фраза"><i class="fas fa-eye-slash"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">спойлер</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-block-command="heading" data-level="1" title="Заголовок 1"><i class="fas fa-heading"></i>1</button>
+                          <button type="button" class="toolbar-button" data-block-command="heading" data-level="2" title="Заголовок 2"><i class="fas fa-heading"></i>2</button>
+                          <button type="button" class="toolbar-button" data-block-command="heading" data-level="3" title="Заголовок 3"><i class="fas fa-heading"></i>3</button>
+                        </div>
+                        <span class="toolbar-group-label">заголовки</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-block-command="list" data-style="bullet" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="list" data-style="ordered" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="list" data-style="checklist" title="Чек-лист"><i class="fas fa-check-square"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">списки</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-block-command="code" title="Блок кода"><i class="fas fa-file-code"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="table" title="Таблица"><i class="fas fa-table"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="divider" title="Горизонтальная линия"><i class="fas fa-minus"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="link" title="Ссылка (Ctrl+K)"><i class="fas fa-link"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="wikilink" title="Wiki-ссылка на статью"><i class="fas fa-file-alt"></i></button>
+                          <button type="button" class="toolbar-button" data-inline-command="wikilink-variants" title="Многослойная wiki-ссылка"><i class="fas fa-layer-group"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="image" title="Изображение"><i class="fas fa-image"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="gallery-image" title="Арт из галереи"><i class="fas fa-images"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="map" title="Интерактивная карта"><i class="fas fa-map-location-dot"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">вставки</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-block-command="infobox" title="Инфобокс"><i class="fas fa-rectangle-list"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="callout" title="Плашка-примечание"><i class="fas fa-circle-info"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="columns" title="Колонки"><i class="fas fa-table-columns"></i></button>
+                          <button type="button" class="toolbar-button" data-block-command="spoiler-section" title="Сворачиваемая секция"><i class="fas fa-square-caret-down"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">блоки</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
+                          <button type="button" id="pasteBlockBtn" class="toolbar-button" data-block-command="paste-block" title="Вставить скопированный блок"><i class="fas fa-paste"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">буфер</span>
+                      </div>
+                    </div>
+                    <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>
+                    <div class="toolbar-fade toolbar-fade-r"><i class="fas fa-chevron-right toolbar-fade-arrow"></i></div>
+                  </div>
+                  <div class="toolbar-row toolbar-row-modes">
+                    <div class="editor-mode-tabs">
+                      <button type="button" class="editor-mode-tab" data-mode="edit" title="Редактирование"><i class="fas fa-pen"></i> <span class="editor-mode-tab-label">Редактирование</span></button>
+                      <button type="button" class="editor-mode-tab" data-mode="preview" title="Просмотр"><i class="fas fa-eye"></i> <span class="editor-mode-tab-label">Просмотр</span></button>
+                      <button type="button" class="editor-mode-tab active" data-mode="split" title="Двойной просмотр"><i class="fas fa-columns"></i> <span class="editor-mode-tab-label">Разделить</span></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="editor-panes" data-mode="split">
+                  <div class="editor-pane">
+                    <div id="articleContent" class="eb-blocklist" data-eb-empty-hint="Нажмите на кнопку в тулбаре, чтобы добавить первый блок — абзац текста, заголовок, картинку…"></div>
+                  </div>
+                  <div class="preview-pane" id="markdownPreviewPane">
+                    <p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
 
   </section>
 </main>
@@ -244,6 +540,8 @@
 <script src="/auth-system.js"></script>
 <script src="/site/stickers.js"></script>
 <script src="/site/site-header.js"></script>
+<script src="/editor-manager.js"></script>
+<script src="/site/antropedia-editor-client.js"></script>
 <script src="/site/site.js"></script>
 <script src="/site/router.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
