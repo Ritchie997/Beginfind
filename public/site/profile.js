@@ -221,7 +221,16 @@
       }
     });
     el('publicProfileAvatarRemove').addEventListener('click', async function () {
-      if (!window.confirm('Убрать аватар?')) return;
+      var ok = window.confirmDialog
+        ? await window.confirmDialog.open({
+            title: 'Убрать аватар?',
+            message: 'Убрать текущий аватар профиля?',
+            confirmLabel: 'Убрать',
+            cancelLabel: 'Отмена',
+            danger: true
+          })
+        : true;
+      if (!ok) return;
       try {
         await requestJson('/api/profile/avatar', { method: 'DELETE' });
         if (generation !== profileLoadGeneration) return;

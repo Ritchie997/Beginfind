@@ -563,10 +563,19 @@
       return block;
     }
 
-    removeBlockFrom(list, block) {
+    async removeBlockFrom(list, block) {
       const idx = list.indexOf(block);
       if (idx === -1) return;
-      if (!confirm('Удалить этот блок?')) return;
+      if (window.confirmDialog) {
+        const ok = await window.confirmDialog.open({
+          title: "Удалить блок?",
+          message: "Удалить выбранный блок? Это действие нельзя отменить.",
+          confirmLabel: "Удалить",
+          cancelLabel: "Отмена",
+          danger: true
+        });
+        if (!ok) return;
+      } else if (!confirm("Удалить этот блок?")) return;
       list.splice(idx, 1);
       if (this._active && this._active.block === block) this._active = null;
       this.renderAll();
@@ -667,10 +676,19 @@
       this.updateSelectionUI();
     }
 
-    deleteSelectedBlocks() {
+    async deleteSelectedBlocks() {
       const n = this._selectedIds.size;
       if (!n) return;
-      if (!confirm(`Удалить выбранные: ${pluralBlocks(n)}?`)) return;
+      if (window.confirmDialog) {
+        const ok = await window.confirmDialog.open({
+          title: "Удалить блоки?",
+          message: `Удалить выбранные: ${pluralBlocks(n)}?`,
+          confirmLabel: "Удалить",
+          cancelLabel: "Отмена",
+          danger: true
+        });
+        if (!ok) return;
+      } else if (!confirm(`Удалить выбранные: ${pluralBlocks(n)}?`)) return;
       removeBlocksByIds(this.doc.blocks, this._selectedIds);
       this._selectedIds.clear();
       this._selectAnchor = null;
@@ -1204,10 +1222,17 @@
       refocusField(el);
     }
 
-    insertLinkInline() {
+    async insertLinkInline() {
       const target = this._activeTextInput;
-      if (!target) { window.showMessage?.('Сначала кликните в текстовый блок', 'warning'); return; }
-      const url = prompt('Введите URL ссылки:');
+      if (!target) { window.showMessage?.("Сначала кликните в текстовый блок", "warning"); return; }
+      const url = window.confirmDialog
+        ? await window.confirmDialog.prompt({
+            title: "Вставить ссылку",
+            message: "Введите URL ссылки:",
+            placeholder: "https://",
+            confirmLabel: "Вставить"
+          })
+        : prompt("Введите URL ссылки:");
       if (!url) return;
       const el = target.el;
       const start = el.selectionStart, end = el.selectionEnd;
@@ -2983,12 +3008,21 @@
 
     // ===== Wiki-ссылки: навигация =====
 
-    navigateToWikiLink(slug, exists) {
+    async navigateToWikiLink(slug, exists) {
       if (!window.spaRouter) return;
       if (exists) { window.spaRouter.editArticle(slug, { fallbackToView: true }); return; }
       const article = this.articlesIndex.find(a => a.slug === slug);
       const title = article ? article.title : slug;
-      if (confirm(`Статьи «${title}» ещё нет. Создать новую?`)) {
+      const proceedCreate = window.confirmDialog
+        ? await window.confirmDialog.open({
+            title: "Создать статью?",
+            message: `Статьи «${title}» ещё нет. Создать новую?`,
+            confirmLabel: "Создать",
+            cancelLabel: "Отмена",
+            danger: false
+          })
+        : confirm(`Статьи «${title}» ещё нет. Создать новую?`);
+      if (proceedCreate) {
         window.spaRouter.resetArticleForm?.();
         const titleInput = document.getElementById('articleTitle');
         if (titleInput) titleInput.value = title;

@@ -2893,8 +2893,17 @@ class SPARouter {
   }
 
   // Reset article form to empty state
-  resetArticle() {
-    if (confirm('Вы уверены, что хотите сбросить все данные формы?')) {
+  async resetArticle() {
+    const ok = window.confirmDialog
+      ? await window.confirmDialog.open({
+          title: "Сбросить форму статьи?",
+          message: "Вы уверены, что хотите сбросить все данные формы?",
+          confirmLabel: "Сбросить",
+          cancelLabel: "Отмена",
+          danger: true
+        })
+      : confirm("Вы уверены, что хотите сбросить все данные формы?");
+    if (ok) {
       this.clearArticleForm();
 
       // "Сбросить" лишь очищает форму и отвязывает её от открытого
@@ -5628,7 +5637,16 @@ class SPARouter {
   }
 
   async deleteServer(serverId, fromWorkspace = false) {
-    if (!confirm('Вы уверены, что хотите удалить этот сервер? Это действие нельзя отменить!')) return;
+    if (window.confirmDialog) {
+      const ok = await window.confirmDialog.open({
+        title: "Удалить сервер?",
+        message: "Вы уверены, что хотите удалить этот сервер? Это действие нельзя отменить!",
+        confirmLabel: "Удалить",
+        cancelLabel: "Отмена",
+        danger: true
+      });
+      if (!ok) return;
+    } else if (!confirm("Вы уверены, что хотите удалить этот сервер? Это действие нельзя отменить!")) return;
 
     try {
       const result = await apiClient.deleteServer(serverId);

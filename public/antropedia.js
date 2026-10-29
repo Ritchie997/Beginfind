@@ -1013,7 +1013,16 @@
     async deleteArticle(slug) {
       if (!slug) return;
       document.querySelectorAll('.antropedia-card-menu-dropdown').forEach((dd) => dd.hidden = true);
-      if (!confirm('Вы уверены, что хотите удалить эту статью?')) return;
+      if (window.confirmDialog) {
+        const ok = await window.confirmDialog.open({
+          title: "Удалить статью?",
+          message: "Вы уверены, что хотите удалить эту статью? Это действие необратимо.",
+          confirmLabel: "Удалить",
+          cancelLabel: "Отмена",
+          danger: true
+        });
+        if (!ok) return;
+      } else if (!confirm("Вы уверены, что хотите удалить эту статью?")) return;
 
       try {
         const result = await window.apiClient.deleteArticle(slug);
@@ -1065,7 +1074,16 @@
     async deleteSelectedArticles() {
       const slugs = Array.from(this.selectedSlugs);
       if (!slugs.length) return;
-      if (!confirm(`Удалить выбранные статьи (${slugs.length})? Это действие необратимо.`)) return;
+      if (window.confirmDialog) {
+        const ok = await window.confirmDialog.open({
+          title: "Удалить статьи?",
+          message: `Удалить выбранные статьи (${slugs.length})? Это действие необратимо.`,
+          confirmLabel: "Удалить",
+          cancelLabel: "Отмена",
+          danger: true
+        });
+        if (!ok) return;
+      } else if (!confirm(`Удалить выбранные статьи (${slugs.length})? Это действие необратимо.`)) return;
 
       const delBtn = this.selectBarEl?.querySelector('[data-select-act="delete"]');
       if (delBtn) delBtn.disabled = true;
@@ -1347,7 +1365,7 @@
       }
     }
 
-    handleViewContentClick(e) {
+    async handleViewContentClick(e) {
       // Арт, пересланный из галереи (image-блок с data.gallery, см.
       // blocks-renderer.js) — открываем его просмотр поверх статьи.
       const galleryFig = e.target.closest('[data-gallery-work]');
@@ -1377,7 +1395,16 @@
         } else {
           const article = this.articlesIndexBySlug.get(slug);
           const title = article ? article.title : wikiEl.textContent;
-          if (confirm(`Статьи «${title}» ещё нет. Создать новую?`)) {
+          const proceedCreate = window.confirmDialog
+            ? await window.confirmDialog.open({
+                title: "Создать статью?",
+                message: `Статьи «${title}» ещё нет. Создать новую?`,
+                confirmLabel: "Создать",
+                cancelLabel: "Отмена",
+                danger: false
+              })
+            : confirm(`Статьи «${title}» ещё нет. Создать новую?`);
+          if (proceedCreate) {
             this.createArticleWithTitle(title);
           }
         }

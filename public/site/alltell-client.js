@@ -1568,7 +1568,7 @@
       options.hidden = false;
     }
 
-    function onClick(event) {
+    async function onClick(event) {
       var commentSticker = event.target.closest('.alltell-comment-sticker[data-pack-id]');
       if (commentSticker) {
         if (!token()) {
@@ -1660,7 +1660,16 @@
         replyState.replyTo = null;
         renderSocialPanel(replyPanel.dataset.postId, replyPanel.dataset.franchiseId);
       } else if (action === 'delete-comment') {
-        if (!window.confirm('Удалить комментарий вместе с ответами?')) return;
+        var ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Удалить комментарий?',
+              message: 'Удалить комментарий вместе с ответами? Действие необратимо.',
+              confirmLabel: 'Удалить',
+              cancelLabel: 'Отмена',
+              danger: true
+            })
+          : true;
+        if (!ok) return;
         var deletePanel = button.closest('[data-post-social]');
         var deletePostId = deletePanel.dataset.postId;
         var deleteFranchiseId = deletePanel.dataset.franchiseId;
@@ -1701,7 +1710,16 @@
           notifyError(error.message);
         });
       } else if (action === 'leave') {
-        if (!window.confirm('Отписаться от этой франшизы? Вы больше не будете участником и не увидите её в своей ленте.')) return;
+        var ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Отписка от франшизы',
+              message: 'Отписаться от этой франшизы? Вы больше не будете участником и не увидите её в своей ленте.',
+              confirmLabel: 'Отписаться',
+              cancelLabel: 'Остаться',
+              danger: true
+            })
+          : true;
+        if (!ok) return;
         button.disabled = true;
         leaveFranchise().catch(function (error) {
           button.disabled = false;
@@ -1756,7 +1774,16 @@
             notifyError(error.message);
           });
       } else if (action === 'delete-post') {
-        if (!window.confirm('Удалить эту публикацию?')) return;
+        var ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Удалить публикацию?',
+              message: 'Удалить эту публикацию? Действие необратимо.',
+              confirmLabel: 'Удалить',
+              cancelLabel: 'Отмена',
+              danger: true
+            })
+          : true;
+        if (!ok) return;
         var postId = button.dataset.postId;
         button.disabled = true;
         request('/api/franchises/' + state.detail.franchise.id + '/posts/' + postId, 'DELETE')

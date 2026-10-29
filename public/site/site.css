@@ -7539,6 +7539,126 @@ a.site-profile-media-row:hover {
     background: rgba(99, 102, 241, 0.14) !important;
 }
 
+/* --- Стили диалога подтверждения (confirm-dialog.js) --- */
+#confirmDialogModal.modal-overlay {
+    backdrop-filter: blur(18px) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+    background: rgba(0, 0, 0, 0.78) !important;
+    z-index: 99999 !important;
+}
+
+#confirmDialogModal .modal-box {
+    background: #1e1f22 !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75) !important;
+    max-width: 440px !important;
+    overflow: hidden !important;
+}
+
+#confirmDialogModal .modal-header {
+    padding: 16px 20px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+#confirmDialogModal .modal-header h3 {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: var(--header-primary, #fff) !important;
+    margin: 0 !important;
+}
+
+#confirmDialogModal .modal-close {
+    background: none !important;
+    border: none !important;
+    color: var(--text-muted) !important;
+    font-size: 20px !important;
+    cursor: pointer !important;
+    line-height: 1 !important;
+    transition: color 0.15s ease !important;
+}
+
+#confirmDialogModal .modal-close:hover {
+    color: #fff !important;
+}
+
+#confirmDialogModal .modal-body {
+    padding: 20px !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    color: var(--text-normal) !important;
+}
+
+#confirmDialogModal .modal-prompt-input {
+    margin-top: 12px !important;
+    width: 100% !important;
+    background: rgba(20, 22, 26, 0.85) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    color: #fff !important;
+    font-size: 14px !important;
+    outline: none !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    box-sizing: border-box !important;
+}
+
+#confirmDialogModal .modal-prompt-input:focus {
+    border-color: #818cf8 !important;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
+}
+
+#confirmDialogModal .modal-footer {
+    padding: 14px 20px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 10px !important;
+    background: rgba(0, 0, 0, 0.15) !important;
+}
+
+#confirmDialogModal .modal-footer .btn {
+    padding: 8px 18px !important;
+    border-radius: 8px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+}
+
+#confirmDialogModal .modal-footer .btn-secondary {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: var(--header-secondary, #ddd) !important;
+}
+
+#confirmDialogModal .modal-footer .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #fff !important;
+}
+
+#confirmDialogModal .modal-footer .btn-danger {
+    background: #ef4444 !important;
+    border: 1px solid #ef4444 !important;
+    color: #fff !important;
+}
+
+#confirmDialogModal .modal-footer .btn-danger:hover {
+    background: #dc2626 !important;
+    border-color: #dc2626 !important;
+}
+
+#confirmDialogModal .modal-footer .btn-primary {
+    background: #5865f2 !important;
+    border: 1px solid #5865f2 !important;
+    color: #fff !important;
+}
+
+#confirmDialogModal .modal-footer .btn-primary:hover {
+    background: #4752c4 !important;
+    border-color: #4752c4 !important;
+}
+
 .drafts-card-badge {
     font-size: 11px !important;
     font-weight: 600 !important;

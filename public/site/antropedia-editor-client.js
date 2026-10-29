@@ -223,9 +223,17 @@
 
     setupFormEvents() {
       // Кнопка «К статьям» (назад)
-      document.getElementById('editorBackBtn')?.addEventListener('click', () => {
+      document.getElementById('editorBackBtn')?.addEventListener('click', async () => {
         if (this.hasUnsavedChanges()) {
-          const ok = window.confirm('У вас есть несохранённые изменения. Вернуться к статьям? Черновик сохранён на этом устройстве.');
+          const ok = window.confirmDialog
+            ? await window.confirmDialog.open({
+                title: 'Несохранённые изменения',
+                message: 'У вас есть несохранённые изменения. Вернуться к статьям? Черновик сохранён на этом устройстве.',
+                confirmLabel: 'Вернуться',
+                cancelLabel: 'Остаться',
+                danger: false
+              })
+            : true;
           if (!ok) return;
         }
         if (window.PublicAntropedia && typeof window.PublicAntropedia.showListView === 'function') {
@@ -244,8 +252,16 @@
       });
 
       // Сбросить форму
-      document.getElementById('resetArticleBtn')?.addEventListener('click', () => {
-        const ok = window.confirm('Очистить форму статьи? Все введённые данные будут сброшены.');
+      document.getElementById('resetArticleBtn')?.addEventListener('click', async () => {
+        const ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Очистить форму статьи?',
+              message: 'Очистить форму статьи? Все введённые данные будут сброшены.',
+              confirmLabel: 'Сбросить',
+              cancelLabel: 'Отмена',
+              danger: true
+            })
+          : true;
         if (!ok) return;
         this.clearForm();
       });
@@ -289,8 +305,15 @@
       });
 
       // Обложка: Вставить URL
-      document.getElementById('editorCoverUrlBtn')?.addEventListener('click', () => {
-        const url = window.prompt('Введите прямую ссылку на изображение обложки:');
+      document.getElementById('editorCoverUrlBtn')?.addEventListener('click', async () => {
+        const url = window.confirmDialog
+          ? await window.confirmDialog.prompt({
+              title: 'Обложка по ссылке',
+              message: 'Введите прямую ссылку на изображение обложки (URL):',
+              placeholder: 'https://example.com/cover.jpg',
+              confirmLabel: 'Вставить'
+            })
+          : null;
         if (url && url.trim()) {
           this.setCoverImage(url.trim());
         }
@@ -779,7 +802,15 @@
     // === Публикация статьи ===
     async saveArticle() {
       if (!isAuthenticated()) {
-        const ok = window.confirm('Для публикации статьи необходимо войти в аккаунт AllTell. Открыть страницу входа?');
+        const ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Требуется авторизация',
+              message: 'Для публикации статьи необходимо войти в аккаунт AllTell. Открыть окно входа?',
+              confirmLabel: 'Войти',
+              cancelLabel: 'Отмена',
+              danger: false
+            })
+          : true;
         if (ok) {
           if (typeof window.showModalLogin === 'function') {
             window.showModalLogin('login');
@@ -1033,7 +1064,15 @@
       const latest = pending[0];
       const title = latest.data && latest.data.title;
       const date = new Date(latest.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      const ok = window.confirm(`Восстановить сохранённый черновик «${title || 'Без названия'}» от ${date}?`);
+      const ok = window.confirmDialog
+        ? await window.confirmDialog.open({
+            title: 'Восстановить черновик?',
+            message: `Восстановить сохранённый черновик «${title || 'Без названия'}» от ${date}?`,
+            confirmLabel: 'Восстановить',
+            cancelLabel: 'Начать новую',
+            danger: false
+          })
+        : false;
       if (ok) {
         await this.loadDraftData(latest.id, latest.data);
       }
@@ -1259,7 +1298,14 @@
           return;
         }
         if (e.target.closest('[data-action="new-folder"]')) {
-          const name = window.prompt('Название новой папки:');
+          const name = window.confirmDialog
+            ? await window.confirmDialog.prompt({
+                title: 'Новая папка черновиков',
+                message: 'Введите название новой папки:',
+                placeholder: 'Название папки…',
+                confirmLabel: 'Создать'
+              })
+            : null;
           if (name && name.trim()) {
             await this.createDraftFolder(name.trim());
           }
@@ -1279,7 +1325,15 @@
         if (deleteBtn) {
           e.stopPropagation();
           const draftId = deleteBtn.dataset.id;
-          const ok = window.confirm('Удалить этот черновик? Это действие нельзя отменить.');
+          const ok = window.confirmDialog
+            ? await window.confirmDialog.open({
+                title: 'Удалить черновик?',
+                message: 'Удалить этот черновик? Это действие нельзя отменить.',
+                confirmLabel: 'Удалить',
+                cancelLabel: 'Отмена',
+                danger: true
+              })
+            : false;
           if (ok) {
             await this.deleteDraft(draftId);
           }

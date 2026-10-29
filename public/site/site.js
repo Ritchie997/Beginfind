@@ -777,7 +777,9 @@
           likeButton.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
           likeButton.querySelector('span').textContent = formatCount(result.count);
         } catch (error) {
-          window.alert(error.message || 'Не удалось поставить лайк');
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Лайк', message: error.message || 'Не удалось поставить лайк' });
+          }
         } finally {
           likeButton.disabled = false;
         }
@@ -1046,7 +1048,9 @@
       async function changeReaction(shortcode) {
         var code = String(shortcode || '').trim().replace(/^:+|:+$/g, '').toLowerCase();
         if (!/^[a-z0-9-]{1,80}:[a-z0-9-]{1,80}$/.test(code)) {
-          window.alert('Не удалось определить стикер. Выберите его из набора ещё раз.');
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Реакция', message: 'Не удалось определить стикер. Выберите его из набора ещё раз.' });
+          }
           return;
         }
         try {
@@ -1055,7 +1059,9 @@
           var result = await authenticatedRequest(path + '/reactions/toggle', 'POST', { shortcode: code });
           if (onChange) onChange(result.reactions || []);
         } catch (error) {
-          window.alert(error.message || 'Не удалось изменить реакцию');
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Реакция', message: error.message || 'Не удалось изменить реакцию' });
+          }
         }
       }
       return bar;
@@ -1078,7 +1084,9 @@
           like.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
           like.querySelector('span').textContent = String(result.count || 0);
         } catch (error) {
-          window.alert(error.message || 'Не удалось поставить лайк');
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Лайк', message: error.message || 'Не удалось поставить лайк' });
+          }
         } finally {
           like.disabled = false;
         }
@@ -1602,17 +1610,30 @@
       }
 
       async function remove(id) {
-        if (!window.confirm('Удалить комментарий? Ответы на него удалятся вместе с ним.')) return;
+        var ok = window.confirmDialog
+          ? await window.confirmDialog.open({
+              title: 'Удалить комментарий?',
+              message: 'Удалить комментарий? Ответы на него удалятся вместе с ним.',
+              confirmLabel: 'Удалить',
+              cancelLabel: 'Отмена',
+              danger: true
+            })
+          : true;
+        if (!ok) return;
         try {
           var response = await fetch(apiBase + '/' + encodeURIComponent(id), { method: 'DELETE', headers: authHeaders() });
           if (!response.ok) {
             var data = await response.json().catch(function () { return {}; });
-            window.alert(data.error || 'Не удалось удалить комментарий');
+            if (window.confirmDialog) {
+              await window.confirmDialog.alert({ title: 'Ошибка удаления', message: data.error || 'Не удалось удалить комментарий' });
+            }
             return;
           }
           await load();
         } catch (error) {
-          window.alert('Нет соединения с сервером');
+          if (window.confirmDialog) {
+            await window.confirmDialog.alert({ title: 'Ошибка связи', message: 'Нет соединения с сервером' });
+          }
         }
       }
 
