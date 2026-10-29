@@ -3186,5 +3186,6 @@
     }
   }
 
+  window.EditorManager = EditorManager;
   window.editorManager = new EditorManager();
 })();

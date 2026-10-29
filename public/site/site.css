@@ -6750,9 +6750,7 @@ a.site-profile-media-row:hover {
 
 /* --- Липкая шапка редактора --- */
 .antropedia-editor-header {
-    position: sticky;
-    top: 72px;
-    z-index: 95;
+    position: relative;
     background: rgba(26, 27, 30, 0.88);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
@@ -6873,7 +6871,7 @@ a.site-profile-media-row:hover {
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--site-radius-md, 14px);
-    overflow: hidden;
+    overflow: visible;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -7143,61 +7141,78 @@ a.site-profile-media-row:hover {
 /* --- Многослойность --- */
 .antropedia-editor-view .article-layers-list {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     margin: 12px 0;
 }
 
-.antropedia-editor-view .layer-item-row {
-    display: flex;
+.antropedia-editor-view .article-layer-pill {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: rgba(20, 22, 26, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.15s ease;
+    color: var(--text-normal);
+    user-select: none;
 }
 
-.antropedia-editor-view .layer-item-row:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.14);
+.antropedia-editor-view .article-layer-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
-.antropedia-editor-view .layer-item-row.is-active {
-    background: rgba(99, 102, 241, 0.16);
-    border-color: rgba(99, 102, 241, 0.45);
+.antropedia-editor-view .article-layer-pill.active {
+    background: #5865f2;
+    border-color: #5865f2;
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(88, 101, 242, 0.4);
 }
 
-.antropedia-editor-view .layer-item-title {
+.antropedia-editor-view .article-layer-pill-title {
     font-weight: 600;
-    font-size: 13px;
-    color: var(--header-primary);
 }
 
-.antropedia-editor-view .layer-item-badge {
+.antropedia-editor-view .article-layer-pill-remove,
+.antropedia-editor-view .article-layer-pill-move {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    opacity: 0.75;
     font-size: 11px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
 }
 
-.antropedia-editor-view .layer-item-badge.is-public {
-    background: rgba(34, 197, 94, 0.18);
-    color: #4ade80;
+.antropedia-editor-view .article-layer-pill-remove:hover,
+.antropedia-editor-view .article-layer-pill-move:hover:not(:disabled) {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.25);
 }
 
-.antropedia-editor-view .layer-item-badge.is-roles {
-    background: rgba(99, 102, 241, 0.2);
-    color: #a5b4fc;
+.antropedia-editor-view .article-layer-pill-move:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
 }
 
 .antropedia-editor-view .article-layers-actions {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
+    margin-top: 6px;
 }
 
 /* --- Обложка --- */
@@ -7210,25 +7225,29 @@ a.site-profile-media-row:hover {
 
 /* --- Обёртка редактора контента, липкий тулбар и сплит-панели --- */
 .antropedia-editor-view .editor-wrapper {
+    position: relative;
     border-radius: var(--site-radius-md, 14px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: #18191c;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+    min-width: 0;
 }
 
 .antropedia-editor-view .editor-toolbar-sticky {
     position: sticky;
-    top: 130px;
-    z-index: 85;
+    top: var(--site-header-h, 64px);
+    z-index: 90;
     background: rgba(30, 31, 34, 0.96);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--site-radius-md, 14px) var(--site-radius-md, 14px) 0 0;
     padding: 8px 14px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    align-items: stretch;
 }
 
 .antropedia-editor-view .toolbar-format-scroll {
@@ -7237,6 +7256,7 @@ a.site-profile-media-row:hover {
     scrollbar-width: none;
     -ms-overflow-style: none;
     padding: 2px 0;
+    min-width: 0;
 }
 
 .antropedia-editor-view .toolbar-format-scroll::-webkit-scrollbar {
@@ -7249,6 +7269,46 @@ a.site-profile-media-row:hover {
     gap: 4px;
     min-width: max-content;
 }
+
+.antropedia-editor-view .toolbar-fade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 2;
+}
+
+.antropedia-editor-view .toolbar-fade-l {
+    left: 0;
+    background: linear-gradient(to right, rgba(30, 31, 34, 0.95), transparent);
+}
+
+.antropedia-editor-view .toolbar-fade-r {
+    right: 0;
+    background: linear-gradient(to left, rgba(30, 31, 34, 0.95), transparent);
+}
+
+.antropedia-editor-view .toolbar-format-scroll.can-scroll-l .toolbar-fade-l {
+    opacity: 1;
+}
+
+.antropedia-editor-view .toolbar-format-scroll.can-scroll-r .toolbar-fade-r {
+    opacity: 1;
+}
+
+.antropedia-editor-view .toolbar-fade-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.antropedia-editor-view .toolbar-fade-l .toolbar-fade-arrow { left: 4px; }
+.antropedia-editor-view .toolbar-fade-r .toolbar-fade-arrow { right: 4px; }
 
 .antropedia-editor-view .toolbar-group-wrap {
     display: flex;
@@ -7382,14 +7442,12 @@ a.site-profile-media-row:hover {
 
 .antropedia-editor-view .editor-pane {
     min-width: 0;
-    overflow-y: auto;
-    max-height: calc(100vh - 210px);
+    min-height: 500px;
 }
 
 .antropedia-editor-view .preview-pane {
     min-width: 0;
-    overflow-y: auto;
-    max-height: calc(100vh - 210px);
+    min-height: 500px;
     padding: 24px 30px;
     background: rgba(18, 19, 22, 0.45);
 }
@@ -7548,7 +7606,6 @@ a.site-profile-media-row:hover {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
-        top: 60px;
     }
 
     .antropedia-editor-header-left,
@@ -7558,7 +7615,7 @@ a.site-profile-media-row:hover {
     }
 
     .antropedia-editor-view .editor-toolbar-sticky {
-        top: 170px;
+        top: var(--site-header-h, 60px);
     }
 
     .antropedia-editor-view .editor-panes[data-mode="split"] {

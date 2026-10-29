@@ -44,8 +44,36 @@
         } catch (err) {
           return { success: false, error: err.message };
         }
+      },
+      async uploadImage(file) {
+        const formData = new FormData();
+        formData.append('image', file);
+        return this.makeAuthenticatedRequest('/api/upload-image', 'POST', formData);
       }
     };
+  } else if (!window.apiClient.uploadImage) {
+    window.apiClient.uploadImage = async function (file) {
+      const formData = new FormData();
+      formData.append('image', file);
+      if (typeof window.apiClient.makeAuthenticatedRequest === 'function') {
+        return window.apiClient.makeAuthenticatedRequest('/api/upload-image', 'POST', formData);
+      }
+      const accessToken = token();
+      const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      const res = await fetch('/api/upload-image', { method: 'POST', headers, body: formData });
+      const result = await res.json().catch(() => ({}));
+      return { success: res.ok, data: result, status: res.status, error: result && result.error };
+    };
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, (m) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[m]);
   }
 
   // Всплывающие уведомления (toast)
@@ -148,11 +176,11 @@
       await this.loadServers();
 
       // Инициализируем EditorManager
-      if (typeof EditorManager !== 'undefined') {
-        if (!this.editorManager) {
-          this.editorManager = new EditorManager();
-        }
-        await this.editorManager.initializeEditor();
+      const editor = window.editorManager || (typeof EditorManager !== 'undefined' ? new EditorManager() : null);
+      if (editor) {
+        this.editorManager = editor;
+        window.editorManager = editor;
+        await editor.initializeEditor();
       }
 
       // Сбрасываем или загружаем черновик/статью
@@ -321,6 +349,24 @@
           this.loadLayerIntoForm(idx);
         }
       });
+
+      // Динамическое обновление заголовка активного слоя при вводе
+      document.getElementById('articleTitle')?.addEventListener('input', (e) => {
+        if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
+          this.articleLayers[this.activeLayerIndex].title = e.target.value;
+          const hint = document.getElementById('articleLayerEditingHint');
+          if (hint) hint.textContent = `(Слой ${this.activeLayerIndex + 1}: ${e.target.value || 'без названия'})`;
+          this.renderArticleLayersList();
+        }
+      });
+
+      // Переключение публичности активного слоя
+      document.getElementById('articleLayerPublicCheckbox')?.addEventListener('change', (e) => {
+        if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
+          this.articleLayers[this.activeLayerIndex].public = e.target.checked;
+          this.renderArticleLayersList();
+        }
+      });
     }
 
     // === Загрузка франшиз и хабов ===
@@ -415,18 +461,40 @@
 
     // === Обложка статьи ===
     async uploadCoverImage(file) {
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showMessage('Пожалуйста, выберите файл изображения', 'error');
+        return;
+      }
+
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        showMessage('Размер файла превышает допустимый лимит (5MB)', 'error');
+        return;
+      }
+
+      // Предпросмотр сразу
+      const previewImg = document.getElementById('articleCoverImagePreview');
+      const previewContainer = document.getElementById('articleCoverPreview');
+      const fileNameElement = document.getElementById('coverFileName');
+      if (previewImg) previewImg.src = URL.createObjectURL(file);
+      if (fileNameElement) fileNameElement.textContent = file.name;
+      if (previewContainer) previewContainer.style.display = 'flex';
+
       const formData = new FormData();
       formData.append('image', file);
+
       try {
         showMessage('Загрузка обложки…', 'info');
         const tokenVal = token();
         const headers = tokenVal ? { Authorization: `Bearer ${tokenVal}` } : {};
-        const res = await fetch('/api/uploads/image', {
+        const res = await fetch('/api/upload-image', {
           method: 'POST',
           headers,
           body: formData
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok && data && (data.url || data.path)) {
           const finalUrl = data.url || data.path;
           this.setCoverImage(finalUrl, file.name);
@@ -454,74 +522,92 @@
       const fileInput = document.getElementById('articleImageFile');
       const fileUploadInput = document.getElementById('articleImageFileInput');
       const previewWrap = document.getElementById('articleCoverPreview');
+      const previewImg = document.getElementById('articleCoverImagePreview');
+      const fileNameEl = document.getElementById('coverFileName');
       if (fileInput) fileInput.value = '';
       if (fileUploadInput) fileUploadInput.value = '';
+      if (previewImg) previewImg.src = '';
+      if (fileNameEl) fileNameEl.textContent = '';
       if (previewWrap) previewWrap.style.display = 'none';
     }
 
     // === Многослойность ===
+    encodeRoleRef(ref) {
+      return `${ref.scope}:${ref.id}`;
+    }
+
+    decodeRoleRef(val) {
+      const m = /^(system|server):(\d+)$/.exec(val);
+      return m ? { scope: m[1], id: parseInt(m[2], 10) } : null;
+    }
+
+    async loadRoleCatalogForLayers(serverId) {
+      if (!this.layerRolesField) return;
+      const options = [];
+      try {
+        const adminRes = await window.apiClient.makeAuthenticatedRequest('/api/admin-roles');
+        if (adminRes.success && Array.isArray(adminRes.data?.roles)) {
+          adminRes.data.roles.forEach((r) => options.push({ value: `system:${r.id}`, label: `🌐 ${r.name}` }));
+        }
+      } catch (e) {}
+
+      if (serverId) {
+        try {
+          const serverRes = await window.apiClient.makeAuthenticatedRequest(`/api/servers/${serverId}/roles`);
+          if (serverRes.success && Array.isArray(serverRes.data)) {
+            serverRes.data.forEach((r) => options.push({ value: `server:${r.id}`, label: `🏠 ${r.name}` }));
+          }
+        } catch (e) {}
+      }
+
+      this.layerRolesField.setOptions(options);
+      this.layerRolesField.setPlaceholder(options.length ? 'Роли, которым виден слой...' : 'Сначала выберите франшизу...');
+    }
+
     setLayersMode(enabled) {
       this.articleLayersEnabled = !!enabled;
       const panel = document.getElementById('articleLayersPanel');
       const legacyAccess = document.getElementById('articleLegacyAccessRow');
       const legacyRoles = document.getElementById('articleLegacyRolesRow');
       const hint = document.getElementById('articleLayerEditingHint');
+      const tagsHint = document.getElementById('articleTagsLayerHint');
+
       if (panel) panel.hidden = !enabled;
-      if (legacyAccess) legacyAccess.hidden = !!enabled;
-      if (legacyRoles) legacyRoles.hidden = !!enabled;
+      if (legacyAccess) legacyAccess.hidden = enabled;
+      if (legacyRoles) legacyRoles.hidden = enabled;
+      if (hint) hint.hidden = !enabled;
+      if (tagsHint) { tagsHint.hidden = !enabled; if (!enabled) tagsHint.textContent = ''; }
 
       if (enabled) {
+        const editor = this.editorManager || window.editorManager;
         if (!this.articleLayers.length) {
-          const currentContent = document.getElementById('articleContent')?.innerHTML || '';
-          let parsed = { version: 1, blocks: [] };
-          try { parsed = JSON.parse(currentContent); } catch (e) {}
           this.articleLayers = [{
             roles: [],
-            public: true,
+            public: false,
             title: document.getElementById('articleTitle')?.value || '',
             tags: this.tagsField ? this.tagsField.getValues() : [],
-            content: parsed
+            content: editor && editor.doc ? JSON.parse(JSON.stringify(editor.doc)) : { version: 1, blocks: [] }
           }];
           this.activeLayerIndex = 0;
         }
-        this.renderLayersList();
+        const serverId = document.getElementById('articleServer')?.value;
+        this.loadRoleCatalogForLayers(serverId);
         this.loadLayerIntoForm(this.activeLayerIndex);
-      } else {
-        if (hint) { hint.hidden = true; hint.textContent = ''; }
       }
     }
 
-    renderLayersList() {
+    renderArticleLayersList() {
       const listEl = document.getElementById('articleLayersList');
       if (!listEl) return;
-      listEl.innerHTML = '';
-      this.articleLayers.forEach((layer, idx) => {
-        const pill = document.createElement('div');
-        pill.className = 'article-layer-pill' + (idx === this.activeLayerIndex ? ' active' : '');
-        pill.dataset.index = String(idx);
-
-        const titleText = layer.title || `Слой ${idx + 1}`;
-        const label = document.createElement('span');
-        label.className = 'article-layer-pill-title';
-        label.textContent = titleText;
-        pill.appendChild(label);
-
-        const badge = document.createElement('span');
-        badge.className = 'article-layer-pill-badge';
-        badge.textContent = layer.public ? '🔓 Всем' : (layer.roles && layer.roles.length ? `🔒 ${layer.roles.length}` : '⚠️ Без ролей');
-        pill.appendChild(badge);
-
-        if (this.articleLayers.length > 1) {
-          const removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'article-layer-pill-remove';
-          removeBtn.dataset.index = String(idx);
-          removeBtn.title = 'Удалить слой';
-          removeBtn.innerHTML = '&times;';
-          pill.appendChild(removeBtn);
-        }
-        listEl.appendChild(pill);
-      });
+      const lastIndex = this.articleLayers.length - 1;
+      listEl.innerHTML = this.articleLayers.map((l, i) => `
+        <span class="article-layer-pill${i === this.activeLayerIndex ? ' active' : ''}" data-index="${i}">
+          <button type="button" class="article-layer-pill-move" data-move="-1" data-index="${i}" title="Сделать публичнее (на уровень ниже)"${i === 0 ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+          <span class="article-layer-pill-title">${escapeHtml(l.title || 'Без названия')}</span>
+          <button type="button" class="article-layer-pill-move" data-move="1" data-index="${i}" title="Сделать закрытее (на уровень выше)"${i === lastIndex ? ' disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+          ${this.articleLayers.length > 1 ? `<button type="button" class="article-layer-pill-remove" data-index="${i}" title="Удалить слой">&times;</button>` : ''}
+        </span>
+      `).join('');
     }
 
     loadLayerIntoForm(index) {
@@ -529,76 +615,77 @@
       this.activeLayerIndex = index;
       const layer = this.articleLayers[index];
       const titleInput = document.getElementById('articleTitle');
-      const contentEl = document.getElementById('articleContent');
       const hint = document.getElementById('articleLayerEditingHint');
       const pubCheck = document.getElementById('articleLayerPublicCheckbox');
+      const tagsHint = document.getElementById('articleTagsLayerHint');
 
       if (titleInput) titleInput.value = layer.title || '';
-      if (contentEl) contentEl.innerHTML = JSON.stringify(layer.content || { version: 1, blocks: [] });
       if (this.tagsField) this.tagsField.setValues(Array.isArray(layer.tags) ? layer.tags : []);
-      if (this.layerRolesField) this.layerRolesField.setValues((layer.roles || []).map((r) => `${r.scope}:${r.id}`));
+      if (tagsHint) tagsHint.textContent = `— теги слоя «${layer.title || 'без названия'}»: их видят только те, кому доступен этот слой`;
+
+      const editor = this.editorManager || window.editorManager;
+      if (editor) {
+        editor.doc = layer.content ? JSON.parse(JSON.stringify(layer.content)) : { version: 1, blocks: [] };
+        if (editor.container) {
+          editor.renderAll();
+          editor.scheduleRenderPreview?.();
+        }
+      }
+
+      if (this.layerRolesField) this.layerRolesField.setValues((layer.roles || []).map((r) => this.encodeRoleRef(r)));
       if (pubCheck) pubCheck.checked = !!layer.public;
 
       if (hint) {
         hint.hidden = false;
         hint.textContent = `(Слой ${index + 1}: ${layer.title || 'без названия'})`;
       }
-      this.renderLayersList();
+      this.renderArticleLayersList();
       this.updateLayerPublicRow();
-      if (this.editorManager) this.editorManager.scheduleRenderPreview(true);
     }
 
     snapshotActiveLayer() {
       if (!this.articleLayersEnabled || !this.articleLayers[this.activeLayerIndex]) return;
-      const layer = this.articleLayers[this.activeLayerIndex];
-      layer.title = document.getElementById('articleTitle')?.value || '';
-      let parsed = { version: 1, blocks: [] };
-      try {
-        parsed = JSON.parse(document.getElementById('articleContent')?.innerHTML || '');
-      } catch (e) {}
-      layer.content = parsed;
-      layer.tags = this.tagsField ? this.tagsField.getValues() : [];
-      layer.public = !!document.getElementById('articleLayerPublicCheckbox')?.checked;
-      const rawRoles = this.layerRolesField ? this.layerRolesField.getValues() : [];
-      layer.roles = rawRoles.map((val) => {
-        const m = /^(system|server):(\d+)$/.exec(val);
-        return m ? { scope: m[1], id: parseInt(m[2], 10) } : null;
-      }).filter(Boolean);
+      const editor = this.editorManager || window.editorManager;
+      this.articleLayers[this.activeLayerIndex] = {
+        roles: (this.layerRolesField ? this.layerRolesField.getValues() : []).map((v) => this.decodeRoleRef(v)).filter(Boolean),
+        public: !!document.getElementById('articleLayerPublicCheckbox')?.checked,
+        title: document.getElementById('articleTitle')?.value || '',
+        tags: this.tagsField ? this.tagsField.getValues() : [],
+        content: editor && editor.doc ? JSON.parse(JSON.stringify(editor.doc)) : { version: 1, blocks: [] }
+      };
     }
 
     updateLayerPublicRow() {
-      const pubCheck = document.getElementById('articleLayerPublicCheckbox');
-      const pubRow = document.getElementById('articleLayerPublicRow');
-      if (!pubCheck || !pubRow) return;
-      const hasRoles = this.layerRolesField && this.layerRolesField.getValues().length > 0;
+      const row = document.getElementById('articleLayerPublicRow');
+      if (!row) return;
+      const hasRoles = (this.layerRolesField?.getValues() || []).length > 0;
+      row.hidden = hasRoles;
       if (hasRoles) {
-        pubCheck.checked = false;
-        pubCheck.disabled = true;
-        pubRow.style.opacity = '0.5';
-      } else {
-        pubCheck.disabled = false;
-        pubRow.style.opacity = '1';
+        const cb = document.getElementById('articleLayerPublicCheckbox');
+        if (cb) cb.checked = false;
       }
     }
 
-    moveArticleLayer(fromIdx, dir) {
-      const toIdx = fromIdx + dir;
-      if (toIdx < 0 || toIdx >= this.articleLayers.length) return;
+    moveArticleLayer(index, direction) {
+      const swapWith = index + direction;
+      if (swapWith < 0 || swapWith >= this.articleLayers.length) return;
       this.snapshotActiveLayer();
-      const item = this.articleLayers.splice(fromIdx, 1)[0];
-      this.articleLayers.splice(toIdx, 0, item);
-      this.loadLayerIntoForm(toIdx);
+      [this.articleLayers[index], this.articleLayers[swapWith]] = [this.articleLayers[swapWith], this.articleLayers[index]];
+      if (this.activeLayerIndex === index) this.activeLayerIndex = swapWith;
+      else if (this.activeLayerIndex === swapWith) this.activeLayerIndex = index;
+      this.renderArticleLayersList();
     }
 
     // === Сбор данных формы для публикации и черновиков ===
     collectFormData() {
       this.snapshotActiveLayer();
+      const editor = this.editorManager || window.editorManager;
       const addAsCoauthor = document.getElementById('addAsCoauthorCheckbox');
       const data = {
         title: document.getElementById('articleTitle')?.value || '',
         server: document.getElementById('articleServer')?.value || '',
         hub_id: document.getElementById('articleHub')?.value || null,
-        content: document.getElementById('articleContent')?.innerHTML || '',
+        content: editor && editor.doc ? JSON.stringify(editor.doc) : (document.getElementById('articleContent')?.innerHTML || ''),
         image: document.getElementById('articleImageFile')?.value || '',
         locked: document.getElementById('articleLocked')?.value === 'true',
         roles: this.rolesField ? this.rolesField.getValues() : [],
@@ -626,9 +713,15 @@
 
     clearForm() {
       const titleInput = document.getElementById('articleTitle');
-      const contentEl = document.getElementById('articleContent');
       if (titleInput) titleInput.value = '';
-      if (contentEl) contentEl.innerHTML = JSON.stringify({ version: 1, blocks: [] });
+      const editor = this.editorManager || window.editorManager;
+      if (editor) {
+        editor.doc = { version: 1, blocks: [] };
+        if (editor.container) {
+          editor.renderAll();
+          editor.scheduleRenderPreview?.();
+        }
+      }
       if (this.tagsField) this.tagsField.setValues([]);
       if (this.rolesField) this.rolesField.setValues([]);
       this.removeCoverImage();
