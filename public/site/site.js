@@ -572,15 +572,6 @@
         cover.appendChild(icon);
       }
       coverWrap.appendChild(cover);
-
-      var badges = document.createElement('div');
-      badges.className = 'antropedia-card-badges';
-      var badge = document.createElement('span');
-      badge.className = 'antropedia-card-badge';
-      badge.innerHTML = '<i class="fas fa-book-bookmark" aria-hidden="true"></i> <span>Статья</span>';
-      badges.appendChild(badge);
-      coverWrap.appendChild(badges);
-
       card.appendChild(coverWrap);
 
       var body = document.createElement('div');
