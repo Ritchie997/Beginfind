@@ -625,7 +625,75 @@
       return item;
     }
 
-    function createCardReactionBar(article, user) {
+    
+  function computeOptimisticReactions(reactions, shortcode, imageUrl) {
+    var list = Array.isArray(reactions) ? reactions.map(function (r) { return Object.assign({}, r); }) : [];
+    var cleanCode = String(shortcode || '').replace(/^:+|:+$/g, '').toLowerCase();
+    if (!cleanCode) return list;
+
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].shortcode || '').replace(/^:+|:+$/g, '').toLowerCase() === cleanCode) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) {
+      var item = list[idx];
+      if (item.reacted) {
+        if (item.count <= 1) {
+          list.splice(idx, 1);
+        } else {
+          item.count = item.count - 1;
+          item.reacted = false;
+        }
+      } else {
+        item.count = item.count + 1;
+        item.reacted = true;
+      }
+    } else {
+      list.push({
+        shortcode: cleanCode,
+        count: 1,
+        reacted: true,
+        url: imageUrl || ''
+      });
+    }
+    return list;
+  }
+
+  function syncArticleLikesUI(slug, liked, count) {
+    if (!slug) return;
+    var slugStr = String(slug);
+    document.querySelectorAll('.wiki-card[data-slug="' + slugStr + '"], .antropedia-card[data-slug="' + slugStr + '"]').forEach(function (card) {
+      var btn = card.querySelector('.engage-item.is-like, [data-action="toggle-like"]');
+      if (!btn) return;
+      btn.classList.toggle('active', liked);
+      btn.classList.toggle('is-liked', liked);
+      var icon = btn.querySelector('i');
+      if (icon) icon.className = (liked ? 'fas' : 'far') + ' fa-heart';
+      var span = btn.querySelector('span, .antropedia-card-pill-count');
+      if (span) span.textContent = formatCount(count);
+    });
+    var detailLike = document.querySelector('.pub-article-engagement-actions .is-like');
+    if (detailLike) {
+      detailLike.classList.toggle('active', liked);
+      var detailIcon = detailLike.querySelector('i');
+      if (detailIcon) detailIcon.className = (liked ? 'fas' : 'far') + ' fa-heart';
+      var detailSpan = detailLike.querySelector('span');
+      if (detailSpan) detailSpan.textContent = String(count);
+    }
+  }
+
+  function syncArticleCommentsUI(slug, count) {
+    if (!slug) return;
+    var slugStr = String(slug);
+    document.querySelectorAll('.wiki-card[data-slug="' + slugStr + '"] .engage-item.is-comment span, .antropedia-card[data-slug="' + slugStr + '"] [data-action="goto-comments"] .antropedia-card-pill-count').forEach(function (span) {
+      span.textContent = formatCount(count);
+    });
+  }
+
+  function createCardReactionBar(article, user) {
       var bar = createReactionBar(article.slug, 'article', article.slug, article.reactions || [], user, function (reactions) {
         article.reactions = reactions;
         var replacement = createCardReactionBar(article, user);
@@ -640,6 +708,7 @@
       var href = '/antropedia/' + encodeURIComponent(article.slug);
       var card = document.createElement('article');
       card.className = 'wiki-card public-wiki-card antropedia-card';
+      card.dataset.slug = article.slug;
 
       var coverWrap = document.createElement('div');
       coverWrap.className = 'antropedia-card-cover-wrap';
@@ -770,18 +839,30 @@
           openLogin();
           return;
         }
-        likeButton.disabled = true;
+        var wasLiked = likeButton.classList.contains('active');
+        var prevCount = parseInt(likeButton.querySelector('span').textContent.replace(/\D/g, ''), 10) || 0;
+        var nextLiked = !wasLiked;
+        var nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
+
+        // Instant optimistic update
+        article.liked = nextLiked;
+        article.likesCount = nextCount;
+        syncArticleLikesUI(article.slug, nextLiked, nextCount);
+
         try {
           var result = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/likes/toggle', 'POST');
-          likeButton.classList.toggle('active', !!result.liked);
-          likeButton.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
-          likeButton.querySelector('span').textContent = formatCount(result.count);
+          if (result && typeof result.count === 'number') {
+            article.liked = !!result.liked;
+            article.likesCount = result.count;
+            syncArticleLikesUI(article.slug, article.liked, article.likesCount);
+          }
         } catch (error) {
+          article.liked = wasLiked;
+          article.likesCount = prevCount;
+          syncArticleLikesUI(article.slug, wasLiked, prevCount);
           if (window.confirmDialog) {
             window.confirmDialog.alert({ title: 'Лайк', message: error.message || 'Не удалось поставить лайк' });
           }
-        } finally {
-          likeButton.disabled = false;
         }
       });
       var commentsLink = document.createElement('a');
@@ -1011,6 +1092,7 @@
 
     function createReactionBar(slug, targetType, targetId, reactions, user, onChange) {
       var bar = makeEl('div', 'pub-reactions');
+      bar.dataset.targetId = targetId;
       (reactions || []).forEach(function (reaction) {
         var button = makeEl('button', 'pub-reaction-pill' + (reaction.reacted ? ' active' : ''));
         button.type = 'button';
@@ -1025,7 +1107,8 @@
         button.append(image, makeEl('span', null, String(reaction.count || 0)));
         button.addEventListener('click', function () {
           if (!user) { openLogin(); return; }
-          changeReaction(reaction.shortcode);
+          var img = button.querySelector('img');
+          changeReaction(reaction.shortcode, img ? img.src : null);
         });
         bar.appendChild(button);
       });
@@ -1038,14 +1121,14 @@
       add.addEventListener('click', function () {
         if (!user) { openLogin(); return; }
         if (window.PublicStickerPicker) {
-          window.PublicStickerPicker.open(add, function (shortcode) {
-            changeReaction(shortcode.replace(/^:+|:+$/g, ''));
+          window.PublicStickerPicker.open(add, function (shortcode, pickedUrl) {
+            changeReaction(shortcode.replace(/^:+|:+$/g, ''), pickedUrl);
           });
         }
       });
       bar.appendChild(add);
 
-      async function changeReaction(shortcode) {
+      async function changeReaction(shortcode, imageUrl) {
         var code = String(shortcode || '').trim().replace(/^:+|:+$/g, '').toLowerCase();
         if (!/^[a-z0-9-]{1,80}:[a-z0-9-]{1,80}$/.test(code)) {
           if (window.confirmDialog) {
@@ -1053,12 +1136,24 @@
           }
           return;
         }
+
+        var prevReactions = (reactions || []).map(function (r) { return Object.assign({}, r); });
+        if (!imageUrl) {
+          var existingPill = bar.querySelector('.pub-reaction-pill img');
+          if (existingPill) imageUrl = existingPill.src;
+        }
+        var optimistic = computeOptimisticReactions(prevReactions, code, imageUrl);
+        if (onChange) onChange(optimistic);
+
         try {
           var path = '/api/articles/' + encodeURIComponent(slug);
           if (targetType === 'comment') path += '/comments/' + encodeURIComponent(targetId);
           var result = await authenticatedRequest(path + '/reactions/toggle', 'POST', { shortcode: code });
-          if (onChange) onChange(result.reactions || []);
+          if (result && Array.isArray(result.reactions)) {
+            if (onChange) onChange(result.reactions);
+          }
         } catch (error) {
+          if (onChange) onChange(prevReactions);
           if (window.confirmDialog) {
             window.confirmDialog.alert({ title: 'Реакция', message: error.message || 'Не удалось изменить реакцию' });
           }
@@ -1077,18 +1172,30 @@
 
       like.addEventListener('click', async function () {
         if (!currentUser) { openLogin(); return; }
-        like.disabled = true;
+        var wasLiked = like.classList.contains('active');
+        var prevCount = parseInt(like.querySelector('span').textContent.replace(/\D/g, ''), 10) || 0;
+        var nextLiked = !wasLiked;
+        var nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
+
+        // Instant optimistic update
+        article.liked = nextLiked;
+        article.likesCount = nextCount;
+        syncArticleLikesUI(article.slug, nextLiked, nextCount);
+
         try {
           var result = await authenticatedRequest('/api/articles/' + encodeURIComponent(article.slug) + '/likes/toggle', 'POST');
-          like.classList.toggle('active', !!result.liked);
-          like.querySelector('i').className = result.liked ? 'fas fa-heart' : 'far fa-heart';
-          like.querySelector('span').textContent = String(result.count || 0);
+          if (result && typeof result.count === 'number') {
+            article.liked = !!result.liked;
+            article.likesCount = result.count;
+            syncArticleLikesUI(article.slug, article.liked, article.likesCount);
+          }
         } catch (error) {
+          article.liked = wasLiked;
+          article.likesCount = prevCount;
+          syncArticleLikesUI(article.slug, wasLiked, prevCount);
           if (window.confirmDialog) {
             window.confirmDialog.alert({ title: 'Лайк', message: error.message || 'Не удалось поставить лайк' });
           }
-        } finally {
-          like.disabled = false;
         }
       });
       comments.addEventListener('click', function () {
@@ -1105,6 +1212,16 @@
         if (reactionBar) reactionBar.replaceWith(replacement);
         else actions.appendChild(replacement);
         reactionBar = replacement;
+
+        var card = document.querySelector('.wiki-card[data-slug="' + article.slug + '"]');
+        if (card) {
+          var cardBar = card.querySelector('.public-card-reactions');
+          if (cardBar) {
+            article.reactions = updated;
+            var rep = createCardReactionBar(article, currentUser);
+            cardBar.replaceWith(rep);
+          }
+        }
       }
 
       actions.appendChild(like);
@@ -1581,9 +1698,18 @@
         render();
         var commentsCountButton = container.querySelector('.pub-article-engagement-actions .is-comment span');
         if (commentsCountButton) commentsCountButton.textContent = String(state.comments.length);
+        headingCount.textContent = state.comments.length ? ' (' + state.comments.length + ')' : '';
+        syncArticleCommentsUI(slug, state.comments.length);
       }
 
       async function post(text, parentId) {
+        var prevCount = state.comments ? state.comments.length : 0;
+        var nextCount = prevCount + 1;
+        headingCount.textContent = ' (' + nextCount + ')';
+        var commentsCountButton = container.querySelector('.pub-article-engagement-actions .is-comment span');
+        if (commentsCountButton) commentsCountButton.textContent = String(nextCount);
+        syncArticleCommentsUI(slug, nextCount);
+
         try {
           var response = await fetch(apiBase, {
             method: 'POST',
@@ -1596,6 +1722,9 @@
             await load();
             return { ok: true };
           }
+          headingCount.textContent = prevCount ? ' (' + prevCount + ')' : '';
+          if (commentsCountButton) commentsCountButton.textContent = String(prevCount);
+          syncArticleCommentsUI(slug, prevCount);
           if (response.status === 401) {
             state.user = null;
             renderComposer();
@@ -1605,6 +1734,9 @@
           var data = await response.json().catch(function () { return {}; });
           return { ok: false, message: data.error || 'Не удалось отправить комментарий' };
         } catch (error) {
+          headingCount.textContent = prevCount ? ' (' + prevCount + ')' : '';
+          if (commentsCountButton) commentsCountButton.textContent = String(prevCount);
+          syncArticleCommentsUI(slug, prevCount);
           return { ok: false, message: 'Нет соединения с сервером' };
         }
       }
@@ -1620,9 +1752,21 @@
             })
           : true;
         if (!ok) return;
+
+        var prevCount = state.comments ? state.comments.length : 0;
+        var childCount = (state.comments || []).filter(function (c) { return String(c.parentId) === String(id); }).length;
+        var nextCount = Math.max(0, prevCount - 1 - childCount);
+        headingCount.textContent = nextCount ? ' (' + nextCount + ')' : '';
+        var commentsCountButton = container.querySelector('.pub-article-engagement-actions .is-comment span');
+        if (commentsCountButton) commentsCountButton.textContent = String(nextCount);
+        syncArticleCommentsUI(slug, nextCount);
+
         try {
           var response = await fetch(apiBase + '/' + encodeURIComponent(id), { method: 'DELETE', headers: authHeaders() });
           if (!response.ok) {
+            headingCount.textContent = prevCount ? ' (' + prevCount + ')' : '';
+            if (commentsCountButton) commentsCountButton.textContent = String(prevCount);
+            syncArticleCommentsUI(slug, prevCount);
             var data = await response.json().catch(function () { return {}; });
             if (window.confirmDialog) {
               await window.confirmDialog.alert({ title: 'Ошибка удаления', message: data.error || 'Не удалось удалить комментарий' });
@@ -1631,6 +1775,9 @@
           }
           await load();
         } catch (error) {
+          headingCount.textContent = prevCount ? ' (' + prevCount + ')' : '';
+          if (commentsCountButton) commentsCountButton.textContent = String(prevCount);
+          syncArticleCommentsUI(slug, prevCount);
           if (window.confirmDialog) {
             await window.confirmDialog.alert({ title: 'Ошибка связи', message: 'Нет соединения с сервером' });
           }

@@ -105,7 +105,7 @@
           ${selectable ? `<button type="button" class="gallery-card-select" data-select-work="${work.id}" aria-label="Выбрать работу «${escapeHtml(work.title)}»"><i class="fas fa-check"></i></button>` : ''}
           ${compact ? '' : `<div class="gallery-card-foot">
             <div class="gallery-card-stats">
-              <span class="${work.liked ? 'is-liked' : ''}"><i class="${work.liked ? 'fas' : 'far'} fa-heart"></i> ${work.likes || 0}</span>
+              <span class="${work.liked ? 'is-liked' : ''} gallery-stat-like" data-action="toggle-card-like" role="button" tabindex="0" title="Нравится"><i class="${work.liked ? 'fas' : 'far'} fa-heart"></i> <span class="gallery-like-num">${work.likes || 0}</span></span>
               <span><i class="far fa-comment"></i> ${work.comments || 0}</span>
               <span><i class="far fa-eye"></i> ${work.views || 0}</span>
             </div>
@@ -956,6 +956,13 @@
           this.toggleWorkSelected(selectButton.dataset.selectWork);
           return;
         }
+        const likeAction = e.target.closest('[data-action="toggle-card-like"]');
+        if (likeAction) {
+          e.stopPropagation();
+          const card = likeAction.closest('[data-work-id]');
+          if (card) this.toggleCardLike(card.dataset.workId, likeAction);
+          return;
+        }
         const card = e.target.closest('[data-work-id]');
         if (!card) return;
         if (this.selectMode) {
@@ -969,6 +976,14 @@
         if (folderButton && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           this.openFolder(folderButton.closest('.gallery-folder-card')?.dataset.folderId);
+          return;
+        }
+        const likeAction = e.target.closest('[data-action="toggle-card-like"]');
+        if (likeAction && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const card = likeAction.closest('[data-work-id]');
+          if (card) this.toggleCardLike(card.dataset.workId, likeAction);
           return;
         }
         const card = e.target.closest('[data-work-id]');
@@ -1546,6 +1561,89 @@
           card.classList.remove('is-selected');
           card.draggable = !this.selectMode && card.dataset.draggable === 'true';
         });
+      }
+    }
+
+    async toggleCardLike(workId, likeEl) {
+      if (!workId) return;
+      if (!window.authManager?.isAuthenticated?.()) {
+        window.showModalLogin?.('login');
+        return;
+      }
+      const wasLiked = likeEl.classList.contains('is-liked');
+      const numEl = likeEl.querySelector('.gallery-like-num') || likeEl;
+      const prevCount = parseInt(numEl.textContent.replace(/\D/g, ''), 10) || 0;
+      const nextLiked = !wasLiked;
+      const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
+
+      const work = this.items.find((item) => String(item.id) === String(workId));
+      if (work) {
+        work.liked = nextLiked;
+        work.likes = nextCount;
+      }
+      document.querySelectorAll(`.gallery-card[data-work-id="${workId}"] .gallery-stat-like`).forEach((el) => {
+        el.classList.toggle('is-liked', nextLiked);
+        const icon = el.querySelector('i');
+        if (icon) icon.className = (nextLiked ? 'fas' : 'far') + ' fa-heart';
+        const num = el.querySelector('.gallery-like-num');
+        if (num) num.textContent = String(nextCount);
+      });
+      if (window.galleryViewer && window.galleryViewer.isOpen() && String(window.galleryViewer.currentSlug) === String(workId)) {
+        window.galleryViewer.renderLikeSummary({ liked: nextLiked, count: nextCount });
+      }
+
+      try {
+        const result = await window.galleryViewer.engagementApi.toggleLike(workId);
+        if (result.success && result.data) {
+          const finalLiked = !!result.data.liked;
+          const finalCount = result.data.count || 0;
+          if (work) {
+            work.liked = finalLiked;
+            work.likes = finalCount;
+          }
+          document.querySelectorAll(`.gallery-card[data-work-id="${workId}"] .gallery-stat-like`).forEach((el) => {
+            el.classList.toggle('is-liked', finalLiked);
+            const icon = el.querySelector('i');
+            if (icon) icon.className = (finalLiked ? 'fas' : 'far') + ' fa-heart';
+            const num = el.querySelector('.gallery-like-num');
+            if (num) num.textContent = String(finalCount);
+          });
+          if (window.galleryViewer && window.galleryViewer.isOpen() && String(window.galleryViewer.currentSlug) === String(workId)) {
+            window.galleryViewer.renderLikeSummary(result.data);
+          }
+        } else {
+          if (work) {
+            work.liked = wasLiked;
+            work.likes = prevCount;
+          }
+          document.querySelectorAll(`.gallery-card[data-work-id="${workId}"] .gallery-stat-like`).forEach((el) => {
+            el.classList.toggle('is-liked', wasLiked);
+            const icon = el.querySelector('i');
+            if (icon) icon.className = (wasLiked ? 'fas' : 'far') + ' fa-heart';
+            const num = el.querySelector('.gallery-like-num');
+            if (num) num.textContent = String(prevCount);
+          });
+          if (window.galleryViewer && window.galleryViewer.isOpen() && String(window.galleryViewer.currentSlug) === String(workId)) {
+            window.galleryViewer.renderLikeSummary({ liked: wasLiked, count: prevCount });
+          }
+          showMessage(errorText(result, 'Не удалось поставить лайк'), 'error');
+        }
+      } catch (e) {
+        if (work) {
+          work.liked = wasLiked;
+          work.likes = prevCount;
+        }
+        document.querySelectorAll(`.gallery-card[data-work-id="${workId}"] .gallery-stat-like`).forEach((el) => {
+          el.classList.toggle('is-liked', wasLiked);
+          const icon = el.querySelector('i');
+          if (icon) icon.className = (wasLiked ? 'fas' : 'far') + ' fa-heart';
+          const num = el.querySelector('.gallery-like-num');
+          if (num) num.textContent = String(prevCount);
+        });
+        if (window.galleryViewer && window.galleryViewer.isOpen() && String(window.galleryViewer.currentSlug) === String(workId)) {
+          window.galleryViewer.renderLikeSummary({ liked: wasLiked, count: prevCount });
+        }
+        showMessage('Неожиданная ошибка при попытке поставить лайк', 'error');
       }
     }
 

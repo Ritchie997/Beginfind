@@ -186,7 +186,37 @@
   // статьёй и под каждым комментарием/ответом, см. handleReactionsClick() и
   // toggleReaction() в классе ниже. ----------
 
-  function reactionsBarInnerHtml(reactions) {
+    function computeOptimisticReactions(reactions, shortcode, fileUrl) {
+    const list = Array.isArray(reactions) ? reactions.map((r) => Object.assign({}, r)) : [];
+    const cleanCode = String(shortcode || '').replace(/^:+|:+$/g, '').toLowerCase();
+    if (!cleanCode) return list;
+
+    const idx = list.findIndex((r) => String(r.shortcode || '').replace(/^:+|:+$/g, '').toLowerCase() === cleanCode);
+    if (idx >= 0) {
+      const item = list[idx];
+      if (item.reacted) {
+        if (item.count <= 1) {
+          list.splice(idx, 1);
+        } else {
+          item.count = item.count - 1;
+          item.reacted = false;
+        }
+      } else {
+        item.count = item.count + 1;
+        item.reacted = true;
+      }
+    } else {
+      list.push({
+        shortcode: cleanCode,
+        count: 1,
+        reacted: true,
+        url: fileUrl || ''
+      });
+    }
+    return list;
+  }
+
+function reactionsBarInnerHtml(reactions) {
     const pills = (reactions || []).map((r) => `
       <button type="button" class="antropedia-reaction-pill${r.reacted ? ' active' : ''}" data-shortcode="${escapeHtml(r.shortcode)}" title="${escapeHtml(r.packTitle || r.shortcode)}">
         <img src="${escapeHtml(r.url)}" alt=""><span>${r.count}</span>
@@ -972,23 +1002,43 @@
     // Обновляет только эту карточку, не весь список.
     async toggleCardLike(btn, slug) {
       if (!slug || btn.disabled) return;
-      btn.disabled = true;
+      const isLiked = btn.classList.contains('is-liked');
+      const countEl = btn.querySelector('.antropedia-card-pill-count');
+      const prevCount = parseInt(countEl?.textContent || '0', 10) || 0;
+      const nextLiked = !isLiked;
+      const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
+
+      // Instant UI update
+      btn.classList.toggle('is-liked', nextLiked);
+      const icon = btn.querySelector('i');
+      if (icon) icon.className = nextLiked ? 'fas fa-heart' : 'far fa-heart';
+      if (countEl) countEl.textContent = String(nextCount);
+
+      if (this.currentSlug === slug) {
+        this.renderLikeSummary({ liked: nextLiked, count: nextCount });
+      }
+
       try {
         const result = await window.apiClient.toggleArticleLike(slug);
-        if (result.success) {
-          const liked = !!result.data.liked;
-          btn.classList.toggle('is-liked', liked);
-          const icon = btn.querySelector('i');
-          if (icon) icon.className = liked ? 'fas fa-heart' : 'far fa-heart';
-          const countEl = btn.querySelector('.antropedia-card-pill-count');
+        if (result.success && result.data) {
+          const finalLiked = !!result.data.liked;
+          btn.classList.toggle('is-liked', finalLiked);
+          if (icon) icon.className = finalLiked ? 'fas fa-heart' : 'far fa-heart';
           if (countEl) countEl.textContent = String(result.data.count || 0);
+          if (this.currentSlug === slug) this.renderLikeSummary(result.data);
         } else {
+          btn.classList.toggle('is-liked', isLiked);
+          if (icon) icon.className = isLiked ? 'fas fa-heart' : 'far fa-heart';
+          if (countEl) countEl.textContent = String(prevCount);
+          if (this.currentSlug === slug) this.renderLikeSummary({ liked: isLiked, count: prevCount });
           showMessage(`Не удалось поставить лайк: ${result.data?.error || result.error || ''}`, 'error');
         }
       } catch (e) {
+        btn.classList.toggle('is-liked', isLiked);
+        if (icon) icon.className = isLiked ? 'fas fa-heart' : 'far fa-heart';
+        if (countEl) countEl.textContent = String(prevCount);
+        if (this.currentSlug === slug) this.renderLikeSummary({ liked: isLiked, count: prevCount });
         showMessage('Неожиданная ошибка при попытке поставить лайк', 'error');
-      } finally {
-        btn.disabled = false;
       }
     }
 
@@ -1450,7 +1500,99 @@
     // данные (видит любой, кому доступна сама статья), в отличие от закладок.
     // ========================================
 
-    initEngagement() {
+        syncCardLikes(slugOrId, liked, count) {
+      if (!slugOrId) return;
+      const idStr = String(slugOrId);
+      document.querySelectorAll('.gallery-card[data-work-id="' + idStr + '"]').forEach((card) => {
+        const stat = card.querySelector('.gallery-card-stats span:first-child');
+        if (stat) {
+          stat.className = (liked ? 'is-liked ' : '') + 'gallery-stat-like';
+          const icon = stat.querySelector('i');
+          if (icon) icon.className = (liked ? 'fas' : 'far') + ' fa-heart';
+          const numEl = stat.querySelector('.gallery-like-num');
+          if (numEl) numEl.textContent = String(count);
+          else stat.innerHTML = '<i class="' + (liked ? 'fas' : 'far') + ' fa-heart"></i> <span class="gallery-like-num">' + count + '</span>';
+        }
+      });
+      if (this.work && String(this.work.id) === idStr) {
+        this.work.liked = liked;
+        this.work.likes = count;
+      }
+      document.querySelectorAll('.antropedia-card[data-slug="' + idStr + '"]').forEach((card) => {
+        const btn = card.querySelector('[data-action="toggle-like"]');
+        if (btn) {
+          btn.classList.toggle('is-liked', liked);
+          const icon = btn.querySelector('i');
+          if (icon) icon.className = (liked ? 'fas' : 'far') + ' fa-heart';
+          const countEl = btn.querySelector('.antropedia-card-pill-count');
+          if (countEl) countEl.textContent = String(count);
+        }
+      });
+      document.querySelectorAll('.wiki-card[data-slug="' + idStr + '"]').forEach((card) => {
+        const btn = card.querySelector('.engage-item.is-like');
+        if (btn) {
+          btn.classList.toggle('active', liked);
+          const icon = btn.querySelector('i');
+          if (icon) icon.className = (liked ? 'fas' : 'far') + ' fa-heart';
+          const span = btn.querySelector('span');
+          if (span) span.textContent = String(count);
+        }
+      });
+    }
+
+    syncCardComments(slugOrId, count) {
+      if (!slugOrId) return;
+      const idStr = String(slugOrId);
+      document.querySelectorAll('.gallery-card[data-work-id="' + idStr + '"]').forEach((card) => {
+        const stat = card.querySelector('.gallery-card-stats span:nth-child(2)');
+        if (stat) stat.innerHTML = '<i class="far fa-comment"></i> ' + count;
+      });
+      if (this.work && String(this.work.id) === idStr) {
+        this.work.comments = count;
+      }
+      document.querySelectorAll('.antropedia-card[data-slug="' + idStr + '"] [data-action="goto-comments"] .antropedia-card-pill-count').forEach((el) => {
+        el.textContent = String(count);
+      });
+      document.querySelectorAll('.wiki-card[data-slug="' + idStr + '"] .engage-item.is-comment span').forEach((el) => {
+        el.textContent = String(count);
+      });
+    }
+
+    syncCardReactions(slugOrId, reactions) {
+      if (!slugOrId) return;
+      const idStr = String(slugOrId);
+      document.querySelectorAll('.antropedia-card[data-slug="' + idStr + '"] .antropedia-reactions').forEach((bar) => {
+        bar.innerHTML = reactionsBarInnerHtml(reactions);
+      });
+      document.querySelectorAll('.gallery-card[data-work-id="' + idStr + '"]').forEach((card) => {
+        let reactionsWrap = card.querySelector('.gallery-card-reactions');
+        if (!reactionsWrap && reactions && reactions.length) {
+          const foot = card.querySelector('.gallery-card-foot');
+          if (foot) {
+            reactionsWrap = document.createElement('div');
+            reactionsWrap.className = 'gallery-card-reactions';
+            foot.appendChild(reactionsWrap);
+          }
+        }
+        if (reactionsWrap) {
+          if (!reactions || !reactions.length) {
+            reactionsWrap.remove();
+          } else {
+            reactionsWrap.innerHTML = reactions.slice(0, 3).map((r) => {
+              return '<span class="gallery-card-reaction-pill" title="' + escapeHtml(r.shortcode || '') + '">' +
+                '<img src="' + escapeHtml(r.url) + '" alt="" loading="lazy">' +
+                '<span>' + r.count + '</span>' +
+              '</span>';
+            }).join('');
+          }
+        }
+      });
+      if (this.work && String(this.work.id) === idStr) {
+        this.work.reactions = reactions;
+      }
+    }
+
+initEngagement() {
       this.likeBtn?.addEventListener('click', () => this.toggleLike());
       this.commentsBtn?.addEventListener('click', () => this.scrollToComments());
       this.reactionsBarEl?.addEventListener('click', (e) => this.handleReactionsClick(e));
@@ -2090,7 +2232,7 @@
       const targetType = bar.dataset.targetType;
       const targetId = bar.dataset.targetId;
       if (addBtn) this.openReactionPicker(addBtn, targetType, targetId);
-      else if (pill) this.toggleReaction(targetType, targetId, pill.dataset.shortcode);
+      else if (pill) { const img = pill.querySelector('img'); this.toggleReaction(targetType, targetId, pill.dataset.shortcode, img ? img.src : null); }
     }
 
     // Переиспользует ТОТ ЖЕ компонент пикера, что и форма комментария/ответа
@@ -2130,10 +2272,10 @@
       // ждёт их без обрамления. На ПК пикер остаётся открытым после выбора —
       // как и у wireComposer, можно подряд поставить несколько реакций; на
       // телефоне закрывается сразу же (донный лист).
-      const onSelect = (shortcode) => {
+      const onSelect = (shortcode, fileUrl) => {
         const code = shortcode.replace(/^:+|:+$/g, '');
         if (isMobilePickerLayout()) this.closeAllStickerPickers();
-        this.toggleReaction(targetType, targetId, code);
+        this.toggleReaction(targetType, targetId, code, fileUrl);
       };
 
       pickerEl.querySelector('[data-role="open-store"]')?.addEventListener('click', (e) => {
@@ -2149,33 +2291,87 @@
     // же реакция теперь ставится и с карточки на витрине (см. buildCard),
     // где никакая статья ещё не открыта, поэтому шлём и ищем строго по
     // targetId, а не по "текущей открытой" статье.
-    async toggleReaction(targetType, targetId, shortcode) {
+    async toggleReaction(targetType, targetId, shortcode, fileUrl) {
+      const isComment = targetType === 'comment';
+      let prevReactions = [];
+      let comment = null;
+
+      if (!isComment) {
+        prevReactions = (this.currentReactions || []).map((r) => Object.assign({}, r));
+      } else {
+        comment = this._commentsById?.get(Number(targetId));
+        prevReactions = (comment?.reactions || []).map((r) => Object.assign({}, r));
+      }
+
+      const cleanCode = String(shortcode || '').trim().replace(/^:+|:+$/g, '').toLowerCase();
+      if (!cleanCode) return false;
+
+      if (!fileUrl) {
+        const existing = prevReactions.find((r) => String(r.shortcode || '').replace(/^:+|:+$/g, '').toLowerCase() === cleanCode);
+        if (existing) fileUrl = existing.url;
+      }
+
+      const optimistic = computeOptimisticReactions(prevReactions, cleanCode, fileUrl);
+
+      // Instant optimistic UI update
+      if (!isComment) {
+        if (String(targetId) === String(this.currentSlug)) {
+          this.currentReactions = optimistic;
+          if (this.reactionsBarEl) this.reactionsBarEl.innerHTML = reactionsBarInnerHtml(optimistic);
+        }
+        this.syncCardReactions(targetId, optimistic);
+      } else {
+        if (comment) comment.reactions = optimistic;
+        const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
+        if (bar) bar.innerHTML = reactionsBarInnerHtml(optimistic);
+      }
+
       try {
-        const result = targetType !== 'comment'
-          ? await this.engagementApi.toggleReaction(targetId, shortcode)
-          : await this.engagementApi.toggleCommentReaction(this.currentSlug, targetId, shortcode);
+        const result = !isComment
+          ? await this.engagementApi.toggleReaction(targetId, cleanCode)
+          : await this.engagementApi.toggleCommentReaction(this.currentSlug, targetId, cleanCode);
         if (!result.success) {
+          // Rollback
+          if (!isComment) {
+            if (String(targetId) === String(this.currentSlug)) {
+              this.currentReactions = prevReactions;
+              if (this.reactionsBarEl) this.reactionsBarEl.innerHTML = reactionsBarInnerHtml(prevReactions);
+            }
+            this.syncCardReactions(targetId, prevReactions);
+          } else {
+            if (comment) comment.reactions = prevReactions;
+            const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
+            if (bar) bar.innerHTML = reactionsBarInnerHtml(prevReactions);
+          }
           showMessage(`Не удалось изменить реакцию: ${result.data?.error || result.error || ''}`, 'error');
           return false;
         }
         const reactions = result.data.reactions || [];
-        if (targetType !== 'comment') {
+        if (!isComment) {
           if (String(targetId) === String(this.currentSlug)) {
             this.currentReactions = reactions;
             if (this.reactionsBarEl) this.reactionsBarEl.innerHTML = reactionsBarInnerHtml(reactions);
           }
-          // Карточка той же статьи на витрине (сетка/список) — если сейчас
-          // видна именно она (а не открытая статья).
-          const cardBar = this.gridEl?.querySelector(`.antropedia-card[data-slug="${targetId}"] .antropedia-reactions`);
-          if (cardBar) cardBar.innerHTML = reactionsBarInnerHtml(reactions);
+          this.syncCardReactions(targetId, reactions);
         } else {
-          const comment = this._commentsById.get(Number(targetId));
           if (comment) comment.reactions = reactions;
           const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
           if (bar) bar.innerHTML = reactionsBarInnerHtml(reactions);
         }
         return true;
       } catch (e) {
+        // Rollback
+        if (!isComment) {
+          if (String(targetId) === String(this.currentSlug)) {
+            this.currentReactions = prevReactions;
+            if (this.reactionsBarEl) this.reactionsBarEl.innerHTML = reactionsBarInnerHtml(prevReactions);
+          }
+          this.syncCardReactions(targetId, prevReactions);
+        } else {
+          if (comment) comment.reactions = prevReactions;
+          const bar = this.commentsListEl?.querySelector(`.antropedia-reactions[data-target-type="comment"][data-target-id="${targetId}"]`);
+          if (bar) bar.innerHTML = reactionsBarInnerHtml(prevReactions);
+        }
         showMessage('Неожиданная ошибка при изменении реакции', 'error');
         return false;
       }
@@ -2220,18 +2416,33 @@
 
     async toggleLike() {
       if (!this.currentSlug || !this.likeBtn) return;
-      this.likeBtn.disabled = true;
+      if (this._likePending) return;
+      this._likePending = true;
+      const prevLiked = !!this.currentLiked;
+      const prevCount = parseInt(this.likeCountEl?.textContent || '0', 10) || 0;
+      const nextLiked = !prevLiked;
+      const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
+
+      // Instant optimistic UI update
+      this.renderLikeSummary({ liked: nextLiked, count: nextCount });
+      this.syncCardLikes(this.currentSlug, nextLiked, nextCount);
+
       try {
         const result = await this.engagementApi.toggleLike(this.currentSlug);
-        if (result.success) {
+        if (result.success && result.data) {
           this.renderLikeSummary(result.data);
+          this.syncCardLikes(this.currentSlug, !!result.data.liked, result.data.count || 0);
         } else {
+          this.renderLikeSummary({ liked: prevLiked, count: prevCount });
+          this.syncCardLikes(this.currentSlug, prevLiked, prevCount);
           showMessage(`Не удалось поставить лайк: ${result.data?.error || result.error || ''}`, 'error');
         }
       } catch (e) {
+        this.renderLikeSummary({ liked: prevLiked, count: prevCount });
+        this.syncCardLikes(this.currentSlug, prevLiked, prevCount);
         showMessage('Неожиданная ошибка при попытке поставить лайк', 'error');
       } finally {
-        this.likeBtn.disabled = false;
+        this._likePending = false;
       }
     }
 
@@ -2484,20 +2695,29 @@
 
     async submitReply(parentId, content) {
       if (!content || !this.currentSlug) return;
+      const prevCount = parseInt(this.commentsCountEl?.textContent || '0', 10) || 0;
+      const nextCount = prevCount + 1;
+      if (this.commentsCountEl) this.commentsCountEl.textContent = String(nextCount);
+      if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = `(${nextCount})`;
+      this.syncCardComments(this.currentSlug, nextCount);
+
       try {
         const result = await this.engagementApi.addComment(this.currentSlug, content, parentId);
         if (result.success) {
           this._activeReplyParentId = null;
-          // Свой же ответ не должен схлопнуть только что открытую ветку
-          // (см. renderRepliesHtml) — помечаем тред развёрнутым ДО
-          // перерисовки, а не только по клику на "Показать ещё ответов".
           this._expandedReplyThreads.add(String(parentId));
           await this.loadComments();
           return true;
         }
+        if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+        if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+        this.syncCardComments(this.currentSlug, prevCount);
         showMessage(`Не удалось отправить ответ: ${result.data?.error || result.error || ''}`, 'error');
         return false;
       } catch (e) {
+        if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+        if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+        this.syncCardComments(this.currentSlug, prevCount);
         showMessage('Неожиданная ошибка при отправке ответа', 'error');
         return false;
       }
@@ -2505,15 +2725,28 @@
 
     async submitComment(content) {
       if (!content || !this.currentSlug) return;
+      const prevCount = parseInt(this.commentsCountEl?.textContent || '0', 10) || 0;
+      const nextCount = prevCount + 1;
+      if (this.commentsCountEl) this.commentsCountEl.textContent = String(nextCount);
+      if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = `(${nextCount})`;
+      if (this.commentsEmptyEl) this.commentsEmptyEl.hidden = true;
+      this.syncCardComments(this.currentSlug, nextCount);
+
       try {
         const result = await this.engagementApi.addComment(this.currentSlug, content);
         if (result.success) {
           this.mainComposer?.clear();
           await this.loadComments();
         } else {
+          if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+          if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+          this.syncCardComments(this.currentSlug, prevCount);
           showMessage(`Не удалось отправить комментарий: ${result.data?.error || result.error || ''}`, 'error');
         }
       } catch (e) {
+        if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+        if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+        this.syncCardComments(this.currentSlug, prevCount);
         showMessage('Неожиданная ошибка при отправке комментария', 'error');
       }
     }
@@ -2527,14 +2760,32 @@
       });
       if (!ok) return;
 
+      const prevCount = parseInt(this.commentsCountEl?.textContent || '0', 10) || 0;
+      let removed = 1;
+      if (this._commentsById) {
+        for (const [cId, c] of this._commentsById.entries()) {
+          if (String(c.parentId) === String(id)) removed++;
+        }
+      }
+      const nextCount = Math.max(0, prevCount - removed);
+      if (this.commentsCountEl) this.commentsCountEl.textContent = String(nextCount);
+      if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = nextCount ? `(${nextCount})` : '';
+      this.syncCardComments(this.currentSlug, nextCount);
+
       try {
         const result = await this.engagementApi.deleteComment(this.currentSlug, id);
         if (result.success) {
           await this.loadComments();
         } else {
+          if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+          if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+          this.syncCardComments(this.currentSlug, prevCount);
           showMessage(`Не удалось удалить комментарий: ${result.data?.error || result.error || ''}`, 'error');
         }
       } catch (e) {
+        if (this.commentsCountEl) this.commentsCountEl.textContent = String(prevCount);
+        if (this.commentsHeaderCountEl) this.commentsHeaderCountEl.textContent = prevCount ? `(${prevCount})` : '';
+        this.syncCardComments(this.currentSlug, prevCount);
         showMessage('Неожиданная ошибка при удалении комментария', 'error');
       }
     }

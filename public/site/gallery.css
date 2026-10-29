@@ -1865,3 +1865,15 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   gap: 5px !important;
   margin-bottom: 8px !important;
 }
+
+.gallery-stat-like {
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.gallery-stat-like:hover {
+  color: var(--accent-pink, #ff5d8f);
+}
+.gallery-stat-like:active {
+  transform: scale(0.9);
+}
