@@ -6460,10 +6460,17 @@ a.site-profile-media-row:hover {
     height: 480px;
     min-height: 400px;
     border-radius: var(--site-radius-md, 14px);
-    background: #14161a;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    --graph-bg: #0a0c16;
+    background: var(--graph-bg);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
     position: relative;
+    transition: background-color 0.3s;
+}
+
+.home-graph-card .graph-container-dashboard.graph-cosmos {
+    --graph-bg: #0a0c16;
+    background: #0a0c16;
 }
 
 /* --- Popular Articles Grid --- */
