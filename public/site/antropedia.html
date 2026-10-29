@@ -22,6 +22,9 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
 <link rel="stylesheet" href="/maps/maps.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body data-page="antropedia">
 
@@ -57,90 +60,155 @@
 </header>
 <div class="site-nav-overlay" id="siteNavOverlay"></div>
 
-<section class="site-hero site-hero-small">
+<section class="site-hero site-hero-small antropedia-hero-section">
+  <div class="antropedia-hero-glow" aria-hidden="true"></div>
   <span class="site-hero-badge"><i class="fas fa-book-open"></i> Энциклопедия AllTell</span>
-  <h1>Antropedia</h1>
-  <p>Открытая база лора: персонажи, локации, фракции, механики и хроники событий вселенной. Всё связано ссылками, оглавлением и закладками.</p>
-  <div class="site-search" id="pubHeroSearch" style="width:min(520px, 100%); margin:0 auto;">
-    <i class="fas fa-search"></i><input type="search" id="publicArticleSearch" placeholder="Искать статью по названию или тексту… (нажмите /)" aria-label="Поиск по открытым статьям">
+  <h1>Antropedia — база знаний и лор вселенной</h1>
+  <p>Исследуйте персонажей, локации, фракции, механики и хроники вселенной AllTell. Интерактивные статьи, перекрёстные связи и авторский лор сообщества.</p>
+  <div class="antropedia-hero-features">
+    <span class="antropedia-hero-feature"><i class="fas fa-book-bookmark"></i> Каноничные статьи</span>
+    <span class="antropedia-hero-feature"><i class="fas fa-map-location-dot"></i> Интерактивные карты</span>
+    <span class="antropedia-hero-feature"><i class="fas fa-network-wired"></i> Перекрёстные связи</span>
+    <span class="antropedia-hero-feature"><i class="fas fa-layer-group"></i> Секретные слои</span>
+    <span class="antropedia-hero-feature"><i class="fas fa-comments"></i> Обсуждения и реакции</span>
+  </div>
+  <div class="site-hero-actions">
+    <a class="btn btn-primary btn-lg" href="#publicArticleListView" id="antropediaHeroExploreBtn"><i class="fas fa-compass"></i> Каталог статей</a>
+    <a class="btn btn-secondary btn-lg" href="/admin-panel" id="antropediaHeroWriteBtn"><i class="fas fa-pen-nib"></i> Написать статью</a>
   </div>
 </section>
 
 <noscript><p class="public-article-message">Для загрузки публичной Antropedia требуется JavaScript.</p></noscript>
 <main class="site-main" hidden>
-  <section class="site-section" style="padding-top:32px;">
+  <section class="site-section antropedia-section" style="padding-top:28px;">
 
-    <!-- ===== Каталог: панель поиска/фильтров + сетка статей ===== -->
-    <div id="publicArticleListView">
-      <div class="pub-toolbar">
-        <div class="pub-toolbar-row pub-toolbar-row-status">
-          <button type="button" id="pubFiltersToggle" class="pub-filters-toggle" aria-expanded="true" aria-controls="pubFiltersPanel">
-            <i class="fas fa-filter"></i> Фильтры
-            <span id="pubFiltersCount" class="pub-filters-count" hidden>0</span>
-            <i class="fas fa-chevron-down pub-filters-chev"></i>
-          </button>
-          <span id="publicArticleStatus" class="pub-status" role="status" aria-live="polite">Загружаем открытые статьи…</span>
-        </div>
+    <!-- ===== Каталог: плавающая стеклянная панель поиска/фильтров + сетка статей ===== -->
+    <div id="publicArticleListView" class="antropedia-catalog-view">
+      <div class="antropedia-toolbar-container">
+        <div class="antropedia-toolbar pub-toolbar">
+          <div class="antropedia-toolbar-header">
+            <div class="antropedia-toolbar-title-wrap">
+              <h2><i class="fas fa-book-open" aria-hidden="true"></i> Статьи и хроники</h2>
+              <p>Исследуйте лор вселенной AllTell, персонажей, события и игровые механики.</p>
+            </div>
+            <div class="antropedia-toolbar-header-stats">
+              <span id="publicArticleStatus" class="pub-status antropedia-status-badge" role="status" aria-live="polite">Загружаем открытые статьи…</span>
+              <span id="publicArticleCountBadge" class="antropedia-count-badge" aria-live="polite"></span>
+            </div>
+          </div>
 
-        <div class="pub-toolbar-row pub-toolbar-row-filters is-open" id="pubFiltersPanel">
-          <div class="pub-filter pub-filter-tags">
-            <label>Теги</label>
-            <div id="pubTagField" class="chip-field">
-              <div class="chip-field-box">
-                <div class="chip-field-chips"></div>
-                <input type="text" class="chip-field-input" placeholder="Все теги...">
+          <div class="antropedia-toolbar-controls">
+            <div class="antropedia-search-wrap">
+              <i class="fas fa-search antropedia-search-icon" aria-hidden="true"></i>
+              <input type="search" id="publicArticleSearch" class="antropedia-search-input" placeholder="Искать статью по названию, тексту или описанию… (нажмите /)" aria-label="Поиск по открытым статьям" autocomplete="off">
+              <button type="button" id="publicArticleSearchClear" class="antropedia-search-clear" aria-label="Очистить поиск" title="Очистить поиск" hidden><i class="fas fa-xmark"></i></button>
+            </div>
+
+            <div class="antropedia-actions-wrap">
+              <div class="antropedia-select-wrapper">
+                <i class="fas fa-arrow-down-short-wide antropedia-select-icon" aria-hidden="true"></i>
+                <select id="pubSort" class="form-select antropedia-sort" title="Сортировка" aria-label="Сортировка статей">
+                  <option value="newest">Сначала новые</option>
+                  <option value="oldest">Сначала старые</option>
+                  <option value="updated">Недавно обновлённые</option>
+                  <option value="views">По просмотрам</option>
+                  <option value="alpha">По алфавиту</option>
+                </select>
               </div>
-              <div class="chip-field-dropdown" hidden></div>
-              <input type="hidden" class="chip-field-hidden">
+
+              <button type="button" id="pubRandomBtn" class="btn btn-secondary antropedia-random-btn" title="Открыть случайную статью">
+                <i class="fas fa-dice" aria-hidden="true"></i>
+                <span>Случайная</span>
+              </button>
+
+              <button type="button" id="pubFiltersToggle" class="btn btn-secondary antropedia-filters-toggle" aria-expanded="false" aria-controls="pubFiltersPanel" title="Дополнительные фильтры">
+                <i class="fas fa-filter" aria-hidden="true"></i>
+                <span>Фильтры</span>
+                <span id="pubFiltersCount" class="antropedia-filters-count" hidden>0</span>
+                <i class="fas fa-chevron-down antropedia-filters-chev" aria-hidden="true"></i>
+              </button>
+
+              <div class="pub-view-toggle antropedia-view-toggle" role="group" aria-label="Вид списка">
+                <button type="button" class="pub-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
+                <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
+              </div>
+
+              <a href="/admin-panel" class="btn btn-primary antropedia-write-btn" title="Написать статью в админ-панели">
+                <i class="fas fa-pen-nib" aria-hidden="true"></i>
+                <span>Написать</span>
+              </a>
             </div>
           </div>
 
-          <div class="pub-filter pub-filter-dates">
-            <label>Дата создания</label>
-            <div class="pub-date-range">
-              <input type="date" id="pubDateFrom" class="form-input" aria-label="Создана от">
-              <span>—</span>
-              <input type="date" id="pubDateTo" class="form-input" aria-label="Создана до">
+          <!-- Разворачиваемая панель расширенных фильтров (теги chip-field, даты) -->
+          <div class="antropedia-filters-panel pub-toolbar-row-filters" id="pubFiltersPanel">
+            <div class="antropedia-filter antropedia-filter-tags pub-filter pub-filter-tags">
+              <label><i class="fas fa-tags" aria-hidden="true"></i> Теги</label>
+              <div id="pubTagField" class="chip-field antropedia-chip-field">
+                <div class="chip-field-box">
+                  <div class="chip-field-chips"></div>
+                  <input type="text" class="chip-field-input" placeholder="Все теги...">
+                </div>
+                <div class="chip-field-dropdown" hidden></div>
+                <input type="hidden" class="chip-field-hidden">
+              </div>
+            </div>
+
+            <div class="antropedia-filter antropedia-filter-dates pub-filter pub-filter-dates">
+              <label><i class="far fa-calendar" aria-hidden="true"></i> Дата создания</label>
+              <div class="pub-date-range antropedia-date-range">
+                <input type="date" id="pubDateFrom" class="form-input antropedia-date-input" aria-label="Создана от">
+                <span class="antropedia-date-sep">—</span>
+                <input type="date" id="pubDateTo" class="form-input antropedia-date-input" aria-label="Создана до">
+              </div>
+            </div>
+
+            <div class="antropedia-filter-actions">
+              <button type="button" id="pubResetFilters" class="btn btn-secondary btn-sm antropedia-reset-btn">
+                <i class="fas fa-rotate-left"></i> Сбросить фильтры
+              </button>
             </div>
           </div>
 
-          <div class="pub-filter">
-            <label for="pubSort">Сортировка</label>
-            <select id="pubSort" class="form-select">
-              <option value="newest">Сначала новые</option>
-              <option value="oldest">Сначала старые</option>
-              <option value="updated">Недавно обновлённые</option>
-              <option value="views">По просмотрам</option>
-              <option value="alpha">По алфавиту</option>
-            </select>
+          <!-- Быстрая строка тегов (как в галерее) -->
+          <div class="antropedia-tags-bar" id="pubQuickTagsBar">
+            <div class="antropedia-tags-label"><i class="fas fa-hashtag" aria-hidden="true"></i> Популярные теги:</div>
+            <div id="pubQuickTags" class="antropedia-quick-tags" aria-label="Быстрый фильтр по тегам"></div>
           </div>
-
-          <div class="pub-list-controls">
-            <button type="button" id="pubRandomBtn" class="pub-icon-btn" title="Случайная статья"><i class="fas fa-dice"></i><span>Случайная</span></button>
-            <div class="pub-view-toggle" role="group" aria-label="Вид списка">
-              <button type="button" class="pub-view-btn active" data-view="grid" title="Сетка"><i class="fas fa-th-large"></i></button>
-              <button type="button" class="pub-view-btn" data-view="list" title="Список"><i class="fas fa-list"></i></button>
-            </div>
-          </div>
-
-          <button type="button" id="pubResetFilters" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
         </div>
       </div>
 
-      <div id="publicArticleGrid" class="article-grid"></div>
+      <div id="publicArticleGrid" class="article-grid antropedia-grid" aria-live="polite"></div>
 
-      <div id="pubEmpty" class="pub-empty" hidden>
-        <i class="fas fa-inbox"></i>
+      <div id="pubEmpty" class="pub-empty antropedia-empty" hidden>
+        <div class="antropedia-empty-icon"><i class="fas fa-book-open" aria-hidden="true"></i></div>
+        <h3>Статей не найдено</h3>
         <p>Ничего не найдено по текущим фильтрам.</p>
-        <button type="button" id="pubEmptyReset" class="btn btn-secondary btn-sm">Сбросить фильтры</button>
+        <div class="antropedia-empty-actions">
+          <button type="button" id="pubEmptyReset" class="btn btn-secondary"><i class="fas fa-rotate-left"></i> Сбросить фильтры</button>
+        </div>
       </div>
 
-      <div id="pubLoadingMore" class="pub-loading-more" hidden><i class="fas fa-spinner fa-spin"></i> Загрузка…</div>
+      <div id="pubLoadingMore" class="pub-loading-more antropedia-loading-more" hidden>
+        <div class="antropedia-spinner" aria-hidden="true"></div>
+        <span>Загружаем статьи…</span>
+      </div>
       <div id="pubSentinel" class="pub-sentinel"></div>
+
+      <aside class="antropedia-create-banner">
+        <div class="antropedia-create-banner-content">
+          <div class="antropedia-create-banner-icon"><i class="fas fa-feather-pointed" aria-hidden="true"></i></div>
+          <div>
+            <h3>Хотите дополнить энциклопедию?</h3>
+            <p>Каждый участник может писать статьи, создавать интерактивные карты и развивать историю вселенной AllTell через админ-панель.</p>
+          </div>
+        </div>
+        <a class="btn btn-primary" href="/admin-panel"><i class="fas fa-plus"></i> Написать статью</a>
+      </aside>
     </div>
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
-    <article class="public-article-detail" id="publicArticleDetail" hidden></article>
+    <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail" hidden></article>
 
   </section>
 </main>
@@ -153,7 +221,7 @@
     </div>
     <div><h5>Разделы</h5><div class="site-footer-links">
       <a href="/antropedia">Antropedia</a>
-      <a href="/site/alltell.html">AllTell сервера</a>
+      <a href="/alltell?view=feed">AllTell</a>
       <a href="/site/gallery.html">Галерея</a>
     </div></div>
     <div><h5>Сообщество</h5><div class="site-footer-links">
