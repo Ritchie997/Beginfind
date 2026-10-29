@@ -1756,10 +1756,13 @@
   function createHomeArticleCard(article) {
     var href = '/antropedia/' + encodeURIComponent(article.slug);
     var card = document.createElement('article');
-    card.className = 'wiki-card public-wiki-card';
+    card.className = 'wiki-card public-wiki-card antropedia-card';
+
+    var coverWrap = document.createElement('div');
+    coverWrap.className = 'antropedia-card-cover-wrap';
 
     var cover = document.createElement('a');
-    cover.className = 'wiki-card-cover';
+    cover.className = 'wiki-card-cover antropedia-card-cover';
     cover.href = href;
     cover.tabIndex = -1;
     cover.setAttribute('aria-hidden', 'true');
@@ -1786,7 +1789,8 @@
       icon.setAttribute('aria-hidden', 'true');
       cover.appendChild(icon);
     }
-    card.appendChild(cover);
+    coverWrap.appendChild(cover);
+    card.appendChild(coverWrap);
 
     var body = document.createElement('div');
     body.className = 'wiki-card-body';
@@ -1812,10 +1816,49 @@
       article.tags.slice(0, 4).forEach(function (tag) {
         var item = document.createElement('span');
         item.className = 'wiki-tag';
-        item.textContent = tag;
+        item.textContent = '#' + tag;
         tags.appendChild(item);
       });
       body.appendChild(tags);
+    }
+
+    var date = formatDate(article.created_at);
+    if ((article.author && article.author.display_name) || date) {
+      var meta = document.createElement('div');
+      meta.className = 'public-card-meta public-card-details';
+      if (article.author && article.author.display_name) {
+        var author = article.author;
+        var authorImage = safePublicImageUrl(author.avatar);
+        var authorLink = author.id != null ? document.createElement('a') : document.createElement('span');
+        authorLink.className = 'public-card-author';
+        if (author.id != null) {
+          authorLink.href = '/profile/' + encodeURIComponent(author.id);
+          authorLink.setAttribute('aria-label', 'Профиль: ' + author.display_name);
+        }
+        if (authorImage) {
+          var avatarImg = document.createElement('img');
+          avatarImg.src = authorImage;
+          avatarImg.srcset = window.avatarSrcSet(authorImage);
+          avatarImg.alt = '';
+          avatarImg.width = 26;
+          avatarImg.height = 26;
+          avatarImg.loading = 'lazy';
+          authorLink.appendChild(avatarImg);
+        } else {
+          authorLink.appendChild(makeEl('span', 'public-card-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
+        }
+        authorLink.appendChild(makeEl('span', 'public-card-author-name', author.display_name));
+        meta.appendChild(authorLink);
+      }
+      if (date) {
+        var dateMeta = makeEl('span', 'public-card-date');
+        var calendar = document.createElement('i');
+        calendar.className = 'far fa-calendar';
+        calendar.setAttribute('aria-hidden', 'true');
+        dateMeta.append(calendar, document.createTextNode(' ' + date));
+        meta.appendChild(dateMeta);
+      }
+      body.appendChild(meta);
     }
 
     var foot = document.createElement('div');
@@ -1851,13 +1894,13 @@
 
   function createHomeGalleryCard(work) {
     var card = document.createElement('a');
-    card.className = 'pin-card home-gallery-card';
+    card.className = 'pin-card home-gallery-card gallery-card';
     card.href = '/site/gallery.html?sort=newest';
     card.setAttribute('aria-label', (work.title || 'Работа галереи') + ' — открыть галерею');
-    card.style.setProperty('--pin-h', String(170 + (Number(work.id) % 3) * 35) + 'px');
+    card.style.setProperty('--pin-h', String(180 + (Number(work.id) % 3) * 35) + 'px');
 
     var media = document.createElement('div');
-    media.className = 'pin-media';
+    media.className = 'pin-media gallery-card-media';
     var cover = work.cover || {};
     var imageUrl = safePublicImageUrl(cover.thumb || cover.url);
     if (imageUrl) {
@@ -1884,18 +1927,20 @@
     card.appendChild(media);
 
     var caption = document.createElement('div');
-    caption.className = 'pin-caption';
+    caption.className = 'pin-caption gallery-card-caption';
     var avatar = document.createElement('div');
     avatar.className = 'pin-avatar';
     var authorName = work.author && work.author.display_name || 'Автор';
     avatar.textContent = authorName.trim().charAt(0).toLocaleUpperCase() || 'А';
     var text = document.createElement('div');
     text.className = 'pin-caption-text';
-    text.appendChild(document.createTextNode(work.title || 'Работа без названия'));
+    var titleEl = document.createElement('div');
+    titleEl.className = 'gallery-card-title';
+    titleEl.textContent = work.title || 'Работа без названия';
     var author = document.createElement('div');
-    author.className = 'pin-caption-author';
+    author.className = 'pin-caption-author gallery-card-author';
     author.textContent = authorName;
-    text.appendChild(author);
+    text.append(titleEl, author);
     caption.append(avatar, text);
     card.appendChild(caption);
     return card;

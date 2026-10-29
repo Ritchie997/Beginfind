@@ -8,6 +8,9 @@
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/editor-obsidian.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body data-page="home">
 
@@ -45,33 +48,83 @@
 <div class="site-nav-overlay" id="siteNavOverlay"></div>
 
 <!-- ============ HERO ============ -->
-<section class="site-hero">
-  <span class="site-hero-badge"><i class="fas fa-sparkles"></i> Добро пожаловать в фэндом</span>
-  <h1>Один мир — энциклопедия, ролевые сообщества и творчество</h1>
-  <p>AllTell объединяет Antropedia — открытую энциклопедию вселенной, живые ролевые франшизы для игр и общения, и галерею работ сообщества. Заходите, читайте, играйте, делитесь артом.</p>
-  <div class="site-hero-stats">
-    <div><div class="site-hero-stat-value" data-home-stat="articles">—</div><div class="site-hero-stat-label">открытых статей</div></div>
-    <div><div class="site-hero-stat-value" data-home-stat="gallery">—</div><div class="site-hero-stat-label">работ в галерее</div></div>
-    <div><div class="site-hero-stat-value" data-home-stat="users">—</div><div class="site-hero-stat-label">участников</div></div>
-    <div><div class="site-hero-stat-value" data-home-stat="messages">—</div><div class="site-hero-stat-label">сообщений</div></div>
-    <div><div class="site-hero-stat-value" data-home-stat="comments">—</div><div class="site-hero-stat-label">комментариев</div></div>
+<section class="site-hero home-hero-section">
+  <div class="home-hero-glow" aria-hidden="true"></div>
+  <span class="site-hero-badge"><i class="fas fa-sparkles"></i> Добро пожаловать во вселенную AllTell</span>
+  <h1>Энциклопедия лора, ролевые миры и галерея творчества</h1>
+  <p>AllTell объединяет Antropedia — открытую энциклопедию вселенной, живые ролевые франшизы для игр и общения, и галерею артов сообщества. Читайте лор, создавайте истории, делитесь творчеством.</p>
+  
+  <div class="home-hero-features">
+    <span class="home-hero-feature"><i class="fas fa-book-open"></i> Энциклопедия Antropedia</span>
+    <span class="home-hero-feature"><i class="fas fa-users"></i> Ролевые франшизы AllTell</span>
+    <span class="home-hero-feature"><i class="fas fa-palette"></i> Галерея творчества</span>
+    <span class="home-hero-feature"><i class="fas fa-diagram-project"></i> Граф связей лора</span>
+  </div>
+
+  <div class="site-hero-actions">
+    <a class="btn btn-primary btn-lg" href="/antropedia"><i class="fas fa-compass"></i> Начать исследование</a>
+    <a class="btn btn-secondary btn-lg" href="/alltell?view=feed"><i class="fas fa-rss"></i> Лента AllTell</a>
+  </div>
+
+  <div class="site-hero-stats home-hero-stats">
+    <div class="home-stat-card"><div class="site-hero-stat-value" data-home-stat="articles">—</div><div class="site-hero-stat-label"><i class="fas fa-book-open"></i> открытых статей</div></div>
+    <div class="home-stat-card"><div class="site-hero-stat-value" data-home-stat="gallery">—</div><div class="site-hero-stat-label"><i class="fas fa-palette"></i> работ в галерее</div></div>
+    <div class="home-stat-card"><div class="site-hero-stat-value" data-home-stat="users">—</div><div class="site-hero-stat-label"><i class="fas fa-user-group"></i> участников</div></div>
+    <div class="home-stat-card"><div class="site-hero-stat-value" data-home-stat="messages">—</div><div class="site-hero-stat-label"><i class="fas fa-comments"></i> сообщений</div></div>
+    <div class="home-stat-card"><div class="site-hero-stat-value" data-home-stat="comments">—</div><div class="site-hero-stat-label"><i class="fas fa-heart"></i> реакций и комментариев</div></div>
     <p class="site-home-stats-error" id="homeStatsError" role="status" hidden></p>
   </div>
 </section>
 
 <main class="site-main">
 
+  <!-- ============ ТРИ ПОРТАЛА ВСЕЛЕННОЙ ============ -->
+  <section class="site-section home-hubs-section">
+    <div class="home-hubs-grid">
+      <a href="/antropedia" class="home-hub-card home-hub-card--antropedia">
+        <div class="home-hub-icon"><i class="fas fa-book-open"></i></div>
+        <div class="home-hub-content">
+          <span class="home-hub-badge">Энциклопедия</span>
+          <h3>Antropedia</h3>
+          <p>Открытая база знаний: персонажи, локации, фракции, механики и хроники вселенной AllTell.</p>
+          <span class="home-hub-link">Исследовать лор <i class="fas fa-arrow-right"></i></span>
+        </div>
+      </a>
+
+      <a href="/alltell?view=feed" class="home-hub-card home-hub-card--alltell">
+        <div class="home-hub-icon"><i class="fas fa-users"></i></div>
+        <div class="home-hub-content">
+          <span class="home-hub-badge">Сообщества</span>
+          <h3>AllTell</h3>
+          <p>Ролевые франшизы, игровые хабы сессий, живая лента хроник, обсуждения и авторские миры.</p>
+          <span class="home-hub-link">Перейти в сообщества <i class="fas fa-arrow-right"></i></span>
+        </div>
+      </a>
+
+      <a href="/site/gallery.html" class="home-hub-card home-hub-card--gallery">
+        <div class="home-hub-icon"><i class="fas fa-palette"></i></div>
+        <div class="home-hub-content">
+          <span class="home-hub-badge">Творчество</span>
+          <h3>Галерея</h3>
+          <p>Иллюстрации, концепт-арты, ролевые комиксы и скриншоты игровых сессий от авторов фэндома.</p>
+          <span class="home-hub-link">Смотреть работы <i class="fas fa-arrow-right"></i></span>
+        </div>
+      </a>
+    </div>
+  </section>
+
   <!-- ============ ГРАФ СВЯЗЕЙ ============ -->
-  <section class="site-section" style="padding-top:0;">
-    <div class="site-section-head">
-      <div>
+  <section class="site-section home-graph-section" style="padding-top:8px;">
+    <div class="site-section-head home-section-head">
+      <div class="home-section-title-wrap">
         <h2><i class="fas fa-diagram-project"></i> Связи Antropedia</h2>
-        <p>Открытые статьи и связи между ними</p>
+        <p>Интерактивная карта открытых статей и связей между ними</p>
       </div>
+      <a href="/antropedia" class="btn btn-secondary btn-sm home-section-action">В каталог лора <i class="fas fa-arrow-right"></i></a>
     </div>
     <div class="chart-card graph-card-top home-graph-card">
       <div class="graph-page-header">
-        <h3 class="chart-title">Граф связей статей</h3>
+        <h3 class="chart-title"><i class="fas fa-circle-nodes"></i> Граф связей статей</h3>
         <span id="homeGraphCount" class="graph-page-count"></span>
       </div>
       <div class="graph-container graph-container-dashboard graph-cosmos" id="homeGraphContainer" aria-live="polite">
@@ -81,40 +134,72 @@
   </section>
 
   <!-- ============ ПОПУЛЯРНОЕ В ANTROPEDIA ============ -->
-  <section class="site-section">
-    <div class="site-section-head">
-      <div>
+  <section class="site-section home-articles-section">
+    <div class="site-section-head home-section-head">
+      <div class="home-section-title-wrap">
         <h2><i class="fas fa-fire"></i> Популярное в Antropedia</h2>
         <p>Статьи, которые сейчас читают чаще всего</p>
       </div>
+      <a href="/antropedia?sort=views" class="btn btn-secondary btn-sm home-section-action">Все статьи <i class="fas fa-arrow-right"></i></a>
     </div>
-    <div class="article-grid" id="homePopularArticles" aria-live="polite">
+    <div class="article-grid antropedia-grid home-articles-grid" id="homePopularArticles" aria-live="polite">
       <p class="public-article-message">Загружаем статьи…</p>
     </div>
   </section>
 
   <!-- ============ СВЕЖЕЕ В ГАЛЕРЕЕ ============ -->
-  <section class="site-section" style="padding-bottom:0;">
-    <div class="site-section-head">
-      <div>
-        <h2><i class="fas fa-images"></i> Свежее в галерее</h2>
-        <p>Последние работы сообщества</p>
+  <section class="site-section home-gallery-section" style="padding-bottom:0;">
+    <div class="site-section-head home-section-head">
+      <div class="home-section-title-wrap">
+        <h2><i class="fas fa-palette"></i> Свежее в галерее</h2>
+        <p>Последние авторские работы, иллюстрации и скетчи сообщества</p>
       </div>
+      <a href="/site/gallery.html" class="btn btn-secondary btn-sm home-section-action">Вся галерея <i class="fas fa-arrow-right"></i></a>
     </div>
-    <div class="masonry" id="homeRecentGallery" aria-live="polite">
+    <div class="masonry home-gallery-masonry" id="homeRecentGallery" aria-live="polite">
       <p class="public-article-message">Загружаем работы…</p>
     </div>
+  </section>
+
+  <!-- ============ БАННЕР ПРИЗЫВА К УЧАСТИЮ ============ -->
+  <section class="site-section home-cta-section" style="padding-top:40px;">
+    <aside class="home-join-banner">
+      <div class="home-join-banner-content">
+        <div class="home-join-banner-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+        <div>
+          <h3>Станьте частью вселенной AllTell</h3>
+          <p>Присоединяйтесь к созданию лора в Antropedia, запускайте игровые франшизы и делитесь авторским творчеством в галерее.</p>
+        </div>
+      </div>
+      <div class="home-join-banner-actions">
+        <a class="btn btn-primary btn-lg" href="/admin-panel"><i class="fas fa-plus"></i> Создать контент</a>
+        <a class="btn btn-secondary btn-lg" href="/alltell?view=catalog"><i class="fas fa-compass"></i> Все франшизы</a>
+      </div>
+    </aside>
   </section>
 
 </main>
 
 <!-- ============ ПОДВАЛ ============ -->
 <footer class="site-footer">
-  <div class="site-footer-inner site-footer-inner--home">
+  <div class="site-footer-inner">
     <div class="site-footer-brand">
       <div class="site-logo"><span class="site-logo-mark">✶</span> AllTell</div>
       <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома AllTell — всё в одном пространстве.</p>
     </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/antropedia">Antropedia</a>
+      <a href="/alltell?view=feed">AllTell</a>
+      <a href="/site/gallery.html">Галерея</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+      <a href="#">Обратная связь</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="/admin-panel">Админ-панель</a>
+    </div></div>
   </div>
   <div class="site-footer-bottom">
     <span>© AllTell. Энциклопедия, сообщества и творчество.</span>
