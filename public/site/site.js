@@ -239,6 +239,13 @@
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  function makeEl(tag, className, text) {
+    var el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+
   function initPublicAntropedia() {
     if (document.body.getAttribute('data-page') !== 'antropedia') return;
     var main = document.querySelector('.site-main');
@@ -1220,13 +1227,6 @@
       var data = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(data.error || 'Ошибка запроса (' + response.status + ')');
       return data;
-    }
-
-    function makeEl(tag, className, text) {
-      var el = document.createElement(tag);
-      if (className) el.className = className;
-      if (text != null) el.textContent = text;
-      return el;
     }
 
     function makeStickerImg(sticker, code, solo) {
