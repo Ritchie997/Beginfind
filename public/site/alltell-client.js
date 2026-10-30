@@ -2330,19 +2330,21 @@
                   </span>
                 </div>
 
-                <div class="alltell-article-picker-box" data-article-picker-box>
-                  <div class="alltell-selected-articles" data-selected-articles>
-                    ${renderSelectedArticleChips(postArticles)}
+                <div class="alltell-article-picker-wrapper" style="position: relative;">
+                  <div class="alltell-article-picker-box" data-article-picker-box>
+                    <div class="alltell-selected-articles" data-selected-articles>
+                      ${renderSelectedArticleChips(postArticles)}
+                    </div>
+                    <input name="article_search"
+                           type="text"
+                           class="alltell-article-search-input"
+                           autocomplete="off"
+                           value=""
+                           placeholder="${postArticles.length ? 'Прикрепить ещё статью…' : 'Поиск статьи по названию для прикрепления…'}"
+                           data-article-search>
                   </div>
-                  <input name="article_search"
-                         type="text"
-                         class="alltell-article-search-input"
-                         autocomplete="off"
-                         value=""
-                         placeholder="${postArticles.length ? 'Прикрепить ещё статью…' : 'Поиск статьи по названию для прикрепления…'}"
-                         data-article-search>
+                  <div class="alltell-article-options" data-article-options hidden></div>
                 </div>
-                <div class="alltell-article-options" data-article-options hidden></div>
                 <div class="form-hint">Прикреплённые статьи появятся в виде кликабельных карточек с быстрым переходом к чтению.</div>
               </div>
             </div>
@@ -3403,6 +3405,7 @@
       postImages: [],
       postArticles: [],
       uploadingImages: false,
+      submittingPost: false,
       draggedImageIndex: null,
       articleIndex: [],
       articleIndexError: '',
@@ -3432,6 +3435,7 @@
       });
       state.postImages = [];
       state.uploadingImages = false;
+      state.submittingPost = false;
     }
 
     function setPostImages(post) {
@@ -4815,15 +4819,14 @@
     }
 
     async function savePost(form, formData) {
-      if (state.uploadingImages) {
-        notifyError('Пожалуйста, дождитесь завершения загрузки изображений на сервер');
-        return;
-      }
-      var pendingImages = state.postImages.filter(function (image) { return image.file && !image.url; });
+      var pendingImages = (state.postImages || []).filter(function (image) { return image.file && !image.url; });
       if (pendingImages.length) {
+        if (state.uploadingImages) {
+          throw new Error('Пожалуйста, дождитесь завершения загрузки изображений на сервер');
+        }
         await uploadPendingPostImages();
       }
-      var failedImages = state.postImages.filter(function (image) { return image.error; });
+      var failedImages = (state.postImages || []).filter(function (image) { return image.error; });
       if (failedImages.length) {
         throw new Error('Некоторые изображения не удалось загрузить на сервер. Удалите их или попробуйте снова.');
       }
@@ -5223,6 +5226,15 @@
         var removedImage = state.postImages.splice(Number(button.dataset.imageIndex), 1)[0];
         if (removedImage && removedImage.preview && removedImage.preview.startsWith('blob:')) {
           URL.revokeObjectURL(removedImage.preview);
+        }
+        var hasUploadingOrPending = (state.postImages || []).some(function (img) {
+          return img.uploading || (img.file && !img.url);
+        });
+        if (!hasUploadingOrPending) {
+          state.uploadingImages = false;
+          var form = root.querySelector('[data-post-form]');
+          var progress = form && form.querySelector('[data-image-progress]');
+          if (progress) progress.hidden = true;
         }
         renderPostImageQueue();
       } else if (action === 'approve-post' || action === 'reject-post') {
@@ -5691,9 +5703,16 @@
         submitPostComment(event.target);
       } else if (event.target.matches('[data-post-form]')) {
         event.preventDefault();
-        if (state.uploadingImages) return;
+        if (state.submittingPost) return;
+        var hasUploadingOrPending = (state.postImages || []).some(function (img) {
+          return img.uploading || (img.file && !img.url);
+        });
+        if (hasUploadingOrPending && state.uploadingImages) {
+          notifyError('Пожалуйста, дождитесь завершения загрузки изображений на сервер');
+          return;
+        }
         var formData = new FormData(event.target);
-        state.uploadingImages = true;
+        state.submittingPost = true;
         var container = event.target.closest('[data-post-form-container]') || event.target;
         container.querySelectorAll('input, select, textarea, button').forEach(function (control) {
           control.disabled = true;
@@ -5701,7 +5720,7 @@
         renderPostImageQueue();
         savePost(event.target, formData).catch(function (error) {
           notifyError(error.message);
-          state.uploadingImages = false;
+          state.submittingPost = false;
           var progress = root.querySelector('[data-image-progress]');
           if (progress) progress.hidden = true;
           renderPostImageQueue();

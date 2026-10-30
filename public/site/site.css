@@ -4226,9 +4226,9 @@
 }
 
 .alltell-post-editor-view .editor-panes {
+    display: grid !important;
     min-height: 240px;
     background: #141518;
-    display: flex;
     overflow: hidden;
 }
 
@@ -4254,33 +4254,58 @@
     overflow-wrap: anywhere;
 }
 
-.alltell-post-editor-view .editor-panes[data-mode="split"] .editor-pane,
-.alltell-post-editor-view .editor-panes[data-mode="split"] .preview-pane {
-    flex: 1 1 50%;
-    min-width: 0;
-    max-width: 50%;
+.alltell-post-editor-view .editor-panes[data-mode="split"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="split"] .editor-pane {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     overflow-x: hidden;
 }
 
+.alltell-post-editor-view .editor-panes[data-mode="split"] .preview-pane {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="edit"] {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+}
+
 .alltell-post-editor-view .editor-panes[data-mode="edit"] .editor-pane {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: 100%;
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
 }
 
 .alltell-post-editor-view .editor-panes[data-mode="edit"] .preview-pane {
-    display: none;
+    display: none !important;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="preview"] {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
 }
 
 .alltell-post-editor-view .editor-panes[data-mode="preview"] .preview-pane {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: 100%;
-    display: block;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
 }
 
 .alltell-post-editor-view .editor-panes[data-mode="preview"] .editor-pane {
-    display: none;
+    display: none !important;
 }
 
 .alltell-post-editor-view .eb-blocklist {
@@ -4625,6 +4650,8 @@
 }
 
 .alltell-post-form-footer {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -5051,6 +5078,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    z-index: 40;
 }
 
 .alltell-article-picker-header {
@@ -5162,13 +5190,13 @@
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    z-index: 120;
-    background: var(--background-secondary, #2f3136);
-    border: 1px solid var(--background-accent, #4f545c);
+    z-index: 1000;
+    background: #25272b;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
     padding: 6px;
-    max-height: 240px;
+    max-height: 260px;
     overflow-y: auto;
     box-sizing: border-box;
 }
@@ -9209,6 +9237,8 @@ a.site-profile-media-row:hover {
 }
 
 .antropedia-editor-section {
+    position: relative;
+    z-index: 5;
     background: rgba(30, 31, 34, 0.72);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -9216,6 +9246,11 @@ a.site-profile-media-row:hover {
     border-radius: var(--site-radius-md, 14px);
     overflow: visible;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.antropedia-editor-section:focus-within,
+.antropedia-editor-section:hover {
+    z-index: 25;
 }
 
 .antropedia-editor-section:hover {
