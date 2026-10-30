@@ -825,17 +825,58 @@
     `;
   }
 
-  function renderStickerText(comment) {
-    var content = String(comment.content || '');
+  var STICKER_SOLO_RE = /^\s*:([a-z0-9-]{1,80}):([a-z0-9-]{1,80}):\s*$/i;
+  var STICKER_SHORTCODE_RE = /:([a-z0-9-]{1,80}):([a-z0-9-]{1,80}):/gi;
+  var MENTION_HTML_RE = /(^|[^\p{L}\p{N}_@])@(?:\[([^\]\n<]{1,64})\]|([\p{L}\p{N}_.-]{1,64}))/gu;
+
+  function unescapeHtml(str) {
+    return String(str || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  }
+
+  function linkMentions(html, mentions) {
+    if (!mentions || !Object.keys(mentions).length) return html;
+    return html.replace(MENTION_HTML_RE, function (full, pre, bracketed, plain) {
+      var name = bracketed || plain;
+      var tail = '';
+      if (plain) {
+        var trimmed = plain.replace(/[.-]+$/, '');
+        tail = plain.slice(trimmed.length);
+        name = trimmed;
+      }
+      var key = unescapeHtml(name).trim().toLowerCase();
+      var id = mentions[key];
+      if (!id) return full;
+      return `${pre}<a href="/profile/${encodeURIComponent(id)}" class="comment-mention" title="Открыть профиль">@${name}</a>${tail}`;
+    });
+  }
+
+  function renderCommentContent(comment) {
+    var raw = String(comment.content || '');
     var stickers = comment.stickers || {};
-    return content.split(/(:[a-z0-9-]{1,80}:[a-z0-9-]{1,80}:)/gi).map(function (part) {
-      var match = /^:([a-z0-9-]{1,80}:[a-z0-9-]{1,80}):$/i.exec(part);
-      if (!match) return escapeHtml(part);
-      var sticker = stickers[match[1]];
-      return sticker
-        ? `<img class="alltell-comment-sticker" data-pack-id="${Number(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(part)}" title="${escapeHtml(part)}">`
-        : escapeHtml(part);
-    }).join('');
+    var mentions = comment.mentions || {};
+
+    var soloMatch = raw.trim().match(STICKER_SOLO_RE);
+    if (soloMatch) {
+      var code = soloMatch[1].toLowerCase() + ':' + soloMatch[2].toLowerCase();
+      var sticker = stickers[code];
+      if (sticker) {
+        return `<div class="alltell-comment-sticker-standalone-wrap"><img class="alltell-comment-sticker alltell-comment-sticker-standalone" data-pack-id="${Number(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(code)}" title="${escapeHtml(code)}"></div>`;
+      }
+    }
+
+    var escaped = escapeHtml(raw);
+    var withMentions = linkMentions(escaped, mentions);
+
+    return withMentions.replace(STICKER_SHORTCODE_RE, function (match, pack, alias) {
+      var code = pack.toLowerCase() + ':' + alias.toLowerCase();
+      var sticker = stickers[code];
+      if (!sticker) return match;
+      return `<img class="alltell-comment-sticker" data-pack-id="${Number(sticker.packId)}" src="${escapeHtml(sticker.url)}" alt="${escapeHtml(match)}" title="${escapeHtml(match)}">`;
+    });
+  }
+
+  function renderStickerText(comment) {
+    return renderCommentContent(comment);
   }
 
   function renderReactionBar(reactions, targetType, targetId) {
@@ -854,22 +895,81 @@
     return count + ' ' + form;
   }
 
-  function renderPostComment(comment, replies, postId, canManage, userId) {
+  function repliesCountLabel(count) {
+    var remainder = count % 100;
+    if (remainder >= 11 && remainder <= 14) return 'ответов';
+    var last = count % 10;
+    if (last === 1) return 'ответ';
+    if (last >= 2 && last <= 4) return 'ответа';
+    return 'ответов';
+  }
+
+  function renderPostComment(comment, replies, postId, canManage, userId, expandedRepliesSet) {
     var own = Number(comment.userId) === Number(userId);
+    var authorId = comment.authorId ?? comment.userId;
     var reactions = renderReactionBar(comment.reactions, 'franchise_post_comment', comment.id);
-    return `<article class="alltell-comment ${replies ? 'alltell-comment-top' : ''}" data-comment-id="${Number(comment.id)}">
+    var isReply = !replies;
+    var contentHtml = renderCommentContent(comment);
+
+    var repliesHtml = '';
+    if (replies && replies.length) {
+      var sorted = replies.slice().sort(function (a, b) {
+        return (new Date(a.createdAt) - new Date(b.createdAt)) || (a.id - b.id);
+      });
+      var hasExtra = sorted.length > 2;
+      var isExpanded = expandedRepliesSet && expandedRepliesSet.has(String(comment.id));
+      var extraCount = sorted.length - 1;
+
+      var shownHtml = (hasExtra && !isExpanded ? [sorted[0]] : sorted).map(function (reply) {
+        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet);
+      }).join('');
+
+      var extraHtml = (hasExtra ? sorted.slice(1) : []).map(function (reply) {
+        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet);
+      }).join('');
+
+      var toggleHtml = hasExtra
+        ? `<button type="button" class="alltell-replies-toggle" data-action="toggle-replies" data-comment-id="${Number(comment.id)}">
+            <i class="fas fa-caret-${isExpanded ? 'up' : 'down'}"></i> ${isExpanded ? 'Скрыть ответы' : 'Показать ещё ' + extraCount + ' ' + repliesCountLabel(extraCount)}
+          </button>`
+        : '';
+
+      repliesHtml = `<div class="alltell-comment-replies" data-replies-for="${Number(comment.id)}">
+        ${shownHtml}
+        ${hasExtra ? `<div class="alltell-comment-replies-extra" ${isExpanded ? '' : 'hidden'}>${extraHtml}</div>` : ''}
+        ${toggleHtml}
+      </div>`;
+    }
+
+    var authorHtml = authorId != null
+      ? `<a href="/profile/${encodeURIComponent(authorId)}" class="alltell-comment-person" title="Открыть профиль">
+          <div class="alltell-comment-author-avatar">
+            ${comment.authorAvatar
+              ? `<img src="${escapeHtml(comment.authorAvatar)}"${avatarSrcSet(comment.authorAvatar) ? ` srcset="${escapeHtml(avatarSrcSet(comment.authorAvatar))}"` : ''} alt="">`
+              : `<span class="alltell-avatar-fallback">${escapeHtml(initials(comment.authorName))}</span>`}
+          </div>
+          <div class="alltell-comment-author-info">
+            <strong>${escapeHtml(comment.authorName)}</strong>
+            <time>${escapeHtml(dateLabel(comment.createdAt))}</time>
+          </div>
+        </a>`
+      : `<div class="alltell-comment-person">
+          <div class="alltell-comment-author-avatar">
+            ${comment.authorAvatar
+              ? `<img src="${escapeHtml(comment.authorAvatar)}"${avatarSrcSet(comment.authorAvatar) ? ` srcset="${escapeHtml(avatarSrcSet(comment.authorAvatar))}"` : ''} alt="">`
+              : `<span class="alltell-avatar-fallback">${escapeHtml(initials(comment.authorName))}</span>`}
+          </div>
+          <div class="alltell-comment-author-info">
+            <strong>${escapeHtml(comment.authorName)}</strong>
+            <time>${escapeHtml(dateLabel(comment.createdAt))}</time>
+          </div>
+        </div>`;
+
+    return `<article class="alltell-comment ${isReply ? 'alltell-comment-reply' : 'alltell-comment-top'}" data-comment-id="${Number(comment.id)}">
       <div class="alltell-comment-heading">
-        <div class="alltell-comment-author-avatar">
-          ${comment.authorAvatar
-            ? `<img src="${escapeHtml(comment.authorAvatar)}"${avatarSrcSet(comment.authorAvatar) ? ` srcset="${escapeHtml(avatarSrcSet(comment.authorAvatar))}"` : ''} alt="">`
-            : `<span class="alltell-avatar-fallback">${escapeHtml(initials(comment.authorName))}</span>`}
-        </div>
-        <div class="alltell-comment-author-info">
-          <strong>${escapeHtml(comment.authorName)}</strong>
-          <time>${escapeHtml(dateLabel(comment.createdAt))}</time>
-        </div>
+        ${authorHtml}
       </div>
-      <div class="alltell-comment-content">${renderStickerText(comment)}</div>
+      <div class="alltell-comment-content">${contentHtml}</div>
       <div class="alltell-comment-actions">
         ${reactions}
         <button type="button" class="alltell-comment-reply" data-action="reply-comment" data-comment-id="${Number(comment.id)}" data-author="${escapeHtml(comment.authorName)}">
@@ -877,9 +977,7 @@
         </button>
         ${own || canManage ? `<button type="button" class="alltell-comment-delete" data-action="delete-comment" data-comment-id="${Number(comment.id)}" title="Удалить"><i class="fas fa-trash-can"></i></button>` : ''}
       </div>
-      ${replies ? `<div class="alltell-comment-replies">${replies.map(function (reply) {
-        return renderPostComment(reply, null, postId, canManage, userId);
-      }).join('')}</div>` : ''}
+      ${repliesHtml}
     </article>`;
   }
 
@@ -888,7 +986,7 @@
     var topLevel = comments.filter(function (comment) { return !comment.parentId; });
     var commentsHtml = topLevel.map(function (comment) {
       var replies = comments.filter(function (reply) { return Number(reply.parentId) === Number(comment.id); });
-      return renderPostComment(comment, replies.length ? replies : null, post.id, canManage, userId);
+      return renderPostComment(comment, replies.length ? replies : null, post.id, canManage, userId, social.expandedReplies);
     }).join('');
     var compose = loggedIn && social.open
       ? `<form class="alltell-comment-form" data-comment-form data-post-id="${Number(post.id)}">
@@ -3660,6 +3758,7 @@
           commentCount: Number(post.comments_count || 0),
           reactions: post.reactions || [],
           comments: [],
+          expandedReplies: new Set(),
           loaded: false,
           loading: false,
           loadError: '',
@@ -4963,10 +5062,10 @@
         }
         var socialPanel = commentSticker.closest('[data-post-social]');
         var commentElement = commentSticker.closest('[data-comment-id]');
-        var targets = buildStickerReplyTargets(socialPanel.dataset.postId, socialPanel.dataset.franchiseId, commentElement.dataset.commentId);
-        if (targets.length) {
-          window.stickerPackView?.open(commentSticker.dataset.packId, { replyTargets: targets });
-        }
+        var targets = (socialPanel && commentElement)
+          ? buildStickerReplyTargets(socialPanel.dataset.postId, socialPanel.dataset.franchiseId, commentElement.dataset.commentId)
+          : [];
+        window.stickerPackView?.open(commentSticker.dataset.packId, targets.length ? { replyTargets: targets } : {});
         return;
       }
       var imageStep = event.target.closest('[data-image-step]');
@@ -5091,6 +5190,19 @@
         commentSocial.open = true;
         renderSocialPanel(commentPostId, commentFranchiseId);
         root.querySelector('[data-post-social="' + postSocialKey(commentFranchiseId, commentPostId) + '"] [data-comment-form] textarea')?.focus();
+      } else if (action === 'toggle-replies') {
+        var repliesRoot = button.closest('[data-post-social]');
+        if (repliesRoot) {
+          var repliesSocial = getPostSocial(repliesRoot.dataset.postId, repliesRoot.dataset.franchiseId);
+          var cid = String(button.dataset.commentId);
+          repliesSocial.expandedReplies = repliesSocial.expandedReplies || new Set();
+          if (repliesSocial.expandedReplies.has(cid)) {
+            repliesSocial.expandedReplies.delete(cid);
+          } else {
+            repliesSocial.expandedReplies.add(cid);
+          }
+          renderSocialPanel(repliesRoot.dataset.postId, repliesRoot.dataset.franchiseId);
+        }
       } else if (action === 'cancel-reply') {
         var replyPanel = button.closest('[data-post-social]');
         var replyState = getPostSocial(replyPanel.dataset.postId, replyPanel.dataset.franchiseId);

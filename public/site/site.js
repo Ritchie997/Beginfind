@@ -1545,6 +1545,51 @@
     var COMMENT_MAX_LEN = 2000;
     var STICKER_RE = /:([a-zA-Z0-9-]{1,80}):([a-zA-Z0-9-]{1,80}):/g;
     var STICKER_SOLO_RE = /^:([a-zA-Z0-9-]{1,80}):([a-zA-Z0-9-]{1,80}):$/;
+    var MENTION_HTML_RE = /(^|[^\p{L}\p{N}_@])@(?:\[([^\]\n<]{1,64})\]|([\p{L}\p{N}_.-]{1,64}))/gu;
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function unescapeHtml(str) {
+      return String(str || '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
+    }
+
+    function linkMentions(html, mentions) {
+      if (!mentions || !Object.keys(mentions).length) return html;
+      return html.replace(MENTION_HTML_RE, function (full, pre, bracketed, plain) {
+        var name = bracketed || plain;
+        var tail = '';
+        if (plain) {
+          var trimmed = plain.replace(/[.-]+$/, '');
+          tail = plain.slice(trimmed.length);
+          name = trimmed;
+        }
+        var key = unescapeHtml(name).trim().toLowerCase();
+        var id = mentions[key];
+        if (!id) return full;
+        return pre + '<a href="/profile/' + encodeURIComponent(id) + '" class="comment-mention" title="Открыть профиль">@' + escapeHtml(name) + '</a>' + tail;
+      });
+    }
+
+    function repliesCountLabel(count) {
+      var remainder = count % 100;
+      if (remainder >= 11 && remainder <= 14) return 'ответов';
+      var last = count % 10;
+      if (last === 1) return 'ответ';
+      if (last >= 2 && last <= 4) return 'ответа';
+      return 'ответов';
+    }
 
     function getAuthToken() {
       try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (error) { return ''; }
@@ -1592,32 +1637,37 @@
       img.alt = code;
       img.title = code;
       img.loading = 'lazy';
+      if (sticker && sticker.packId != null) {
+        img.dataset.packId = String(sticker.packId);
+        img.style.cursor = 'pointer';
+      }
       return img;
     }
 
-    // Текст комментария: только textContent и <img> стикеров — HTML из комментария
-    // никогда не вставляется. Шорткод без найденного стикера остаётся текстом.
+    // Текст комментария: безопасный HTML со ссылками на профили упомянутых и <img> стикеров.
     function renderCommentBody(comment) {
       var body = makeEl('div', 'pub-comment-body');
       var raw = String(comment.content || '');
       var stickers = comment.stickers || {};
+      var mentions = comment.mentions || {};
       var solo = raw.trim().match(STICKER_SOLO_RE);
       if (solo) {
         var soloCode = solo[1].toLowerCase() + ':' + solo[2].toLowerCase();
         var soloImg = makeStickerImg(stickers[soloCode], soloCode, true);
         if (soloImg) { body.appendChild(soloImg); return body; }
       }
-      var last = 0;
-      raw.replace(STICKER_RE, function (match, pack, alias, offset) {
+      var escaped = escapeHtml(raw);
+      var withMentions = linkMentions(escaped, mentions);
+      var parsedHtml = withMentions.replace(STICKER_RE, function (match, pack, alias) {
         var code = pack.toLowerCase() + ':' + alias.toLowerCase();
-        var img = makeStickerImg(stickers[code], code, false);
-        if (!img) return match;
-        if (offset > last) body.appendChild(document.createTextNode(raw.slice(last, offset)));
-        body.appendChild(img);
-        last = offset + match.length;
-        return match;
+        var sticker = stickers[code];
+        if (!sticker) return match;
+        var src = safePublicImageUrl(sticker.url);
+        if (!src) return match;
+        var pId = sticker.packId != null ? ' data-pack-id="' + Number(sticker.packId) + '"' : '';
+        return '<img class="pub-comment-sticker"' + pId + ' src="' + escapeHtml(src) + '" srcset="' + escapeHtml(window.avatarSrcSet(src)) + '" alt="' + escapeHtml(code) + '" title="' + escapeHtml(code) + '" loading="lazy" style="cursor:pointer">';
       });
-      if (last < raw.length) body.appendChild(document.createTextNode(raw.slice(last)));
+      body.innerHTML = parsedHtml;
       return body;
     }
 
@@ -1778,6 +1828,12 @@
 
       var composerMount = makeEl('div', 'pub-comments-compose');
       var list = makeEl('div', 'pub-comments-list');
+      list.addEventListener('click', function (e) {
+        var stickerImg = e.target.closest('[data-pack-id]');
+        if (stickerImg && stickerImg.dataset.packId) {
+          window.stickerPackView?.open(stickerImg.dataset.packId);
+        }
+      });
       var empty = makeEl('p', 'pub-comments-empty', 'Комментариев пока нет.');
       empty.hidden = true;
       section.appendChild(composerMount);
@@ -1969,16 +2025,24 @@
           var replies = repliesBy[comment.id] || [];
           if (replies.length) {
             var box = makeEl('div', 'pub-comment-replies');
-            var limit = 2;
-            var showAll = state.expanded[comment.id] || replies.length <= limit;
-            (showAll ? replies : replies.slice(0, limit)).forEach(function (r) {
+            var hasExtra = replies.length > 2;
+            var isExpanded = !!state.expanded[comment.id];
+            var shownReplies = (hasExtra && !isExpanded) ? [replies[0]] : replies;
+            var extraCount = replies.length - 1;
+
+            shownReplies.forEach(function (r) {
               box.appendChild(renderComment(r, true, comment.id));
             });
-            if (!showAll) {
-              var more = makeEl('button', 'pub-comment-more', 'Показать ещё ответы (' + (replies.length - limit) + ')');
-              more.type = 'button';
-              more.addEventListener('click', function () { state.expanded[comment.id] = true; render(); });
-              box.appendChild(more);
+            if (hasExtra) {
+              var toggle = makeEl('button', 'pub-comment-more', isExpanded
+                ? 'Скрыть ответы'
+                : 'Показать ещё ' + extraCount + ' ' + repliesCountLabel(extraCount));
+              toggle.type = 'button';
+              toggle.addEventListener('click', function () {
+                state.expanded[comment.id] = !state.expanded[comment.id];
+                render();
+              });
+              box.appendChild(toggle);
             }
             thread.appendChild(box);
           }
