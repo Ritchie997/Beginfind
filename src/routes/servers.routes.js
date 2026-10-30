@@ -137,7 +137,7 @@ router.post('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, asy
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
-    if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
+    if (description.length > 5000) return res.status(400).json({ error: 'Hub description must be at most 5000 characters' });
     const actor = hubActorName(req.user);
     const isPublic = req.body.is_public === true;
     const avatarUrl = typeof req.body.avatar_url === 'string' ? (req.body.avatar_url.trim() || null) : null;
@@ -165,7 +165,7 @@ router.put('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApprove
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     if (!name || name.length > 120) return res.status(400).json({ error: 'Hub name is required and must be at most 120 characters' });
-    if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
+    if (description.length > 5000) return res.status(400).json({ error: 'Hub description must be at most 5000 characters' });
     if (req.body.is_public != null && typeof req.body.is_public !== 'boolean') {
       return res.status(400).json({ error: 'Visibility must be a boolean' });
     }

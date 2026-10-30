@@ -3661,13 +3661,18 @@
 }
 
 .alltell-hub-card {
+    position: relative;
     padding: 18px;
     border-radius: var(--site-radius-md);
     background: var(--background-secondary);
     border: 1px solid rgba(255, 255, 255, 0.07);
     display: flex;
     flex-direction: column;
+    min-height: 220px;
+    height: 100%;
+    box-sizing: border-box;
     transition: all 0.2s ease;
+    overflow: hidden;
 }
 
 .alltell-hub-card:hover {
@@ -3738,17 +3743,155 @@
     color: var(--header-primary);
 }
 
+.alltell-hub-card-desc-wrap {
+    display: flex;
+    flex-direction: column;
+    margin: 0 0 12px;
+    flex: 1;
+}
+
 .alltell-hub-card-desc {
     color: var(--header-secondary);
     font-size: 13px;
     line-height: 1.5;
-    margin: 0 0 12px;
-    flex: 1;
+    margin: 0 0 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 38px;
 }
 
 .alltell-hub-card-desc.is-placeholder {
     color: var(--text-muted);
     font-style: italic;
+}
+
+.alltell-hub-desc-toggle-btn {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--blurple, #5865f2);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s ease;
+}
+
+.alltell-hub-desc-toggle-btn:hover {
+    color: #7983f5;
+    text-decoration: underline;
+}
+
+/* Модульное всплывающее окно описания хаба внутри карточки (без деформации сетки) */
+.alltell-hub-desc-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: var(--background-secondary-alt, #282b30);
+    padding: 16px;
+    border-radius: inherit;
+    border: 1px solid var(--blurple);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(10px);
+    box-sizing: border-box;
+    animation: alltellHubModalIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alltell-hub-desc-modal[hidden] {
+    display: none !important;
+}
+
+.alltell-hub-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.alltell-hub-modal-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.alltell-hub-modal-title-row strong {
+    font-size: 14px;
+    color: var(--header-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.alltell-hub-modal-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.alltell-hub-modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-normal);
+}
+
+.alltell-hub-modal-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.alltell-hub-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-normal);
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.alltell-hub-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes alltellHubModalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .alltell-hub-card-foot {
@@ -4731,10 +4874,94 @@
 }
 
 .alltell-card-hub-item {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    padding: 3px 0;
+}
+
+.alltell-card-hub-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.alltell-card-hub-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.alltell-card-hub-desc-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px 5px;
+    font-size: 13px;
+    border-radius: 4px;
+    transition: color 0.15s ease, background 0.15s ease;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.alltell-card-hub-desc-btn:hover {
+    color: var(--blurple);
+    background: rgba(88, 101, 242, 0.12);
+}
+
+.alltell-card-hub-modal {
+    position: absolute;
+    inset: -6px -10px;
+    z-index: 30;
+    background: var(--background-secondary, #2f3136);
+    border: 1px solid var(--blurple);
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    animation: alltellHubModalIn 0.16s ease-out;
+}
+
+.alltell-card-hub-modal[hidden] {
+    display: none !important;
+}
+
+.alltell-card-hub-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.alltell-card-hub-modal-header strong {
+    font-size: 13px;
+    color: var(--header-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.alltell-card-hub-modal-body {
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-normal);
+    white-space: pre-wrap;
+    word-break: break-word;
+    scrollbar-width: thin;
 }
 
 /* --- Рабочее пространство франшизы (Workspace) --- */
@@ -4916,6 +5143,72 @@
     padding: 32px 16px !important;
     color: var(--text-muted);
     font-size: 0.9rem;
+}
+
+.alltell-table-action-col,
+th.alltell-table-action-col {
+    text-align: right;
+    width: 1%;
+    white-space: nowrap;
+}
+
+.alltell-table-action-cell,
+td.alltell-table-action-cell {
+    text-align: right;
+    width: 1%;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.alltell-table-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.alltell-table-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 8px;
+    white-space: nowrap;
+    min-height: 32px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+}
+
+.alltell-table-actions .btn i {
+    font-size: 0.75rem;
+    opacity: 0.9;
+}
+
+.alltell-table-note {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 4px 8px;
+}
+
+/* Расширяемое поле описания хаба без угловой точки масштабирования */
+.alltell-hub-desc-textarea,
+textarea.alltell-hub-desc-textarea {
+    resize: none !important;
+    min-height: 96px;
+    max-height: 55vh;
+    field-sizing: content;
+    overflow-y: auto;
+    line-height: 1.55;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Ролевые чипы */

@@ -382,10 +382,37 @@
           ${isExpanded ? `
             <div class="alltell-card-hubs-preview">
               ${previewHubs ? (previewHubs.length ? previewHubs.map(function(h) {
-                return `<div class="alltell-card-hub-item">
-                  ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : ''}
-                  <span>${escapeHtml(h.name)}</span>
-                  <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
+                return `<div class="alltell-card-hub-item" data-hub-id="${h.id}">
+                  <div class="alltell-card-hub-main">
+                    ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : ''}
+                    <span class="alltell-card-hub-name" title="${escapeHtml(h.name)}">${escapeHtml(h.name)}</span>
+                    <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
+                  </div>
+                  ${h.description ? `
+                    <button type="button" class="alltell-card-hub-desc-btn" data-action="open-card-hub-desc" data-hub-id="${h.id}" title="Описание хаба">
+                      <i class="fas fa-circle-info"></i>
+                    </button>
+                    <div class="alltell-card-hub-modal" data-card-hub-modal="${h.id}" hidden>
+                      <div class="alltell-card-hub-modal-header">
+                        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                          ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : '<i class="fas fa-dice-d20" style="color:var(--blurple);"></i>'}
+                          <strong>${escapeHtml(h.name)}</strong>
+                        </div>
+                        <button type="button" class="alltell-hub-modal-close-btn" data-action="close-card-hub-desc" data-hub-id="${h.id}" title="Закрыть">
+                          <i class="fas fa-xmark"></i>
+                        </button>
+                      </div>
+                      <div style="margin:6px 0 8px;">
+                        <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
+                      </div>
+                      <div class="alltell-card-hub-modal-body">
+                        ${escapeHtml(h.description)}
+                      </div>
+                      <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+                        <button type="button" class="btn btn-secondary btn-sm" data-action="close-card-hub-desc" data-hub-id="${h.id}">Свернуть</button>
+                      </div>
+                    </div>
+                  ` : ''}
                 </div>`;
               }).join('') : '<span style="color:var(--text-muted);">В этой франшизе пока нет хабов</span>') : '<span style="color:var(--text-muted);">Загрузка хабов…</span>'}
             </div>
@@ -1083,7 +1110,7 @@
                 <tr>
                   <th>Пользователь</th>
                   <th>Роли</th>
-                  ${(canManage || userId) ? '<th style="text-align:right;">Действия</th>' : ''}
+                  ${(canManage || userId) ? '<th class="alltell-table-action-col">Действия</th>' : ''}
                 </tr>
               </thead>
               <tbody>
@@ -1099,14 +1126,26 @@
 
                   var actionsHtml = '';
                   if (isMemberOwner) {
-                    actionsHtml = '<span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Создатель</span>';
+                    actionsHtml = '<div class="alltell-table-actions"><span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Создатель</span></div>';
                   } else if (canManage) {
                     actionsHtml = `
-                      <button class="btn btn-secondary btn-sm" type="button" data-action="manage-assign-role" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}">Роль</button>
-                      <button class="btn btn-danger btn-sm" type="button" data-action="manage-kick-member" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}">Удалить</button>
+                      <div class="alltell-table-actions">
+                        <button class="btn btn-secondary btn-sm" type="button" data-action="manage-assign-role" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Назначить роль">
+                          <i class="fas fa-user-gear"></i> <span>Роль</span>
+                        </button>
+                        <button class="btn btn-danger btn-sm" type="button" data-action="manage-kick-member" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Исключить участника">
+                          <i class="fas fa-user-xmark"></i> <span>Исключить</span>
+                        </button>
+                      </div>
                     `;
                   } else if (isSelf) {
-                    actionsHtml = '<button class="btn btn-danger btn-sm" type="button" data-action="leave">Покинуть</button>';
+                    actionsHtml = `
+                      <div class="alltell-table-actions">
+                        <button class="btn btn-danger btn-sm" type="button" data-action="leave" title="Покинуть франшизу">
+                          <i class="fas fa-right-from-bracket"></i> <span>Покинуть</span>
+                        </button>
+                      </div>
+                    `;
                   }
 
                   return `
@@ -1122,7 +1161,7 @@
                         </div>
                       </td>
                       <td>${rolesHtml}</td>
-                      ${(canManage || userId) ? `<td style="text-align:right;">${actionsHtml}</td>` : ''}
+                      ${(canManage || userId) ? `<td class="alltell-table-action-cell">${actionsHtml}</td>` : ''}
                     </tr>
                   `;
                 }).join('')}
@@ -1206,7 +1245,7 @@
               <th>ID</th>
               <th>Пользователь</th>
               <th>Роли</th>
-              <th style="text-align:right;">Действия</th>
+              <th class="alltell-table-action-col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -1222,14 +1261,26 @@
 
               var actionsHtml = '';
               if (isMemberOwner) {
-                actionsHtml = '<span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Владелец</span>';
+                actionsHtml = '<div class="alltell-table-actions"><span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Владелец</span></div>';
               } else if (canManage) {
                 actionsHtml = `
-                  <button class="btn btn-secondary btn-sm" type="button" data-action="manage-assign-role" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}">Роль</button>
-                  <button class="btn btn-danger btn-sm" type="button" data-action="manage-kick-member" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}">Удалить</button>
+                  <div class="alltell-table-actions">
+                    <button class="btn btn-secondary btn-sm" type="button" data-action="manage-assign-role" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Назначить роль">
+                      <i class="fas fa-user-gear"></i> <span>Роль</span>
+                    </button>
+                    <button class="btn btn-danger btn-sm" type="button" data-action="manage-kick-member" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Исключить участника">
+                      <i class="fas fa-user-xmark"></i> <span>Исключить</span>
+                    </button>
+                  </div>
                 `;
               } else if (isSelf) {
-                actionsHtml = '<button class="btn btn-danger btn-sm" type="button" data-action="leave">Покинуть</button>';
+                actionsHtml = `
+                  <div class="alltell-table-actions">
+                    <button class="btn btn-danger btn-sm" type="button" data-action="leave" title="Покинуть франшизу">
+                      <i class="fas fa-right-from-bracket"></i> <span>Покинуть</span>
+                    </button>
+                  </div>
+                `;
               }
 
               return `
@@ -1245,7 +1296,7 @@
                     </div>
                   </td>
                   <td>${rolesHtml}</td>
-                  <td style="text-align:right;">${actionsHtml}</td>
+                  <td class="alltell-table-action-cell">${actionsHtml}</td>
                 </tr>
               `;
             }).join('') : '<tr class="alltell-table-empty"><td colspan="4">Участников пока нет</td></tr>'}
@@ -1282,7 +1333,7 @@
               <th>Тип</th>
               <th>Уровень</th>
               <th>Права</th>
-              <th style="text-align:right;">Действия</th>
+              <th class="alltell-table-action-col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -1293,10 +1344,16 @@
               }).map(function (e) { return e[1]; }).join(', ') || '—';
 
               var actionsHtml = isSystem
-                ? '<span style="color:var(--text-muted);font-size:12px;">Системная</span>'
+                ? '<div class="alltell-table-actions"><span class="alltell-table-note">Системная</span></div>'
                 : (canManage ? `
-                  <button class="btn btn-secondary btn-sm" type="button" data-action="manage-edit-role" data-role-id="${r.id}">Изменить</button>
-                  <button class="btn btn-danger btn-sm" type="button" data-action="manage-delete-role" data-role-id="${r.id}" data-role-name="${escapeHtml(r.name)}">Удалить</button>
+                  <div class="alltell-table-actions">
+                    <button class="btn btn-secondary btn-sm" type="button" data-action="manage-edit-role" data-role-id="${r.id}" title="Редактировать роль">
+                      <i class="fas fa-pen"></i> <span>Изменить</span>
+                    </button>
+                    <button class="btn btn-danger btn-sm" type="button" data-action="manage-delete-role" data-role-id="${r.id}" data-role-name="${escapeHtml(r.name)}" title="Удалить роль">
+                      <i class="fas fa-trash"></i> <span>Удалить</span>
+                    </button>
+                  </div>
                 ` : '—');
 
               return `
@@ -1305,7 +1362,7 @@
                   <td><span class="alltell-role-chip ${isSystem ? 'is-system' : 'is-custom'}">${isSystem ? 'Системная' : 'Пользовательская'}</span></td>
                   <td>${r.hierarchy_level}</td>
                   <td style="color:var(--text-muted);font-size:12px;">${escapeHtml(permsList)}</td>
-                  <td style="text-align:right;">${actionsHtml}</td>
+                  <td class="alltell-table-action-cell">${actionsHtml}</td>
                 </tr>
               `;
             }).join('') : '<tr class="alltell-table-empty"><td colspan="5">Ролей пока нет</td></tr>'}
@@ -1334,22 +1391,28 @@
               <th>Название</th>
               <th>Тип</th>
               <th>Описание</th>
-              <th style="text-align:right;">Действия</th>
+              <th class="alltell-table-action-col">Действия</th>
             </tr>
           </thead>
           <tbody>
             ${channels.length ? channels.map(function (c) {
               var isVoice = c.channel_type === 'voice';
               var actionsHtml = canManage ? `
-                <button class="btn btn-secondary btn-sm" type="button" data-action="manage-edit-channel" data-channel-id="${c.id}">Изменить</button>
-                <button class="btn btn-danger btn-sm" type="button" data-action="manage-delete-channel" data-channel-id="${c.id}" data-channel-name="${escapeHtml(c.name)}">Удалить</button>
+                <div class="alltell-table-actions">
+                  <button class="btn btn-secondary btn-sm" type="button" data-action="manage-edit-channel" data-channel-id="${c.id}" title="Редактировать канал">
+                    <i class="fas fa-pen"></i> <span>Изменить</span>
+                  </button>
+                  <button class="btn btn-danger btn-sm" type="button" data-action="manage-delete-channel" data-channel-id="${c.id}" data-channel-name="${escapeHtml(c.name)}" title="Удалить канал">
+                    <i class="fas fa-trash"></i> <span>Удалить</span>
+                  </button>
+                </div>
               ` : '—';
               return `
                 <tr>
                   <td><i class="fas ${isVoice ? 'fa-volume-high' : 'fa-hashtag'}" style="color:var(--text-muted);margin-right:6px;"></i><strong>${escapeHtml(c.name)}</strong></td>
                   <td>${isVoice ? '🔊 Голосовой' : '💬 Текстовый'}</td>
                   <td style="color:var(--text-muted);font-size:13px;">${escapeHtml(c.description || '—')}</td>
-                  <td style="text-align:right;">${actionsHtml}</td>
+                  <td class="alltell-table-action-cell">${actionsHtml}</td>
                 </tr>
               `;
             }).join('') : '<tr class="alltell-table-empty"><td colspan="4">Каналов пока нет. Создайте каналы для общения сообщества!</td></tr>'}
@@ -1375,7 +1438,7 @@
         </div>
         <div class="alltell-field">
           <label class="alltell-field-label">Описание хаба</label>
-          <textarea name="description" rows="3" maxlength="1000" placeholder="Краткое описание сюжета, правил или формата игры">${escapeHtml(editingHub.description || '')}</textarea>
+          <textarea name="description" class="alltell-hub-desc-textarea" data-autogrow rows="3" maxlength="5000" placeholder="Краткое описание сюжета, правил или формата игры">${escapeHtml(editingHub.description || '')}</textarea>
         </div>
         <div class="alltell-field">
           <label class="alltell-field-label">Аватарка хаба</label>
@@ -1445,21 +1508,58 @@
                     </div>
                   </div>
                 </div>
-                <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                <div class="alltell-hub-card-desc-wrap">
+                  <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                  ${hub.description ? `
+                    <button type="button" class="alltell-hub-desc-toggle-btn" data-action="open-hub-desc" data-hub-id="${hub.id}">
+                      <i class="fas fa-expand"></i> <span>Читать описание</span>
+                    </button>
+                  ` : ''}
+                </div>
+                ${hub.description ? `
+                  <div class="alltell-hub-desc-modal" data-hub-modal="${hub.id}" hidden>
+                    <div class="alltell-hub-modal-header">
+                      <div class="alltell-hub-modal-title-row">
+                        <div class="alltell-hub-icon" style="width:26px;height:26px;font-size:12px;border-radius:8px;">
+                          ${hub.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="">` : '<i class="fas fa-dice-d20"></i>'}
+                        </div>
+                        <strong>${escapeHtml(hub.name)}</strong>
+                      </div>
+                      <button type="button" class="alltell-hub-modal-close-btn" data-action="close-hub-desc" data-hub-id="${hub.id}" title="Закрыть">
+                        <i class="fas fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div class="alltell-hub-modal-badges">
+                      <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
+                        <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
+                        ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
+                      </span>
+                      <span style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--background-tertiary);color:var(--text-muted);border:1px solid var(--background-accent);">
+                        ${hub.is_public ? 'Публичный' : 'Скрытый'}
+                      </span>
+                    </div>
+                    <div class="alltell-hub-modal-body">${escapeHtml(hub.description)}</div>
+                    <div class="alltell-hub-modal-footer">
+                      <button type="button" class="btn btn-secondary btn-sm" data-action="close-hub-desc" data-hub-id="${hub.id}">
+                        <i class="fas fa-compress"></i> <span>Свернуть</span>
+                      </button>
+                    </div>
+                  </div>
+                ` : ''}
                 <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;">
                   <span>Создан: ${dateLabel(hub.created_at)}</span>
                   ${hub.created_by_name ? `<span>Автор: ${escapeHtml(hub.created_by_name)}</span>` : ''}
                 </div>
                 ${canManage ? `
-                  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid var(--background-accent);">
+                  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid var(--background-accent);margin-top:auto;">
                     <select class="alltell-select" data-action="manage-change-hub-status" data-hub-id="${hub.id}" style="font-size:0.8rem;padding:5px 8px;">
                       <option value="active" ${hub.status === 'active' ? 'selected' : ''}>Ведётся</option>
                       <option value="paused" ${hub.status === 'paused' ? 'selected' : ''}>Приостановлено</option>
                       <option value="finished" ${hub.status === 'finished' ? 'selected' : ''}>Завершено</option>
                     </select>
-                    <div style="display:flex;gap:6px;">
-                      <button type="button" class="btn btn-secondary btn-sm" data-action="manage-edit-hub" data-hub-id="${hub.id}" style="padding:5px 9px;font-size:0.8rem;"><i class="fas fa-pen"></i></button>
-                      <button type="button" class="btn btn-danger btn-sm" data-action="manage-delete-hub" data-hub-id="${hub.id}" data-hub-name="${escapeHtml(hub.name)}" style="padding:5px 9px;font-size:0.8rem;"><i class="fas fa-trash"></i></button>
+                    <div class="alltell-table-actions">
+                      <button type="button" class="btn btn-secondary btn-sm" data-action="manage-edit-hub" data-hub-id="${hub.id}" title="Редактировать"><i class="fas fa-pen"></i></button>
+                      <button type="button" class="btn btn-danger btn-sm" data-action="manage-delete-hub" data-hub-id="${hub.id}" data-hub-name="${escapeHtml(hub.name)}" title="Удалить"><i class="fas fa-trash"></i></button>
                     </div>
                   </div>
                 ` : ''}
@@ -1833,7 +1933,41 @@
                           </span>
                         </div>
                       </div>
-                      <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                      <div class="alltell-hub-card-desc-wrap">
+                        <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                        ${hub.description ? `
+                          <button type="button" class="alltell-hub-desc-toggle-btn" data-action="open-hub-desc" data-hub-id="${hub.id}">
+                            <i class="fas fa-expand"></i> <span>Читать описание</span>
+                          </button>
+                        ` : ''}
+                      </div>
+                      ${hub.description ? `
+                        <div class="alltell-hub-desc-modal" data-hub-modal="${hub.id}" hidden>
+                          <div class="alltell-hub-modal-header">
+                            <div class="alltell-hub-modal-title-row">
+                              <div class="alltell-hub-icon" style="width:26px;height:26px;font-size:12px;border-radius:8px;">
+                                ${hub.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="">` : '<i class="fas fa-dice-d20"></i>'}
+                              </div>
+                              <strong>${escapeHtml(hub.name)}</strong>
+                            </div>
+                            <button type="button" class="alltell-hub-modal-close-btn" data-action="close-hub-desc" data-hub-id="${hub.id}" title="Закрыть">
+                              <i class="fas fa-xmark"></i>
+                            </button>
+                          </div>
+                          <div class="alltell-hub-modal-badges">
+                            <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
+                              <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
+                              ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
+                            </span>
+                          </div>
+                          <div class="alltell-hub-modal-body">${escapeHtml(hub.description)}</div>
+                          <div class="alltell-hub-modal-footer">
+                            <button type="button" class="btn btn-secondary btn-sm" data-action="close-hub-desc" data-hub-id="${hub.id}">
+                              <i class="fas fa-compress"></i> <span>Свернуть</span>
+                            </button>
+                          </div>
+                        </div>
+                      ` : ''}
                       <div class="alltell-hub-card-foot">
                         <span class="alltell-hub-tag"><i class="fas fa-server"></i> Хаб франшизы</span>
                         ${canManage ? `
@@ -3558,16 +3692,40 @@
         state.workspaceTab = 'hubs';
         state.editingHubId = 'new';
         renderDetail(root, state);
+        var hubTa = root.querySelector('[data-hub-form] textarea[data-autogrow]');
+        if (hubTa) { hubTa.style.height = 'auto'; hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px'; }
         root.querySelector('[data-hub-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'manage-edit-hub') {
         state.editingHubId = button.dataset.hubId;
         renderDetail(root, state);
+        var hubTa = root.querySelector('[data-hub-form] textarea[data-autogrow]');
+        if (hubTa) { hubTa.style.height = 'auto'; hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px'; }
         root.querySelector('[data-hub-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'manage-cancel-hub') {
         state.editingHubId = null;
         renderDetail(root, state);
       } else if (action === 'manage-delete-hub') {
         deleteHub(state.detail.franchise.id, button.dataset.hubId, button.dataset.hubName);
+      } else if (action === 'open-hub-desc') {
+        var hubCard = button.closest('.alltell-hub-card');
+        if (hubCard) {
+          hubCard.querySelectorAll('.alltell-hub-desc-modal').forEach(function (m) { m.removeAttribute('hidden'); });
+        }
+      } else if (action === 'close-hub-desc') {
+        var hubCard = button.closest('.alltell-hub-card');
+        if (hubCard) {
+          hubCard.querySelectorAll('.alltell-hub-desc-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
+        }
+      } else if (action === 'open-card-hub-desc') {
+        var hubItem = button.closest('.alltell-card-hub-item');
+        if (hubItem) {
+          hubItem.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.removeAttribute('hidden'); });
+        }
+      } else if (action === 'close-card-hub-desc') {
+        var hubItem = button.closest('.alltell-card-hub-item');
+        if (hubItem) {
+          hubItem.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
+        }
       } else if (action === 'manage-toggle-create-map') {
         state.showCreateMap = !state.showCreateMap;
         renderDetail(root, state);
@@ -3598,6 +3756,10 @@
 
     function onInput(event) {
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
+      if (event.target.matches('textarea[data-autogrow]')) {
+        event.target.style.height = 'auto';
+        event.target.style.height = Math.max(96, event.target.scrollHeight) + 'px';
+      }
     }
 
     function onDragOver(event) {
