@@ -368,7 +368,7 @@
       `,
       footerHtml: `
         <button type="button" class="btn btn-secondary" data-modal-close>Закрыть</button>
-        ${franchiseId ? `
+        ${franchiseId && (!state.detail || !state.detail.franchise || Number(state.detail.franchise.id) !== Number(franchiseId)) ? `
           <a href="/alltell?franchise=${Number(franchiseId)}" class="btn btn-primary">
             <i class="fas fa-arrow-right"></i> В сообщество
           </a>
@@ -4815,9 +4815,16 @@
       }
       var franchiseName = franchise ? franchise.name : (state.detail && state.detail.franchise ? state.detail.franchise.name : '');
 
-      var hubs = (franchiseId && state.hubPreviewCache.get(franchiseId)) || [];
-      if (!hubs.length && state.detail && state.detail.hubs) hubs = state.detail.hubs;
-      if (!hubs.length && state.workspaceData && state.workspaceData.hubs) hubs = state.workspaceData.hubs;
+      var hubs = [];
+      if (state.detail && state.detail.hubs && Array.isArray(state.detail.hubs)) {
+        hubs = state.detail.hubs;
+      }
+      if (!hubs.length && state.workspaceData && state.workspaceData.hubs && Array.isArray(state.workspaceData.hubs)) {
+        hubs = state.workspaceData.hubs;
+      }
+      if (!hubs.length && franchiseId && state.hubPreviewCache.has(franchiseId)) {
+        hubs = state.hubPreviewCache.get(franchiseId) || [];
+      }
 
       var hub = hubs.find(function (h) { return Number(h.id) === hubId; });
       if (hub) {
@@ -5918,8 +5925,12 @@
       } else if (action === 'toggle-hub-preview') {
         toggleHubPreview(button.dataset.franchiseId, button.dataset.cardKey);
       } else if (action === 'close-hub-desc') {
-        var modal = root.querySelector('[data-hub-modal="' + button.dataset.hubId + '"]');
-        if (modal) modal.hidden = true;
+        var hubCard = button.closest('.alltell-hub-card');
+        var modal = (hubCard && hubCard.querySelector('.alltell-hub-desc-modal')) || root.querySelector('[data-hub-modal="' + button.dataset.hubId + '"]');
+        if (modal) {
+          modal.setAttribute('hidden', '');
+          modal.hidden = true;
+        }
       } else if (action === 'toggle-manage') {
         state.detailTab = (state.detailTab === 'manage' ? 'all' : 'manage');
         if (state.detailTab === 'manage' && state.detail) {
@@ -5989,9 +6000,16 @@
         var hubId = Number(button.dataset.hubId);
         openHubInfoPopup(franchiseId, hubId);
       } else if (action === 'open-hub-desc') {
-        var hubId = Number(button.dataset.hubId);
-        var fId = state.detail && state.detail.franchise ? state.detail.franchise.id : null;
-        openHubInfoPopup(fId, hubId);
+        var hubCard = button.closest('.alltell-hub-card');
+        var modal = (hubCard && hubCard.querySelector('.alltell-hub-desc-modal')) || root.querySelector('[data-hub-modal="' + button.dataset.hubId + '"]');
+        if (modal) {
+          modal.removeAttribute('hidden');
+          modal.hidden = false;
+        } else {
+          var hubId = Number(button.dataset.hubId);
+          var fId = state.detail && state.detail.franchise ? state.detail.franchise.id : null;
+          openHubInfoPopup(fId, hubId);
+        }
       } else if (action === 'manage-toggle-create-map') {
         state.showCreateMap = !state.showCreateMap;
         renderDetail(root, state);
@@ -6040,6 +6058,16 @@
     }
 
     function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        var openModals = root.querySelectorAll('.alltell-hub-desc-modal:not([hidden])');
+        if (openModals.length) {
+          openModals.forEach(function (m) {
+            m.setAttribute('hidden', '');
+            m.hidden = true;
+          });
+          return;
+        }
+      }
       if (event.target.matches('textarea[name="body"]')) {
         var mod = event.ctrlKey || event.metaKey;
         if (mod) {
