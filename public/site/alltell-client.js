@@ -1128,19 +1128,13 @@
               <div class="alltell-selected-articles" data-selected-articles>
                 ${renderSelectedArticleChips(postArticles)}
               </div>
-              <div class="alltell-article-input-wrap">
-                <i class="fas fa-search alltell-article-search-icon" aria-hidden="true"></i>
-                <input name="article_search"
-                       type="text"
-                       class="alltell-article-search-input"
-                       autocomplete="off"
-                       value=""
-                       placeholder="${postArticles.length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…'}"
-                       data-article-search>
-                <button type="button" class="alltell-article-search-clear" data-action="clear-article-search" title="Очистить поиск" hidden>
-                  <i class="fas fa-xmark" aria-hidden="true"></i>
-                </button>
-              </div>
+              <input name="article_search"
+                     type="text"
+                     class="alltell-article-search-input"
+                     autocomplete="off"
+                     value=""
+                     placeholder="${postArticles.length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…'}"
+                     data-article-search>
             </div>
             <div class="alltell-article-options" data-article-options hidden></div>
           </div>
@@ -2270,8 +2264,13 @@
         searchInput.placeholder = (state.postArticles || []).length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…';
       }
       var options = form.querySelector('[data-article-options]');
-      if (options && !options.hidden && searchInput) {
-        renderArticleOptions(searchInput);
+      if (options) {
+        if (!options.hidden && searchInput && searchInput.value.trim()) {
+          renderArticleOptions(searchInput);
+        } else if (searchInput && !searchInput.value.trim()) {
+          options.hidden = true;
+          options.replaceChildren();
+        }
       }
     }
 
@@ -3563,28 +3562,26 @@
       if (!form) return;
       var options = form.querySelector('[data-article-options]');
       if (!options) return;
-      var clearBtn = form.querySelector('[data-action="clear-article-search"]');
       var query = input.value.trim().toLocaleLowerCase();
-      if (clearBtn) {
-        clearBtn.hidden = !query;
+      if (!query) {
+        options.hidden = true;
+        options.replaceChildren();
+        return;
       }
       var selectedSlugs = new Set((state.postArticles || []).map(function (a) { return a.slug; }));
       var list = state.articleIndex || [];
-      var matches = query
-        ? list.filter(function (article) {
-            return ((article.title || '') + ' ' + (article.slug || '')).toLocaleLowerCase().includes(query);
-          }).slice(0, 25)
-        : list.slice(0, 15);
+      var matches = list.filter(function (article) {
+        return ((article.title || '') + ' ' + (article.slug || '')).toLocaleLowerCase().includes(query);
+      }).slice(0, 20);
 
       if (!matches.length) {
         options.innerHTML = state.articleIndexError
           ? `<div class="alltell-article-option-empty">Не удалось загрузить статьи: ${escapeHtml(state.articleIndexError)}</div>`
-          : `<div class="alltell-article-option-empty">${query ? 'Статьи не найдены по запросу' : 'Нет доступных статей'}</div>`;
+          : '<div class="alltell-article-option-empty">Статьи не найдены по запросу</div>';
       } else {
-        var headerText = query ? ('Найдено совпадений: ' + matches.length) : 'Доступные статьи Antropedia';
         options.innerHTML = `
           <div class="alltell-article-options-header">
-            <span>${escapeHtml(headerText)}</span>
+            <span>Найдено совпадений: ${matches.length}</span>
             <span class="alltell-article-options-hint">Нажмите для выбора / отмены</span>
           </div>
           <div class="alltell-article-options-list">
@@ -3669,20 +3666,9 @@
         updateArticlePickerUI(form);
         return;
       }
-      var clearSearchBtn = event.target.closest('[data-action="clear-article-search"]');
-      if (clearSearchBtn) {
-        var form = clearSearchBtn.closest('[data-post-form]');
-        var input = form && form.querySelector('[data-article-search]');
-        if (input) {
-          input.value = '';
-          input.focus();
-          renderArticleOptions(input);
-        }
-        return;
-      }
       var searchInputEl = event.target.closest('[data-article-search]');
       if (searchInputEl) {
-        renderArticleOptions(searchInputEl);
+        if (searchInputEl.value.trim()) renderArticleOptions(searchInputEl);
         return;
       }
       var pickerBox = event.target.closest('[data-article-picker-box]');
@@ -3690,7 +3676,7 @@
         var input = pickerBox.querySelector('[data-article-search]');
         if (input) {
           input.focus();
-          renderArticleOptions(input);
+          if (input.value.trim()) renderArticleOptions(input);
         }
         return;
       }
