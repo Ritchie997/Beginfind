@@ -604,7 +604,28 @@
     container.__blocksInteractionsAttached = true;
     container.addEventListener('click', (e) => {
       const el = e.target.closest('.spoiler');
-      if (el) el.classList.toggle('revealed');
+      if (el) { el.classList.toggle('revealed'); return; }
+
+      if (e.target.closest('[data-gallery-work]')) return;
+      if (e.target.closest('.antropedia-view-content, .public-article-content')) return;
+
+      const img = e.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
+      if (img && window.imageLightbox && img.src && !e.target.closest('a')) {
+        e.preventDefault();
+        const all = Array.from(container.querySelectorAll('.blk-image:not([data-gallery-work]):not(.blk-image-gallery-locked) img, .blk-infobox-art img'))
+          .filter((i) => Boolean(i.src));
+        const idx = Math.max(0, all.indexOf(img));
+        const items = (all.length ? all : [img]).map((i) => {
+          const fig = i.closest('.blk-image');
+          const caption = fig ? fig.querySelector('figcaption')?.textContent?.trim() : '';
+          return {
+            src: i.src,
+            alt: i.alt || '',
+            caption: caption || i.alt || ''
+          };
+        });
+        window.imageLightbox.open(items, idx);
+      }
     });
   }
 

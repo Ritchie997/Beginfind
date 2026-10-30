@@ -5074,6 +5074,26 @@
         track.scrollBy({ left: Number(imageStep.dataset.imageStep) * track.clientWidth, behavior: 'smooth' });
         return;
       }
+      var postImage = event.target.closest('.alltell-post-image');
+      if (postImage) {
+        var carousel = postImage.closest('[data-image-carousel]');
+        var slide = postImage.closest('[data-image-index]');
+        var clickedIdx = slide ? Number(slide.dataset.imageIndex) || 0 : 0;
+        var imageElements = carousel
+          ? Array.from(carousel.querySelectorAll('.alltell-post-image'))
+          : [postImage];
+        var lightboxItems = imageElements.map(function (img, i) {
+          return {
+            src: img.dataset.imageSrc || img.src,
+            alt: img.alt || ('Изображение ' + (i + 1))
+          };
+        }).filter(function (item) { return Boolean(item.src); });
+
+        if (lightboxItems.length && window.imageLightbox) {
+          window.imageLightbox.open(lightboxItems, clickedIdx);
+        }
+        return;
+      }
       var articleChoice = event.target.closest('[data-article-choice]');
       if (articleChoice) {
         var form = articleChoice.closest('[data-post-form]');

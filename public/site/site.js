@@ -1396,8 +1396,12 @@
         var cover = makeEl('figure', 'public-article-cover');
         var coverImage = document.createElement('img');
         coverImage.src = coverUrl;
-        coverImage.alt = '';
+        coverImage.alt = article.title || 'Обложка статьи';
+        coverImage.style.cursor = 'zoom-in';
         coverImage.addEventListener('error', function () { cover.remove(); });
+        coverImage.addEventListener('click', function () {
+          window.imageLightbox?.open([{ src: coverUrl, alt: article.title || 'Обложка статьи' }]);
+        });
         cover.appendChild(coverImage);
         detail.appendChild(cover);
       }
@@ -1525,6 +1529,31 @@
           var tagLink = event.target.closest('[data-tag]');
           if (tagLink) {
             window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tagLink.dataset.tag));
+            return;
+          }
+          var galleryFig = event.target.closest('[data-gallery-work]');
+          if (galleryFig && window.galleryViewer && !event.target.closest('a:not([data-gallery-open])')) {
+            event.preventDefault();
+            window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
+            return;
+          }
+          var imgEl = event.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
+          if (imgEl && window.imageLightbox && !event.target.closest('a') && !galleryFig) {
+            event.preventDefault();
+            var allImgs = Array.from(content.querySelectorAll('.blk-image:not([data-gallery-work]):not(.blk-image-gallery-locked) img, .blk-infobox-art img'))
+              .filter(function (img) { return Boolean(img.src); });
+            var clickedIdx = Math.max(0, allImgs.indexOf(imgEl));
+            var items = (allImgs.length ? allImgs : [imgEl]).map(function (img) {
+              var fig = img.closest('.blk-image');
+              var caption = fig ? fig.querySelector('figcaption')?.textContent?.trim() : '';
+              return {
+                src: img.src,
+                alt: img.alt || '',
+                caption: caption || img.alt || ''
+              };
+            });
+            window.imageLightbox.open(items, clickedIdx);
+            return;
           }
         });
       }).catch(function () {

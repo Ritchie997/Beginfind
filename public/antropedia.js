@@ -634,6 +634,7 @@ function reactionsBarInnerHtml(reactions) {
 
       this.gridEl?.addEventListener('click', (e) => this.handleGridClick(e));
       document.getElementById('antropediaViewContent')?.addEventListener('click', (e) => this.handleViewContentClick(e));
+      document.getElementById('antropediaViewCover')?.addEventListener('click', (e) => this.handleViewContentClick(e));
       // Переключатель слоя — отдельный элемент СНАРУЖИ #antropediaViewContent
       // (см. renderLayerSwitcher), поэтому его клики туда не всплывают и
       // нужен свой обработчик; handleViewContentClick сам проверяет
@@ -1422,6 +1423,33 @@ function reactionsBarInnerHtml(reactions) {
       if (galleryFig && window.galleryViewer && !e.target.closest('a:not([data-gallery-open])')) {
         e.preventDefault();
         window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
+        return;
+      }
+
+      const coverTarget = e.target.closest('#antropediaViewCoverImg');
+      if (coverTarget && window.imageLightbox && coverTarget.src) {
+        e.preventDefault();
+        window.imageLightbox.open([{ src: coverTarget.src, alt: this.currentArticle?.title || 'Обложка статьи' }]);
+        return;
+      }
+
+      const imgEl = e.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
+      if (imgEl && window.imageLightbox && !e.target.closest('a') && !galleryFig) {
+        e.preventDefault();
+        const root = imgEl.closest('.antropedia-view-content, .antropedia-article') || this.contentEl || document.body;
+        const allImgs = Array.from(root.querySelectorAll('.blk-image:not([data-gallery-work]):not(.blk-image-gallery-locked) img, .blk-infobox-art img'))
+          .filter((img) => Boolean(img.src));
+        const clickedIdx = Math.max(0, allImgs.indexOf(imgEl));
+        const items = (allImgs.length ? allImgs : [imgEl]).map((img) => {
+          const fig = img.closest('.blk-image');
+          const caption = fig ? fig.querySelector('figcaption')?.textContent?.trim() : '';
+          return {
+            src: img.src,
+            alt: img.alt || '',
+            caption: caption || img.alt || ''
+          };
+        });
+        window.imageLightbox.open(items, clickedIdx);
         return;
       }
 

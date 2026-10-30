@@ -1045,6 +1045,10 @@
 
     openLightbox(urls, index) {
       if (!urls.length) return;
+      if (window.imageLightbox) {
+        window.imageLightbox.open(urls, index);
+        return;
+      }
       const lb = this.ensureLightbox();
       lb.urls = urls;
       const wasHidden = lb.el.hidden;
