@@ -1143,6 +1143,8 @@
 
         <h3 class="alltell-post-title">${escapeHtml(post.title)}</h3>
 
+        ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body)}</div>` : ''}
+
         ${images.length ? `
           <div class="alltell-post-carousel" data-image-carousel>
             <div class="alltell-post-images" data-image-track>
@@ -1171,8 +1173,6 @@
             ` : ''}
           </div>
         ` : ''}
-
-        ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body)}</div>` : ''}
 
         ${postArticles.length ? `
           <div class="alltell-post-articles-list">
@@ -1443,11 +1443,23 @@
 
     var previewEl = document.querySelector('[data-post-preview-pane]');
     if (previewEl) {
+      var bodyHtml = '';
       if (!md.trim()) {
-        previewEl.innerHTML = '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
+        bodyHtml = '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
       } else {
-        previewEl.innerHTML = formatPostBody(md);
+        bodyHtml = formatPostBody(md);
       }
+      var previewImages = (state.postImages || []).map(function (item) { return item.preview || item.url; }).filter(Boolean);
+      if (previewImages.length) {
+        bodyHtml += '<div class="alltell-post-preview-images" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">' +
+          previewImages.map(function (src) {
+            return '<div style="position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;background:#14161a;border:1px solid rgba(255,255,255,0.1);flex-shrink:0;">' +
+              '<img src="' + escapeHtml(src) + '" style="width:100%;height:100%;object-fit:cover;" alt="">' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }
+      previewEl.innerHTML = bodyHtml;
     }
   }
 
@@ -3520,6 +3532,7 @@
           badge.textContent = 'Перетащите или выберите';
         }
       }
+      syncPostEditorState(state);
     }
 
     async function uploadPendingPostImages() {
