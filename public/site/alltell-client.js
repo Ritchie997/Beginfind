@@ -1020,22 +1020,51 @@
 
     // Заголовки (#, ##, ###, ####)
     text = text.replace(/^(#{1,4})\s+(.+)$/gm, function (_, hashes, content) {
-      return '<div class="alltell-post-h' + hashes.length + '">' + content.trim() + '</div>';
+      var lvl = hashes.length;
+      return '<h' + lvl + ' class="alltell-post-h' + lvl + '">' + content.trim() + '</h' + lvl + '>';
     });
 
-    // Чек-листы (интерактивные с сохранением состояния при клике)
-    text = text.replace(/^[-*]\s+\[([xX])\]\s+(.+)$/gm, function (_, checked, content) {
-      return '<label class="alltell-checklist-item is-checked" onclick="event.stopPropagation();"><input type="checkbox" checked onchange="this.parentElement.classList.toggle(\'is-checked\', this.checked)"> <span>' + content.trim() + '</span></label>';
-    });
-    text = text.replace(/^[-*]\s+\[\s*\]\s+(.+)$/gm, function (_, content) {
-      return '<label class="alltell-checklist-item" onclick="event.stopPropagation();"><input type="checkbox" onchange="this.parentElement.classList.toggle(\'is-checked\', this.checked)"> <span>' + content.trim() + '</span></label>';
+    // Чек-листы
+    text = text.replace(/((?:^[-*]\s+\[[ xX]\][^\n]*(?:\n|$))+)/gm, function (match) {
+      var lines = match.trim().split('\n');
+      var items = lines.map(function (line) {
+        var m = line.match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+        var checked = m && m[1].toLowerCase() === 'x';
+        var content = m ? m[2].trim() : line;
+        return '<li class="alltell-checklist-item' + (checked ? ' is-checked' : '') + '">' +
+               '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="this.parentElement.classList.toggle(\'is-checked\', this.checked)">' +
+               '<span>' + content + '</span></li>';
+      }).join('');
+      return '<ul class="alltell-checklist blk-checklist">' + items + '</ul>';
     });
 
     // Нумерованные списки
-    text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<div class="alltell-post-bullet alltell-post-ordered"><span class="alltell-bullet-num">$1.</span> <span>$2</span></div>');
+    text = text.replace(/((?:^\d+\.\s+[^\n]*(?:\n|$))+)/gm, function (match) {
+      var lines = match.trim().split('\n');
+      var items = lines.map(function (line) {
+        var content = line.replace(/^\d+\.\s+/, '').trim();
+        return '<li>' + content + '</li>';
+      }).join('');
+      return '<ol class="alltell-post-ol">' + items + '</ol>';
+    });
 
     // Маркированные списки
-    text = text.replace(/^[-*•]\s+(.+)$/gm, '<div class="alltell-post-bullet"><span class="alltell-bullet-dot">•</span> <span>$1</span></div>');
+    text = text.replace(/((?:^[-*•]\s+[^\n]*(?:\n|$))+)/gm, function (match) {
+      var lines = match.trim().split('\n');
+      var items = lines.map(function (line) {
+        var content = line.replace(/^[-*•]\s+/, '').trim();
+        return '<li>' + content + '</li>';
+      }).join('');
+      return '<ul class="alltell-post-ul">' + items + '</ul>';
+    });
+
+    // Цитаты: группировка строк, начинающихся с > или &gt;
+    text = text.replace(/((?:^(?:>|&gt;)[^\n]*(?:\n|$))+)/gm, function (match) {
+      var inner = match.split('\n').map(function (line) {
+        return line.replace(/^(?:>|&gt;)\s*/, '');
+      }).join('<br>').replace(/(?:<br>)+$/, '');
+      return '<blockquote class="alltell-post-quote">' + inner + '</blockquote>';
+    });
 
     // Выделение цветом: ==текст==(#hex) или ==текст==
     text = text.replace(/==([\s\S]+?)==\((#[0-9a-fA-F]{3,8})\)/g, function (_, content, hex) {
@@ -1065,9 +1094,6 @@
 
     // Разделитель: --- или ***
     text = text.replace(/^(?:---|—{3,}|\*\*\*)\s*$/gm, '<hr class="alltell-post-divider">');
-
-    // Цитаты: строки начинающиеся с &gt;
-    text = text.replace(/^(?:&gt;|>)\s*(.+)$/gm, '<blockquote class="alltell-post-quote">$1</blockquote>');
 
     // Wiki-ссылки на Antropedia: [[slug|title]], [[slug]] или [title]((slug))
     text = text.replace(/\[\[([^\]\|]+)(?:\|([^\]]+))?\]\]/g, function (_, slug, title) {
@@ -1292,7 +1318,8 @@
       }
 
       var lines = trimmed.split('\n');
-      var isQuote = lines.every(function (l) { return /^(?:>|&gt;)\s*/.test(l.trim()); });
+      var isQuote = lines.every(function (l) { return !l.trim() || /^(?:>|&gt;)\s*/.test(l.trim()); }) &&
+                    lines.some(function (l) { return /^(?:>|&gt;)\s*/.test(l.trim()); });
       if (isQuote) {
         var quoteText = lines.map(function (l) { return l.replace(/^(?:>|&gt;)\s*/, ''); }).join('\n');
         blocks.push({
@@ -1561,13 +1588,21 @@
     var blocks = state.postBlocks;
     var activeId = state._activePostBlockId;
     var idx = blocks.findIndex(function (b) { return b.id === activeId; });
-    var newBlock = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
-    if (idx !== -1) {
-      blocks.splice(idx + 1, 0, newBlock);
+    var active = idx !== -1 ? blocks[idx] : null;
+
+    if (active && (active.type === 'heading' || active.type === 'quote') && !active.data.markdown) {
+      active.type = 'paragraph';
+      active.data = { markdown: '' };
+      state._pendingFocusBlockId = active.id;
     } else {
-      blocks.push(newBlock);
+      var newBlock = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
+      if (idx !== -1) {
+        blocks.splice(idx + 1, 0, newBlock);
+      } else {
+        blocks.push(newBlock);
+      }
+      state._pendingFocusBlockId = newBlock.id;
     }
-    state._pendingFocusBlockId = newBlock.id;
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1575,15 +1610,22 @@
 
   function addPostHeadingBlock(state, level) {
     if (!state || !state.postBlocks) return;
+    level = Math.min(3, Math.max(1, parseInt(level, 10) || 2));
     var blocks = state.postBlocks;
     var activeId = state._activePostBlockId;
     var idx = blocks.findIndex(function (b) { return b.id === activeId; });
-    if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
-      blocks[idx].type = 'heading';
-      blocks[idx].data = { level: level || 2, markdown: '' };
-      state._pendingFocusBlockId = blocks[idx].id;
+    var active = idx !== -1 ? blocks[idx] : null;
+
+    if (active && (active.type === 'paragraph' || active.type === 'quote' || active.type === 'heading')) {
+      active.type = 'heading';
+      active.data = { level: level, markdown: (active.data && active.data.markdown) || '' };
+      state._pendingFocusBlockId = active.id;
+    } else if (active && active.type === 'list' && (!active.data.items || !active.data.items.length || (active.data.items.length === 1 && !active.data.items[0].markdown))) {
+      active.type = 'heading';
+      active.data = { level: level, markdown: '' };
+      state._pendingFocusBlockId = active.id;
     } else {
-      var newBlock = { id: genBlockId(), type: 'heading', data: { level: level || 2, markdown: '' } };
+      var newBlock = { id: genBlockId(), type: 'heading', data: { level: level, markdown: '' } };
       if (idx !== -1) {
         blocks.splice(idx + 1, 0, newBlock);
       } else {
@@ -1598,18 +1640,23 @@
 
   function addPostListBlock(state, style) {
     if (!state || !state.postBlocks) return;
+    style = style || 'bullet';
     var blocks = state.postBlocks;
     var activeId = state._activePostBlockId;
     var idx = blocks.findIndex(function (b) { return b.id === activeId; });
-    if (idx !== -1 && blocks[idx].type === 'list') {
-      blocks[idx].data.style = style || 'bullet';
-      state._pendingFocusBlockId = blocks[idx].id;
-    } else if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
-      blocks[idx].type = 'list';
-      blocks[idx].data = { style: style || 'bullet', items: [{ markdown: '', checked: false }] };
-      state._pendingFocusBlockId = blocks[idx].id;
+    var active = idx !== -1 ? blocks[idx] : null;
+
+    if (active && active.type === 'list') {
+      active.data.style = style;
+      state._pendingFocusBlockId = active.id;
+    } else if (active && (active.type === 'paragraph' || active.type === 'heading' || active.type === 'quote')) {
+      var text = (active.data && active.data.markdown != null) ? active.data.markdown.trim() : '';
+      var items = text ? text.split('\n').map(function (l) { return { markdown: l.trim(), checked: false }; }) : [{ markdown: '', checked: false }];
+      active.type = 'list';
+      active.data = { style: style, items: items };
+      state._pendingFocusBlockId = active.id;
     } else {
-      var newBlock = { id: genBlockId(), type: 'list', data: { style: style || 'bullet', items: [{ markdown: '', checked: false }] } };
+      var newBlock = { id: genBlockId(), type: 'list', data: { style: style, items: [{ markdown: '', checked: false }] } };
       if (idx !== -1) {
         blocks.splice(idx + 1, 0, newBlock);
       } else {
@@ -1627,10 +1674,19 @@
     var blocks = state.postBlocks;
     var activeId = state._activePostBlockId;
     var idx = blocks.findIndex(function (b) { return b.id === activeId; });
-    if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
-      blocks[idx].type = 'quote';
-      blocks[idx].data = { markdown: '' };
-      state._pendingFocusBlockId = blocks[idx].id;
+    var active = idx !== -1 ? blocks[idx] : null;
+
+    if (active && (active.type === 'paragraph' || active.type === 'heading')) {
+      active.type = 'quote';
+      active.data = { markdown: (active.data && active.data.markdown) || '' };
+      state._pendingFocusBlockId = active.id;
+    } else if (active && active.type === 'list') {
+      var text = (active.data.items || []).map(function (it) { return it.markdown || ''; }).filter(Boolean).join('\n');
+      active.type = 'quote';
+      active.data = { markdown: text };
+      state._pendingFocusBlockId = active.id;
+    } else if (active && active.type === 'quote') {
+      state._pendingFocusBlockId = active.id;
     } else {
       var newBlock = { id: genBlockId(), type: 'quote', data: { markdown: '' } };
       if (idx !== -1) {
@@ -1859,9 +1915,61 @@
     return row;
   }
 
+  function closeBlockMoveMenu() {
+    var old = document.querySelector('.eb-block-action-menu');
+    if (old) old.remove();
+  }
+
+  function openBlockMoveMenu(button, block, state, containerEl) {
+    closeBlockMoveMenu();
+    var menu = document.createElement('div');
+    menu.className = 'eb-block-action-menu';
+    var blocks = state.postBlocks || [];
+    var idx = blocks.findIndex(function (b) { return b.id === block.id; });
+
+    var upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.innerHTML = '<i class="fas fa-arrow-up"></i> <span>Вверх</span>';
+    upBtn.disabled = idx <= 0;
+    upBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeBlockMoveMenu();
+      movePostBlock(state, block.id, -1);
+    });
+
+    var downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.innerHTML = '<i class="fas fa-arrow-down"></i> <span>Вниз</span>';
+    downBtn.disabled = idx === -1 || idx >= blocks.length - 1;
+    downBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeBlockMoveMenu();
+      movePostBlock(state, block.id, 1);
+    });
+
+    menu.append(upBtn, downBtn);
+    document.body.appendChild(menu);
+
+    var rect = button.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = rect.left + 'px';
+
+    function onDocClick(ev) {
+      if (!menu.contains(ev.target) && ev.target !== button) {
+        closeBlockMoveMenu();
+        document.removeEventListener('click', onDocClick, true);
+      }
+    }
+    setTimeout(function () {
+      document.addEventListener('click', onDocClick, true);
+    }, 10);
+  }
+
   function renderPostBlocksList(containerEl, state) {
     if (!containerEl) return;
     containerEl.innerHTML = '';
+    closeBlockMoveMenu();
+
     if (!state.postBlocks || !state.postBlocks.length) {
       state.postBlocks = [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
     }
@@ -1874,22 +1982,44 @@
       var controls = document.createElement('div');
       controls.className = 'eb-block-controls';
 
-      var moveUpBtn = document.createElement('button');
-      moveUpBtn.type = 'button';
-      moveUpBtn.title = 'Переместить выше';
-      moveUpBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
-      moveUpBtn.addEventListener('click', function (e) {
+      var dragBtn = document.createElement('button');
+      dragBtn.type = 'button';
+      dragBtn.className = 'eb-drag-handle';
+      dragBtn.title = 'Потяните — переместить, клик — меню позиции';
+      dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      dragBtn.draggable = true;
+      dragBtn.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', block.id);
+        e.dataTransfer.effectAllowed = 'move';
+        wrap.classList.add('eb-dragging');
+      });
+      dragBtn.addEventListener('dragend', function () {
+        wrap.classList.remove('eb-dragging');
+        containerEl.querySelectorAll('.eb-block').forEach(function (el) {
+          el.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+        });
+      });
+      dragBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        movePostBlock(state, block.id, -1);
+        openBlockMoveMenu(dragBtn, block, state, containerEl);
       });
 
-      var moveDownBtn = document.createElement('button');
-      moveDownBtn.type = 'button';
-      moveDownBtn.title = 'Переместить ниже';
-      moveDownBtn.innerHTML = '<i class="fas fa-arrow-down"></i>';
-      moveDownBtn.addEventListener('click', function (e) {
+      var copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'eb-copy-btn';
+      copyBtn.title = 'Копировать / дублировать блок';
+      copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+      copyBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        movePostBlock(state, block.id, 1);
+        var idx = state.postBlocks.findIndex(function (b) { return b.id === block.id; });
+        if (idx === -1) return;
+        var clone = JSON.parse(JSON.stringify(block));
+        clone.id = genBlockId();
+        state.postBlocks.splice(idx + 1, 0, clone);
+        state._pendingFocusBlockId = clone.id;
+        renderPostBlocksList(containerEl, state);
+        syncPostEditorState(state);
+        showToast('Блок продублирован');
       });
 
       var delBtn = document.createElement('button');
@@ -1902,7 +2032,38 @@
         removePostBlock(state, block.id, false);
       });
 
-      controls.append(moveUpBtn, moveDownBtn, delBtn);
+      controls.append(dragBtn, copyBtn, delBtn);
+
+      // Drag & drop перетаскивание между блоками
+      wrap.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var rect = wrap.getBoundingClientRect();
+        var isAbove = (e.clientY - rect.top) < (rect.height / 2);
+        wrap.classList.toggle('eb-drop-target-above', isAbove);
+        wrap.classList.toggle('eb-drop-target-below', !isAbove);
+      });
+      wrap.addEventListener('dragleave', function () {
+        wrap.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+      });
+      wrap.addEventListener('drop', function (e) {
+        e.preventDefault();
+        wrap.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+        var srcId = e.dataTransfer.getData('text/plain');
+        if (!srcId || srcId === block.id) return;
+        var fromIdx = state.postBlocks.findIndex(function (b) { return b.id === srcId; });
+        var toIdx = state.postBlocks.findIndex(function (b) { return b.id === block.id; });
+        if (fromIdx === -1 || toIdx === -1) return;
+        var rect = wrap.getBoundingClientRect();
+        var isAbove = (e.clientY - rect.top) < (rect.height / 2);
+        var moved = state.postBlocks.splice(fromIdx, 1)[0];
+        var newIdx = state.postBlocks.findIndex(function (b) { return b.id === block.id; });
+        if (!isAbove) newIdx += 1;
+        state.postBlocks.splice(newIdx, 0, moved);
+        state._pendingFocusBlockId = moved.id;
+        renderPostBlocksList(containerEl, state);
+        syncPostEditorState(state);
+      });
 
       var tag = document.createElement('span');
       tag.className = 'eb-block-type-tag';
@@ -2069,9 +2230,14 @@
                             <button type="button" class="toolbar-button" data-post-cmd="list" data-style="bullet" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="list" data-style="ordered" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="list" data-style="checklist" title="Чек-лист"><i class="fas fa-check-square"></i></button>
-                            <button type="button" class="toolbar-button" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
                           </div>
                           <span class="toolbar-group-label">списки</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">цитата</span>
                         </div>
                       </div>
                       <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>

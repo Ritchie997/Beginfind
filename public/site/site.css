@@ -2992,15 +2992,48 @@
     font-weight: 700;
 }
 
-.alltell-post-h2,
-.alltell-post-h3,
-.alltell-post-h4 {
-    margin: 14px 0 6px;
+.alltell-post-h1,
+.alltell-post-body h1,
+.preview-pane h1 {
+    font-size: 1.68em;
     font-weight: 700;
+    line-height: 1.3;
+    margin: 18px 0 8px;
     color: var(--header-primary, #fff);
-    font-size: 15.5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 6px;
+}
+
+.alltell-post-h2,
+.alltell-post-body h2,
+.preview-pane h2 {
+    font-size: 1.36em;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 16px 0 6px;
+    color: var(--header-primary, #fff);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 4px;
+}
+
+.alltell-post-h3,
+.alltell-post-body h3,
+.preview-pane h3 {
+    font-size: 1.16em;
+    font-weight: 700;
+    line-height: 1.4;
+    margin: 12px 0 4px;
+    color: var(--header-primary, #fff);
+}
+
+.alltell-post-h4,
+.alltell-post-body h4,
+.preview-pane h4 {
+    font-size: 1.05em;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 10px 0 4px;
+    color: var(--header-secondary, #cbd5e1);
 }
 
 .alltell-post-divider {
@@ -4195,14 +4228,18 @@
 .alltell-post-editor-view .editor-panes {
     min-height: 240px;
     background: #141518;
+    display: flex;
+    overflow: hidden;
 }
 
 .alltell-post-editor-view .editor-pane {
     min-height: 240px;
     max-height: 560px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .alltell-post-editor-view .preview-pane {
@@ -4211,6 +4248,39 @@
     padding: 16px 20px;
     background: rgba(18, 19, 22, 0.45);
     overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="split"] .editor-pane,
+.alltell-post-editor-view .editor-panes[data-mode="split"] .preview-pane {
+    flex: 1 1 50%;
+    min-width: 0;
+    max-width: 50%;
+    overflow-x: hidden;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="edit"] .editor-pane {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="edit"] .preview-pane {
+    display: none;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="preview"] .preview-pane {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    display: block;
+}
+
+.alltell-post-editor-view .editor-panes[data-mode="preview"] .editor-pane {
+    display: none;
 }
 
 .alltell-post-editor-view .eb-blocklist {
@@ -4219,9 +4289,17 @@
 }
 
 .alltell-post-editor-view .eb-block {
-    min-height: 38px;
-    padding: 6px 10px 6px 36px;
+    min-height: 86px;
+    padding: 8px 10px 8px 36px;
     border-radius: 6px;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.alltell-post-editor-view .eb-block.eb-quote,
+.eb-block.eb-quote {
+    border-left: 3px solid #818cf8;
+    padding-left: 36px;
 }
 
 .alltell-post-editor-view .eb-block:hover,
@@ -4230,20 +4308,109 @@
     background: rgba(255, 255, 255, 0.03);
 }
 
+.alltell-post-editor-view .eb-block.eb-dragging {
+    opacity: 0.35;
+}
+
+.alltell-post-editor-view .eb-block.eb-drop-target-above {
+    border-top: 2px solid #6366f1 !important;
+}
+
+.alltell-post-editor-view .eb-block.eb-drop-target-below {
+    border-bottom: 2px solid #6366f1 !important;
+}
+
 .alltell-post-editor-view .eb-block-controls {
-    top: 6px;
+    position: absolute;
+    top: 8px;
     left: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity .12s;
+    z-index: 2;
+}
+
+.alltell-post-editor-view .eb-block:hover .eb-block-controls,
+.alltell-post-editor-view .eb-block:focus-within .eb-block-controls {
+    opacity: 1;
 }
 
 .alltell-post-editor-view .eb-block-controls button {
-    width: 22px;
+    width: 24px;
     height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
     font-size: 11px;
+}
+
+.alltell-post-editor-view .eb-block-controls button:hover {
+    background: var(--background-accent);
+    color: var(--text-normal);
+}
+
+.alltell-post-editor-view .eb-block-controls button.eb-remove:hover {
+    color: var(--red, #ed4245);
+}
+
+.alltell-post-editor-view .eb-block-controls button.eb-drag-handle {
+    cursor: grab;
+}
+
+.alltell-post-editor-view .eb-block-controls button.eb-drag-handle:active {
+    cursor: grabbing;
 }
 
 .alltell-post-editor-view .eb-block-type-tag {
     top: 6px;
     right: 8px;
+}
+
+/* Выпадающее меню позиции блока при клике на ручку перемещения */
+.eb-block-action-menu {
+    position: fixed;
+    z-index: 10003;
+    background: #1e1f22;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 130px;
+}
+
+.eb-block-action-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-normal, #dbdee1);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+}
+
+.eb-block-action-menu button:hover:not(:disabled) {
+    background: var(--background-accent, rgba(255, 255, 255, 0.08));
+    color: #fff;
+}
+
+.eb-block-action-menu button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 .alltell-post-editor-view .toolbar-fade {
@@ -4308,12 +4475,36 @@
     font-weight: 500;
 }
 
+.alltell-checklist,
+.alltell-post-ol,
+.alltell-post-ul {
+    margin: 8px 0 12px;
+    padding-left: 24px;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.alltell-checklist {
+    list-style: none;
+    padding-left: 0;
+}
+
 .alltell-checklist-item {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
     gap: 8px;
     margin: 4px 0;
     line-height: 1.5;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.alltell-checklist-item input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-top: 3px;
+    cursor: pointer;
 }
 
 .alltell-checklist-item i {
@@ -4327,9 +4518,41 @@
     color: #818cf8;
 }
 
+.alltell-checklist-item span {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
 .alltell-checklist-item.is-checked span {
     text-decoration: line-through;
     opacity: 0.7;
+}
+
+.alltell-post-ol li,
+.alltell-post-ul li {
+    margin: 4px 0;
+    line-height: 1.5;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.alltell-post-bullet {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 3px 0;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.alltell-post-bullet > span:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .alltell-post-bullet.alltell-post-ordered .alltell-bullet-num {
