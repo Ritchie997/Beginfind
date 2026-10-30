@@ -201,9 +201,10 @@ async function runCleanupNow() {
         return;
     }
 
-    const confirmed = confirm(
+    const confirmed = await window.showConfirm(
         `Будет безвозвратно удалено ${preview.totalCount} файл(ов) ` +
-        `(${formatCleanupBytes(preview.totalBytes)}).\n\nПродолжить?`
+        `(${formatCleanupBytes(preview.totalBytes)}).\n\nПродолжить?`,
+        { title: 'Очистка диска', confirmLabel: 'Удалить файлы', danger: true }
     );
     if (!confirmed) return;
 

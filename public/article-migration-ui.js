@@ -105,9 +105,9 @@ async function runArticleMigration() {
         return;
     }
 
-    const confirmed = confirm(
-        `Будет переписано статей: ${preview.changed} из ${preview.total}.\n` +
-        'Оригиналы сохранятся в backups/articles-migration/.\n\nПродолжить?'
+    const confirmed = await window.showConfirm(
+        `Будет переписано статей: ${preview.changed} из ${preview.total}.\nОригиналы сохранятся в backups/articles-migration/.\n\nПродолжить?`,
+        { title: 'Миграция статей', confirmLabel: 'Запустить', danger: false }
     );
     if (!confirmed) return;
 

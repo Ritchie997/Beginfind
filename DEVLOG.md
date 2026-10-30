@@ -7,6 +7,14 @@
 
 ## 2026-10-30 — перенос создания и управления франшизами из админ-панели на публичную основу AllTell
 
+- Единая система модальных диалогов (Confirm / Alert / Prompt) и всплывающих уведомлений (Toast):
+  - Централизация в `public/confirm-dialog.js`:
+    - Модуль объединён с `ToastManager`: предоставлен глобальный API `window.showMessage(text, type, duration)`, `window.showToast` и `window.toast.{success, error, warning, info}` для всего сайта.
+    - Всплывающие уведомления получили семантические иконки FontAwesome (успех, ошибка, предупреждение, инфо), кнопку закрытия, клик для скрытия, анимацию `bounceIn` и адаптивность под мобильные устройства.
+    - Перехват нативного `window.alert`: любые вызовы `alert(...)` заменяются неблокирующей модалкой AllTell или тостом вместо белого системного окна ОС.
+  - Замена нативных `confirm()` на `window.showConfirm(...)` в `public/spa-router.js`, `public/stickers-manager.js`, `public/backup-ui.js`, `public/cleanup-ui.js` и `public/article-migration-ui.js`.
+  - В `public/app.js` и `public/site/alltell-client.js` локальные реализации тостов переведены на единый `window.toast`.
+
 - Унификация модального окна «Магазин наборов стикеров» (Sticker Store):
   - Модуль `public/sticker-store.js` переведён в единый независимый компонент для всех страниц (Admin SPA, Antropedia, AllTell, Галерея, Профиль, Главная):
     - Добавлена поддержка автономных API-запросов (с fallback при отсутствии глобального `apiClient`), безопасное уведомление об ошибках (`notify`), обработка нажатия клавиши `Escape` и клика по подложке.

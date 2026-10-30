@@ -1,21 +1,132 @@
-// confirm-dialog.js — общая модалка подтверждения, ввода и уведомлений
-// вместо браузерных window.confirm(), window.prompt() и window.alert().
-// Неблокирующий, оформленный в едином стиле приложения попап (.modal-overlay/.modal-box),
-// лениво создаётся при первом обращении и переиспользуется на любых страницах.
+// confirm-dialog.js — Единая система модальных диалогов (подтверждение, ввод,
+// выбор, предупреждения) и всплывающих уведомлений (toast) для всего сайта
+// AllTell (SPA, Antropedia, AllTell, Галерея, Профиль).
 
 (function () {
   'use strict';
+
+  // ========================================================
+  // 1. ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOAST MANAGER)
+  // ========================================================
+
+  class ToastManager {
+    constructor() {
+      this._container = null;
+    }
+
+    ensureContainer() {
+      if (this._container && document.body.contains(this._container)) {
+        return this._container;
+      }
+      let container = document.getElementById('global-toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'global-toast-container';
+        container.className = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('role', 'region');
+        container.setAttribute('aria-label', 'Всплывающие уведомления');
+        document.body.appendChild(container);
+      }
+      this._container = container;
+      return container;
+    }
+
+    show(text, type = 'info', duration = 4000) {
+      if (text == null || text === '') return () => {};
+      const container = this.ensureContainer();
+
+      const toast = document.createElement('div');
+      const normalizedType = ['error', 'success', 'warning', 'info'].includes(type) ? type : 'info';
+      toast.className = `toast toast-${normalizedType}`;
+      toast.setAttribute('role', normalizedType === 'error' ? 'alert' : 'status');
+
+      const iconClass = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-exclamation',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info'
+      }[normalizedType] || 'fa-circle-info';
+
+      const icon = document.createElement('i');
+      icon.className = `fas ${iconClass}`;
+      icon.setAttribute('aria-hidden', 'true');
+      icon.style.cssText = 'flex-shrink: 0; font-size: 16px;';
+
+      const msgSpan = document.createElement('span');
+      msgSpan.style.cssText = 'flex: 1; line-height: 1.4; word-break: break-word;';
+      msgSpan.textContent = String(text);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', 'Закрыть');
+      closeBtn.style.cssText = 'background:none;border:none;color:currentColor;opacity:0.65;cursor:pointer;font-size:18px;line-height:1;padding:0 0 0 8px;margin-left:auto;display:flex;align-items:center;';
+      closeBtn.innerHTML = '&times;';
+
+      toast.appendChild(icon);
+      toast.appendChild(msgSpan);
+      toast.appendChild(closeBtn);
+
+      let timer = null;
+      let dismissed = false;
+
+      const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        if (timer) clearTimeout(timer);
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-6px)';
+        toast.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+        setTimeout(() => toast.remove(), 240);
+      };
+
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismiss();
+      });
+
+      toast.addEventListener('click', dismiss);
+
+      container.appendChild(toast);
+
+      if (duration && duration > 0) {
+        timer = setTimeout(dismiss, duration);
+      }
+
+      return dismiss;
+    }
+
+    success(text, duration) { return this.show(text, 'success', duration); }
+    error(text, duration) { return this.show(text, 'error', duration); }
+    warning(text, duration) { return this.show(text, 'warning', duration); }
+    info(text, duration) { return this.show(text, 'info', duration); }
+  }
+
+  // ========================================================
+  // 2. МОДАЛЬНЫЙ ДИАЛОГ (CONFIRM / ALERT / PROMPT / CHOOSE)
+  // ========================================================
 
   class ConfirmDialog {
     constructor() {
       this._els = null;
       this._resolve = null;
-      this._hist = null; // id записи в window.modalHistory, пока окно открыто
+      this._hist = null;
       this._mode = 'confirm';
     }
 
     ensureModal() {
       if (this._els) return this._els;
+
+      if (!document.getElementById('confirmDialogStyles')) {
+        const style = document.createElement('style');
+        style.id = 'confirmDialogStyles';
+        style.textContent = `
+          #confirmDialogModal { z-index: 2100; }
+          #confirmDialogModal .modal-body { word-break: break-word; }
+          #confirmDialogModal .modal-footer { gap: 10px; }
+        `;
+        document.head.appendChild(style);
+      }
 
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -84,7 +195,15 @@
         if (btn) finish(btn.dataset.choice);
       });
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !overlay.hidden) { e.stopPropagation(); cancel(); }
+        if (!overlay.hidden) {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            cancel();
+          } else if (e.key === 'Enter' && this._mode === 'alert') {
+            e.stopPropagation();
+            finish();
+          }
+        }
       }, true);
 
       this._els = {
@@ -102,7 +221,7 @@
     }
 
     _show() {
-      const els = this._els;
+      const els = this.ensureModal();
       els.overlay.hidden = false;
       if (!this._hist && window.modalHistory) {
         this._hist = window.modalHistory.open(() => els.cancel({ fromHistory: true }));
@@ -239,9 +358,23 @@
     }
   }
 
+  // ========================================================
+  // 3. ИНИЦИАЛИЗАЦИЯ И ГЛОБАЛЬНЫЙ API
+  // ========================================================
+
+  window.toast = new ToastManager();
+  window.showMessage = function (text, type = 'info', duration = 4000) {
+    return window.toast.show(text, type, duration);
+  };
+  window.showToast = function (text, typeOrIsError = 'info', duration = 4000) {
+    const type = typeof typeOrIsError === 'boolean'
+      ? (typeOrIsError ? 'error' : 'success')
+      : (typeOrIsError || 'info');
+    return window.toast.show(text, type, duration);
+  };
+
   window.confirmDialog = new ConfirmDialog();
 
-  // Глобальные хелперы
   window.showConfirm = function (optsOrMessage, extraOpts) {
     if (typeof optsOrMessage === 'string') {
       return window.confirmDialog.open({ message: optsOrMessage, ...(extraOpts || {}) });
@@ -261,5 +394,20 @@
       return window.confirmDialog.alert({ message: optsOrMessage, ...(extraOpts || {}) });
     }
     return window.confirmDialog.alert(optsOrMessage);
+  };
+
+  // Перехват window.alert: заменяем нативное блокирующее белое окно ОС на красивую модалку AllTell
+  const _nativeAlert = window.alert;
+  window.alert = function (message) {
+    if (window.confirmDialog) {
+      window.confirmDialog.alert({
+        title: 'Уведомление',
+        message: String(message ?? ''),
+        confirmLabel: 'Понятно',
+        variant: 'primary'
+      });
+    } else {
+      _nativeAlert?.call(window, message);
+    }
   };
 })();

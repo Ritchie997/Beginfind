@@ -3429,6 +3429,10 @@
     };
 
     function showToast(message) {
+      if (typeof window.showMessage === 'function') {
+        window.showMessage(message, 'success');
+        return;
+      }
       var previous = document.querySelector('.alltell-toast');
       if (previous) previous.remove();
       var toast = document.createElement('div');

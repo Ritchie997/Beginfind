@@ -1,40 +1,23 @@
 // app.js - Global application functions and utilities
 
 // Global shared functions
-window.showMessage = function(text, type = 'info') {
-  // Remove any existing message containers
-  const existingMessage = document.getElementById('message-container');
-  if (existingMessage) {
-    existingMessage.remove();
+function showMessage(text, type = 'info', duration = 4000) {
+  if (window.toast && typeof window.toast.show === 'function') {
+    return window.toast.show(text, type, duration);
   }
-
-  // Общий компонент тоста (.toast/.toast-success/.toast-error/.toast-info) —
-  // см. "TOAST COMPONENT" в global-styles.css, тот же, что и у
-  // showUsersToast/showPendingToast (spa-router.js). Раньше цвет собирался
-  // через style.cssText с зашитым hex (#dc3545/#28a745/#007bff). Этот тост —
-  // сам себе контейнер (создаётся и удаляется точечно, а не копится в общем
-  // .toast-container), поэтому позиционирование остаётся инлайном.
+  const existingMessage = document.getElementById('message-container');
+  if (existingMessage) existingMessage.remove();
   const messageContainer = document.createElement('div');
   messageContainer.id = 'message-container';
   messageContainer.className = `toast toast-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}`;
-  messageContainer.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 10001;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  `;
+  messageContainer.style.cssText = `position:fixed;top:20px;right:20px;z-index:10001;font-family:inherit;`;
   messageContainer.textContent = text;
-
   document.body.appendChild(messageContainer);
-
-  // Remove message after 5 seconds
   setTimeout(() => {
-    if (messageContainer.parentNode) {
-      messageContainer.remove();
-    }
-  }, 5000);
-};
+    if (messageContainer.parentNode) messageContainer.remove();
+  }, duration || 4000);
+}
+window.showMessage = showMessage;
 
 // ===== Аватарки пользователей =====
 // Оригинал лежит в /uploads/avatar/<id>.<ext>; URL поля avatar/authorAvatar

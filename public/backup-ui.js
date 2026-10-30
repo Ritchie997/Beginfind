@@ -223,7 +223,11 @@ async function downloadBackup(fileName) {
 }
 
 async function restoreBackup(fileName) {
-    if (!confirm(`Вы уверены, что хотите восстановить данные из бэкапа "${fileName}"?\n\nБазы данных и настройки будут заменены целиком, статьи и загруженные файлы (в том числе стикеры) — перезаписаны поверх текущих.\nЭто действие перезапишет текущие данные!`)) {
+    const confirmed = await window.showConfirm(
+        `Вы уверены, что хотите восстановить данные из бэкапа "${fileName}"?\n\nБазы данных и настройки будут заменены целиком, статьи и загруженные файлы (в том числе стикеры) — перезаписаны поверх текущих.\nЭто действие перезапишет текущие данные!`,
+        { title: 'Восстановить бэкап?', confirmLabel: 'Восстановить', danger: true }
+    );
+    if (!confirmed) {
         return;
     }
 
@@ -259,7 +263,12 @@ async function restoreBackup(fileName) {
 }
 
 async function deleteBackup(fileName) {
-    if (!confirm(`Вы уверены, что хотите удалить бэкап "${fileName}"?`)) {
+    const confirmed = await window.showConfirm(`Вы уверены, что хотите удалить бэкап "${fileName}"?`, {
+        title: 'Удалить бэкап?',
+        confirmLabel: 'Удалить',
+        danger: true
+    });
+    if (!confirmed) {
         return;
     }
 

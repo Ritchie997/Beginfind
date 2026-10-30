@@ -419,7 +419,8 @@
     }
 
     async acceptCollab(requestId, proposerName) {
-      if (!confirm(`Принять предложение? Стикеры пользователя ${proposerName} добавятся в ваш набор, а он станет соавтором.`)) return;
+      const ok = await window.showConfirm(`Принять предложение? Стикеры пользователя ${proposerName} добавятся в ваш набор, а он станет соавтором.`, { title: 'Принять предложение?', confirmLabel: 'Принять', danger: false });
+      if (!ok) return;
       try {
         const result = await window.apiClient.acceptStickerCollab(requestId);
         if (!result.success) {
@@ -434,7 +435,8 @@
     }
 
     async declineCollab(requestId, proposerName) {
-      if (!confirm(`Отклонить предложение? Стикеры пользователя ${proposerName} будут удалены, набор не изменится.`)) return;
+      const ok = await window.showConfirm(`Отклонить предложение? Стикеры пользователя ${proposerName} будут удалены, набор не изменится.`, { title: 'Отклонить предложение?', confirmLabel: 'Отклонить', danger: true });
+      if (!ok) return;
       try {
         const result = await window.apiClient.declineStickerCollab(requestId);
         if (!result.success) {
@@ -449,7 +451,8 @@
     }
 
     async cancelCollabRequest(requestId) {
-      if (!confirm('Отозвать предложение? Добавленные вами стикеры будут удалены.')) return;
+      const ok = await window.showConfirm('Отозвать предложение? Добавленные вами стикеры будут удалены.', { title: 'Отозвать предложение?', confirmLabel: 'Отозвать', danger: true });
+      if (!ok) return;
       try {
         const result = await window.apiClient.cancelStickerCollab(requestId);
         if (!result.success) {
@@ -545,7 +548,8 @@
 
       box.querySelector('#stickersCollabCancelBtn')?.addEventListener('click', async () => {
         if (!collab) return;
-        if (!confirm('Отозвать предложение? Добавленные вами стикеры будут удалены.')) return;
+        const ok = await window.showConfirm('Отозвать предложение? Добавленные вами стикеры будут удалены.', { title: 'Отозвать предложение?', confirmLabel: 'Отозвать', danger: true });
+        if (!ok) return;
         try {
           const result = await window.apiClient.cancelStickerCollab(collab.id);
           if (!result.success) {
@@ -916,7 +920,8 @@
     }
 
     async removeSticker(stickerId) {
-      if (!confirm('Удалить этот стикер из набора?')) return;
+      const ok = await window.showConfirm('Удалить этот стикер из набора?', { title: 'Удалить стикер?', confirmLabel: 'Удалить', danger: true });
+      if (!ok) return;
       try {
         const result = await window.apiClient.deleteSticker(stickerId);
         if (!result.success) {
@@ -1009,7 +1014,8 @@
     }
 
     async deletePack() {
-      if (!confirm(`Удалить набор «${this.currentPack.title}» вместе со всеми стикерами? Это необратимо.`)) return;
+      const ok = await window.showConfirm(`Удалить набор «${this.currentPack.title}» вместе со всеми стикерами? Это необратимо.`, { title: 'Удалить набор?', confirmLabel: 'Удалить', danger: true });
+      if (!ok) return;
       try {
         const result = await window.apiClient.deleteStickerPack(this.currentPack.id);
         if (!result.success) {

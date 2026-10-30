@@ -5270,7 +5270,8 @@ class SPARouter {
     const member = (this.currentServerData?.members || []).find(m => m.id === userId);
     const label = member ? member.display_name : `ID ${userId}`;
     const isSelf = (authManager.getUser() || {}).id === userId;
-    if (!confirm(isSelf ? 'Покинуть этот сервер?' : `Удалить участника «${label}» с сервера?`)) return;
+    const ok = await window.showConfirm(isSelf ? 'Покинуть этот сервер?' : `Удалить участника «${label}» с сервера?`, { title: isSelf ? 'Покинуть сервер?' : 'Удалить участника?', confirmLabel: isSelf ? 'Покинуть' : 'Удалить', danger: true });
+    if (!ok) return;
 
     try {
       const result = await apiClient.removeServerUser(this.currentServerId, userId);
@@ -5450,7 +5451,8 @@ class SPARouter {
   async deleteServerRole(roleId) {
     const role = (this.currentServerData?.roles || []).find(r => r.id === roleId);
     const roleName = role ? role.name : `#${roleId}`;
-    if (!confirm(`Удалить роль «${roleName}»? Действие необратимо.`)) return;
+    const ok = await window.showConfirm(`Удалить роль «${roleName}»? Действие необратимо.`, { title: 'Удалить роль?', confirmLabel: 'Удалить', danger: true });
+    if (!ok) return;
 
     try {
       const result = await apiClient.deleteServerRole(this.currentServerId, roleId);
@@ -5546,7 +5548,8 @@ class SPARouter {
 
   async deleteServerChannel(channelId) {
     const channel = (this.currentServerData?.channels || []).find(c => c.id === channelId);
-    if (!confirm(`Удалить канал «${channel ? channel.name : '#' + channelId}»?`)) return;
+    const ok = await window.showConfirm(`Удалить канал «${channel ? channel.name : '#' + channelId}»?`, { title: 'Удалить канал?', confirmLabel: 'Удалить', danger: true });
+    if (!ok) return;
 
     try {
       const result = await apiClient.deleteServerChannel(this.currentServerId, channelId);
@@ -5765,7 +5768,8 @@ class SPARouter {
   }
 
   async resetSettings() {
-    if (!confirm('Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?')) return;
+    const ok = await window.showConfirm('Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?', { title: 'Сбросить настройки?', confirmLabel: 'Сбросить', danger: true });
+    if (!ok) return;
 
     try {
       const res = await fetch('/api/system-settings', {
@@ -7153,7 +7157,10 @@ SPARouter.prototype.unmuteUser = async function(userId, userName) {
 };
 
 SPARouter.prototype.setRoleManager = async function(userId, userName, enabled) {
-  if (enabled && !confirm(`Сделать «${userName}» доверенным администратором? Он сможет редактировать каталог ролей (создавать/переименовывать роли, включать/выключать им права). Этот статус уникален — если он уже был у кого-то другого, тот его потеряет.`)) return;
+  if (enabled) {
+    const ok = await window.showConfirm(`Сделать «${userName}» доверенным администратором? Он сможет редактировать каталог ролей (создавать/переименовывать роли, включать/выключать им права). Этот статус уникален — если он уже был у кого-то другого, тот его потеряет.`, { title: 'Назначить администратором?', confirmLabel: 'Назначить', danger: false });
+    if (!ok) return;
+  }
   try {
     const res = await fetch(`/api/users/${userId}/role-manager`, {
       method: 'PUT',
@@ -7276,7 +7283,8 @@ SPARouter.prototype.showRoleEditorModal = function(role) {
 };
 
 SPARouter.prototype.deleteRole = async function(roleId, roleName) {
-  if (!confirm(`Удалить роль «${roleName}»? Действие необратимо. Роль нельзя удалить, пока она кому-то назначена.`)) return;
+  const ok = await window.showConfirm(`Удалить роль «${roleName}»? Действие необратимо. Роль нельзя удалить, пока она кому-то назначена.`, { title: 'Удалить роль?', confirmLabel: 'Удалить', danger: true });
+  if (!ok) return;
   try {
     const res = await fetch(`/api/admin-roles/${roleId}`, { method: 'DELETE' });
     const data = await res.json();
@@ -7482,7 +7490,8 @@ SPARouter.prototype.setupProfileAvatar = function(profile) {
     }
   };
   removeBtn.onclick = async () => {
-    if (!confirm('Убрать аватарку?')) return;
+    const ok = await window.showConfirm('Убрать аватарку?', { title: 'Убрать аватарку?', confirmLabel: 'Убрать', danger: true });
+    if (!ok) return;
     const result = await apiClient.deleteAvatar();
     if (!result.success) {
       showMessage(result.data?.error || result.error || 'Не удалось убрать аватарку', 'error');
