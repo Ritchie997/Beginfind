@@ -3345,6 +3345,8 @@
       state.detail = null;
       state.postSocial = {};
       state.error = '';
+      state.expandedCardKey = null;
+      state.expandedHubs.clear();
       root.innerHTML = '<p class="alltell-state">Загружаем франшизу…</p>';
       try {
         state.detail = await request('/api/public/franchises/' + encodeURIComponent(franchiseId));
@@ -3969,11 +3971,12 @@
         return;
       }
       if (event.target.matches('[data-action="toggle-hub-public"]')) {
-        var hubId = event.target.dataset.hubId;
-        var fId = event.target.dataset.franchiseId || (state.detail && state.detail.franchise ? state.detail.franchise.id : null);
+        var checkbox = event.target;
+        var hubId = checkbox.dataset.hubId;
+        var fId = checkbox.dataset.franchiseId || (state.detail && state.detail.franchise ? state.detail.franchise.id : null);
         if (!fId || !hubId) return;
-        var isPublic = event.target.checked;
-        event.target.disabled = true;
+        var isPublic = checkbox.checked;
+        checkbox.disabled = true;
         request('/api/servers/' + fId + '/hubs/' + hubId + '/visibility', 'PUT', { is_public: isPublic }).then(function () {
           showToast(isPublic ? 'Хаб теперь публичный' : 'Хаб теперь скрытый');
           if (state.workspaceData && state.workspaceData.hubs) {
@@ -3989,14 +3992,31 @@
             var h3 = cached && cached.find(function (x) { return String(x.id) === String(hubId); });
             if (h3) h3.is_public = isPublic ? 1 : 0;
           }
-          if (state.view === 'franchise' && state.detail) {
-            renderDetail(root, state);
-          } else {
-            renderCatalog(root, state);
-          }
+          // Обновляем состояние чекбоксов и классов в DOM точечно, без перезагрузки всей страницы
+          root.querySelectorAll('[data-action="toggle-hub-public"][data-hub-id="' + hubId + '"]').forEach(function (el) {
+            el.checked = isPublic;
+            el.disabled = false;
+            var label = el.closest('.alltell-hub-pub-check, .alltell-hub-pub-toggle');
+            if (label) {
+              label.classList.toggle('is-pub', isPublic);
+              label.classList.toggle('is-priv', !isPublic);
+              label.title = isPublic ? 'Публичный хаб (виден всем). Нажмите, чтобы скрыть' : 'Скрытый хаб (виден только участникам). Нажмите, чтобы опубликовать';
+              var span = label.querySelector('span');
+              if (span && !label.classList.contains('alltell-hub-pub-check')) {
+                span.textContent = isPublic ? 'Публичный' : 'Скрытый';
+              }
+            }
+          });
         }).catch(function (err) {
-          event.target.checked = !isPublic;
-          event.target.disabled = false;
+          root.querySelectorAll('[data-action="toggle-hub-public"][data-hub-id="' + hubId + '"]').forEach(function (el) {
+            el.checked = !isPublic;
+            el.disabled = false;
+            var label = el.closest('.alltell-hub-pub-check, .alltell-hub-pub-toggle');
+            if (label) {
+              label.classList.toggle('is-pub', !isPublic);
+              label.classList.toggle('is-priv', isPublic);
+            }
+          });
           notifyError(err.message);
         });
         return;
@@ -4153,7 +4173,7 @@
       var flyoutToggle = event.target.closest('[data-action="toggle-hub-preview"]');
       var flyoutBox = event.target.closest('.alltell-card-hubs-flyout');
       var hubInfoBtn = event.target.closest('[data-action="open-hub-info"]');
-      if (!flyoutToggle && !flyoutBox && !hubInfoBtn && (state.expandedCardKey || (state.expandedHubs && state.expandedHubs.size > 0))) {
+      if (!state.detail && !flyoutToggle && !flyoutBox && !hubInfoBtn && (state.expandedCardKey || (state.expandedHubs && state.expandedHubs.size > 0))) {
         state.expandedCardKey = null;
         state.expandedHubs.clear();
         renderCatalog(root, state);
