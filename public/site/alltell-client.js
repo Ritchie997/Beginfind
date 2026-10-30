@@ -919,9 +919,9 @@
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
     var canEdit = canManage || post.can_edit;
     var images = extractPostImages(post);
-    var articleHref = post.article && (post.article.is_public
-      ? '/antropedia/' + encodeURIComponent(post.article.slug)
-      : '/admin-panel/antropedia/' + encodeURIComponent(post.article.slug));
+    var postArticles = Array.isArray(post.articles) && post.articles.length
+      ? post.articles
+      : (post.article ? [post.article] : []);
 
     return `
       <article class="alltell-post-card" data-post-id="${Number(post.id)}">
@@ -977,15 +977,24 @@
 
         ${post.body ? `<div class="alltell-post-body">${escapeHtml(post.body)}</div>` : ''}
 
-        ${post.article && articleHref ? `
-          <a class="alltell-post-article-card" href="${escapeHtml(articleHref)}">
-            <div class="alltell-article-icon"><i class="fas fa-book-bookmark" aria-hidden="true"></i></div>
-            <div class="alltell-article-details">
-              <span class="alltell-article-tag">Статья в Antropedia</span>
-              <strong class="alltell-article-title">${escapeHtml(post.article.title)}</strong>
-            </div>
-            <i class="fas fa-arrow-up-right-from-square alltell-article-arrow" aria-hidden="true"></i>
-          </a>
+        ${postArticles.length ? `
+          <div class="alltell-post-articles-list">
+            ${postArticles.map(function (art) {
+              var href = art.is_public
+                ? '/antropedia/' + encodeURIComponent(art.slug)
+                : '/admin-panel/antropedia/' + encodeURIComponent(art.slug);
+              return `
+                <a class="alltell-post-article-card" href="${escapeHtml(href)}">
+                  <div class="alltell-article-icon"><i class="fas fa-book-bookmark" aria-hidden="true"></i></div>
+                  <div class="alltell-article-details">
+                    <span class="alltell-article-tag">Статья в Antropedia</span>
+                    <strong class="alltell-article-title">${escapeHtml(art.title || art.slug)}</strong>
+                  </div>
+                  <i class="fas fa-arrow-up-right-from-square alltell-article-arrow" aria-hidden="true"></i>
+                </a>
+              `;
+            }).join('')}
+          </div>
         ` : ''}
 
         ${canEdit || (canManage && post.approval_status === 'pending') ? `
@@ -1039,14 +1048,28 @@
     }).join('');
   }
 
+  function renderSelectedArticleChips(articles) {
+    if (!articles || !articles.length) return '';
+    return articles.map(function (art) {
+      return `
+        <span class="alltell-article-tag-chip" data-slug="${escapeHtml(art.slug)}">
+          <i class="fas fa-book-bookmark" aria-hidden="true"></i>
+          <span class="alltell-article-tag-title" title="${escapeHtml(art.title || art.slug)}">${escapeHtml(art.title || art.slug)}</span>
+          <button type="button" class="alltell-article-tag-remove" data-action="remove-article-tag" data-slug="${escapeHtml(art.slug)}" title="Удалить из выбранных" aria-label="Удалить статью">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </span>
+      `;
+    }).join('');
+  }
+
   function renderPostForm(state, hubs, canManage) {
     var post = state.editingPost;
     var images = state.postImages || [];
     var hubOptions = hubs.map(function (hub) {
       return `<option value="${Number(hub.id)}" ${post && Number(post.hub_id) === Number(hub.id) ? 'selected' : ''}>${escapeHtml(hub.name)}</option>`;
     }).join('');
-    var article = post && post.article;
-    var articleTitle = article ? article.title : '';
+    var postArticles = state.postArticles || [];
     return `
       <form class="alltell-post-form" data-post-form>
         <div class="alltell-form-header">
@@ -1096,14 +1119,31 @@
         </label>
 
         <div class="alltell-form-grid">
-          <label class="alltell-field">
-            <span class="alltell-field-label">Связанная статья Antropedia</span>
-            <div class="alltell-search-input-wrap">
-              <input name="article_search" type="search" autocomplete="off" value="${escapeHtml(articleTitle)}" placeholder="Начните вводить название статьи…" data-article-search>
-              <input name="article_slug" type="hidden" value="${escapeHtml(article ? article.slug : '')}" data-article-slug>
+          <div class="alltell-field alltell-article-picker-field">
+            <div class="alltell-article-picker-header">
+              <span class="alltell-field-label">Связанные статьи Antropedia</span>
+              <span class="alltell-article-picker-counter" data-article-count>${postArticles.length ? postArticles.length + ' выбрано' : 'Не выбрано'}</span>
+            </div>
+            <div class="alltell-article-picker-box" data-article-picker-box>
+              <div class="alltell-selected-articles" data-selected-articles>
+                ${renderSelectedArticleChips(postArticles)}
+              </div>
+              <div class="alltell-article-input-wrap">
+                <i class="fas fa-search alltell-article-search-icon" aria-hidden="true"></i>
+                <input name="article_search"
+                       type="text"
+                       class="alltell-article-search-input"
+                       autocomplete="off"
+                       value=""
+                       placeholder="${postArticles.length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…'}"
+                       data-article-search>
+                <button type="button" class="alltell-article-search-clear" data-action="clear-article-search" title="Очистить поиск" hidden>
+                  <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
+              </div>
             </div>
             <div class="alltell-article-options" data-article-options hidden></div>
-          </label>
+          </div>
 
           <div class="alltell-post-image-editor" data-image-drop>
             <div class="alltell-image-editor-heading">
@@ -2151,6 +2191,7 @@
       stickerPacks: null,
       favoriteStickers: null,
       postImages: [],
+      postArticles: [],
       uploadingImages: false,
       draggedImageIndex: null,
       articleIndex: [],
@@ -2191,6 +2232,47 @@
       state.postImages = images.map(function (url) {
         return { url: url, preview: url, file: null };
       });
+    }
+
+    function setPostArticles(post) {
+      if (post && Array.isArray(post.articles) && post.articles.length) {
+        state.postArticles = post.articles.map(function (art) {
+          return {
+            slug: art.slug,
+            title: art.title || art.slug,
+            is_public: art.is_public !== false
+          };
+        });
+      } else if (post && post.article) {
+        state.postArticles = [{
+          slug: post.article.slug,
+          title: post.article.title || post.article.slug,
+          is_public: post.article.is_public !== false
+        }];
+      } else {
+        state.postArticles = [];
+      }
+    }
+
+    function updateArticlePickerUI(form) {
+      if (!form) return;
+      var selectedContainer = form.querySelector('[data-selected-articles]');
+      if (selectedContainer) {
+        selectedContainer.innerHTML = renderSelectedArticleChips(state.postArticles || []);
+      }
+      var countEl = form.querySelector('[data-article-count]');
+      if (countEl) {
+        var count = (state.postArticles || []).length;
+        countEl.textContent = count ? count + ' выбрано' : 'Не выбрано';
+      }
+      var searchInput = form.querySelector('[data-article-search]');
+      if (searchInput) {
+        searchInput.placeholder = (state.postArticles || []).length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…';
+      }
+      var options = form.querySelector('[data-article-options]');
+      if (options && !options.hidden && searchInput) {
+        renderArticleOptions(searchInput);
+      }
     }
 
     function renderPostImageQueue() {
@@ -3446,13 +3528,16 @@
         renderPostImageQueue();
       }
       var imageUrls = state.postImages.map(function (image) { return image.url; }).filter(Boolean);
+      var postArticles = state.postArticles || [];
+      var articleSlugs = postArticles.map(function (a) { return a.slug; }).filter(Boolean);
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
         hub_status: formData.get('hub_id') ? formData.get('hub_status') : '',
         title: formData.get('title'),
         body: formData.get('body'),
-        article_slug: formData.get('article_slug'),
+        article_slug: articleSlugs[0] || null,
+        article_slugs: articleSlugs,
         image_urls: imageUrls
       };
       var franchiseId = state.detail.franchise.id;
@@ -3466,6 +3551,7 @@
       state.editingPost = null;
       state.showPostForm = false;
       releasePostImages();
+      state.postArticles = [];
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
         ? 'Предложение отправлено создателю франшизы'
@@ -3476,26 +3562,58 @@
       var form = input.closest('[data-post-form]');
       if (!form) return;
       var options = form.querySelector('[data-article-options]');
-      var slugInput = form.querySelector('[data-article-slug]');
+      if (!options) return;
+      var clearBtn = form.querySelector('[data-action="clear-article-search"]');
       var query = input.value.trim().toLocaleLowerCase();
-      if (!query) {
-        options.hidden = true;
-        options.replaceChildren();
-        slugInput.value = '';
-        return;
+      if (clearBtn) {
+        clearBtn.hidden = !query;
       }
-      slugInput.value = '';
-      var matches = state.articleIndex.filter(function (article) {
-        return (article.title + ' ' + article.slug).toLocaleLowerCase().includes(query);
-      }).slice(0, 15);
+      var selectedSlugs = new Set((state.postArticles || []).map(function (a) { return a.slug; }));
+      var list = state.articleIndex || [];
+      var matches = query
+        ? list.filter(function (article) {
+            return ((article.title || '') + ' ' + (article.slug || '')).toLocaleLowerCase().includes(query);
+          }).slice(0, 25)
+        : list.slice(0, 15);
+
       if (!matches.length) {
         options.innerHTML = state.articleIndexError
-          ? `<span class="alltell-article-option-empty">Не удалось загрузить список статей: ${escapeHtml(state.articleIndexError)}</span>`
-          : '<span class="alltell-article-option-empty">Доступные статьи не найдены</span>';
+          ? `<div class="alltell-article-option-empty">Не удалось загрузить статьи: ${escapeHtml(state.articleIndexError)}</div>`
+          : `<div class="alltell-article-option-empty">${query ? 'Статьи не найдены по запросу' : 'Нет доступных статей'}</div>`;
       } else {
-        options.innerHTML = matches.map(function (article) {
-          return `<button type="button" data-article-choice data-article-slug="${escapeHtml(article.slug)}" data-article-title="${escapeHtml(article.title)}">${escapeHtml(article.title)}</button>`;
-        }).join('');
+        var headerText = query ? ('Найдено совпадений: ' + matches.length) : 'Доступные статьи Antropedia';
+        options.innerHTML = `
+          <div class="alltell-article-options-header">
+            <span>${escapeHtml(headerText)}</span>
+            <span class="alltell-article-options-hint">Нажмите для выбора / отмены</span>
+          </div>
+          <div class="alltell-article-options-list">
+            ${matches.map(function (article) {
+              var isSelected = selectedSlugs.has(article.slug);
+              var tagsText = Array.isArray(article.tags) && article.tags.length
+                ? article.tags.slice(0, 2).map(function (t) { return '#' + escapeHtml(t); }).join(' ')
+                : '';
+              return `
+                <button type="button"
+                        class="alltell-article-choice-chip ${isSelected ? 'is-selected' : ''}"
+                        data-article-choice
+                        data-article-slug="${escapeHtml(article.slug)}"
+                        data-article-title="${escapeHtml(article.title || article.slug)}">
+                  <div class="alltell-article-choice-icon">
+                    <i class="fas ${isSelected ? 'fa-check' : 'fa-book-bookmark'}" aria-hidden="true"></i>
+                  </div>
+                  <div class="alltell-article-choice-info">
+                    <span class="alltell-article-choice-title">${escapeHtml(article.title || article.slug)}</span>
+                    ${tagsText ? `<span class="alltell-article-choice-tags">${tagsText}</span>` : ''}
+                  </div>
+                  <span class="alltell-article-choice-status">
+                    ${isSelected ? '<i class="fas fa-check" aria-hidden="true"></i> Выбрана' : 'Выбрать'}
+                  </span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        `;
       }
       options.hidden = false;
     }
@@ -3524,10 +3642,56 @@
       }
       var articleChoice = event.target.closest('[data-article-choice]');
       if (articleChoice) {
-        var articleForm = articleChoice.closest('[data-post-form]');
-        articleForm.querySelector('[data-article-search]').value = articleChoice.dataset.articleTitle;
-        articleForm.querySelector('[data-article-slug]').value = articleChoice.dataset.articleSlug;
-        articleForm.querySelector('[data-article-options]').hidden = true;
+        var form = articleChoice.closest('[data-post-form]');
+        var slug = articleChoice.dataset.articleSlug;
+        var title = articleChoice.dataset.articleTitle;
+        if (!slug) return;
+        state.postArticles = state.postArticles || [];
+        var existingIdx = state.postArticles.findIndex(function (a) { return a.slug === slug; });
+        if (existingIdx >= 0) {
+          state.postArticles.splice(existingIdx, 1);
+        } else {
+          var source = (state.articleIndex || []).find(function (a) { return a.slug === slug; });
+          state.postArticles.push({
+            slug: slug,
+            title: title,
+            is_public: source ? !!source.is_public : true
+          });
+        }
+        updateArticlePickerUI(form);
+        return;
+      }
+      var removeTagBtn = event.target.closest('[data-action="remove-article-tag"]');
+      if (removeTagBtn) {
+        var form = removeTagBtn.closest('[data-post-form]');
+        var slugToRemove = removeTagBtn.dataset.slug;
+        state.postArticles = (state.postArticles || []).filter(function (a) { return a.slug !== slugToRemove; });
+        updateArticlePickerUI(form);
+        return;
+      }
+      var clearSearchBtn = event.target.closest('[data-action="clear-article-search"]');
+      if (clearSearchBtn) {
+        var form = clearSearchBtn.closest('[data-post-form]');
+        var input = form && form.querySelector('[data-article-search]');
+        if (input) {
+          input.value = '';
+          input.focus();
+          renderArticleOptions(input);
+        }
+        return;
+      }
+      var searchInputEl = event.target.closest('[data-article-search]');
+      if (searchInputEl) {
+        renderArticleOptions(searchInputEl);
+        return;
+      }
+      var pickerBox = event.target.closest('[data-article-picker-box]');
+      if (pickerBox && !event.target.closest('button, input')) {
+        var input = pickerBox.querySelector('[data-article-search]');
+        if (input) {
+          input.focus();
+          renderArticleOptions(input);
+        }
         return;
       }
       var button = event.target.closest('[data-action]');
@@ -3665,7 +3829,10 @@
           notifyError(error.message);
         });
       } else if (action === 'toggle-post-form') {
+        state.editingPost = null;
         state.showPostForm = true;
+        setPostImages(null);
+        setPostArticles(null);
         renderDetail(root, state);
         root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'edit-post') {
@@ -3674,17 +3841,20 @@
         }) || null;
         state.showPostForm = true;
         setPostImages(state.editingPost);
+        setPostArticles(state.editingPost);
         renderDetail(root, state);
         root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
         state.showPostForm = false;
         releasePostImages();
+        state.postArticles = [];
         renderDetail(root, state);
       } else if (action === 'cancel-post-form') {
         state.editingPost = null;
         state.showPostForm = false;
         releasePostImages();
+        state.postArticles = [];
         renderDetail(root, state);
       } else if (action === 'move-image') {
         var imageIndex = Number(button.dataset.imageIndex);
@@ -4158,6 +4328,12 @@
     }
 
     function onDocClick(event) {
+      var pickerField = event.target.closest('.alltell-article-picker-field');
+      if (!pickerField) {
+        root.querySelectorAll('[data-article-options]').forEach(function (opt) {
+          opt.hidden = true;
+        });
+      }
       var createBtn = event.target.closest('[data-action="open-create-franchise"]');
       if (createBtn) {
         if (root && root.contains(createBtn)) return;

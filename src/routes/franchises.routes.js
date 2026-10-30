@@ -100,7 +100,14 @@ async function validatePostInput(body, franchiseId, user, canManage) {
   const type = POST_TYPES.has(body.type) ? body.type : '';
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const text = typeof body.body === 'string' ? body.body.trim() : '';
-  const articleSlug = typeof body.article_slug === 'string' ? body.article_slug.trim() : '';
+  const rawArticleSlugs = Array.isArray(body.article_slugs)
+    ? body.article_slugs
+    : (typeof body.article_slug === 'string' && body.article_slug.trim() ? [body.article_slug.trim()] : []);
+  const articleSlugs = Array.from(new Set(
+    rawArticleSlugs
+      .map((slug) => typeof slug === 'string' ? slug.trim() : '')
+      .filter(Boolean)
+  ));
   const imageUrls = Array.isArray(body.image_urls)
     ? body.image_urls.map((url) => typeof url === 'string' ? url.trim() : '')
     : (typeof body.image_url === 'string' && body.image_url.trim() ? [body.image_url.trim()] : []);
@@ -136,10 +143,10 @@ async function validatePostInput(body, franchiseId, user, canManage) {
       throw Object.assign(new Error('Загруженное изображение не найдено'), { status: 400 });
     }
   }
-  if (articleSlug) {
-    const record = articlesStore.getArticle(articleSlug);
+  for (const slug of articleSlugs) {
+    const record = articlesStore.getArticle(slug);
     if (!record || !(await articleLayers.hasArticleAccess(record, user))) {
-      throw Object.assign(new Error('Указанная статья недоступна для публикации'), { status: 400 });
+      throw Object.assign(new Error(`Указанная статья "${slug}" недоступна для публикации`), { status: 400 });
     }
   }
 
@@ -148,7 +155,8 @@ async function validatePostInput(body, franchiseId, user, canManage) {
     title,
     body: text,
     hub_id: hubId,
-    article_slug: articleSlug || null,
+    article_slug: articleSlugs[0] || null,
+    article_slugs: articleSlugs,
     image_urls: imageUrls,
     hub_status: hubId ? hubStatus || null : null,
     event_at: null
@@ -156,13 +164,33 @@ async function validatePostInput(body, franchiseId, user, canManage) {
 }
 
 async function publicPost(row, user) {
-  const articleRecord = row.article_slug ? articlesStore.getArticle(row.article_slug) : null;
-  const publicArticle = articleRecord && publicArticles.getPublicArticle(articleRecord);
-  const authorizedArticle = articleRecord && user && !publicArticle &&
-    await articleLayers.resolveArticleLayer(articleRecord, user);
-  const article = publicArticle || (authorizedArticle
-    ? { slug: articleRecord.slug, title: authorizedArticle.layer.title || articleRecord.title || articleRecord.slug }
-    : null);
+  let slugs = [];
+  if (row.article_slugs) {
+    try {
+      const parsed = JSON.parse(row.article_slugs);
+      if (Array.isArray(parsed)) {
+        slugs = parsed.map((s) => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+      }
+    } catch (_) {}
+  }
+  if (!slugs.length && row.article_slug) {
+    slugs = [row.article_slug.trim()];
+  }
+  const articles = [];
+  for (const slug of slugs) {
+    const articleRecord = articlesStore.getArticle(slug);
+    if (!articleRecord) continue;
+    const publicArticle = publicArticles.getPublicArticle(articleRecord);
+    const authorizedArticle = user && !publicArticle && (await articleLayers.resolveArticleLayer(articleRecord, user));
+    if (publicArticle || authorizedArticle) {
+      articles.push({
+        slug: articleRecord.slug,
+        title: (publicArticle && publicArticle.title) || (authorizedArticle && authorizedArticle.layer.title) || articleRecord.title || articleRecord.slug,
+        is_public: !!publicArticle
+      });
+    }
+  }
+  const article = articles[0] || null;
   return {
     id: row.id,
     hub_id: row.hub_id,
@@ -174,8 +202,10 @@ async function publicPost(row, user) {
     article: article ? {
       slug: article.slug,
       title: article.title,
-      is_public: !!publicArticle
+      is_public: !!article.is_public
     } : null,
+    articles: articles,
+    article_slugs: articles.map((a) => a.slug),
     hub_status: row.hub_status || null,
     approval_status: row.approval_status || 'published',
     can_edit: !!user && Number(row.created_by) === Number(user.id) &&
@@ -608,10 +638,11 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
     const authorName = req.user.display_name || req.user.username || `Пользователь ${req.user.id}`;
     const result = await dbRun(`
       INSERT INTO franchise_posts
-        (server_id, hub_id, type, title, body, article_slug, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (server_id, hub_id, type, title, body, article_slug, article_slugs, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug,
+      JSON.stringify(post.article_slugs),
       post.event_at, post.image_urls[0] || null, JSON.stringify(post.image_urls),
       post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
     ]);
@@ -640,13 +671,13 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
     const post = await validatePostInput(req.body, franchiseId, req.user, canManage);
     await dbRun(`
       UPDATE franchise_posts
-      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, event_at = ?,
+      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, article_slugs = ?, event_at = ?,
           image_url = ?, image_urls = ?, hub_status = ?,
           approval_status = CASE WHEN created_by = ? AND approval_status != 'published' THEN 'pending' ELSE approval_status END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
     `, [
-      post.hub_id, post.type, post.title, post.body, post.article_slug, post.event_at,
+      post.hub_id, post.type, post.title, post.body, post.article_slug, JSON.stringify(post.article_slugs), post.event_at,
       post.image_urls[0] || null, JSON.stringify(post.image_urls), post.hub_status, req.user.id, postId, franchiseId
     ]);
     res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
