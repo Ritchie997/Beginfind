@@ -4193,22 +4193,57 @@
 }
 
 .alltell-post-editor-view .editor-panes {
-    min-height: 280px;
+    min-height: 240px;
     background: #141518;
 }
 
 .alltell-post-editor-view .editor-pane {
-    min-height: 280px;
+    min-height: 240px;
+    max-height: 560px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
 }
 
 .alltell-post-editor-view .preview-pane {
-    min-height: 280px;
-    max-height: 520px;
+    min-height: 240px;
+    max-height: 560px;
     padding: 16px 20px;
     background: rgba(18, 19, 22, 0.45);
     overflow-y: auto;
+}
+
+.alltell-post-editor-view .eb-blocklist {
+    min-height: 200px;
+    padding: 12px;
+}
+
+.alltell-post-editor-view .eb-block {
+    min-height: 38px;
+    padding: 6px 10px 6px 36px;
+    border-radius: 6px;
+}
+
+.alltell-post-editor-view .eb-block:hover,
+.alltell-post-editor-view .eb-block:focus-within {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.alltell-post-editor-view .eb-block-controls {
+    top: 6px;
+    left: 4px;
+}
+
+.alltell-post-editor-view .eb-block-controls button {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+}
+
+.alltell-post-editor-view .eb-block-type-tag {
+    top: 6px;
+    right: 8px;
 }
 
 .alltell-post-editor-view .toolbar-fade {

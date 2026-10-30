@@ -958,7 +958,7 @@
     }
   }
 
-  function openPostHighlightPicker(anchorBtn, form) {
+  function openPostHighlightPicker(anchorBtn, state) {
     if (activePostHlPicker) {
       closePostHighlightPicker();
       return;
@@ -976,7 +976,7 @@
       btn.title = preset.label;
       btn.addEventListener('mousedown', function (e) {
         e.preventDefault();
-        applyPostFormat('highlight', form, { hex: preset.hex === '#faa81a' ? null : preset.hex });
+        applyPostInlineFormat('highlight', state, { hex: preset.hex === '#faa81a' ? null : preset.hex });
         closePostHighlightPicker();
       });
       swatches.appendChild(btn);
@@ -988,7 +988,7 @@
     custom.title = 'Свой цвет';
     custom.value = '#faa81a';
     custom.addEventListener('change', function () {
-      applyPostFormat('highlight', form, { hex: custom.value });
+      applyPostInlineFormat('highlight', state, { hex: custom.value });
       closePostHighlightPicker();
     });
     custom.addEventListener('mousedown', function (e) { e.stopPropagation(); });
@@ -1023,9 +1023,13 @@
       return '<div class="alltell-post-h' + hashes.length + '">' + content.trim() + '</div>';
     });
 
-    // Чек-листы
-    text = text.replace(/^[-*]\s+\[[xX]\]\s+(.+)$/gm, '<div class="alltell-checklist-item is-checked"><i class="fas fa-square-check"></i> <span>$1</span></div>');
-    text = text.replace(/^[-*]\s+\[\s*\]\s+(.+)$/gm, '<div class="alltell-checklist-item"><i class="far fa-square"></i> <span>$1</span></div>');
+    // Чек-листы (интерактивные с сохранением состояния при клике)
+    text = text.replace(/^[-*]\s+\[([xX])\]\s+(.+)$/gm, function (_, checked, content) {
+      return '<label class="alltell-checklist-item is-checked" onclick="event.stopPropagation();"><input type="checkbox" checked onchange="this.parentElement.classList.toggle(\'is-checked\', this.checked)"> <span>' + content.trim() + '</span></label>';
+    });
+    text = text.replace(/^[-*]\s+\[\s*\]\s+(.+)$/gm, function (_, content) {
+      return '<label class="alltell-checklist-item" onclick="event.stopPropagation();"><input type="checkbox" onchange="this.parentElement.classList.toggle(\'is-checked\', this.checked)"> <span>' + content.trim() + '</span></label>';
+    });
 
     // Нумерованные списки
     text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<div class="alltell-post-bullet alltell-post-ordered"><span class="alltell-bullet-num">$1.</span> <span>$2</span></div>');
@@ -1201,7 +1205,7 @@
       } else if (image.url) {
         statusHtml = '<span class="alltell-image-status is-uploaded" title="Загружено на сервер"><i class="fas fa-check"></i> Загружено</span>';
       } else if (image.file) {
-        statusHtml = '<span class="alltell-image-status is-new" title="Новое изображение (ещё не отправлено на сервер)"><i class="fas fa-cloud-arrow-up"></i> new</span>';
+        statusHtml = '<span class="alltell-image-status is-new" title="В очереди на загрузку"><i class="fas fa-clock"></i> В очереди</span>';
       }
 
       return `<article class="alltell-form-image-item${image.uploading ? ' is-uploading' : (image.url ? ' is-uploaded' : ' is-pending')}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
@@ -1241,28 +1245,204 @@
     }).join('');
   }
 
-  function updatePostPreview(form) {
-    if (!form) return;
-    var textarea = form.querySelector('textarea[name="body"]');
-    var previewEl = form.querySelector('[data-post-preview-pane]');
-    if (!textarea || !previewEl) return;
-    var val = textarea.value.trim();
-    if (!val) {
-      previewEl.innerHTML = '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
-    } else {
-      previewEl.innerHTML = formatPostBody(val);
+  // ===== AllTell Post Block Editor Engine =====
+
+  function genBlockId() {
+    return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function blockTypeTag(block) {
+    if (!block) return 'Текст';
+    if (block.type === 'heading') return 'Заголовок H' + (block.data.level || 2);
+    if (block.type === 'list') {
+      return { bullet: 'Список', ordered: 'Нумерованный список', checklist: 'Чек-лист' }[block.data.style] || 'Список';
+    }
+    if (block.type === 'quote') return 'Цитата';
+    return 'Текст';
+  }
+
+  function autosizeField(el) {
+    if (!el || !el.isConnected) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(26, el.scrollHeight) + 'px';
+  }
+
+  function parsePostBlocks(body) {
+    if (!body || typeof body !== 'string' || !body.trim()) {
+      return [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
+    }
+    var rawBlocks = body.split(/\n{2,}/);
+    var blocks = [];
+
+    rawBlocks.forEach(function (raw) {
+      var trimmed = raw.trim();
+      if (!trimmed) return;
+
+      var headingMatch = trimmed.match(/^(#{1,6})\s+([\s\S]+)$/);
+      if (headingMatch && !trimmed.includes('\n')) {
+        blocks.push({
+          id: genBlockId(),
+          type: 'heading',
+          data: {
+            level: Math.min(3, Math.max(1, headingMatch[1].length)),
+            markdown: headingMatch[2].trim()
+          }
+        });
+        return;
+      }
+
+      var lines = trimmed.split('\n');
+      var isQuote = lines.every(function (l) { return /^(?:>|&gt;)\s*/.test(l.trim()); });
+      if (isQuote) {
+        var quoteText = lines.map(function (l) { return l.replace(/^(?:>|&gt;)\s*/, ''); }).join('\n');
+        blocks.push({
+          id: genBlockId(),
+          type: 'quote',
+          data: { markdown: quoteText }
+        });
+        return;
+      }
+
+      var isChecklist = lines.every(function (l) { return /^[-*]\s+\[[ xX]\]\s*/.test(l.trim()); });
+      if (isChecklist) {
+        var items = lines.map(function (l) {
+          var m = l.trim().match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+          return {
+            checked: m ? m[1].toLowerCase() === 'x' : false,
+            markdown: m ? m[2] : l
+          };
+        });
+        blocks.push({
+          id: genBlockId(),
+          type: 'list',
+          data: { style: 'checklist', items: items.length ? items : [{ markdown: '', checked: false }] }
+        });
+        return;
+      }
+
+      var isOrdered = lines.every(function (l) { return /^\d+\.\s+/.test(l.trim()); });
+      if (isOrdered) {
+        var ordItems = lines.map(function (l) {
+          return {
+            checked: false,
+            markdown: l.trim().replace(/^\d+\.\s+/, '')
+          };
+        });
+        blocks.push({
+          id: genBlockId(),
+          type: 'list',
+          data: { style: 'ordered', items: ordItems.length ? ordItems : [{ markdown: '', checked: false }] }
+        });
+        return;
+      }
+
+      var isBullet = lines.every(function (l) { return /^[-*•]\s+/.test(l.trim()); });
+      if (isBullet) {
+        var bulItems = lines.map(function (l) {
+          return {
+            checked: false,
+            markdown: l.trim().replace(/^[-*•]\s+/, '')
+          };
+        });
+        blocks.push({
+          id: genBlockId(),
+          type: 'list',
+          data: { style: 'bullet', items: bulItems.length ? bulItems : [{ markdown: '', checked: false }] }
+        });
+        return;
+      }
+
+      blocks.push({
+        id: genBlockId(),
+        type: 'paragraph',
+        data: { markdown: trimmed }
+      });
+    });
+
+    if (!blocks.length) {
+      blocks.push({ id: genBlockId(), type: 'paragraph', data: { markdown: '' } });
+    }
+    return blocks;
+  }
+
+  function serializePostBlocks(blocks) {
+    if (!blocks || !blocks.length) return '';
+    var parts = [];
+    blocks.forEach(function (b) {
+      if (!b) return;
+      if (b.type === 'paragraph') {
+        var text = (b.data && b.data.markdown != null ? b.data.markdown : '').trim();
+        if (text) parts.push(text);
+      } else if (b.type === 'heading') {
+        var level = (b.data && b.data.level) || 2;
+        var hashes = '#'.repeat(Math.max(1, Math.min(3, level)));
+        var hText = (b.data && b.data.markdown != null ? b.data.markdown : '').trim();
+        if (hText) parts.push(hashes + ' ' + hText);
+      } else if (b.type === 'quote') {
+        var qText = (b.data && b.data.markdown != null ? b.data.markdown : '').trim();
+        if (qText) {
+          var lines = qText.split('\n').map(function (l) { return '> ' + l; }).join('\n');
+          parts.push(lines);
+        }
+      } else if (b.type === 'list') {
+        var items = (b.data && b.data.items) || [];
+        var style = (b.data && b.data.style) || 'bullet';
+        var listLines = [];
+        items.forEach(function (item, idx) {
+          var itText = (item.markdown != null ? item.markdown : '').trim();
+          if (!itText && items.length > 1) return;
+          if (style === 'checklist') {
+            listLines.push('- [' + (item.checked ? 'x' : ' ') + '] ' + itText);
+          } else if (style === 'ordered') {
+            listLines.push((idx + 1) + '. ' + itText);
+          } else {
+            listLines.push('- ' + itText);
+          }
+        });
+        if (listLines.length) parts.push(listLines.join('\n'));
+      }
+    });
+    return parts.join('\n\n');
+  }
+
+  function syncPostEditorState(state) {
+    if (!state || !state.postBlocks) return;
+    var md = serializePostBlocks(state.postBlocks);
+    var bodyInput = document.getElementById('postBodyInput');
+    if (bodyInput) bodyInput.value = md;
+
+    var counter = document.querySelector('[data-char-counter]');
+    if (counter) counter.textContent = md.length.toLocaleString('ru-RU') + ' / 10 000';
+
+    var previewEl = document.querySelector('[data-post-preview-pane]');
+    if (previewEl) {
+      if (!md.trim()) {
+        previewEl.innerHTML = '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
+      } else {
+        previewEl.innerHTML = formatPostBody(md);
+      }
     }
   }
 
-  function setPostEditorMode(form, mode) {
+  function updatePostPreview(form, state) {
+    if (!state) return;
+    syncPostEditorState(state);
+  }
+
+  function setPostEditorMode(form, mode, state) {
+    if (!form) form = document.querySelector('[data-post-form]');
     if (!form) return;
     var panes = form.querySelector('[data-post-panes]');
     if (panes) panes.setAttribute('data-mode', mode);
     form.querySelectorAll('[data-post-mode]').forEach(function (tab) {
       tab.classList.toggle('active', (tab.dataset.postMode || tab.getAttribute('data-mode')) === mode);
     });
-    if (mode !== 'edit') {
-      updatePostPreview(form);
+    if (state) syncPostEditorState(state);
+    if (mode === 'edit' || mode === 'split') {
+      var container = form.querySelector('#postBlocksContent');
+      if (container) {
+        container.querySelectorAll('textarea').forEach(function (ta) { autosizeField(ta); });
+      }
     }
   }
 
@@ -1273,188 +1453,479 @@
     scrollEl.classList.toggle('can-scroll-r', maxScroll > 2 && scrollEl.scrollLeft < maxScroll - 2);
   }
 
-  function applyPostFormat(cmd, form, extra) {
-    extra = extra || {};
-    var textarea = form ? form.querySelector('textarea[name="body"]') : null;
-    if (!textarea) return;
-    var start = textarea.selectionStart;
-    var end = textarea.selectionEnd;
-    var val = textarea.value;
+  function createBlockTextarea(value, opts) {
+    opts = opts || {};
+    var ta = document.createElement('textarea');
+    ta.className = 'eb-text' + (opts.className ? ' ' + opts.className : '');
+    ta.value = value || '';
+    ta.rows = 1;
+    if (opts.placeholder) ta.placeholder = opts.placeholder;
 
-    if (cmd === 'paragraph') {
-      if (!val.trim()) {
-        textarea.value = 'Текст абзаца…';
-        textarea.selectionStart = 0;
-        textarea.selectionEnd = textarea.value.length;
-      } else {
-        var needsDouble = !val.endsWith('\n\n');
-        var nl = val.endsWith('\n') ? '\n' : (needsDouble ? '\n\n' : '');
-        var insPos = (start === end && start < val.length) ? start : val.length;
-        if (insPos === val.length) {
-          textarea.value = val + nl + 'Новый абзац…';
-          textarea.selectionStart = val.length + nl.length;
-          textarea.selectionEnd = textarea.value.length;
-        } else {
-          var beforeText = val.substring(0, insPos);
-          var afterText = val.substring(insPos);
-          var sepBefore = beforeText.endsWith('\n\n') ? '' : (beforeText.endsWith('\n') ? '\n' : '\n\n');
-          var sepAfter = afterText.startsWith('\n\n') ? '' : (afterText.startsWith('\n') ? '\n' : '\n\n');
-          var newBlock = sepBefore + 'Новый абзац…' + sepAfter;
-          textarea.value = beforeText + newBlock + afterText;
-          textarea.selectionStart = beforeText.length + sepBefore.length;
-          textarea.selectionEnd = beforeText.length + sepBefore.length + 'Новый абзац…'.length;
+    requestAnimationFrame(function () { autosizeField(ta); });
+
+    ta.addEventListener('focus', function () {
+      if (opts.state) {
+        opts.state._activePostTextarea = ta;
+        opts.state._activePostBlockId = opts.block ? opts.block.id : null;
+      }
+    });
+
+    ta.addEventListener('input', function () {
+      autosizeField(ta);
+      if (opts.onInput) opts.onInput(ta.value);
+      if (opts.state) syncPostEditorState(opts.state);
+    });
+
+    ta.addEventListener('keydown', function (e) {
+      if (opts.splitOnEnter && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        splitPostTextBlockAtCursor(ta, opts.block, opts.state);
+        return;
+      }
+      if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && opts.state && opts.state.postBlocks.length > 1 && !ta.value) {
+        e.preventDefault();
+        removePostBlock(opts.state, opts.block.id, true);
+        return;
+      }
+      var mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); applyPostInlineFormat('bold', opts.state); }
+      else if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); applyPostInlineFormat('italic', opts.state); }
+      else if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); applyPostInlineFormat('underline', opts.state); }
+      else if (mod && e.shiftKey && e.key.toLowerCase() === 'x') { e.preventDefault(); applyPostInlineFormat('strike', opts.state); }
+    });
+
+    return ta;
+  }
+
+  function splitPostTextBlockAtCursor(ta, block, state) {
+    if (!state || !state.postBlocks || !block) return;
+    var blocks = state.postBlocks;
+    var idx = blocks.indexOf(block);
+    if (idx === -1) idx = blocks.length - 1;
+
+    var pos = ta.selectionStart;
+    var before = ta.value.slice(0, pos);
+    var after = ta.value.slice(pos);
+
+    block.data.markdown = before;
+    var newBlock = { id: genBlockId(), type: 'paragraph', data: { markdown: after } };
+    blocks.splice(idx + 1, 0, newBlock);
+
+    state._pendingFocusBlockId = newBlock.id;
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function removePostBlock(state, blockId, focusPrev) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    if (blocks.length <= 1) {
+      blocks[0] = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
+      state._pendingFocusBlockId = blocks[0].id;
+    } else {
+      var idx = blocks.findIndex(function (b) { return b.id === blockId; });
+      if (idx !== -1) {
+        if (focusPrev && idx > 0) {
+          state._pendingFocusBlockId = blocks[idx - 1].id;
+          state._pendingFocusAtEnd = true;
+        } else if (idx < blocks.length - 1) {
+          state._pendingFocusBlockId = blocks[idx + 1].id;
         }
+        blocks.splice(idx, 1);
       }
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
-      updatePostPreview(form);
-      return;
     }
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
 
-    if (cmd === 'heading') {
-      var level = parseInt(extra.level, 10) || 1;
-      var prefix = '#'.repeat(level) + ' ';
-      if (!val.trim()) {
-        var ph = 'Заголовок ' + level;
-        textarea.value = prefix + ph;
-        textarea.selectionStart = prefix.length;
-        textarea.selectionEnd = textarea.value.length;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.focus();
-        updatePostPreview(form);
-        return;
-      }
-      var lineStart = val.lastIndexOf('\n', start - 1) + 1;
-      var lineEnd = val.indexOf('\n', end);
-      if (lineEnd === -1) lineEnd = val.length;
-      var selText = val.substring(lineStart, lineEnd);
-      var lines = selText.split('\n');
-      var allHave = lines.every(function (l) { return l.startsWith(prefix); });
-      var newLines = lines.map(function (l) {
-        if (allHave) return l.replace(/^#{1,6}\s+/, '');
-        return prefix + l.replace(/^#{1,6}\s+/, '');
-      });
-      var rep = newLines.join('\n');
-      textarea.value = val.substring(0, lineStart) + rep + val.substring(lineEnd);
-      textarea.selectionStart = lineStart;
-      textarea.selectionEnd = lineStart + rep.length;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
-      updatePostPreview(form);
-      return;
+  function movePostBlock(state, blockId, dir) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var idx = blocks.findIndex(function (b) { return b.id === blockId; });
+    if (idx === -1) return;
+    var targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= blocks.length) return;
+    var temp = blocks[idx];
+    blocks[idx] = blocks[targetIdx];
+    blocks[targetIdx] = temp;
+    state._pendingFocusBlockId = blockId;
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function addPostParagraphBlock(state) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    var newBlock = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
+    if (idx !== -1) {
+      blocks.splice(idx + 1, 0, newBlock);
+    } else {
+      blocks.push(newBlock);
     }
+    state._pendingFocusBlockId = newBlock.id;
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
 
-    if (cmd === 'list') {
-      var style = extra.style || 'bullet';
-      if (!val.trim()) {
-        var itemPrefix = style === 'ordered' ? '1. ' : (style === 'checklist' ? '- [ ] ' : '- ');
-        var placeholder = style === 'checklist' ? 'Новая задача' : (style === 'ordered' ? 'Первый пункт' : 'Пункт списка');
-        textarea.value = itemPrefix + placeholder;
-        textarea.selectionStart = itemPrefix.length;
-        textarea.selectionEnd = textarea.value.length;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.focus();
-        updatePostPreview(form);
-        return;
+  function addPostHeadingBlock(state, level) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
+      blocks[idx].type = 'heading';
+      blocks[idx].data = { level: level || 2, markdown: '' };
+      state._pendingFocusBlockId = blocks[idx].id;
+    } else {
+      var newBlock = { id: genBlockId(), type: 'heading', data: { level: level || 2, markdown: '' } };
+      if (idx !== -1) {
+        blocks.splice(idx + 1, 0, newBlock);
+      } else {
+        blocks.push(newBlock);
       }
-      var lineStartL = val.lastIndexOf('\n', start - 1) + 1;
-      var lineEndL = val.indexOf('\n', end);
-      if (lineEndL === -1) lineEndL = val.length;
-      var selTextL = val.substring(lineStartL, lineEndL);
-      var linesL = selTextL.split('\n');
-
-      var newLinesL = [];
-      if (style === 'bullet') {
-        var allBullet = linesL.every(function (l) { return /^[-*•]\s+(?!\[[ xX]\])/.test(l); });
-        newLinesL = linesL.map(function (l) {
-          if (allBullet) return l.replace(/^[-*•]\s+/, '');
-          return '- ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
-        });
-      } else if (style === 'ordered') {
-        var allOrd = linesL.every(function (l) { return /^\d+\.\s+/.test(l); });
-        newLinesL = linesL.map(function (l, idx) {
-          if (allOrd) return l.replace(/^\d+\.\s+/, '');
-          return (idx + 1) + '. ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
-        });
-      } else if (style === 'checklist') {
-        var allCheck = linesL.every(function (l) { return /^[-*]\s+\[[ xX]\]\s+/.test(l); });
-        newLinesL = linesL.map(function (l) {
-          if (allCheck) return l.replace(/^[-*]\s+\[[ xX]\]\s+/, '');
-          return '- [ ] ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
-        });
-      }
-      var repL = newLinesL.join('\n');
-      textarea.value = val.substring(0, lineStartL) + repL + val.substring(lineEndL);
-      textarea.selectionStart = lineStartL;
-      textarea.selectionEnd = lineStartL + repL.length;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
-      updatePostPreview(form);
-      return;
+      state._pendingFocusBlockId = newBlock.id;
     }
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
 
-    if (cmd === 'quote') {
-      if (!val.trim()) {
-        textarea.value = '> Цитата…';
-        textarea.selectionStart = 2;
-        textarea.selectionEnd = textarea.value.length;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.focus();
-        updatePostPreview(form);
-        return;
+  function addPostListBlock(state, style) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    if (idx !== -1 && blocks[idx].type === 'list') {
+      blocks[idx].data.style = style || 'bullet';
+      state._pendingFocusBlockId = blocks[idx].id;
+    } else if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
+      blocks[idx].type = 'list';
+      blocks[idx].data = { style: style || 'bullet', items: [{ markdown: '', checked: false }] };
+      state._pendingFocusBlockId = blocks[idx].id;
+    } else {
+      var newBlock = { id: genBlockId(), type: 'list', data: { style: style || 'bullet', items: [{ markdown: '', checked: false }] } };
+      if (idx !== -1) {
+        blocks.splice(idx + 1, 0, newBlock);
+      } else {
+        blocks.push(newBlock);
       }
-      var lineStartQ = val.lastIndexOf('\n', start - 1) + 1;
-      var lineEndQ = val.indexOf('\n', end);
-      if (lineEndQ === -1) lineEndQ = val.length;
-      var selTextQ = val.substring(lineStartQ, lineEndQ);
-      var linesQ = selTextQ.split('\n');
-      var allQuote = linesQ.every(function (l) { return /^>\s*/.test(l); });
-      var newLinesQ = linesQ.map(function (l) {
-        if (allQuote) return l.replace(/^>\s*/, '');
-        return '> ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
-      });
-      var repQ = newLinesQ.join('\n');
-      textarea.value = val.substring(0, lineStartQ) + repQ + val.substring(lineEndQ);
-      textarea.selectionStart = lineStartQ;
-      textarea.selectionEnd = lineStartQ + repQ.length;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
-      updatePostPreview(form);
-      return;
+      state._pendingFocusBlockId = newBlock.id;
     }
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
 
-    // Inline commands
+  function addPostQuoteBlock(state) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    if (idx !== -1 && blocks[idx].type === 'paragraph' && !blocks[idx].data.markdown) {
+      blocks[idx].type = 'quote';
+      blocks[idx].data = { markdown: '' };
+      state._pendingFocusBlockId = blocks[idx].id;
+    } else {
+      var newBlock = { id: genBlockId(), type: 'quote', data: { markdown: '' } };
+      if (idx !== -1) {
+        blocks.splice(idx + 1, 0, newBlock);
+      } else {
+        blocks.push(newBlock);
+      }
+      state._pendingFocusBlockId = newBlock.id;
+    }
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function applyPostInlineFormat(cmd, state, extra) {
+    var ta = state && state._activePostTextarea;
+    if (!ta || !document.body.contains(ta)) {
+      ta = document.querySelector('#postBlocksContent textarea');
+      if (!ta) return;
+    }
+    var start = ta.selectionStart;
+    var end = ta.selectionEnd;
+    var val = ta.value;
+    var selected = val.substring(start, end);
+
     var before = '', after = '';
     var placeholder = 'текст';
     switch (cmd) {
       case 'bold': before = '**'; after = '**'; placeholder = 'жирный текст'; break;
-      case 'italic': before = '*'; after = '*'; placeholder = 'курсив'; break;
+      case 'italic': before = '_'; after = '_'; placeholder = 'курсив'; break;
       case 'underline': before = '++'; after = '++'; placeholder = 'подчёркнутый текст'; break;
       case 'strike': before = '~~'; after = '~~'; placeholder = 'зачёркнутый текст'; break;
       case 'code': before = '`'; after = '`'; placeholder = 'код'; break;
       case 'spoiler': before = '||'; after = '||'; placeholder = 'спойлер'; break;
       case 'highlight':
         before = '==';
-        after = extra.hex ? '==(' + extra.hex + ')' : '==';
+        after = (extra && extra.hex) ? '==(' + extra.hex + ')' : '==';
         placeholder = 'выделение';
         break;
       default: return;
     }
 
-    var selected = val.substring(start, end);
-    var leadWs = selected.match(/^\s*/)[0];
-    var trailWs = selected.match(/\s*$/)[0];
+    var leadWs = (selected.match(/^\s*/) || [''])[0];
+    var trailWs = (selected.match(/\s*$/) || [''])[0];
     var core = selected.slice(leadWs.length, selected.length - trailWs.length);
     if (!core && !selected) core = placeholder;
     var inserted = leadWs + before + core + after + trailWs;
-    textarea.value = val.substring(0, start) + inserted + val.substring(end);
+    ta.value = val.substring(0, start) + inserted + val.substring(end);
     var newStart = start + leadWs.length + before.length;
     var newEnd = newStart + core.length;
-    textarea.selectionStart = newStart;
-    textarea.selectionEnd = newEnd;
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    textarea.focus();
-    updatePostPreview(form);
+    ta.selectionStart = newStart;
+    ta.selectionEnd = newEnd;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+    autosizeField(ta);
+    if (state) syncPostEditorState(state);
+  }
+
+  function applyPostCommand(cmd, state, dataset) {
+    dataset = dataset || {};
+    switch (cmd) {
+      case 'paragraph':
+        addPostParagraphBlock(state);
+        break;
+      case 'heading':
+        addPostHeadingBlock(state, parseInt(dataset.level, 10) || 2);
+        break;
+      case 'list':
+        addPostListBlock(state, dataset.style || 'bullet');
+        break;
+      case 'quote':
+        addPostQuoteBlock(state);
+        break;
+      case 'bold':
+      case 'italic':
+      case 'underline':
+      case 'strike':
+      case 'code':
+      case 'spoiler':
+        applyPostInlineFormat(cmd, state);
+        break;
+    }
+  }
+
+  function renderPostBlockBody(block, state, containerEl) {
+    if (block.type === 'paragraph') {
+      return createBlockTextarea(block.data.markdown, {
+        placeholder: 'Начните писать текст… Enter — новый абзац, Shift+Enter — перенос строки.',
+        splitOnEnter: true,
+        block: block,
+        state: state,
+        onInput: function (val) { block.data.markdown = val; }
+      });
+    }
+    if (block.type === 'heading') {
+      return createBlockTextarea(block.data.markdown, {
+        placeholder: 'Заголовок H' + (block.data.level || 2) + '…',
+        splitOnEnter: true,
+        block: block,
+        state: state,
+        onInput: function (val) { block.data.markdown = val; }
+      });
+    }
+    if (block.type === 'quote') {
+      return createBlockTextarea(block.data.markdown, {
+        placeholder: 'Текст цитаты…',
+        splitOnEnter: false,
+        block: block,
+        state: state,
+        onInput: function (val) { block.data.markdown = val; }
+      });
+    }
+    if (block.type === 'list') {
+      var wrap = document.createElement('div');
+      wrap.className = 'eb-gap';
+
+      var styleGroup = document.createElement('div');
+      styleGroup.className = 'eb-list-style-group';
+      [
+        { key: 'bullet', label: 'Маркеры' },
+        { key: 'ordered', label: 'Нумерация' },
+        { key: 'checklist', label: 'Чек-лист' }
+      ].forEach(function (s) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = s.label;
+        if (block.data.style === s.key) btn.className = 'active';
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          block.data.style = s.key;
+          renderPostBlocksList(containerEl, state);
+          syncPostEditorState(state);
+        });
+        styleGroup.appendChild(btn);
+      });
+      wrap.appendChild(styleGroup);
+
+      var itemsEl = document.createElement('div');
+      itemsEl.className = 'eb-gap';
+      (block.data.items || []).forEach(function (item, idx) {
+        itemsEl.appendChild(renderPostListItem(block, item, idx, state, containerEl));
+      });
+      wrap.appendChild(itemsEl);
+
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'eb-mini-btn';
+      addBtn.innerHTML = '<i class="fas fa-plus"></i> Пункт';
+      addBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        block.data.items = block.data.items || [];
+        block.data.items.push({ markdown: '', checked: false });
+        state._pendingFocusBlockId = block.id;
+        renderPostBlocksList(containerEl, state);
+        syncPostEditorState(state);
+      });
+      wrap.appendChild(addBtn);
+
+      return wrap;
+    }
+    return document.createElement('div');
+  }
+
+  function renderPostListItem(block, item, idx, state, containerEl) {
+    var row = document.createElement('div');
+    row.className = 'eb-list-item';
+
+    if (block.data.style === 'checklist') {
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!item.checked;
+      cb.addEventListener('change', function () {
+        item.checked = cb.checked;
+        syncPostEditorState(state);
+      });
+      row.appendChild(cb);
+    } else {
+      var marker = document.createElement('span');
+      marker.className = 'eb-list-marker';
+      marker.textContent = (block.data.style === 'ordered' ? (idx + 1) + '.' : '•');
+      row.appendChild(marker);
+    }
+
+    var ta = createBlockTextarea(item.markdown, {
+      placeholder: 'Пункт списка…',
+      block: block,
+      state: state,
+      onInput: function (val) { item.markdown = val; }
+    });
+
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        var pos = ta.selectionStart;
+        var before = ta.value.slice(0, pos);
+        var after = ta.value.slice(pos);
+        item.markdown = before;
+        block.data.items.splice(idx + 1, 0, { markdown: after, checked: false });
+        state._pendingFocusBlockId = block.id;
+        renderPostBlocksList(containerEl, state);
+        syncPostEditorState(state);
+      } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && block.data.items.length > 1) {
+        e.preventDefault();
+        block.data.items.splice(idx, 1);
+        state._pendingFocusBlockId = block.id;
+        state._pendingFocusAtEnd = true;
+        renderPostBlocksList(containerEl, state);
+        syncPostEditorState(state);
+      }
+    });
+
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'eb-icon-btn';
+    del.title = 'Удалить пункт';
+    del.innerHTML = '<i class="fas fa-xmark"></i>';
+    del.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (block.data.items.length <= 1) return;
+      block.data.items.splice(idx, 1);
+      renderPostBlocksList(containerEl, state);
+      syncPostEditorState(state);
+    });
+
+    row.append(ta, del);
+    return row;
+  }
+
+  function renderPostBlocksList(containerEl, state) {
+    if (!containerEl) return;
+    containerEl.innerHTML = '';
+    if (!state.postBlocks || !state.postBlocks.length) {
+      state.postBlocks = [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
+    }
+
+    state.postBlocks.forEach(function (block) {
+      var wrap = document.createElement('div');
+      wrap.className = 'eb-block eb-' + block.type + (block.type === 'heading' ? ' eb-heading-' + (block.data.level || 2) : '');
+      wrap.dataset.blockId = block.id;
+
+      var controls = document.createElement('div');
+      controls.className = 'eb-block-controls';
+
+      var moveUpBtn = document.createElement('button');
+      moveUpBtn.type = 'button';
+      moveUpBtn.title = 'Переместить выше';
+      moveUpBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+      moveUpBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        movePostBlock(state, block.id, -1);
+      });
+
+      var moveDownBtn = document.createElement('button');
+      moveDownBtn.type = 'button';
+      moveDownBtn.title = 'Переместить ниже';
+      moveDownBtn.innerHTML = '<i class="fas fa-arrow-down"></i>';
+      moveDownBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        movePostBlock(state, block.id, 1);
+      });
+
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'eb-remove';
+      delBtn.title = 'Удалить блок';
+      delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+      delBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removePostBlock(state, block.id, false);
+      });
+
+      controls.append(moveUpBtn, moveDownBtn, delBtn);
+
+      var tag = document.createElement('span');
+      tag.className = 'eb-block-type-tag';
+      tag.textContent = blockTypeTag(block);
+
+      var body = renderPostBlockBody(block, state, containerEl);
+
+      wrap.append(controls, tag, body);
+      containerEl.appendChild(wrap);
+    });
+
+    if (state._pendingFocusBlockId) {
+      var targetId = state._pendingFocusBlockId;
+      state._pendingFocusBlockId = null;
+      var targetEl = containerEl.querySelector('[data-block-id="' + targetId + '"] textarea');
+      if (targetEl) {
+        targetEl.focus();
+        if (state._pendingFocusAtEnd) {
+          targetEl.selectionStart = targetEl.selectionEnd = targetEl.value.length;
+          state._pendingFocusAtEnd = false;
+        }
+      }
+    }
   }
 
   function renderPostForm(state, hubs, canManage) {
@@ -1616,17 +2087,14 @@
                   </div>
                   <div class="editor-panes" data-mode="edit" data-post-panes>
                     <div class="editor-pane">
-                      <textarea id="postBodyInput"
-                                name="body"
-                                class="form-textarea alltell-post-body-input"
-                                maxlength="10000"
-                                placeholder="Нажмите «P» в тулбаре или начните писать текст публикации…">${escapeHtml(post ? post.body : '')}</textarea>
+                      <div id="postBlocksContent" class="eb-blocklist" data-eb-empty-hint="Нажмите на кнопку «P» в тулбаре, чтобы добавить первый блок…"></div>
                     </div>
                     <div class="preview-pane alltell-post-body" data-post-preview-pane>
                       ${post && post.body ? formatPostBody(post.body) : '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>'}
                     </div>
                   </div>
                 </div>
+                <input type="hidden" name="body" id="postBodyInput" value="${escapeHtml(serializePostBlocks(state.postBlocks || []))}">
                 <div class="alltell-post-body-footer">
                   <span class="alltell-post-format-hint">
                     <i class="fab fa-markdown"></i> Поддерживается разметка: **жирный**, *курсив*, ||спойлеры||, списки и цитаты
@@ -2710,6 +3178,14 @@
       ta.style.overflow = 'hidden';
       ta.style.height = Math.max(140, ta.scrollHeight) + 'px';
     });
+    var postBlocksContainer = root.querySelector('#postBlocksContent');
+    if (postBlocksContainer) {
+      if (!state.postBlocks || !state.postBlocks.length) {
+        state.postBlocks = parsePostBlocks(state.editingPost ? state.editingPost.body : '');
+      }
+      renderPostBlocksList(postBlocksContainer, state);
+      syncPostEditorState(state);
+    }
     var toolbarScroll = root.querySelector('[data-alltell-toolbar-scroll]');
     if (toolbarScroll) updatePostToolbarFade(toolbarScroll);
   }
@@ -2750,6 +3226,11 @@
       followedCount: 0,
       editingPost: null,
       showPostForm: false,
+      postBlocks: null,
+      _activePostBlockId: null,
+      _activePostTextarea: null,
+      _pendingFocusBlockId: null,
+      _pendingFocusAtEnd: false,
       postSocial: {},
       stickerPacks: null,
       favoriteStickers: null,
@@ -2877,11 +3358,14 @@
       if (!pending.length) return;
 
       state.uploadingImages = true;
+      var total = pending.length;
+      var done = 0;
       pending.forEach(function (img) {
         img.uploading = true;
         img.error = null;
       });
       renderPostImageQueue();
+      updateImageProgress(done, total);
 
       for (var i = 0; i < pending.length; i += IMAGE_UPLOAD_CHUNK) {
         var chunk = pending.slice(i, i + IMAGE_UPLOAD_CHUNK);
@@ -2909,7 +3393,9 @@
               URL.revokeObjectURL(image.preview);
             }
             image.preview = image.url;
+            done++;
           });
+          updateImageProgress(done, total);
         } catch (err) {
           chunk.forEach(function (image) {
             image.uploading = false;
@@ -2921,6 +3407,9 @@
       }
       state.uploadingImages = false;
       renderPostImageQueue();
+      var form = root.querySelector('[data-post-form]');
+      var progress = form && form.querySelector('[data-image-progress]');
+      if (progress) progress.hidden = true;
     }
 
     function addPostImages(fileList) {
@@ -2946,16 +3435,18 @@
       uploadPendingPostImages();
     }
 
-    function updateImageProgress(done, total, currentName) {
+    function updateImageProgress(done, total) {
       var form = root.querySelector('[data-post-form]');
       if (!form) return;
       var progress = form.querySelector('[data-image-progress]');
+      if (!progress) return;
       progress.hidden = false;
-      form.querySelector('[data-image-progress-label]').textContent = currentName
-        ? 'Загружаем ' + currentName
-        : 'Загрузка изображений…';
-      form.querySelector('[data-image-progress-count]').textContent = done + ' / ' + total;
-      form.querySelector('[data-image-progress-bar]').value = total ? Math.round(done / total * 100) : 0;
+      var label = form.querySelector('[data-image-progress-label]');
+      if (label) label.textContent = 'Загрузка: ' + done + ' / ' + total;
+      var count = form.querySelector('[data-image-progress-count]');
+      if (count) count.textContent = Math.round(total ? (done / total * 100) : 0) + '%';
+      var bar = form.querySelector('[data-image-progress-bar]');
+      if (bar) bar.value = total ? Math.round(done / total * 100) : 0;
     }
 
     function findPost(postId, franchiseId) {
@@ -4173,12 +4664,16 @@
       var imageUrls = state.postImages.map(function (image) { return image.url; }).filter(Boolean);
       var postArticles = state.postArticles || [];
       var articleSlugs = postArticles.map(function (a) { return a.slug; }).filter(Boolean);
+      var bodyValue = formData.get('body');
+      if (state.postBlocks && state.postBlocks.length) {
+        bodyValue = serializePostBlocks(state.postBlocks);
+      }
       var payload = {
         type: formData.get('type'),
         hub_id: formData.get('hub_id'),
         hub_status: formData.get('hub_id') ? formData.get('hub_status') : '',
         title: formData.get('title'),
-        body: formData.get('body'),
+        body: bodyValue,
         article_slug: articleSlugs[0] || null,
         article_slugs: articleSlugs,
         image_urls: imageUrls
@@ -4193,6 +4688,7 @@
       }
       state.editingPost = null;
       state.showPostForm = false;
+      state.postBlocks = null;
       releasePostImages();
       state.postArticles = [];
       renderDetail(root, state);
@@ -4264,12 +4760,11 @@
       if (postCmdBtn) {
         event.preventDefault();
         var cmd = postCmdBtn.dataset.postCmd;
-        var form = postCmdBtn.closest('[data-post-form]') || root.querySelector('[data-post-form]');
         if (cmd === 'highlight') {
-          openPostHighlightPicker(postCmdBtn, form);
+          openPostHighlightPicker(postCmdBtn, state);
           return;
         }
-        applyPostFormat(cmd, form, postCmdBtn.dataset);
+        applyPostCommand(cmd, state, postCmdBtn.dataset);
         return;
       }
     }
@@ -4285,7 +4780,7 @@
         event.preventDefault();
         var mode = modeTab.dataset.postMode || modeTab.getAttribute('data-mode');
         var form = modeTab.closest('[data-post-form]') || root.querySelector('[data-post-form]');
-        setPostEditorMode(form, mode);
+        setPostEditorMode(form, mode, state);
         return;
       }
       var fadeArrow = event.target.closest('.toolbar-fade');
@@ -4515,6 +5010,7 @@
       } else if (action === 'toggle-post-form') {
         state.editingPost = null;
         state.showPostForm = true;
+        state.postBlocks = [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
         setPostImages(null);
         setPostArticles(null);
         renderDetail(root, state);
@@ -4525,6 +5021,7 @@
           return String(post.id) === button.dataset.postId;
         }) || null;
         state.showPostForm = true;
+        state.postBlocks = parsePostBlocks(state.editingPost ? state.editingPost.body : '');
         setPostImages(state.editingPost);
         setPostArticles(state.editingPost);
         renderDetail(root, state);
@@ -4533,12 +5030,18 @@
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
         state.showPostForm = false;
+        state.postBlocks = null;
+        state._activePostBlockId = null;
+        state._activePostTextarea = null;
         releasePostImages();
         state.postArticles = [];
         renderDetail(root, state);
       } else if (action === 'cancel-post-form') {
         state.editingPost = null;
         state.showPostForm = false;
+        state.postBlocks = null;
+        state._activePostBlockId = null;
+        state._activePostTextarea = null;
         releasePostImages();
         state.postArticles = [];
         renderDetail(root, state);
