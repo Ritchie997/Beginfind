@@ -2348,9 +2348,14 @@
     border-radius: var(--site-radius-lg);
     background: var(--background-secondary);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    overflow: hidden;
+    overflow: visible;
     position: relative;
     transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.alltell-live-card.has-flyout {
+    z-index: 60;
+    transform: none !important;
 }
 
 .alltell-live-card:hover {
@@ -2359,10 +2364,16 @@
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(88, 101, 242, 0.2);
 }
 
+.alltell-live-card.has-flyout:hover {
+    transform: none !important;
+}
+
 .alltell-live-card-banner {
     height: 72px;
     position: relative;
     overflow: hidden;
+    border-top-left-radius: calc(var(--site-radius-lg) - 1px);
+    border-top-right-radius: calc(var(--site-radius-lg) - 1px);
 }
 
 .alltell-card-banner-pattern {
@@ -4861,27 +4872,51 @@
     opacity: 0.85;
 }
 
-.alltell-card-hubs-preview {
+/* Выпадающее всплывающее меню хабов в каталоге (поверх контента) */
+.alltell-card-hubs-dropdown-wrap {
+    position: relative;
+    width: 100%;
+    margin-top: 6px;
+}
+
+.alltell-card-hubs-flyout {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: -8px;
+    right: -8px;
+    z-index: 80;
     display: flex;
     flex-direction: column;
-    padding: 10px 12px;
-    background: rgba(0, 0, 0, 0.22);
-    border-radius: 8px;
-    margin-top: 10px;
-    font-size: 0.82rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    position: relative;
-    overflow: hidden;
-    min-height: 80px;
+    padding: 12px;
+    background: #1e1f22;
+    background: var(--background-secondary-alt, #1e1f22);
+    border: 1px solid var(--blurple, #5865f2);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(88, 101, 242, 0.35);
+    backdrop-filter: blur(16px);
+    animation: alltellFlyoutMenuIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top center;
+    box-sizing: border-box;
+}
+
+@keyframes alltellFlyoutMenuIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.96);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .alltell-card-hubs-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 11.5px;
     color: var(--text-muted);
 }
@@ -4890,65 +4925,111 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
+    color: var(--header-secondary, #b5bac1);
 }
 
 .alltell-card-hubs-header-count {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-normal);
-    padding: 1px 6px;
+    background: rgba(88, 101, 242, 0.2);
+    color: #818cf8;
+    border: 1px solid rgba(88, 101, 242, 0.35);
+    padding: 1px 7px;
     border-radius: 999px;
     font-size: 11px;
     font-weight: 700;
+}
+
+.alltell-card-hubs-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1;
+    transition: all 0.15s ease;
+}
+
+.alltell-card-hubs-close-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .alltell-card-hubs-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 220px;
+    max-height: 240px;
     overflow-y: auto;
     padding-right: 2px;
     scrollbar-width: thin;
 }
 
+/* Пункт хаба: статус отображается ТОЛЬКО цветом рамки (без текстовой подписи) */
 .alltell-card-hub-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 7px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 7px;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.18s ease;
+    box-sizing: border-box;
 }
 
-.alltell-card-hub-item:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(88, 101, 242, 0.3);
+.alltell-card-hub-item.status-active {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.05);
+}
+.alltell-card-hub-item.status-active:hover {
+    border-color: #34d399;
+    background: rgba(16, 185, 129, 0.12);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.28);
+}
+
+.alltell-card-hub-item.status-paused {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+}
+.alltell-card-hub-item.status-paused:hover {
+    border-color: #fbbf24;
+    background: rgba(245, 158, 11, 0.12);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.28);
+}
+
+.alltell-card-hub-item.status-finished {
+    border-color: #94a3b8;
+    background: rgba(148, 163, 184, 0.05);
+}
+.alltell-card-hub-item.status-finished:hover {
+    border-color: #cbd5e1;
+    background: rgba(148, 163, 184, 0.12);
+    box-shadow: 0 0 12px rgba(148, 163, 184, 0.28);
 }
 
 .alltell-card-hub-main {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     min-width: 0;
     flex: 1;
 }
 
 .alltell-card-hub-avatar-wrap {
-    width: 22px;
-    height: 22px;
-    border-radius: 5px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
     overflow: hidden;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(88, 101, 242, 0.16);
+    background: rgba(88, 101, 242, 0.18);
     color: #818cf8;
     font-size: 11px;
 }
@@ -4961,9 +5042,9 @@
 }
 
 .alltell-card-hub-name {
-    font-weight: 500;
-    font-size: 0.82rem;
-    color: var(--text-normal);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #fff;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -4971,24 +5052,18 @@
     min-width: 0;
 }
 
-.alltell-card-hub-item .alltell-hub-status {
-    font-size: 10.5px;
-    padding: 2px 7px;
-    flex-shrink: 0;
-}
-
 .alltell-card-hub-desc-btn {
-    width: 24px;
-    height: 24px;
-    border-radius: 5px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     color: var(--text-muted);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 13px;
     flex-shrink: 0;
     transition: all 0.15s ease;
 }
@@ -4997,56 +5072,7 @@
     color: #fff;
     background: var(--blurple);
     border-color: var(--blurple);
-}
-
-.alltell-card-hub-modal {
-    position: absolute;
-    inset: 0;
-    z-index: 30;
-    background: var(--background-secondary, #2f3136);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--blurple);
-    border-radius: 8px;
-    padding: 12px 14px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box;
-    animation: alltellHubModalIn 0.16s ease-out;
-}
-
-.alltell-card-hub-modal[hidden] {
-    display: none !important;
-}
-
-.alltell-card-hub-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.alltell-card-hub-modal-header strong {
-    font-size: 13px;
-    color: var(--header-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.alltell-card-hub-modal-body {
-    flex: 1;
-    overflow-y: auto;
-    font-size: 12.5px;
-    line-height: 1.55;
-    color: var(--text-normal);
-    white-space: pre-wrap;
-    word-break: break-word;
-    scrollbar-width: thin;
-    padding-right: 4px;
+    box-shadow: 0 0 10px rgba(88, 101, 242, 0.4);
 }
 
 .alltell-card-hubs-empty,
@@ -5054,10 +5080,77 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 16px 8px;
+    gap: 8px;
+    padding: 18px 10px;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 12.5px;
+}
+
+/* Отдельное контекстное окно информации о РП (Hub Info Modal) */
+.alltell-hub-info-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 4px 0;
+}
+
+.alltell-hub-info-meta-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.alltell-hub-info-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    border: 1.5px solid;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.alltell-hub-info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.alltell-hub-info-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+}
+
+.alltell-hub-info-desc-content {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 16px;
+    font-size: 0.92rem;
+    line-height: 1.65;
+    color: var(--text-normal);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 55vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
 }
 
 /* --- Рабочее пространство франшизы (Workspace) --- */
