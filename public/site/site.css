@@ -4336,6 +4336,609 @@
     .alltell-reaction-bar { justify-content: flex-start; }
 }
 
+/* ==========================================================================
+   ALLTELL FRANCHISE MANAGEMENT & WORKSPACE STYLES (PORTED FROM ADMIN)
+   ========================================================================== */
+
+/* --- Модальные окна AllTell --- */
+.alltell-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: alltellFadeIn 0.18s ease-out;
+}
+
+@keyframes alltellFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes alltellModalSlide {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.alltell-modal-box {
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid var(--background-accent, #3f4147);
+    border-radius: var(--site-radius-lg, 16px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: alltellModalSlide 0.22s ease-out;
+}
+
+.alltell-modal-box-wide {
+    max-width: 620px;
+}
+
+.alltell-modal-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--background-accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.alltell-modal-header-hero {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.alltell-modal-avatar-preview {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.alltell-modal-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.alltell-modal-subtitle {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.alltell-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    line-height: 1;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.alltell-modal-close:hover {
+    background: var(--background-accent);
+    color: var(--text-normal);
+}
+
+.alltell-modal-body {
+    padding: 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.alltell-modal-footer {
+    padding: 14px 22px;
+    border-top: 1px solid var(--background-accent);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.alltell-modal-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.alltell-modal-hint i {
+    color: var(--blurple);
+    margin-top: 2px;
+}
+
+/* Выпадающий список поиска пользователя */
+.alltell-user-search-wrap {
+    position: relative;
+}
+
+.alltell-user-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid var(--blurple);
+    border-radius: 8px;
+    z-index: 100;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
+.alltell-user-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.88rem;
+    color: var(--text-normal);
+    transition: background 0.15s;
+}
+
+.alltell-user-item:hover {
+    background: var(--background-accent);
+    color: var(--blurple);
+}
+
+.alltell-user-empty {
+    padding: 12px 14px;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    text-align: center;
+}
+
+/* Чекбоксы разрешений ролей */
+.alltell-perm-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.alltell-perm-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.86rem;
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+/* --- Каталог: тулбар, сортировка, фильтры хабов, карточки --- */
+.alltell-catalog-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-accent);
+}
+
+.alltell-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--background-tertiary, #1e1f22);
+    border: 1px solid var(--background-accent);
+    color: var(--text-normal);
+    font-size: 0.86rem;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.alltell-select:focus {
+    outline: none;
+    border-color: var(--blurple);
+    box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25);
+}
+
+.alltell-stats-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+}
+
+.alltell-stat-chip-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.alltell-stat-chip-pill strong {
+    color: var(--text-normal);
+}
+
+.alltell-card-owner-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(250, 168, 26, 0.18);
+    color: #ffc65c;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.alltell-card-del-btn {
+    border: none;
+    background: rgba(237, 66, 69, 0.15);
+    color: #f23f43;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+.alltell-card-del-btn:hover {
+    background: #f23f43;
+    color: #fff;
+    transform: scale(1.05);
+}
+
+.alltell-card-hubs-toggle {
+    background: transparent;
+    border: none;
+    color: var(--blurple);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    transition: opacity 0.15s;
+}
+
+.alltell-card-hubs-toggle:hover {
+    opacity: 0.85;
+}
+
+.alltell-card-hubs-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--background-tertiary);
+    border-radius: 8px;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    border: 1px solid var(--background-accent);
+}
+
+.alltell-card-hub-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* --- Рабочее пространство франшизы (Workspace) --- */
+.alltell-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 24px;
+}
+
+.alltell-workspace-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 0 10px;
+    border-bottom: 1px solid var(--background-accent);
+    scrollbar-width: thin;
+}
+
+.alltell-ws-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 15px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.alltell-ws-tab-btn:hover {
+    background: var(--background-secondary);
+    color: var(--text-normal);
+}
+
+.alltell-ws-tab-btn.active {
+    background: var(--background-secondary);
+    border-color: var(--blurple);
+    color: var(--text-normal);
+    box-shadow: 0 4px 14px rgba(88, 101, 242, 0.2);
+}
+
+.alltell-ws-tab-btn i {
+    color: var(--blurple);
+    font-size: 0.9rem;
+}
+
+.alltell-ws-tab-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--background-accent);
+    color: var(--text-muted);
+}
+
+.alltell-workspace-body {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: var(--site-radius-lg, 16px);
+    padding: 24px;
+    box-shadow: var(--site-shadow-soft);
+}
+
+.alltell-ws-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--background-accent);
+}
+
+.alltell-ws-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.alltell-ws-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.alltell-ws-stat-card {
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+
+.alltell-ws-stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--blurple);
+    line-height: 1.2;
+}
+
+.alltell-ws-stat-label {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.alltell-permission-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+}
+
+.alltell-permission-note i {
+    color: #ffc65c;
+}
+
+/* Таблицы участников, ролей, каналов, журнала */
+.alltell-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--background-accent);
+    border-radius: 12px;
+    background: var(--background-tertiary);
+}
+
+.alltell-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.88rem;
+}
+
+.alltell-table th {
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--background-accent);
+}
+
+.alltell-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--background-accent);
+    color: var(--text-normal);
+    vertical-align: middle;
+}
+
+.alltell-table tr:last-child td {
+    border-bottom: none;
+}
+
+.alltell-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.alltell-table-empty {
+    text-align: center;
+    padding: 32px 16px !important;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Ролевые чипы */
+.alltell-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 2px 4px 2px 0;
+}
+
+.alltell-role-chip.is-system {
+    background: #5865f2;
+}
+
+.alltell-role-chip.is-custom {
+    background: #eb459e;
+}
+
+.alltell-role-remove {
+    border: none;
+    background: rgba(0, 0, 0, 0.25);
+    color: #fff;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 8px;
+    line-height: 1;
+    padding: 0;
+    transition: background 0.15s;
+}
+
+.alltell-role-remove:hover {
+    background: rgba(0, 0, 0, 0.55);
+}
+
+/* Форма хаба в Workspace */
+.alltell-hub-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding: 18px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    border-radius: 12px;
+}
+
+.alltell-hub-edit-form h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-normal);
+}
+
+/* Опасная зона настроек */
+.alltell-danger-box {
+    margin-top: 28px;
+    padding: 20px;
+    border: 1px solid rgba(237, 66, 69, 0.35);
+    border-radius: 12px;
+    background: rgba(237, 66, 69, 0.07);
+}
+
+.alltell-danger-box h4 {
+    margin: 0 0 6px;
+    color: #f23f43;
+    font-size: 0.92rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.alltell-danger-box p {
+    margin: 0 0 14px;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+    .alltell-perm-grid { grid-template-columns: 1fr; }
+    .alltell-catalog-controls { flex-direction: column; align-items: stretch; }
+    .alltell-stats-chips { margin-left: 0; }
+    .alltell-ws-section-header { flex-direction: column; align-items: stretch; }
+}
+
 /* Шаги "как начать" на странице AllTell */
 .steps-grid {
     display: grid;

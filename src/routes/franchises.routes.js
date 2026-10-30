@@ -256,7 +256,7 @@ function parsePostImages(row) {
 router.get('/public/franchises', async (req, res) => {
   try {
     const franchises = await dbAll(`
-      SELECT s.id, s.name, s.description, s.created_at, s.updated_at,
+      SELECT s.id, s.owner_id, s.name, s.description, s.created_at, s.updated_at,
              (SELECT COUNT(*) FROM user_server_memberships m WHERE m.server_id = s.id) AS member_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.is_public = 1) AS hub_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active' AND h.is_public = 1) AS active_hubs,
