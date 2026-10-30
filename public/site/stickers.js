@@ -48,6 +48,10 @@
     return node;
   }
 
+  function onPickerScrollOrResize() {
+    if (picker) positionPicker();
+  }
+
   function closePicker() {
     if (picker) picker.remove();
     if (pickerTrigger) pickerTrigger.classList.remove('active');
@@ -56,6 +60,8 @@
     pickerSelect = null;
     document.removeEventListener('click', onOutsideClick);
     document.removeEventListener('keydown', onPickerKeydown);
+    window.removeEventListener('resize', onPickerScrollOrResize);
+    window.removeEventListener('scroll', onPickerScrollOrResize, true);
   }
 
   function onOutsideClick(event) {
@@ -195,6 +201,8 @@
     trigger.classList.add('active');
     document.addEventListener('click', onOutsideClick);
     document.addEventListener('keydown', onPickerKeydown);
+    window.addEventListener('resize', onPickerScrollOrResize);
+    window.addEventListener('scroll', onPickerScrollOrResize, true);
     showPickerMessage('Загружаем стикеры…');
     positionPicker();
     loadSubscribed().then(renderPicker).catch(function (error) {

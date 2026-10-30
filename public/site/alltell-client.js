@@ -929,7 +929,6 @@
               : (loggedIn ? '<div class="alltell-comments-loading"><div class="alltell-spinner-sm"></div> Загрузка комментариев…</div>' : '')))}</div>
         ${compose}
       </section>
-      <div class="alltell-sticker-picker" data-sticker-picker hidden></div>
     </div>`;
   }
 
@@ -3700,93 +3699,70 @@
       }
     }
 
-    async function loadStickerPickerData() {
-      if (state.stickerPacks && state.favoriteStickers) return;
-      var results = await Promise.all([
-        request('/api/stickers/subscribed'),
-        request('/api/stickers/favorites')
-      ]);
-      state.stickerPacks = results[0];
-      state.favoriteStickers = results[1];
-    }
-
-    function stickerPickerMarkup() {
-      if (!state.stickerPacks) return '<div class="alltell-sticker-picker-heading"><strong>Стикеры</strong><button type="button" data-action="close-sticker-picker" aria-label="Закрыть">×</button></div><p class="alltell-picker-empty">Загружаем наборы…</p>';
-      var favorites = (state.favoriteStickers || []).map(function (sticker) {
-        return Object.assign({ packSlug: sticker.packSlug }, sticker);
+    function ensureStickerPicker() {
+      if (window.PublicStickerPicker) return Promise.resolve(window.PublicStickerPicker);
+      return new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = '/site/stickers.js';
+        script.onload = function () { resolve(window.PublicStickerPicker); };
+        script.onerror = function () { reject(new Error('Не удалось загрузить модуль стикеров')); };
+        document.body.appendChild(script);
       });
-      var favoriteGroup = favorites.length
-        ? `<div class="alltell-sticker-picker-group"><strong>Избранное</strong><div>${favorites.map(renderPickerSticker).join('')}</div></div>`
-        : '';
-      var packGroups = state.stickerPacks.map(function (pack) {
-        return `<div class="alltell-sticker-picker-group"><strong>${escapeHtml(pack.title)}</strong><div>${(pack.stickers || []).map(function (sticker) {
-          return renderPickerSticker(Object.assign({ packSlug: pack.slug, packId: pack.id }, sticker));
-        }).join('')}</div></div>`;
-      }).join('');
-      return `<div class="alltell-sticker-picker-heading"><strong>Стикеры</strong><button type="button" data-action="close-sticker-picker" aria-label="Закрыть">×</button></div>${favoriteGroup + packGroups || '<p class="alltell-picker-empty">Добавьте наборы в разделе «Стикеры», чтобы использовать их здесь.</p>'}`;
-    }
-
-    function renderPickerSticker(sticker) {
-      var code = ':' + sticker.packSlug + ':' + sticker.alias + ':';
-      return `<button type="button" class="alltell-picker-sticker" data-action="select-sticker" data-shortcode="${escapeHtml(code)}" title="${escapeHtml(sticker.alias)}">
-        <img src="${escapeHtml(sticker.fileUrl)}" alt="${escapeHtml(sticker.alias)}">
-      </button>`;
     }
 
     async function openPostStickerPicker(button) {
-      var postRoot = button.closest('[data-post-social]');
-      var postId = postRoot.dataset.postId;
-      var franchiseId = postRoot.dataset.franchiseId;
-      var social = getPostSocial(postId, franchiseId);
-      social.pickerTarget = {
-        mode: button.dataset.pickerMode,
-        type: button.dataset.targetType,
-        id: button.dataset.targetId
-      };
-      try {
-        await loadStickerPickerData();
-        var panel = postRoot.querySelector('[data-sticker-picker]');
-        if (!panel) return;
-        panel.innerHTML = stickerPickerMarkup();
-        panel.hidden = false;
-      } catch (error) {
-        notifyError(error.message);
-      }
-    }
-
-    async function selectPostSticker(button) {
-      var panel = button.closest('[data-post-social]');
-      var postId = panel.dataset.postId;
-      var franchiseId = panel.dataset.franchiseId;
-      var social = getPostSocial(postId, franchiseId);
-      var target = social.pickerTarget;
-      if (!target) return;
-      var shortcode = button.dataset.shortcode;
-      if (target.mode === 'insert') {
-        var textarea = panel.querySelector('[data-comment-form] textarea[name="content"]');
-        if (!textarea) return;
-        var start = textarea.selectionStart;
-        var end = textarea.selectionEnd;
-        textarea.setRangeText(shortcode, start, end, 'end');
-        textarea.focus();
-        panel.querySelector('[data-sticker-picker]').hidden = true;
+      if (!token()) {
+        if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
+        else window.location.href = '/admin-panel';
         return;
       }
-      var endpoint = '/api/franchises/' + franchiseId + '/posts/' + postId;
-      if (target.type === 'franchise_post_comment') endpoint += '/comments/' + target.id;
-      endpoint += '/reactions/toggle';
+      var postRoot = button.closest('[data-post-social]');
+      if (!postRoot) return;
+      var postId = postRoot.dataset.postId;
+      var franchiseId = franchiseIdForPost(postId, postRoot.dataset.franchiseId);
+      var mode = button.dataset.pickerMode;
+      var targetType = button.dataset.targetType;
+      var targetId = button.dataset.targetId;
+
+      var picker;
       try {
-        var result = await request(endpoint, 'POST', { shortcode: shortcode.replace(/^:+|:+$/g, '') });
-        if (target.type === 'franchise_post') {
-          social.reactions = result.reactions || [];
-          renderSocialPanel(postId, franchiseId);
-        } else {
-          social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
-          renderSocialPanel(postId, franchiseId);
-        }
-      } catch (error) {
-        notifyError(error.message);
+        picker = await ensureStickerPicker();
+      } catch (err) {
+        notifyError(err.message);
+        return;
       }
+      if (!picker) return;
+
+      picker.open(button, async function (shortcode, imageUrl) {
+        var cleanCode = String(shortcode || '').replace(/^:+|:+$/g, '').trim();
+        if (mode === 'insert') {
+          var textarea = postRoot.querySelector('[data-comment-form] textarea[name="content"]');
+          if (!textarea) return;
+          var insertText = ':' + cleanCode + ': ';
+          var start = textarea.selectionStart;
+          var end = textarea.selectionEnd;
+          textarea.setRangeText(insertText, start, end, 'end');
+          textarea.focus();
+          return;
+        }
+
+        var endpoint = '/api/franchises/' + franchiseId + '/posts/' + postId;
+        if (targetType === 'franchise_post_comment') endpoint += '/comments/' + targetId;
+        endpoint += '/reactions/toggle';
+        try {
+          var result = await request(endpoint, 'POST', { shortcode: cleanCode });
+          var social = getPostSocial(postId, franchiseId);
+          if (targetType === 'franchise_post') {
+            social.reactions = result.reactions || [];
+            renderSocialPanel(postId, franchiseId);
+          } else {
+            social.comments = await request('/api/franchises/' + franchiseId + '/posts/' + postId + '/comments');
+            renderSocialPanel(postId, franchiseId);
+          }
+        } catch (error) {
+          notifyError(error.message);
+        }
+      });
     }
 
     async function togglePostLike(postId, franchiseId) {
@@ -5152,11 +5128,6 @@
           return;
         }
         openPostStickerPicker(button);
-      } else if (action === 'select-sticker') {
-        selectPostSticker(button);
-      } else if (action === 'close-sticker-picker') {
-        var pickerPanel = button.closest('[data-sticker-picker]');
-        if (pickerPanel) pickerPanel.hidden = true;
       } else if (action === 'login') {
         if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
         else window.location.href = '/admin-panel';
