@@ -66,6 +66,25 @@
     return result;
   }
 
+  async function uploadSingleImage(file) {
+    if (!token()) throw new Error('Требуется авторизация');
+    if (!file) throw new Error('Файл не выбран');
+    var uploadData = new FormData();
+    uploadData.append('image', file);
+    var uploadResponse = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token() },
+      credentials: 'same-origin',
+      body: uploadData
+    });
+    var uploadResult = {};
+    try { uploadResult = await uploadResponse.json(); } catch (e) {}
+    if (!uploadResponse.ok || !uploadResult.url) {
+      throw new Error(uploadResult.error || 'Не удалось загрузить изображение');
+    }
+    return uploadResult.url;
+  }
+
   function dateLabel(value) {
     if (!value) return '';
     var date = new Date(value);
@@ -341,7 +360,11 @@
           ${unread ? `<span class="alltell-unread-badge"><i class="fas fa-bell" aria-hidden="true"></i> ${unread} новых</span>` : ''}
         </div>
         <div class="alltell-live-card-content">
-          <div class="alltell-live-avatar" style="background: ${gradient}">${escapeHtml(initials(franchise.name))}</div>
+          <div class="alltell-live-avatar" style="background: ${gradient}">
+            ${franchise.avatar_url
+              ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" alt="${escapeHtml(franchise.name)}">`
+              : escapeHtml(initials(franchise.name))}
+          </div>
           <div class="alltell-live-title-row">
             <h3 title="${escapeHtml(franchise.name)}"><a href="/alltell?franchise=${Number(franchise.id)}">${escapeHtml(franchise.name)}</a></h3>
           </div>
@@ -360,6 +383,7 @@
             <div class="alltell-card-hubs-preview">
               ${previewHubs ? (previewHubs.length ? previewHubs.map(function(h) {
                 return `<div class="alltell-card-hub-item">
+                  ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : ''}
                   <span>${escapeHtml(h.name)}</span>
                   <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
                 </div>`;
@@ -443,14 +467,9 @@
         <div class="alltell-toolbar-container">
           ${renderViewTabs(state.view, counts)}
           <div class="alltell-toolbar">
-            <div class="alltell-toolbar-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-              <div>
-                <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
-                <p>Исследуйте сообщества AllTell, знакомьтесь с ролевыми мирами и следите за развитием историй.</p>
-              </div>
-              <button type="button" class="btn btn-primary" data-action="open-create-franchise">
-                <i class="fas fa-plus"></i> Создать франшизу
-              </button>
+            <div class="alltell-toolbar-header">
+              <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
+              <p>Исследуйте сообщества AllTell, знакомьтесь с ролевыми мирами и следите за развитием историй.</p>
             </div>
             <form class="alltell-search-box" data-search-form role="search">
               <div class="alltell-search-input-wrap">
@@ -678,7 +697,11 @@
                 <div class="alltell-feed-item">
                   <div class="alltell-feed-franchise-card">
                     <a class="alltell-feed-franchise-link" href="/alltell?franchise=${Number(post.franchise_id)}">
-                      <span class="alltell-feed-franchise-avatar" style="background:${gradient}">${escapeHtml(initials(post.franchise_name))}</span>
+                      <span class="alltell-feed-franchise-avatar" style="background:${gradient}">
+                        ${post.franchise_avatar_url
+                          ? `<img src="${escapeHtml(normalizeImageUrl(post.franchise_avatar_url))}" alt="">`
+                          : escapeHtml(initials(post.franchise_name))}
+                      </span>
                       <span class="alltell-feed-franchise-meta">
                         <strong class="alltell-feed-franchise-name">${escapeHtml(post.franchise_name)}</strong>
                         ${post.hub_name ? `<span class="alltell-feed-hub-tag"><i class="fas fa-layer-group"></i> ${escapeHtml(post.hub_name)}</span>` : '<span class="alltell-feed-tag">Франшиза</span>'}
@@ -841,7 +864,7 @@
               <i class="fas ${post.type === 'news' ? 'fa-newspaper' : (post.type === 'announcement' ? 'fa-bullhorn' : 'fa-calendar-check')}"></i>
               ${escapeHtml(POST_TYPES[post.type] || 'Публикация')}
             </span>
-            ${hub ? `<span class="alltell-post-hub"><i class="fas fa-layer-group" aria-hidden="true"></i> ${escapeHtml(hub.name)}</span>` : ''}
+            ${hub ? `<span class="alltell-post-hub">${hub.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" class="alltell-post-hub-avatar" alt="">` : '<i class="fas fa-layer-group" aria-hidden="true"></i>'} ${escapeHtml(hub.name)}</span>` : ''}
             ${post.hub_status ? `<span class="alltell-hub-status alltell-hub-status-${escapeHtml(post.hub_status)}">${escapeHtml(HUB_STATUSES[post.hub_status] || '')}</span>` : ''}
             ${post.approval_status !== 'published' ? `<span class="alltell-post-review alltell-post-review-${escapeHtml(post.approval_status)}">${escapeHtml(POST_STATUS_LABELS[post.approval_status] || '')}</span>` : ''}
           </div>
@@ -1341,7 +1364,7 @@
     var editingId = state.editingHubId;
     var editingHub = editingId && editingId !== 'new'
       ? hubs.find(function (h) { return String(h.id) === String(editingId); })
-      : (editingId === 'new' ? { name: '', description: '', is_public: 1 } : null);
+      : (editingId === 'new' ? { name: '', description: '', is_public: 1, avatar_url: null } : null);
 
     var formHtml = editingHub ? `
       <form class="alltell-hub-edit-form" data-hub-form>
@@ -1353,6 +1376,24 @@
         <div class="alltell-field">
           <label class="alltell-field-label">Описание хаба</label>
           <textarea name="description" rows="3" maxlength="1000" placeholder="Краткое описание сюжета, правил или формата игры">${escapeHtml(editingHub.description || '')}</textarea>
+        </div>
+        <div class="alltell-field">
+          <label class="alltell-field-label">Аватарка хаба</label>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div id="hub-avatar-preview" style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg, var(--blurple), var(--accent-teal));display:grid;place-items:center;color:#fff;font-size:18px;overflow:hidden;flex-shrink:0;">
+              ${editingHub.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(editingHub.avatar_url))}" style="width:100%;height:100%;object-fit:cover;" alt="">` : '<i class="fas fa-dice-d20"></i>'}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;">
+                <i class="fas fa-camera"></i> <span id="hub-avatar-label">${editingHub.avatar_url ? 'Сменить аватарку' : 'Загрузить аватарку'}</span>
+                <input type="file" id="hub-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" id="hub-avatar-remove" data-action="manage-remove-hub-avatar" style="${editingHub.avatar_url ? '' : 'display:none;'}color:var(--status-danger);">
+                <i class="fas fa-trash"></i> Удалить
+              </button>
+              <input type="hidden" name="avatar_url" id="hub-avatar-url" value="${escapeHtml(editingHub.avatar_url || '')}">
+            </div>
+          </div>
         </div>
         <label class="alltell-perm-check">
           <input type="checkbox" name="is_public" ${editingHub.is_public ? 'checked' : ''}>
@@ -1386,7 +1427,11 @@
             return `
               <article class="alltell-hub-card ${isHubActive ? 'is-hub-active' : ''}">
                 <div class="alltell-hub-card-header">
-                  <div class="alltell-hub-icon"><i class="fas fa-dice-d20"></i></div>
+                  <div class="alltell-hub-icon">
+                    ${hub.avatar_url
+                      ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="${escapeHtml(hub.name)}">`
+                      : '<i class="fas fa-dice-d20"></i>'}
+                  </div>
                   <div class="alltell-hub-title-block">
                     <h3>${escapeHtml(hub.name)}</h3>
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -1561,6 +1606,26 @@
           <label class="alltell-field-label" for="settings-desc-input">Описание</label>
           <textarea id="settings-desc-input" name="description" rows="3" maxlength="500" ${canEdit ? '' : 'disabled'}>${escapeHtml(franchise.description || '')}</textarea>
         </div>
+        <div class="alltell-field">
+          <label class="alltell-field-label">Аватарка франшизы</label>
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div id="settings-avatar-preview" style="width:64px;height:64px;border-radius:18px;background:${franchiseGradient(franchise.id, franchise.name)};display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+              ${franchise.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" style="width:100%;height:100%;object-fit:cover;" alt="">` : escapeHtml(initials(franchise.name))}
+            </div>
+            ${canEdit ? `
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;">
+                  <i class="fas fa-camera"></i> <span id="settings-avatar-label">${franchise.avatar_url ? 'Сменить аватарку' : 'Загрузить аватарку'}</span>
+                  <input type="file" id="settings-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="settings-avatar-remove" data-action="manage-remove-settings-avatar" style="${franchise.avatar_url ? '' : 'display:none;'}color:var(--status-danger);">
+                  <i class="fas fa-trash"></i> Удалить
+                </button>
+                <input type="hidden" name="avatar_url" id="settings-avatar-url" value="${escapeHtml(franchise.avatar_url || '')}">
+              </div>
+            ` : ''}
+          </div>
+        </div>
         ${canEdit ? `
           <div>
             <button type="submit" class="btn btn-primary" id="save-settings-btn"><i class="fas fa-floppy-disk"></i> Сохранить изменения</button>
@@ -1674,7 +1739,9 @@
           <div class="alltell-franchise-header-body">
             <div class="alltell-franchise-avatar-wrap">
               <div class="alltell-franchise-avatar" style="background: ${gradient}">
-                ${escapeHtml(initials(franchise.name))}
+                ${franchise.avatar_url
+                  ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" alt="${escapeHtml(franchise.name)}">`
+                  : escapeHtml(initials(franchise.name))}
               </div>
             </div>
             <div class="alltell-franchise-meta">
@@ -1753,7 +1820,11 @@
                   return `
                     <article class="alltell-hub-card ${isHubActive ? 'is-hub-active' : ''}">
                       <div class="alltell-hub-card-header">
-                        <div class="alltell-hub-icon"><i class="fas fa-dice-d20"></i></div>
+                        <div class="alltell-hub-icon">
+                    ${hub.avatar_url
+                      ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="${escapeHtml(hub.name)}">`
+                      : '<i class="fas fa-dice-d20"></i>'}
+                  </div>
                         <div class="alltell-hub-title-block">
                           <h3>${escapeHtml(hub.name)}</h3>
                           <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
@@ -2561,6 +2632,22 @@
                       placeholder="Опишите сеттинг, атмосферу или ключевую тему вашей франшизы"></textarea>
           </div>
 
+          <div class="alltell-field">
+            <label class="alltell-field-label">Аватарка вселенной</label>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;">
+                <i class="fas fa-camera"></i> <span id="create-franchise-avatar-label">Выбрать фото</span>
+                <input type="file" id="create-franchise-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" id="create-franchise-avatar-remove" style="display:none;color:var(--status-danger);">
+                <i class="fas fa-trash"></i> Удалить
+              </button>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
+              Рекомендуется квадратное изображение (PNG, JPG, WebP)
+            </span>
+          </div>
+
           <div class="alltell-modal-hint" style="margin-top:4px;">
             <i class="fas fa-circle-info"></i>
             <span>После создания вы автоматически становитесь администратором франшизы и сможете настроить хабы, роли и статьи лора.</span>
@@ -2584,8 +2671,43 @@
           var nameInput = container.querySelector('#create-franchise-name-input');
           var avatarPreview = container.querySelector('#create-franchise-avatar-preview');
           var form = container.querySelector('#alltell-create-franchise-form');
+          var avatarUrl = null;
+          var fileInput = container.querySelector('#create-franchise-avatar-file');
+          var removeBtn = container.querySelector('#create-franchise-avatar-remove');
+          var labelSpan = container.querySelector('#create-franchise-avatar-label');
+
+          fileInput.addEventListener('change', async function () {
+            if (!fileInput.files || !fileInput.files[0]) return;
+            var prevLabel = labelSpan.textContent;
+            labelSpan.textContent = 'Загрузка…';
+            fileInput.disabled = true;
+            try {
+              var uploadedUrl = await uploadSingleImage(fileInput.files[0]);
+              avatarUrl = uploadedUrl;
+              avatarPreview.textContent = '';
+              avatarPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(uploadedUrl)) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" alt="">';
+              removeBtn.style.display = 'inline-flex';
+              labelSpan.textContent = 'Сменить фото';
+            } catch (err) {
+              notifyError(err.message);
+              labelSpan.textContent = prevLabel;
+            } finally {
+              fileInput.disabled = false;
+              fileInput.value = '';
+            }
+          });
+
+          removeBtn.addEventListener('click', function () {
+            avatarUrl = null;
+            removeBtn.style.display = 'none';
+            labelSpan.textContent = 'Выбрать фото';
+            var val = nameInput.value.trim();
+            avatarPreview.textContent = initials(val) || '?';
+            avatarPreview.style.background = franchiseAvatarColor(val || 'Franchise');
+          });
 
           nameInput.addEventListener('input', function () {
+            if (avatarUrl) return;
             var val = nameInput.value.trim();
             avatarPreview.textContent = initials(val) || '?';
             avatarPreview.style.background = franchiseAvatarColor(val || 'Franchise');
@@ -2600,7 +2722,7 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создание…';
             try {
-              var server = await request('/api/servers', 'POST', { name: name, description: description });
+              var server = await request('/api/servers', 'POST', { name: name, description: description, avatar_url: avatarUrl });
               closeModal();
               showToast('Франшиза «' + name + '» успешно создана!');
               window.history.pushState({}, '', '/alltell?franchise=' + server.id + '&tab=manage');
@@ -3455,6 +3577,22 @@
         openChangeOwnerModal(state.detail.franchise.id);
       } else if (action === 'manage-delete-franchise') {
         deleteFranchise(state.detail.franchise.id, state.detail.franchise.name);
+      } else if (action === 'manage-remove-settings-avatar') {
+        var sPreview = root.querySelector('#settings-avatar-preview');
+        var sUrlInput = root.querySelector('#settings-avatar-url');
+        var sLabel = root.querySelector('#settings-avatar-label');
+        if (sUrlInput) sUrlInput.value = '';
+        if (sPreview) sPreview.innerHTML = escapeHtml(initials(state.detail && state.detail.franchise ? state.detail.franchise.name : ''));
+        button.style.display = 'none';
+        if (sLabel) sLabel.textContent = 'Загрузить аватарку';
+      } else if (action === 'manage-remove-hub-avatar') {
+        var hPreview = root.querySelector('#hub-avatar-preview');
+        var hUrlInput = root.querySelector('#hub-avatar-url');
+        var hLabel = root.querySelector('#hub-avatar-label');
+        if (hUrlInput) hUrlInput.value = '';
+        if (hPreview) hPreview.innerHTML = '<i class="fas fa-dice-d20"></i>';
+        button.style.display = 'none';
+        if (hLabel) hLabel.textContent = 'Загрузить аватарку';
       }
     }
 
@@ -3524,6 +3662,54 @@
     }
 
     function onChange(event) {
+      if (event.target.id === 'settings-avatar-file') {
+        var sFile = event.target.files && event.target.files[0];
+        if (!sFile) return;
+        var sLabel = root.querySelector('#settings-avatar-label');
+        var sPrevText = sLabel ? sLabel.textContent : '';
+        if (sLabel) sLabel.textContent = 'Загрузка…';
+        event.target.disabled = true;
+        uploadSingleImage(sFile).then(function (url) {
+          var sPreview = root.querySelector('#settings-avatar-preview');
+          var sUrlInput = root.querySelector('#settings-avatar-url');
+          var sRemoveBtn = root.querySelector('#settings-avatar-remove');
+          if (sUrlInput) sUrlInput.value = url;
+          if (sPreview) sPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          if (sRemoveBtn) sRemoveBtn.style.display = 'inline-flex';
+          if (sLabel) sLabel.textContent = 'Сменить аватарку';
+        }).catch(function (err) {
+          notifyError(err.message);
+          if (sLabel) sLabel.textContent = sPrevText;
+        }).finally(function () {
+          event.target.disabled = false;
+          event.target.value = '';
+        });
+        return;
+      }
+      if (event.target.id === 'hub-avatar-file') {
+        var hFile = event.target.files && event.target.files[0];
+        if (!hFile) return;
+        var hLabel = root.querySelector('#hub-avatar-label');
+        var hPrevText = hLabel ? hLabel.textContent : '';
+        if (hLabel) hLabel.textContent = 'Загрузка…';
+        event.target.disabled = true;
+        uploadSingleImage(hFile).then(function (url) {
+          var hPreview = root.querySelector('#hub-avatar-preview');
+          var hUrlInput = root.querySelector('#hub-avatar-url');
+          var hRemoveBtn = root.querySelector('#hub-avatar-remove');
+          if (hUrlInput) hUrlInput.value = url;
+          if (hPreview) hPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          if (hRemoveBtn) hRemoveBtn.style.display = 'inline-flex';
+          if (hLabel) hLabel.textContent = 'Сменить аватарку';
+        }).catch(function (err) {
+          notifyError(err.message);
+          if (hLabel) hLabel.textContent = hPrevText;
+        }).finally(function () {
+          event.target.disabled = false;
+          event.target.value = '';
+        });
+        return;
+      }
       if (event.target.matches('[data-action="change-hub-filter"]')) {
         state.catalogHubFilter = event.target.value;
         renderCatalog(root, state);
@@ -3561,6 +3747,7 @@
         var hubPayload = {
           name: (hubFormData.get('name') || '').trim(),
           description: (hubFormData.get('description') || '').trim(),
+          avatar_url: (hubFormData.get('avatar_url') || '').trim() || null,
           is_public: event.target.querySelector('[name="is_public"]')?.checked ? 1 : 0
         };
         var fId = state.detail.franchise.id;
@@ -3586,7 +3773,8 @@
         var setFormData = new FormData(event.target);
         var setPayload = {
           name: (setFormData.get('name') || '').trim(),
-          description: (setFormData.get('description') || '').trim()
+          description: (setFormData.get('description') || '').trim(),
+          avatar_url: (setFormData.get('avatar_url') || '').trim() || null
         };
         var sFId = state.detail.franchise.id;
         var sBtn = event.target.querySelector('#save-settings-btn');
@@ -3596,6 +3784,7 @@
           if (sBtn) sBtn.disabled = false;
           state.detail.franchise.name = setPayload.name;
           state.detail.franchise.description = setPayload.description;
+          state.detail.franchise.avatar_url = setPayload.avatar_url;
           renderDetail(root, state);
           loadMine();
         }).catch(function (err) {

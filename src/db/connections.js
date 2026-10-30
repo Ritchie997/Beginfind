@@ -92,11 +92,22 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         completeSchemaTask(new Error('The servers table is missing'));
         return;
       }
-      const ensurePublicationColumn = (callback) => {
-        if (columns.some((column) => column.name === 'is_published')) return callback();
-        serversDb.run('ALTER TABLE servers ADD COLUMN is_published INTEGER NOT NULL DEFAULT 1', callback);
+      const existingServerColumns = new Set(columns.map((column) => column.name));
+      const serverMigrations = [
+        ['is_published', 'ALTER TABLE servers ADD COLUMN is_published INTEGER NOT NULL DEFAULT 1'],
+        ['avatar_url', 'ALTER TABLE servers ADD COLUMN avatar_url TEXT']
+      ].filter(([name]) => !existingServerColumns.has(name));
+
+      const runServerMigrations = (callback) => {
+        if (!serverMigrations.length) return callback();
+        const migration = serverMigrations.shift();
+        serversDb.run(migration[1], (migrationErr) => {
+          if (migrationErr) return callback(migrationErr);
+          runServerMigrations(callback);
+        });
       };
-      ensurePublicationColumn((migrationErr) => {
+
+      runServerMigrations((migrationErr) => {
         if (migrationErr) return completeSchemaTask(migrationErr);
         serversDb.run('CREATE TABLE IF NOT EXISTS franchise_schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)', (tableErr) => {
           if (tableErr) return completeSchemaTask(tableErr);
@@ -193,8 +204,22 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
         if (hubIndexErr) return completeSchemaTask(hubIndexErr);
         serversDb.all('PRAGMA table_info(franchise_hubs)', (hubSchemaErr, columns) => {
           if (hubSchemaErr) return completeSchemaTask(hubSchemaErr);
-          if (columns.some((column) => column.name === 'is_public')) return completeSchemaTask();
-          serversDb.run('ALTER TABLE franchise_hubs ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0', completeSchemaTask);
+          const existingHubColumns = new Set(columns.map((column) => column.name));
+          const hubMigrations = [
+            ['is_public', 'ALTER TABLE franchise_hubs ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0'],
+            ['avatar_url', 'ALTER TABLE franchise_hubs ADD COLUMN avatar_url TEXT']
+          ].filter(([name]) => !existingHubColumns.has(name));
+
+          const runHubMigrations = (callback) => {
+            if (!hubMigrations.length) return callback();
+            const migration = hubMigrations.shift();
+            serversDb.run(migration[1], (migrationErr) => {
+              if (migrationErr) return callback(migrationErr);
+              runHubMigrations(callback);
+            });
+          };
+
+          runHubMigrations(completeSchemaTask);
         });
       });
     });

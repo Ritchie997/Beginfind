@@ -256,7 +256,7 @@ function parsePostImages(row) {
 router.get('/public/franchises', async (req, res) => {
   try {
     const franchises = await dbAll(`
-      SELECT s.id, s.owner_id, s.name, s.description, s.created_at, s.updated_at,
+      SELECT s.id, s.owner_id, s.name, s.description, s.avatar_url, s.created_at, s.updated_at,
              (SELECT COUNT(*) FROM user_server_memberships m WHERE m.server_id = s.id) AS member_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.is_public = 1) AS hub_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active' AND h.is_public = 1) AS active_hubs,
@@ -282,7 +282,7 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
     const franchiseId = Number(req.params.id);
     if (!Number.isInteger(franchiseId) || franchiseId < 1) return res.status(404).json({ error: 'Франшиза не найдена' });
     const franchise = await dbGet(`
-      SELECT s.id, s.owner_id, s.name, s.description, s.is_published, s.created_at, s.updated_at,
+      SELECT s.id, s.owner_id, s.name, s.description, s.avatar_url, s.is_published, s.created_at, s.updated_at,
              (SELECT COUNT(*) FROM user_server_memberships m WHERE m.server_id = s.id) AS member_count
       FROM servers s WHERE s.id = ?
     `, [franchiseId]);
@@ -295,7 +295,7 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
 
     const [hubs, rows, member] = await Promise.all([
       dbAll(`
-        SELECT id, server_id, name, description, status, is_public, created_at, updated_at
+        SELECT id, server_id, name, description, avatar_url, status, is_public, created_at, updated_at
         FROM franchise_hubs
         WHERE server_id = ? AND (is_public = 1 OR ? = 1)
         ORDER BY created_at DESC, id DESC
@@ -350,7 +350,7 @@ router.get('/public/franchises/:id', optionalAuth, async (req, res) => {
 router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const franchises = await dbAll(`
-      SELECT s.id, s.name, s.description, s.is_published,
+      SELECT s.id, s.name, s.description, s.avatar_url, s.is_published,
              (SELECT COUNT(*) FROM user_server_memberships members WHERE members.server_id = s.id) AS member_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.is_public = 1) AS hub_count,
              (SELECT COUNT(*) FROM franchise_hubs h WHERE h.server_id = s.id AND h.status = 'active' AND h.is_public = 1) AS active_hubs,
@@ -379,7 +379,7 @@ router.get('/franchises/mine', auth.authenticateToken, auth.checkApproved, async
 router.get('/franchises/feed', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const rows = await dbAll(`
-      SELECT p.*, s.id AS franchise_id, s.name AS franchise_name,
+      SELECT p.*, s.id AS franchise_id, s.name AS franchise_name, s.avatar_url AS franchise_avatar_url,
              h.name AS hub_name
       FROM user_server_memberships m
       JOIN servers s ON s.id = m.server_id AND s.is_published = 1
@@ -407,6 +407,7 @@ router.get('/franchises/feed', auth.authenticateToken, auth.checkApproved, async
         ...post,
         franchise_id: row.franchise_id,
         franchise_name: row.franchise_name,
+        franchise_avatar_url: row.franchise_avatar_url || null,
         hub_name: row.hub_name || null,
         likes_count: counts.likes,
         comments_count: counts.comments,

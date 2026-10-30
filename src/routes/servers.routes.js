@@ -111,7 +111,7 @@ router.get('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, asyn
     if (!server) return res.status(404).json({ error: 'Franchise not found' });
     const canManage = await isServerAdmin(req.user, serverId);
     const hubs = await dbAll('servers.db', `
-      SELECT id, server_id, name, description, status, created_by,
+      SELECT id, server_id, name, description, avatar_url, status, created_by,
              created_by_name, is_public, status_updated_at, status_updated_by,
              status_updated_by_name, created_at, updated_at
       FROM franchise_hubs
@@ -140,10 +140,11 @@ router.post('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, asy
     if (description.length > 1000) return res.status(400).json({ error: 'Hub description must be at most 1000 characters' });
     const actor = hubActorName(req.user);
     const isPublic = req.body.is_public === true;
+    const avatarUrl = typeof req.body.avatar_url === 'string' ? (req.body.avatar_url.trim() || null) : null;
     const result = await dbRun('servers.db', `
-      INSERT INTO franchise_hubs (server_id, name, description, is_public, created_by, created_by_name, status_updated_by, status_updated_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [serverId, name, description, isPublic ? 1 : 0, req.user.id, actor, req.user.id, actor]);
+      INSERT INTO franchise_hubs (server_id, name, description, is_public, avatar_url, created_by, created_by_name, status_updated_by, status_updated_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [serverId, name, description, isPublic ? 1 : 0, avatarUrl, req.user.id, actor, req.user.id, actor]);
     const hub = await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [result.lastID]);
     await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_created', { hubId: hub.id, name, isPublic });
     res.status(201).json(hub);
@@ -169,10 +170,13 @@ router.put('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApprove
       return res.status(400).json({ error: 'Visibility must be a boolean' });
     }
     const isPublic = req.body.is_public == null ? existing.is_public === 1 : req.body.is_public;
+    const avatarUrl = req.body.avatar_url !== undefined
+      ? (typeof req.body.avatar_url === 'string' ? req.body.avatar_url.trim() : null)
+      : existing.avatar_url;
     await dbRun('servers.db', `
-      UPDATE franchise_hubs SET name = ?, description = ?, is_public = ?, updated_at = CURRENT_TIMESTAMP
+      UPDATE franchise_hubs SET name = ?, description = ?, is_public = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
-    `, [name, description, isPublic ? 1 : 0, hubId, serverId]);
+    `, [name, description, isPublic ? 1 : 0, avatarUrl, hubId, serverId]);
     const actor = hubActorName(req.user);
     await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_updated', { hubId, name, isPublic });
     res.json(await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [hubId]));
@@ -255,8 +259,8 @@ router.get('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
 // Создание нового сервера
 router.post('/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { name, description } = req.body;
-    const server = await serverSystem.createServer(name, description, req.user.id);
+    const { name, description, avatar_url } = req.body;
+    const server = await serverSystem.createServer(name, description, req.user.id, avatar_url);
     // Добавляем владельца как администратора сервера
     await serverSystem.addUserToServer(req.user.id, server.id);
     const roles = await serverSystem.getRolesOnServer(server.id);
@@ -275,7 +279,7 @@ router.post('/servers', auth.authenticateToken, auth.checkApproved, async (req, 
 router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, avatar_url } = req.body;
     const userId = req.user.id;
 
     const serversDb = new sqlite3.Database(dbPath('servers.db'));
@@ -299,7 +303,7 @@ router.put('/servers/:id', auth.authenticateToken, auth.checkApproved, async (re
         return;
       }
 
-      const result = await serverSystem.updateServer(id, name, description);
+      const result = await serverSystem.updateServer(id, name, description, avatar_url);
       if (result.changes === 0) {
         res.status(404).json({ error: 'Server not found' });
       } else {

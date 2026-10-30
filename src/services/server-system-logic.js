@@ -11,16 +11,16 @@ function getDatabaseConnection() {
 // === CRUD операции для серверов ===
 
 // Создание нового сервера
-function createServer(name, description, ownerId) {
+function createServer(name, description, ownerId, avatarUrl = null) {
   return new Promise((resolve, reject) => {
     const db = getDatabaseConnection();
-    const query = 'INSERT INTO servers (name, description, owner_id, is_published) VALUES (?, ?, ?, 1)';
+    const query = 'INSERT INTO servers (name, description, owner_id, is_published, avatar_url) VALUES (?, ?, ?, 1, ?)';
     
-    db.run(query, [name, description, ownerId], function(err) {
+    db.run(query, [name, description, ownerId, avatarUrl || null], function(err) {
       if (err) {
         reject(err);
       } else {
-        resolve({ id: this.lastID, name, description, owner_id: ownerId, is_published: 1 });
+        resolve({ id: this.lastID, name, description, owner_id: ownerId, is_published: 1, avatar_url: avatarUrl || null });
       }
       db.close();
     });
@@ -53,12 +53,19 @@ function getServerById(serverId) {
 }
 
 // Обновление сервера
-function updateServer(serverId, name, description) {
+function updateServer(serverId, name, description, avatarUrl) {
   return new Promise((resolve, reject) => {
     const db = getDatabaseConnection();
-    const query = 'UPDATE servers SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+    let query, params;
+    if (avatarUrl !== undefined) {
+      query = 'UPDATE servers SET name = ?, description = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+      params = [name, description, avatarUrl || null, serverId];
+    } else {
+      query = 'UPDATE servers SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+      params = [name, description, serverId];
+    }
     
-    db.run(query, [name, description, serverId], function(err) {
+    db.run(query, params, function(err) {
       if (err) {
         reject(err);
       } else {
@@ -334,7 +341,7 @@ function getAllServersWithUserCount() {
     
     // Сначала получаем все сервера
     serversDb.all(`
-      SELECT s.id, s.name, s.description, s.owner_id, s.is_published, s.created_at,
+      SELECT s.id, s.name, s.description, s.avatar_url, s.owner_id, s.is_published, s.created_at,
              s.updated_at
       FROM servers s
       ORDER BY s.created_at DESC
@@ -421,7 +428,7 @@ function getServerWithDetails(serverId) {
     
     // Получаем основную информацию о сервере
     serversDb.get(`
-      SELECT s.id, s.name, s.description, s.owner_id, s.is_published, s.created_at, s.updated_at
+      SELECT s.id, s.name, s.description, s.avatar_url, s.owner_id, s.is_published, s.created_at, s.updated_at
       FROM servers s
       WHERE s.id = ?
     `, [serverId], (err, serverRow) => {
