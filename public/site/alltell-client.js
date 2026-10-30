@@ -1530,8 +1530,9 @@
           ${hubs.map(function (hub) {
             var isHubActive = hub.status === 'active';
             var isHubPaused = hub.status === 'paused';
+            var statusTitle = HUB_STATUSES[hub.status] || hub.status;
             return `
-              <article class="alltell-hub-card ${isHubActive ? 'is-hub-active' : ''}">
+              <article class="alltell-hub-card status-${escapeHtml(hub.status)} ${isHubActive ? 'is-hub-active' : ''}" data-hub-id="${hub.id}" title="Статус хаба: ${escapeHtml(statusTitle)}">
                 <div class="alltell-hub-card-header">
                   <div class="alltell-hub-icon">
                     ${hub.avatar_url
@@ -1539,18 +1540,11 @@
                       : '<i class="fas fa-dice-d20"></i>'}
                   </div>
                   <div class="alltell-hub-title-block">
-                    <h3>${escapeHtml(hub.name)}</h3>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
-                        <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
-                        ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
-                      </span>
-                      <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="${canManage ? 'Нажмите, чтобы переключить видимость хаба' : ''}">
-                        <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''} ${!canManage ? 'disabled' : ''}>
-                        <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
-                      </label>
-                    </div>
+                    <h3 title="${escapeHtml(hub.name)}">${escapeHtml(hub.name)}</h3>
                   </div>
+                  <label class="alltell-hub-pub-check" title="${canManage ? (hub.is_public ? 'Публичный хаб (виден всем). Нажмите, чтобы скрыть' : 'Скрытый хаб (виден только участникам). Нажмите, чтобы опубликовать') : (hub.is_public ? 'Публичный хаб' : 'Скрытый хаб')}">
+                    <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''} ${!canManage ? 'disabled' : ''}>
+                  </label>
                 </div>
                 <div class="alltell-hub-card-desc-wrap">
                   <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml((hub.description || '').trim() || 'Описание ролевого хаба пока не добавлено.')}</p>
@@ -1962,33 +1956,21 @@
                 ${data.hubs.map(function (hub) {
                   var isHubActive = hub.status === 'active';
                   var isHubPaused = hub.status === 'paused';
+                  var statusTitle = HUB_STATUSES[hub.status] || hub.status;
                   return `
-                    <article class="alltell-hub-card ${isHubActive ? 'is-hub-active' : ''}">
+                    <article class="alltell-hub-card status-${escapeHtml(hub.status)} ${isHubActive ? 'is-hub-active' : ''}" data-hub-id="${hub.id}" title="Статус хаба: ${escapeHtml(statusTitle)}">
                       <div class="alltell-hub-card-header">
                         <div class="alltell-hub-icon">
-                    ${hub.avatar_url
-                      ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="${escapeHtml(hub.name)}">`
-                      : '<i class="fas fa-dice-d20"></i>'}
-                  </div>
-                        <div class="alltell-hub-title-block">
-                          <h3>${escapeHtml(hub.name)}</h3>
-                          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                            <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
-                              <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
-                              ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
-                            </span>
-                            ${canManage ? `
-                              <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="Нажмите, чтобы переключить видимость хаба">
-                                <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''}>
-                                <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
-                              </label>
-                            ` : (hub.is_public ? `
-                              <span class="alltell-hub-pub-toggle is-pub" style="cursor:default;"><i class="fas fa-globe" style="font-size:10px;"></i> Публичный</span>
-                            ` : `
-                              <span class="alltell-hub-pub-toggle is-priv" style="cursor:default;"><i class="fas fa-lock" style="font-size:10px;"></i> Скрытый</span>
-                            `)}
-                          </div>
+                          ${hub.avatar_url
+                            ? `<img src="${escapeHtml(normalizeImageUrl(hub.avatar_url))}" alt="${escapeHtml(hub.name)}">`
+                            : '<i class="fas fa-dice-d20"></i>'}
                         </div>
+                        <div class="alltell-hub-title-block">
+                          <h3 title="${escapeHtml(hub.name)}">${escapeHtml(hub.name)}</h3>
+                        </div>
+                        <label class="alltell-hub-pub-check" title="${canManage ? (hub.is_public ? 'Публичный хаб (виден всем). Нажмите, чтобы скрыть' : 'Скрытый хаб (виден только участникам). Нажмите, чтобы опубликовать') : (hub.is_public ? 'Публичный хаб' : 'Скрытый хаб')}">
+                          <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''} ${!canManage ? 'disabled' : ''}>
+                        </label>
                       </div>
                       <div class="alltell-hub-card-desc-wrap">
                         <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml((hub.description || '').trim() || 'Описание ролевого хаба пока не добавлено.')}</p>
@@ -2739,7 +2721,7 @@
 
     async function changeHubStatus(franchiseId, hubId, status) {
       try {
-        await request('/api/servers/' + franchiseId + '/hubs/' + hubId, 'PUT', { status: status });
+        await request('/api/servers/' + franchiseId + '/hubs/' + hubId + '/status', 'PUT', { status: status });
         showToast('Статус хаба обновлён');
         await loadWorkspaceData(franchiseId);
         if (state.detail) state.detail.hubs = state.workspaceData.hubs;
