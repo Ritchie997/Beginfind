@@ -1115,6 +1115,44 @@
     if (!body) return '';
     var text = escapeHtml(body);
 
+    // 1. Извлекаем блоки кода ```lang\ncode\n``` чтобы их содержимое не задевалось остальной разметкой
+    var codeBlocks = [];
+    text = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)\r?\n```/g, function (_, lang, code) {
+      var placeholder = '@@ALLTELLCODEBLOCK' + codeBlocks.length + '@@';
+      var langAttr = lang ? ' class="language-' + lang.trim() + '"' : '';
+      codeBlocks.push(
+        '<pre class="alltell-post-code-block blk-code"><code' + langAttr + '>' + code + '</code></pre>'
+      );
+      return placeholder;
+    });
+
+    // 2. Врезки-плашки (callout): > [!NOTE|TIP|WARNING] Заголовок \n > текст
+    text = text.replace(/((?:^(?:>|&gt;)\s*\[!(NOTE|INFO|TIP|WARNING|CAUTION)\][^\n]*(?:\n|$))(?:^(?:>|&gt;)[^\n]*(?:\n|$))*)/gim, function (match) {
+      var lines = match.split('\n').filter(function (l) { return l.trim().length > 0; });
+      var firstLine = lines[0].replace(/^(?:>|&gt;)\s*/, '');
+      var headerMatch = firstLine.match(/^\[!(NOTE|INFO|TIP|WARNING|CAUTION)\]\s*(.*)$/i);
+      var variant = 'info';
+      var customTitle = '';
+      if (headerMatch) {
+        var vKey = headerMatch[1].toLowerCase();
+        if (vKey === 'note' || vKey === 'info') variant = 'info';
+        else if (vKey === 'tip') variant = 'tip';
+        else if (vKey === 'warning' || vKey === 'caution') variant = 'warning';
+        customTitle = headerMatch[2].trim();
+      }
+      var labels = { info: 'Информация', tip: 'Совет', warning: 'Внимание' };
+      var icons = { info: 'fa-circle-info', tip: 'fa-lightbulb', warning: 'fa-triangle-exclamation' };
+      var title = customTitle || labels[variant];
+      var bodyLines = lines.slice(1).map(function (l) {
+        return l.replace(/^(?:>|&gt;)\s*/, '');
+      });
+      var bodyText = bodyLines.join('<br>').replace(/(?:<br>)+$/, '');
+      return '<aside class="alltell-post-callout blk-callout blk-callout-' + variant + '">' +
+        '<div class="alltell-callout-header"><i class="fas ' + icons[variant] + '"></i><strong>' + title + '</strong></div>' +
+        (bodyText ? '<div class="alltell-callout-body">' + bodyText + '</div>' : '') +
+        '</aside>';
+    });
+
     // Заголовки (#, ##, ###, ####)
     text = text.replace(/^(#{1,4})\s+(.+)$/gm, function (_, hashes, content) {
       var lvl = hashes.length;
@@ -1204,6 +1242,11 @@
 
     // Обычные markdown-ссылки: [название](url)
     text = text.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="alltell-post-link">$1 <i class="fas fa-arrow-up-right-from-square"></i></a>');
+
+    // Восстанавливаем блоки кода
+    text = text.replace(/@@ALLTELLCODEBLOCK(\d+)@@/g, function (_, i) {
+      return codeBlocks[Number(i)] || '';
+    });
 
     return text;
   }
@@ -1381,13 +1424,28 @@
       return { bullet: 'Список', ordered: 'Нумерованный список', checklist: 'Чек-лист' }[block.data.style] || 'Список';
     }
     if (block.type === 'quote') return 'Цитата';
+    if (block.type === 'divider') return 'Разделитель';
+    if (block.type === 'code') return 'Блок кода' + (block.data.language ? ' (' + block.data.language + ')' : '');
+    if (block.type === 'callout') {
+      var calloutNames = { info: 'Врезка (инфо)', tip: 'Врезка (совет)', warning: 'Врезка (внимание)' };
+      return calloutNames[block.data.variant] || 'Врезка';
+    }
     return 'Текст';
   }
 
   function autosizeField(el) {
-    if (!el || !el.isConnected) return;
+    if (!el || !el.isConnected || !el.offsetWidth) return;
+    var scroller = document.scrollingElement || document.documentElement;
+    var prevScroll = scroller.scrollTop;
+    var holder = el.parentElement;
+    var prevMin = holder ? holder.style.minHeight : '';
+    if (holder) holder.style.minHeight = holder.offsetHeight + 'px';
     el.style.height = 'auto';
     el.style.height = Math.max(26, el.scrollHeight) + 'px';
+    if (holder) holder.style.minHeight = prevMin;
+    if (scroller.scrollTop !== prevScroll) {
+      try { scroller.scrollTo({ top: prevScroll, behavior: 'instant' }); } catch (e) { scroller.scrollTop = prevScroll; }
+    }
   }
 
   function parsePostBlocks(body) {
@@ -1400,6 +1458,26 @@
     rawBlocks.forEach(function (raw) {
       var trimmed = raw.trim();
       if (!trimmed) return;
+
+      // Разделитель: --- или ***
+      if (/^(?:---|—{3,}|\*\*\*)$/.test(trimmed)) {
+        blocks.push({ id: genBlockId(), type: 'divider', data: {} });
+        return;
+      }
+
+      // Блок кода: ```lang\ncode\n```
+      var codeMatch = trimmed.match(/^```([a-zA-Z0-9_-]*)\n([\s\S]*?)```$/);
+      if (codeMatch) {
+        blocks.push({
+          id: genBlockId(),
+          type: 'code',
+          data: {
+            language: codeMatch[1].trim(),
+            code: codeMatch[2]
+          }
+        });
+        return;
+      }
 
       var headingMatch = trimmed.match(/^(#{1,6})\s+([\s\S]+)$/);
       if (headingMatch && !trimmed.includes('\n')) {
@@ -1418,6 +1496,26 @@
       var isQuote = lines.every(function (l) { return !l.trim() || /^(?:>|&gt;)\s*/.test(l.trim()); }) &&
                     lines.some(function (l) { return /^(?:>|&gt;)\s*/.test(l.trim()); });
       if (isQuote) {
+        var firstLine = lines[0].replace(/^(?:>|&gt;)\s*/, '');
+        var calloutHeaderMatch = firstLine.match(/^\[!(NOTE|INFO|TIP|WARNING|CAUTION)\]\s*(.*)$/i);
+        if (calloutHeaderMatch) {
+          var variant = calloutHeaderMatch[1].toLowerCase();
+          if (variant === 'note') variant = 'info';
+          if (variant === 'caution') variant = 'warning';
+          var calloutTitle = calloutHeaderMatch[2].trim();
+          var calloutBody = lines.slice(1).map(function (l) { return l.replace(/^(?:>|&gt;)\s*/, ''); }).join('\n');
+          blocks.push({
+            id: genBlockId(),
+            type: 'callout',
+            data: {
+              variant: variant,
+              title: calloutTitle,
+              markdown: calloutBody
+            }
+          });
+          return;
+        }
+
         var quoteText = lines.map(function (l) { return l.replace(/^(?:>|&gt;)\s*/, ''); }).join('\n');
         blocks.push({
           id: genBlockId(),
@@ -1508,6 +1606,21 @@
           var lines = qText.split('\n').map(function (l) { return '> ' + l; }).join('\n');
           parts.push(lines);
         }
+      } else if (b.type === 'divider') {
+        parts.push('---');
+      } else if (b.type === 'code') {
+        var lang = (b.data && b.data.language) || '';
+        var code = (b.data && b.data.code != null ? b.data.code : '');
+        parts.push('```' + lang + '\n' + code + '\n```');
+      } else if (b.type === 'callout') {
+        var v = ((b.data && b.data.variant) || 'info').toUpperCase();
+        var t = (b.data && b.data.title) ? ' ' + b.data.title.trim() : '';
+        var md = (b.data && b.data.markdown != null ? b.data.markdown : '').trim();
+        var calloutLines = ['> [!' + v + ']' + t];
+        if (md) {
+          md.split('\n').forEach(function (l) { calloutLines.push('> ' + l); });
+        }
+        parts.push(calloutLines.join('\n'));
       } else if (b.type === 'list') {
         var items = (b.data && b.data.items) || [];
         var style = (b.data && b.data.style) || 'bullet';
@@ -1527,6 +1640,228 @@
       }
     });
     return parts.join('\n\n');
+  }
+
+  // ===== AllTell Post Editor History (Undo / Redo) =====
+
+  function updateUndoRedoButtons(state) {
+    var canUndo = !!(state && state._postHistory && state._postHistoryIndex > 0);
+    var canRedo = !!(state && state._postHistory && state._postHistoryIndex < state._postHistory.length - 1);
+    document.querySelectorAll('[data-post-cmd="undo"]').forEach(function (btn) {
+      btn.disabled = !canUndo;
+      btn.classList.toggle('is-disabled', !canUndo);
+    });
+    document.querySelectorAll('[data-post-cmd="redo"]').forEach(function (btn) {
+      btn.disabled = !canRedo;
+      btn.classList.toggle('is-disabled', !canRedo);
+    });
+  }
+
+  function recordPostEditorHistory(state, immediate) {
+    if (!state || !state.postBlocks) return;
+    if (!state._postHistory) {
+      state._postHistory = [];
+      state._postHistoryIndex = -1;
+    }
+    var snapshot = JSON.stringify(state.postBlocks);
+    if (state._postHistoryIndex >= 0 && state._postHistory[state._postHistoryIndex] === snapshot) {
+      return;
+    }
+    var doRecord = function () {
+      state._postHistory = state._postHistory.slice(0, state._postHistoryIndex + 1);
+      state._postHistory.push(snapshot);
+      if (state._postHistory.length > 50) {
+        state._postHistory.shift();
+      }
+      state._postHistoryIndex = state._postHistory.length - 1;
+      updateUndoRedoButtons(state);
+    };
+
+    if (immediate) {
+      if (state._postHistoryDebounce) {
+        clearTimeout(state._postHistoryDebounce);
+        state._postHistoryDebounce = null;
+      }
+      doRecord();
+    } else {
+      if (state._postHistoryDebounce) clearTimeout(state._postHistoryDebounce);
+      state._postHistoryDebounce = setTimeout(function () {
+        state._postHistoryDebounce = null;
+        doRecord();
+      }, 400);
+    }
+  }
+
+  function undoPostEditor(state) {
+    if (!state || !state._postHistory || state._postHistoryIndex <= 0) return;
+    if (state._postHistoryDebounce) {
+      clearTimeout(state._postHistoryDebounce);
+      state._postHistoryDebounce = null;
+    }
+    state._postHistoryIndex--;
+    var snapshot = state._postHistory[state._postHistoryIndex];
+    try {
+      state.postBlocks = JSON.parse(snapshot);
+      var container = document.getElementById('postBlocksContent');
+      if (container) renderPostBlocksList(container, state);
+      syncPostEditorState(state);
+    } catch (e) {
+      console.error('Failed to undo post editor:', e);
+    }
+    updateUndoRedoButtons(state);
+  }
+
+  function redoPostEditor(state) {
+    if (!state || !state._postHistory || state._postHistoryIndex >= state._postHistory.length - 1) return;
+    if (state._postHistoryDebounce) {
+      clearTimeout(state._postHistoryDebounce);
+      state._postHistoryDebounce = null;
+    }
+    state._postHistoryIndex++;
+    var snapshot = state._postHistory[state._postHistoryIndex];
+    try {
+      state.postBlocks = JSON.parse(snapshot);
+      var container = document.getElementById('postBlocksContent');
+      if (container) renderPostBlocksList(container, state);
+      syncPostEditorState(state);
+    } catch (e) {
+      console.error('Failed to redo post editor:', e);
+    }
+    updateUndoRedoButtons(state);
+  }
+
+  function duplicatePostBlock(state, blockId) {
+    if (!state || !state.postBlocks) return;
+    var idx = state.postBlocks.findIndex(function (b) { return b.id === blockId; });
+    if (idx === -1) return;
+    var clone = JSON.parse(JSON.stringify(state.postBlocks[idx]));
+    clone.id = genBlockId();
+    state.postBlocks.splice(idx + 1, 0, clone);
+    state._pendingFocusBlockId = clone.id;
+    recordPostEditorHistory(state, true);
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+    if (typeof showToast === 'function') showToast('Блок продублирован');
+    else if (window.toast) window.toast('Блок продублирован');
+  }
+
+  function addPostDividerBlock(state) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    var newBlock = { id: genBlockId(), type: 'divider', data: {} };
+    if (idx !== -1) {
+      blocks.splice(idx + 1, 0, newBlock);
+    } else {
+      blocks.push(newBlock);
+    }
+    recordPostEditorHistory(state, true);
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function addPostCodeBlock(state, language) {
+    if (!state || !state.postBlocks) return;
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    var newBlock = { id: genBlockId(), type: 'code', data: { language: language || '', code: '' } };
+    if (idx !== -1) {
+      blocks.splice(idx + 1, 0, newBlock);
+    } else {
+      blocks.push(newBlock);
+    }
+    state._pendingFocusBlockId = newBlock.id;
+    recordPostEditorHistory(state, true);
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function addPostCalloutBlock(state, variant) {
+    if (!state || !state.postBlocks) return;
+    variant = variant || 'info';
+    var blocks = state.postBlocks;
+    var activeId = state._activePostBlockId;
+    var idx = blocks.findIndex(function (b) { return b.id === activeId; });
+    var newBlock = { id: genBlockId(), type: 'callout', data: { variant: variant, title: '', markdown: '' } };
+    if (idx !== -1) {
+      blocks.splice(idx + 1, 0, newBlock);
+    } else {
+      blocks.push(newBlock);
+    }
+    state._pendingFocusBlockId = newBlock.id;
+    recordPostEditorHistory(state, true);
+    var container = document.getElementById('postBlocksContent');
+    if (container) renderPostBlocksList(container, state);
+    syncPostEditorState(state);
+  }
+
+  function applyPostLink(state) {
+    var ta = state && state._activePostTextarea;
+    if (!ta || !document.body.contains(ta)) {
+      ta = document.querySelector('#postBlocksContent textarea');
+      if (!ta) return;
+    }
+    var promptFn = (window.confirmDialog && window.confirmDialog.prompt)
+      ? function (p) { return window.confirmDialog.prompt(p); }
+      : function (p) { return Promise.resolve(window.prompt(p.message, p.placeholder || '')); };
+
+    promptFn({
+      title: 'Вставить ссылку',
+      message: 'Введите адрес ссылки (URL):',
+      placeholder: 'https://',
+      confirmLabel: 'Вставить'
+    }).then(function (url) {
+      if (!url || !url.trim()) return;
+      url = url.trim();
+      var start = ta.selectionStart;
+      var end = ta.selectionEnd;
+      var val = ta.value;
+      var selected = val.substring(start, end) || 'ссылка';
+      var insert = '[' + selected + '](' + url + ')';
+      ta.value = val.substring(0, start) + insert + val.substring(end);
+      ta.selectionStart = ta.selectionEnd = start + insert.length;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      autosizeField(ta);
+      if (state) syncPostEditorState(state);
+    });
+  }
+
+  function applyPostWikilink(state) {
+    var ta = state && state._activePostTextarea;
+    if (!ta || !document.body.contains(ta)) {
+      ta = document.querySelector('#postBlocksContent textarea');
+      if (!ta) return;
+    }
+    var promptFn = (window.confirmDialog && window.confirmDialog.prompt)
+      ? function (p) { return window.confirmDialog.prompt(p); }
+      : function (p) { return Promise.resolve(window.prompt(p.message, p.placeholder || '')); };
+
+    promptFn({
+      title: 'Вставить ссылку на статью',
+      message: 'Введите название или slug статьи Antropedia:',
+      placeholder: 'Название или slug статьи',
+      confirmLabel: 'Вставить'
+    }).then(function (slugOrTitle) {
+      if (!slugOrTitle || !slugOrTitle.trim()) return;
+      var raw = slugOrTitle.trim();
+      var start = ta.selectionStart;
+      var end = ta.selectionEnd;
+      var val = ta.value;
+      var selected = val.substring(start, end);
+      var insert = selected ? '[' + selected + ']((' + raw + '))' : '[[' + raw + ']]';
+      ta.value = val.substring(0, start) + insert + val.substring(end);
+      ta.selectionStart = ta.selectionEnd = start + insert.length;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      autosizeField(ta);
+      if (state) syncPostEditorState(state);
+    });
   }
 
   function syncPostEditorState(state) {
@@ -1558,6 +1893,7 @@
       }
       previewEl.innerHTML = bodyHtml;
     }
+    updateUndoRedoButtons(state);
   }
 
   function updatePostPreview(form, state) {
@@ -1609,7 +1945,10 @@
     ta.addEventListener('input', function () {
       autosizeField(ta);
       if (opts.onInput) opts.onInput(ta.value);
-      if (opts.state) syncPostEditorState(opts.state);
+      if (opts.state) {
+        recordPostEditorHistory(opts.state, false);
+        syncPostEditorState(opts.state);
+      }
     });
 
     ta.addEventListener('keydown', function (e) {
@@ -1624,6 +1963,46 @@
         return;
       }
       var mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redoPostEditor(opts.state);
+        } else {
+          undoPostEditor(opts.state);
+        }
+        return;
+      }
+      if (mod && (e.key.toLowerCase() === 'y' || e.code === 'KeyY')) {
+        e.preventDefault();
+        redoPostEditor(opts.state);
+        return;
+      }
+      if (mod && (e.key.toLowerCase() === 'd' || e.code === 'KeyD')) {
+        e.preventDefault();
+        if (opts.block && opts.state) {
+          duplicatePostBlock(opts.state, opts.block.id);
+        }
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowUp' || e.code === 'ArrowUp')) {
+        e.preventDefault();
+        if (opts.block && opts.state) {
+          movePostBlock(opts.state, opts.block.id, -1);
+        }
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowDown' || e.code === 'ArrowDown')) {
+        e.preventDefault();
+        if (opts.block && opts.state) {
+          movePostBlock(opts.state, opts.block.id, 1);
+        }
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        applyPostLink(opts.state);
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); applyPostInlineFormat('bold', opts.state); }
       else if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); applyPostInlineFormat('italic', opts.state); }
       else if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); applyPostInlineFormat('underline', opts.state); }
@@ -1648,6 +2027,7 @@
     blocks.splice(idx + 1, 0, newBlock);
 
     state._pendingFocusBlockId = newBlock.id;
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1671,6 +2051,7 @@
         blocks.splice(idx, 1);
       }
     }
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1687,6 +2068,7 @@
     blocks[idx] = blocks[targetIdx];
     blocks[targetIdx] = temp;
     state._pendingFocusBlockId = blockId;
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1712,6 +2094,7 @@
       }
       state._pendingFocusBlockId = newBlock.id;
     }
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1742,6 +2125,7 @@
       }
       state._pendingFocusBlockId = newBlock.id;
     }
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1773,6 +2157,7 @@
       }
       state._pendingFocusBlockId = newBlock.id;
     }
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1805,6 +2190,7 @@
       }
       state._pendingFocusBlockId = newBlock.id;
     }
+    recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
     syncPostEditorState(state);
@@ -1851,12 +2237,21 @@
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.focus();
     autosizeField(ta);
-    if (state) syncPostEditorState(state);
+    if (state) {
+      recordPostEditorHistory(state, false);
+      syncPostEditorState(state);
+    }
   }
 
   function applyPostCommand(cmd, state, dataset) {
     dataset = dataset || {};
     switch (cmd) {
+      case 'undo':
+        undoPostEditor(state);
+        break;
+      case 'redo':
+        redoPostEditor(state);
+        break;
       case 'paragraph':
         addPostParagraphBlock(state);
         break;
@@ -1868,6 +2263,21 @@
         break;
       case 'quote':
         addPostQuoteBlock(state);
+        break;
+      case 'divider':
+        addPostDividerBlock(state);
+        break;
+      case 'code-block':
+        addPostCodeBlock(state);
+        break;
+      case 'callout':
+        addPostCalloutBlock(state, dataset.variant || 'info');
+        break;
+      case 'link':
+        applyPostLink(state);
+        break;
+      case 'wikilink':
+        applyPostWikilink(state);
         break;
       case 'bold':
       case 'italic':
@@ -1953,6 +2363,92 @@
         syncPostEditorState(state);
       });
       wrap.appendChild(addBtn);
+
+      return wrap;
+    }
+    if (block.type === 'divider') {
+      var wrap = document.createElement('div');
+      wrap.className = 'eb-divider-block';
+      wrap.innerHTML = '<i class="fas fa-minus"></i><hr><span>Разделитель</span>';
+      return wrap;
+    }
+    if (block.type === 'code') {
+      var wrap = document.createElement('div');
+      wrap.className = 'eb-code-editor eb-gap';
+
+      var lang = document.createElement('input');
+      lang.type = 'text';
+      lang.className = 'eb-input eb-input-sm';
+      lang.placeholder = 'язык (необязательно, например js)';
+      lang.value = (block.data && block.data.language) || '';
+      lang.addEventListener('input', function () {
+        block.data.language = lang.value;
+        recordPostEditorHistory(state, false);
+        syncPostEditorState(state);
+      });
+
+      var codeArea = createBlockTextarea((block.data && block.data.code) || '', {
+        className: 'eb-code-text',
+        placeholder: 'Код…',
+        block: block,
+        state: state,
+        onInput: function (val) {
+          block.data.code = val;
+        }
+      });
+
+      wrap.append(lang, codeArea);
+      return wrap;
+    }
+    if (block.type === 'callout') {
+      var wrap = document.createElement('div');
+      var curVariant = (block.data && block.data.variant) || 'info';
+      wrap.className = 'eb-callout-editor eb-variant-' + curVariant + ' eb-gap';
+
+      var variants = document.createElement('div');
+      variants.className = 'eb-callout-variant-group';
+      [
+        ['info', 'fa-circle-info', 'Информация'],
+        ['tip', 'fa-lightbulb', 'Совет'],
+        ['warning', 'fa-triangle-exclamation', 'Осторожно']
+      ].forEach(function (item) {
+        var v = item[0], icon = item[1], label = item[2];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerHTML = '<i class="fas ' + icon + '"></i> ' + label;
+        if (curVariant === v) btn.className = 'active';
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          block.data.variant = v;
+          recordPostEditorHistory(state, true);
+          renderPostBlocksList(containerEl, state);
+          syncPostEditorState(state);
+        });
+        variants.appendChild(btn);
+      });
+      wrap.appendChild(variants);
+
+      var titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.className = 'eb-input';
+      titleInput.placeholder = 'Заголовок плашки (необязательно)';
+      titleInput.value = (block.data && block.data.title) || '';
+      titleInput.addEventListener('input', function () {
+        block.data.title = titleInput.value;
+        recordPostEditorHistory(state, false);
+        syncPostEditorState(state);
+      });
+      wrap.appendChild(titleInput);
+
+      var bodyArea = createBlockTextarea((block.data && block.data.markdown) || '', {
+        placeholder: 'Текст примечания…',
+        block: block,
+        state: state,
+        onInput: function (val) {
+          block.data.markdown = val;
+        }
+      });
+      wrap.appendChild(bodyArea);
 
       return wrap;
     }
@@ -2116,19 +2612,11 @@
       var copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'eb-copy-btn';
-      copyBtn.title = 'Копировать / дублировать блок';
+      copyBtn.title = 'Копировать / дублировать блок (Ctrl+D)';
       copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
       copyBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        var idx = state.postBlocks.findIndex(function (b) { return b.id === block.id; });
-        if (idx === -1) return;
-        var clone = JSON.parse(JSON.stringify(block));
-        clone.id = genBlockId();
-        state.postBlocks.splice(idx + 1, 0, clone);
-        state._pendingFocusBlockId = clone.id;
-        renderPostBlocksList(containerEl, state);
-        syncPostEditorState(state);
-        showToast('Блок продублирован');
+        duplicatePostBlock(state, block.id);
       });
 
       var delBtn = document.createElement('button');
@@ -2170,6 +2658,7 @@
         if (!isAbove) newIdx += 1;
         state.postBlocks.splice(newIdx, 0, moved);
         state._pendingFocusBlockId = moved.id;
+        recordPostEditorHistory(state, true);
         renderPostBlocksList(containerEl, state);
         syncPostEditorState(state);
       });
@@ -2305,6 +2794,13 @@
                       <div class="toolbar-row toolbar-row-format" data-alltell-toolbar-row>
                         <div class="toolbar-group-wrap">
                           <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="undo" title="Отменить (Ctrl+Z)" disabled><i class="fas fa-rotate-left"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="redo" title="Повторить (Ctrl+Y / Ctrl+Shift+Z)" disabled><i class="fas fa-rotate-right"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">история</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
                             <button type="button" class="toolbar-button" data-post-cmd="paragraph" title="Текст — новый абзац"><i class="fas fa-paragraph"></i></button>
                           </div>
                           <span class="toolbar-group-label">текст</span>
@@ -2316,7 +2812,9 @@
                             <button type="button" class="toolbar-button" data-post-cmd="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="strike" title="Зачёркнутый (Ctrl+Shift+X)"><i class="fas fa-strikethrough"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="highlight" title="Выделение цветом"><i class="fas fa-highlighter"></i></button>
-                            <button type="button" class="toolbar-button" data-post-cmd="code" title="Код (строка)"><i class="fas fa-code"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="code" title="Инлайн-код"><i class="fas fa-code"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="link" title="Вставить ссылку (Ctrl+K)"><i class="fas fa-link"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="wikilink" title="Ссылка на статью Antropedia"><i class="fas fa-book-bookmark"></i></button>
                           </div>
                           <span class="toolbar-group-label">формат</span>
                         </div>
@@ -2345,8 +2843,11 @@
                         <div class="toolbar-group-wrap">
                           <div class="toolbar-group">
                             <button type="button" class="toolbar-button" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="divider" title="Разделитель"><i class="fas fa-minus"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="code-block" title="Блок кода"><i class="fas fa-file-code"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="callout" data-variant="info" title="Врезка / плашка"><i class="fas fa-circle-info"></i></button>
                           </div>
-                          <span class="toolbar-group-label">цитата</span>
+                          <span class="toolbar-group-label">блоки</span>
                         </div>
                       </div>
                       <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>
@@ -2372,7 +2873,7 @@
                 <input type="hidden" name="body" id="postBodyInput" value="${escapeHtml(serializePostBlocks(state.postBlocks || []))}">
                 <div class="alltell-post-body-footer">
                   <span class="alltell-post-format-hint">
-                    <i class="fab fa-markdown"></i> Поддерживается разметка: **жирный**, *курсив*, ||спойлеры||, списки и цитаты
+                    <i class="fab fa-markdown"></i> Поддерживается разметка: **жирный**, *курсив*, ||спойлеры||, списки, врезки, код и цитаты
                   </span>
                   <span class="alltell-post-char-counter" data-char-counter>
                     ${(post && post.body ? post.body.length : 0).toLocaleString('ru-RU')} / 10 000
@@ -3459,6 +3960,10 @@
     if (postBlocksContainer) {
       if (!state.postBlocks || !state.postBlocks.length) {
         state.postBlocks = parsePostBlocks(state.editingPost ? state.editingPost.body : '');
+      }
+      if (!state._postHistory || !state._postHistory.length) {
+        state._postHistory = [JSON.stringify(state.postBlocks)];
+        state._postHistoryIndex = 0;
       }
       renderPostBlocksList(postBlocksContainer, state);
       syncPostEditorState(state);
@@ -5320,6 +5825,8 @@
         state.editingPost = null;
         state.showPostForm = false;
         state.postBlocks = null;
+        state._postHistory = null;
+        state._postHistoryIndex = -1;
         state._activePostBlockId = null;
         state._activePostTextarea = null;
         releasePostImages();
@@ -5329,6 +5836,8 @@
         state.editingPost = null;
         state.showPostForm = false;
         state.postBlocks = null;
+        state._postHistory = null;
+        state._postHistoryIndex = -1;
         state._activePostBlockId = null;
         state._activePostTextarea = null;
         releasePostImages();

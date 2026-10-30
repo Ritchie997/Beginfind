@@ -4591,6 +4591,152 @@
     font-weight: 500;
 }
 
+/* Callouts, Code Blocks, and Dividers for AllTell Posts */
+.alltell-post-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    border-radius: 8px;
+    background: rgba(30, 31, 36, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid var(--c-accent, var(--blurple));
+}
+
+.alltell-post-callout.callout-info { --c-accent: var(--blurple); }
+.alltell-post-callout.callout-tip { --c-accent: #3ba55d; }
+.alltell-post-callout.callout-warning { --c-accent: #faa81a; }
+
+.alltell-callout-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-accent, #fff);
+}
+
+.alltell-callout-body {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-normal);
+}
+
+.alltell-post-code-block {
+    position: relative;
+    background: #141518;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    overflow-x: auto;
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #e3e5e8;
+}
+
+.alltell-post-code-block code {
+    font-family: inherit;
+    background: transparent;
+    padding: 0;
+}
+
+.alltell-post-divider {
+    border: none;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    margin: 18px 0;
+}
+
+.eb-divider-block {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 10px 0;
+}
+
+.eb-divider-block hr {
+    flex: 1;
+    border: none;
+    border-top: 1px dashed var(--background-accent);
+}
+
+.eb-code-editor {
+    width: 100%;
+}
+
+.eb-code-editor .eb-code-text {
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    background: #141518;
+    color: #e3e5e8;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 10px 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.eb-callout-editor {
+    border-left: 3px solid var(--c-accent, var(--blurple));
+    padding-left: 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.eb-callout-editor.eb-variant-info { --c-accent: var(--blurple); }
+.eb-callout-editor.eb-variant-tip { --c-accent: #3ba55d; }
+.eb-callout-editor.eb-variant-warning { --c-accent: #faa81a; }
+
+.eb-callout-variant-group {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.eb-callout-variant-group button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--background-accent);
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.eb-callout-variant-group button:hover {
+    color: var(--text-normal);
+}
+
+.eb-callout-variant-group button.active {
+    color: #fff;
+    border-color: var(--c-accent);
+    background: var(--c-accent);
+}
+
+.eb-input-sm {
+    padding: 5px 8px;
+    font-size: 13px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    color: var(--text-normal);
+    border-radius: 6px;
+    outline: none;
+}
+
+.eb-input-sm:focus {
+    border-color: var(--blurple);
+}
+
 .alltell-checklist,
 .alltell-post-ol,
 .alltell-post-ul {
@@ -9851,6 +9997,13 @@ a.site-profile-media-row:hover {
     background: rgba(99, 102, 241, 0.25);
     color: #818cf8;
     border-color: rgba(99, 102, 241, 0.4);
+}
+
+.antropedia-editor-view .toolbar-button:disabled,
+.antropedia-editor-view .toolbar-button.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .antropedia-editor-view .toolbar-row-modes {
