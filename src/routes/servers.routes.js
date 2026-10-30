@@ -87,6 +87,26 @@ function hubActorName(user) {
   return user.display_name || user.username || `Пользователь ${user.id}`;
 }
 
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return next();
+  let continued = false;
+  const publicFallback = {
+    status() { return this; },
+    json() {
+      if (continued) return;
+      continued = true;
+      delete req.user;
+      next();
+    }
+  };
+  return auth.authenticateToken(req, publicFallback, () => auth.checkApproved(req, publicFallback, () => {
+    if (continued) return;
+    continued = true;
+    next();
+  }));
+}
+
 // Получение всех серверов
 router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
@@ -104,7 +124,7 @@ router.get('/servers', auth.authenticateToken, auth.checkApproved, async (req, r
 });
 
 // Хабы франшизы (внутреннее имя верхнего уровня — server).
-router.get('/servers/:id/hubs', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+router.get('/servers/:id/hubs', optionalAuth, async (req, res) => {
   try {
     const serverId = Number(req.params.id);
     const server = await dbGet('servers.db', 'SELECT id FROM servers WHERE id = ?', [serverId]);

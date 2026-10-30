@@ -376,45 +376,67 @@
               ${escapeHtml(hubSummary)}
             </span>
           </div>
-          <button type="button" class="alltell-card-hubs-toggle" data-action="toggle-hub-preview" data-franchise-id="${franchise.id}">
+          <button type="button" class="alltell-card-hubs-toggle ${isExpanded ? 'is-expanded' : ''}" data-action="toggle-hub-preview" data-franchise-id="${Number(franchise.id)}">
             <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> ${isExpanded ? 'Скрыть хабы' : 'Показать хабы (' + totalHubs + ')'}
           </button>
           ${isExpanded ? `
             <div class="alltell-card-hubs-preview">
-              ${previewHubs ? (previewHubs.length ? previewHubs.map(function(h) {
-                return `<div class="alltell-card-hub-item" data-hub-id="${h.id}">
-                  <div class="alltell-card-hub-main">
-                    ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : ''}
-                    <span class="alltell-card-hub-name" title="${escapeHtml(h.name)}">${escapeHtml(h.name)}</span>
-                    <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
-                  </div>
-                  ${h.description ? `
-                    <button type="button" class="alltell-card-hub-desc-btn" data-action="open-card-hub-desc" data-hub-id="${h.id}" title="Описание хаба">
-                      <i class="fas fa-circle-info"></i>
-                    </button>
+              <div class="alltell-card-hubs-header">
+                <span class="alltell-card-hubs-header-title"><i class="fas fa-layer-group"></i> Игровые хабы</span>
+                <span class="alltell-card-hubs-header-count">${previewHubs ? previewHubs.length : '…'}</span>
+              </div>
+              ${previewHubs ? (previewHubs.length ? `
+                <div class="alltell-card-hubs-list">
+                  ${previewHubs.map(function(h) {
+                    return `<div class="alltell-card-hub-item" data-hub-id="${h.id}">
+                      <div class="alltell-card-hub-main">
+                        <span class="alltell-card-hub-avatar-wrap">
+                          ${h.avatar_url
+                            ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">`
+                            : `<i class="fas fa-dice-d20"></i>`
+                          }
+                        </span>
+                        <span class="alltell-card-hub-name" title="${escapeHtml(h.name)}">${escapeHtml(h.name)}</span>
+                        <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
+                      </div>
+                      ${h.description ? `
+                        <button type="button" class="alltell-card-hub-desc-btn" data-action="open-card-hub-desc" data-hub-id="${h.id}" title="Описание хаба">
+                          <i class="fas fa-circle-info"></i>
+                        </button>
+                      ` : ''}
+                    </div>`;
+                  }).join('')}
+                </div>
+                ${previewHubs.filter(function(h) { return !!h.description; }).map(function(h) {
+                  return `
                     <div class="alltell-card-hub-modal" data-card-hub-modal="${h.id}" hidden>
                       <div class="alltell-card-hub-modal-header">
                         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                          ${h.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">` : '<i class="fas fa-dice-d20" style="color:var(--blurple);"></i>'}
+                          <span class="alltell-card-hub-avatar-wrap">
+                            ${h.avatar_url
+                              ? `<img src="${escapeHtml(normalizeImageUrl(h.avatar_url))}" class="alltell-card-hub-avatar" alt="">`
+                              : `<i class="fas fa-dice-d20"></i>`
+                            }
+                          </span>
                           <strong>${escapeHtml(h.name)}</strong>
                         </div>
                         <button type="button" class="alltell-hub-modal-close-btn" data-action="close-card-hub-desc" data-hub-id="${h.id}" title="Закрыть">
                           <i class="fas fa-xmark"></i>
                         </button>
                       </div>
-                      <div style="margin:6px 0 8px;">
+                      <div style="margin:4px 0 6px;">
                         <span class="alltell-hub-status alltell-hub-status-${escapeHtml(h.status)}">${escapeHtml(HUB_STATUSES[h.status] || h.status)}</span>
                       </div>
                       <div class="alltell-card-hub-modal-body">
                         ${escapeHtml(h.description)}
                       </div>
-                      <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+                      <div style="margin-top:8px;display:flex;justify-content:flex-end;">
                         <button type="button" class="btn btn-secondary btn-sm" data-action="close-card-hub-desc" data-hub-id="${h.id}">Свернуть</button>
                       </div>
                     </div>
-                  ` : ''}
-                </div>`;
-              }).join('') : '<span style="color:var(--text-muted);">В этой франшизе пока нет хабов</span>') : '<span style="color:var(--text-muted);">Загрузка хабов…</span>'}
+                  `;
+                }).join('')}
+              ` : '<div class="alltell-card-hubs-empty"><i class="fas fa-inbox"></i> В этой франшизе пока нет хабов</div>') : '<div class="alltell-card-hubs-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка хабов…</div>'}
             </div>
           ` : ''}
           <div class="alltell-live-card-foot">
@@ -560,10 +582,11 @@
               <span class="alltell-section-count">${mine.length}</span>
             </div>
             <div class="alltell-live-grid">${mine.map(function (item) {
-              var catalogItem = state.franchises.find(function (franchise) { return franchise.id === item.id; });
-              var isOwner = currentUserId && (item.owner_id === currentUserId || (catalogItem && catalogItem.owner_id === currentUserId));
-              var isExpanded = state.expandedHubs.has(item.id);
-              var previewHubs = state.hubPreviewCache.get(item.id);
+              var catalogItem = state.franchises.find(function (franchise) { return Number(franchise.id) === Number(item.id); });
+              var isOwner = currentUserId && (Number(item.owner_id) === Number(currentUserId) || (catalogItem && Number(catalogItem.owner_id) === Number(currentUserId)));
+              var itemIdNum = Number(item.id);
+              var isExpanded = state.expandedHubs.has(itemIdNum);
+              var previewHubs = state.hubPreviewCache.get(itemIdNum);
               return franchiseCard(Object.assign({
                 active_hubs: 0, paused_hubs: 0, finished_hubs: 0, member_count: 0
               }, catalogItem || item, item), true, isOwner, isRoot, isExpanded, previewHubs);
@@ -591,10 +614,11 @@
             </div>
           ` : franchises.length ? `
             <div class="alltell-live-grid">${franchises.map(function (franchise) {
-              var isUserMember = mine && mine.some(function (item) { return item.id === franchise.id; });
+              var isUserMember = mine && mine.some(function (item) { return Number(item.id) === Number(franchise.id); });
               var isOwner = currentUserId && Number(franchise.owner_id) === Number(currentUserId);
-              var isExpanded = state.expandedHubs.has(franchise.id);
-              var previewHubs = state.hubPreviewCache.get(franchise.id);
+              var franchiseIdNum = Number(franchise.id);
+              var isExpanded = state.expandedHubs.has(franchiseIdNum);
+              var previewHubs = state.hubPreviewCache.get(franchiseIdNum);
               return franchiseCard(franchise, isUserMember, isOwner, isRoot, isExpanded, previewHubs);
             }).join('')}</div>
           ` : `
@@ -2055,6 +2079,11 @@
         </div>
       </div>
     `;
+    root.querySelectorAll('textarea[data-autogrow]').forEach(function (ta) {
+      ta.style.height = 'auto';
+      ta.style.overflow = 'hidden';
+      ta.style.height = Math.max(96, ta.scrollHeight) + 'px';
+    });
   }
 
   async function init() {
@@ -2717,19 +2746,22 @@
     }
 
     async function toggleHubPreview(franchiseId) {
-      if (state.expandedHubs.has(franchiseId)) {
-        state.expandedHubs.delete(franchiseId);
+      var id = Number(franchiseId);
+      if (!id) return;
+      if (state.expandedHubs.has(id)) {
+        state.expandedHubs.delete(id);
         renderCatalog(root, state);
         return;
       }
-      state.expandedHubs.add(franchiseId);
-      if (!state.hubPreviewCache.has(franchiseId)) {
+      state.expandedHubs.add(id);
+      if (!state.hubPreviewCache.has(id)) {
         renderCatalog(root, state);
         try {
-          var hubs = await request('/api/servers/' + franchiseId + '/hubs');
-          state.hubPreviewCache.set(franchiseId, Array.isArray(hubs) ? hubs : []);
+          var hubs = await request('/api/servers/' + id + '/hubs');
+          state.hubPreviewCache.set(id, Array.isArray(hubs) ? hubs : []);
         } catch (error) {
-          state.hubPreviewCache.set(franchiseId, []);
+          console.error('Ошибка загрузки хабов франшизы:', error);
+          state.hubPreviewCache.set(id, []);
         }
       }
       renderCatalog(root, state);
@@ -3693,13 +3725,21 @@
         state.editingHubId = 'new';
         renderDetail(root, state);
         var hubTa = root.querySelector('[data-hub-form] textarea[data-autogrow]');
-        if (hubTa) { hubTa.style.height = 'auto'; hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px'; }
+        if (hubTa) {
+          hubTa.style.height = 'auto';
+          hubTa.style.overflow = 'hidden';
+          hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px';
+        }
         root.querySelector('[data-hub-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'manage-edit-hub') {
         state.editingHubId = button.dataset.hubId;
         renderDetail(root, state);
         var hubTa = root.querySelector('[data-hub-form] textarea[data-autogrow]');
-        if (hubTa) { hubTa.style.height = 'auto'; hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px'; }
+        if (hubTa) {
+          hubTa.style.height = 'auto';
+          hubTa.style.overflow = 'hidden';
+          hubTa.style.height = Math.max(96, hubTa.scrollHeight) + 'px';
+        }
         root.querySelector('[data-hub-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (action === 'manage-cancel-hub') {
         state.editingHubId = null;
@@ -3717,14 +3757,17 @@
           hubCard.querySelectorAll('.alltell-hub-desc-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
         }
       } else if (action === 'open-card-hub-desc') {
-        var hubItem = button.closest('.alltell-card-hub-item');
-        if (hubItem) {
-          hubItem.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.removeAttribute('hidden'); });
+        var hubId = button.dataset.hubId;
+        var container = button.closest('.alltell-card-hubs-preview');
+        if (container && hubId) {
+          container.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
+          var modal = container.querySelector('[data-card-hub-modal="' + hubId + '"]');
+          if (modal) modal.removeAttribute('hidden');
         }
       } else if (action === 'close-card-hub-desc') {
-        var hubItem = button.closest('.alltell-card-hub-item');
-        if (hubItem) {
-          hubItem.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
+        var container = button.closest('.alltell-card-hubs-preview');
+        if (container) {
+          container.querySelectorAll('.alltell-card-hub-modal').forEach(function (m) { m.setAttribute('hidden', ''); });
         }
       } else if (action === 'manage-toggle-create-map') {
         state.showCreateMap = !state.showCreateMap;
@@ -3758,6 +3801,7 @@
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
       if (event.target.matches('textarea[data-autogrow]')) {
         event.target.style.height = 'auto';
+        event.target.style.overflow = 'hidden';
         event.target.style.height = Math.max(96, event.target.scrollHeight) + 'px';
       }
     }
@@ -3824,6 +3868,11 @@
     }
 
     function onChange(event) {
+      if (event.target.matches('textarea[data-autogrow]')) {
+        event.target.style.height = 'auto';
+        event.target.style.overflow = 'hidden';
+        event.target.style.height = Math.max(96, event.target.scrollHeight) + 'px';
+      }
       if (event.target.id === 'settings-avatar-file') {
         var sFile = event.target.files && event.target.files[0];
         if (!sFile) return;

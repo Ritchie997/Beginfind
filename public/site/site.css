@@ -4864,22 +4864,71 @@
 .alltell-card-hubs-preview {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     padding: 10px 12px;
-    background: var(--background-tertiary);
+    background: rgba(0, 0, 0, 0.22);
     border-radius: 8px;
-    margin-top: 8px;
-    font-size: 0.8rem;
-    border: 1px solid var(--background-accent);
+    margin-top: 10px;
+    font-size: 0.82rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    overflow: hidden;
+    min-height: 80px;
 }
 
-.alltell-card-hub-item {
-    position: relative;
+.alltell-card-hubs-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
+.alltell-card-hubs-header-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.alltell-card-hubs-header-count {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-normal);
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.alltell-card-hubs-list {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-    padding: 3px 0;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+    scrollbar-width: thin;
+}
+
+.alltell-card-hub-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 7px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.alltell-card-hub-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(88, 101, 242, 0.3);
 }
 
 .alltell-card-hub-main {
@@ -4890,41 +4939,76 @@
     flex: 1;
 }
 
-.alltell-card-hub-name {
+.alltell-card-hub-avatar-wrap {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.alltell-card-hub-desc-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 3px 5px;
-    font-size: 13px;
-    border-radius: 4px;
-    transition: color 0.15s ease, background 0.15s ease;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    background: rgba(88, 101, 242, 0.16);
+    color: #818cf8;
+    font-size: 11px;
+}
+
+.alltell-card-hub-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.alltell-card-hub-name {
+    font-weight: 500;
+    font-size: 0.82rem;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.alltell-card-hub-item .alltell-hub-status {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+}
+
+.alltell-card-hub-desc-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
 }
 
 .alltell-card-hub-desc-btn:hover {
-    color: var(--blurple);
-    background: rgba(88, 101, 242, 0.12);
+    color: #fff;
+    background: var(--blurple);
+    border-color: var(--blurple);
 }
 
 .alltell-card-hub-modal {
     position: absolute;
-    inset: -6px -10px;
+    inset: 0;
     z-index: 30;
     background: var(--background-secondary, #2f3136);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--blurple);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 12px 14px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -4941,7 +5025,7 @@
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 6px;
-    padding-bottom: 4px;
+    padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -4954,14 +5038,26 @@
 }
 
 .alltell-card-hub-modal-body {
-    max-height: 140px;
+    flex: 1;
     overflow-y: auto;
     font-size: 12.5px;
-    line-height: 1.5;
+    line-height: 1.55;
     color: var(--text-normal);
     white-space: pre-wrap;
     word-break: break-word;
     scrollbar-width: thin;
+    padding-right: 4px;
+}
+
+.alltell-card-hubs-empty,
+.alltell-card-hubs-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px 8px;
+    color: var(--text-muted);
+    font-size: 12px;
 }
 
 /* --- Рабочее пространство франшизы (Workspace) --- */
@@ -5202,12 +5298,14 @@ td.alltell-table-action-cell {
 textarea.alltell-hub-desc-textarea {
     resize: none !important;
     min-height: 96px;
-    max-height: 55vh;
+    height: auto;
     field-sizing: content;
-    overflow-y: auto;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
     line-height: 1.55;
     width: 100%;
     box-sizing: border-box;
+    display: block;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
