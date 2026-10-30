@@ -7,6 +7,7 @@
 <meta name="description" content="Профиль участника AllTell.">
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="/gallery.css">
 <link rel="stylesheet" href="/image-lightbox.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -145,7 +146,7 @@
       </div>
       <div class="site-profile-tabs" role="tablist" aria-label="Публикации профиля">
         <button type="button" class="site-profile-tab is-active" data-profile-tab="articles" role="tab" aria-selected="true"><i class="fas fa-book-open"></i> Статьи</button>
-        <button type="button" class="site-profile-tab" data-profile-tab="arts" role="tab" aria-selected="false"><i class="fas fa-images"></i> Арты</button>
+        <button type="button" class="site-profile-tab" data-profile-tab="arts" role="tab" aria-selected="false"><i class="fas fa-images"></i> Арты <span id="publicProfileArtsCount"></span></button>
         <button type="button" class="site-profile-tab" data-profile-tab="stickers" role="tab" aria-selected="false"><i class="fas fa-icons"></i> Стикеры</button>
         <button type="button" class="site-profile-tab" data-profile-tab="bookmarks" role="tab" aria-selected="false" id="publicProfileBookmarksTab" hidden><i class="fas fa-bookmark"></i> Закладки</button>
       </div>
@@ -179,6 +180,7 @@
 <script src="/sticker-pack-view.js"></script>
 <script src="/sticker-store.js"></script>
 <script src="/image-lightbox.js"></script>
+<script src="/gallery.js"></script>
 <script src="/site/stickers.js"></script>
 <script src="/site/site-header.js"></script>
 <script src="/site/site.js"></script>

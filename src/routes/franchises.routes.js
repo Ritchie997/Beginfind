@@ -211,6 +211,7 @@ async function publicPost(row, user) {
     can_edit: !!user && Number(row.created_by) === Number(user.id) &&
       (row.approval_status || 'published') !== 'published',
     event_at: row.event_at,
+    created_by: row.created_by,
     created_by_name: row.created_by_name,
     created_at: row.created_at,
     updated_at: row.updated_at

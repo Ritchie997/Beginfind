@@ -7376,7 +7376,19 @@ SPARouter.prototype.renderProfile = async function(targetId) {
     contentEl.style.display = 'block';
 
     const displayName = profile.display_name || profile.username || '?';
-    window.applyAvatarTo(document.getElementById('profile-avatar'), { name: displayName, avatar: profile.avatar });
+    const avatarEl = document.getElementById('profile-avatar');
+    window.applyAvatarTo(avatarEl, { name: displayName, avatar: profile.avatar });
+    if (avatarEl) {
+      if (profile.avatar) {
+        avatarEl.style.cursor = 'pointer';
+        avatarEl.title = 'Нажмите для полноэкранного просмотра';
+        avatarEl.onclick = () => { if (window.imageLightbox) window.imageLightbox.open([profile.avatar], 0); };
+      } else {
+        avatarEl.style.cursor = '';
+        avatarEl.title = '';
+        avatarEl.onclick = null;
+      }
+    }
     document.getElementById('profile-display-name').textContent = displayName;
 
     // Логин приходит только самому пользователю и админам (см.
@@ -7464,6 +7476,17 @@ SPARouter.prototype.setupProfileAvatar = function(profile) {
   const apply = (avatar) => {
     profile.avatar = avatar || null;
     window.applyAvatarTo(avatarEl, { name: profile.display_name, avatar: profile.avatar });
+    if (avatarEl) {
+      if (profile.avatar) {
+        avatarEl.style.cursor = 'pointer';
+        avatarEl.title = 'Нажмите для полноэкранного просмотра';
+        avatarEl.onclick = () => { if (window.imageLightbox) window.imageLightbox.open([profile.avatar], 0); };
+      } else {
+        avatarEl.style.cursor = '';
+        avatarEl.title = '';
+        avatarEl.onclick = null;
+      }
+    }
     removeBtn.hidden = !profile.avatar;
     // Шапка берёт аватарку из закэшированного пользователя — обновляем.
     const me = authManager.getUser();

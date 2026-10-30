@@ -1264,11 +1264,19 @@
       <article class="alltell-post-card" data-post-id="${Number(post.id)}">
         <div class="alltell-post-card-header">
           <div class="alltell-post-author-block">
-            <div class="alltell-author-avatar">${escapeHtml(initials(post.created_by_name))}</div>
-            <div class="alltell-author-info">
-              <strong class="alltell-author-name">${escapeHtml(post.created_by_name)}</strong>
-              <time class="alltell-post-date" datetime="${escapeHtml(post.created_at)}">${escapeHtml(dateLabel(post.created_at))}</time>
-            </div>
+            ${post.created_by || post.user_id ? `
+              <a href="/profile/${encodeURIComponent(post.created_by || post.user_id)}" class="alltell-author-avatar alltell-author-avatar-link" title="Перейти в профиль">${escapeHtml(initials(post.created_by_name))}</a>
+              <div class="alltell-author-info">
+                <a href="/profile/${encodeURIComponent(post.created_by || post.user_id)}" class="alltell-author-name alltell-author-name-link" title="Перейти в профиль">${escapeHtml(post.created_by_name)}</a>
+                <time class="alltell-post-date" datetime="${escapeHtml(post.created_at)}">${escapeHtml(dateLabel(post.created_at))}</time>
+              </div>
+            ` : `
+              <div class="alltell-author-avatar">${escapeHtml(initials(post.created_by_name))}</div>
+              <div class="alltell-author-info">
+                <strong class="alltell-author-name">${escapeHtml(post.created_by_name)}</strong>
+                <time class="alltell-post-date" datetime="${escapeHtml(post.created_at)}">${escapeHtml(dateLabel(post.created_at))}</time>
+              </div>
+            `}
           </div>
           <div class="alltell-post-badges">
             <span class="alltell-post-type alltell-post-type-${escapeHtml(post.type)}">
