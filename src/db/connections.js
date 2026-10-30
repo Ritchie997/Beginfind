@@ -49,6 +49,25 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
       color TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // Заявки на соавторство и обновление статьи
+    articlesDb.run(`CREATE TABLE IF NOT EXISTS article_collab_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_slug TEXT NOT NULL,
+      article_title TEXT NOT NULL,
+      author_id INTEGER NOT NULL,
+      proposer_id INTEGER NOT NULL,
+      proposer_name TEXT NOT NULL,
+      proposed_data TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      resolved_by INTEGER
+    )`);
+    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_article_slug ON article_collab_requests(article_slug)');
+    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_author_status ON article_collab_requests(author_id, status)');
+    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_proposer ON article_collab_requests(proposer_id)');
   }
 });
 

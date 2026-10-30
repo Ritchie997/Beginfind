@@ -11,7 +11,7 @@
       if (u) return u;
     }
     try {
-      const raw = localStorage.getItem('currentUser') || localStorage.getItem('user');
+      const raw = localStorage.getItem('alltell_user_info') || localStorage.getItem('currentUser') || localStorage.getItem('user');
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return null;
@@ -22,7 +22,7 @@
       const t = window.authManager.getToken();
       if (t) return t;
     }
-    return localStorage.getItem('token') || localStorage.getItem('authToken') || null;
+    return localStorage.getItem('alltell_auth_token') || localStorage.getItem('token') || localStorage.getItem('authToken') || null;
   }
 
   function isAuthenticated() {
@@ -242,6 +242,12 @@
       }
       const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
       if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = true;
+
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (saveBtn) {
+        saveBtn.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Опубликовать</span>';
+        saveBtn.title = 'Опубликовать статью';
+      }
     }
 
     renderArticleAuthorInfo(article) {
@@ -282,6 +288,17 @@
       if (checkbox) {
         checkbox.checked = true;
       }
+
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (saveBtn) {
+        if (isForeignArticle) {
+          saveBtn.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Предложить правку</span>';
+          saveBtn.title = 'Отправить обновление статьи и запрос на соавторство автору на подтверждение';
+        } else {
+          saveBtn.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Опубликовать</span>';
+          saveBtn.title = 'Опубликовать статью';
+        }
+      }
     }
 
     setupFormEvents() {
@@ -314,8 +331,26 @@
         this.openDraftsModal();
       });
 
-      // Сбросить форму
+      // Сбросить форму (или вернуть к исходному состоянию статьи)
       document.getElementById('resetArticleBtn')?.addEventListener('click', async () => {
+        const saveBtn = document.getElementById('saveArticleBtn');
+        const articleId = saveBtn ? saveBtn.getAttribute('data-article-id') : null;
+        if (articleId) {
+          const ok = window.confirmDialog
+            ? await window.confirmDialog.open({
+                title: 'Сбросить изменения?',
+                message: 'Сбросить все внесённые изменения к исходному варианту статьи?',
+                confirmLabel: 'Сбросить изменения',
+                cancelLabel: 'Отмена',
+                danger: true
+              })
+            : confirm('Сбросить все внесённые изменения к исходному варианту статьи?');
+          if (!ok) return;
+          await this.loadArticleForEdit(this.loadedArticleSlug || articleId);
+          showMessage('Изменения сброшены к исходной статье', 'info');
+          return;
+        }
+
         const ok = window.confirmDialog
           ? await window.confirmDialog.open({
               title: 'Очистить форму статьи?',
@@ -327,6 +362,7 @@
           : true;
         if (!ok) return;
         this.clearForm();
+        showMessage('Форма очищена', 'info');
       });
 
       // Опубликовать
@@ -923,6 +959,23 @@
 
         const result = await response.json().catch(() => ({}));
         if (response.ok) {
+          if (result.pending_approval || result.status === 'pending_approval') {
+            showMessage(result.message || 'Правки и заявка на соавторство отправлены автору статьи на подтверждение!', 'success');
+            if (this.currentDraftId) {
+              this.removePendingDraft(this.currentDraftId);
+              this.deleteDraftOnServer(this.currentDraftId).catch(() => {});
+            }
+            this.currentDraftId = null;
+            this.currentDraftRev = null;
+            this._lastLoadedDraftData = null;
+
+            const slug = result.slug || (result.data && result.data.slug) || articleId;
+            setTimeout(() => {
+              window.location.href = '/antropedia/' + encodeURIComponent(slug);
+            }, 1200);
+            return;
+          }
+
           showMessage(articleId ? 'Статья успешно обновлена!' : 'Статья успешно опубликована!', 'success');
           // Удаляем использованный черновик
           if (this.currentDraftId) {
@@ -1277,11 +1330,18 @@
           this.setCoverImage(article.image);
         }
 
+        this.loadedArticleSlug = slug;
+
+        // Франшиза: сопоставляем по ID (server_id или server)
+        const targetServerId = (article.server_id != null && article.server_id !== '')
+          ? String(article.server_id)
+          : (article.server ? String(article.server) : '');
+
         const sSelect = document.getElementById('articleServer');
-        if (sSelect && article.server) {
-          sSelect.value = article.server;
-          await this.loadHubsForFranchise(article.server);
-          await this.loadRolesForFranchise(article.server);
+        if (sSelect && targetServerId) {
+          sSelect.value = targetServerId;
+          await this.loadHubsForFranchise(targetServerId);
+          await this.loadRolesForFranchise(targetServerId);
         }
 
         const hSelect = document.getElementById('articleHub');
@@ -1526,6 +1586,9 @@
               <option value="created">Недавно созданные</option>
               <option value="title">По названию</option>
             </select>
+            <button type="button" class="drafts-modal-select-btn drafts-modal-new-btn" data-action="new-draft" title="Начать новую статью с чистого листа">
+              <i class="fas fa-plus"></i> <span>Новый</span>
+            </button>
             <button type="button" class="drafts-modal-select-btn" data-action="new-folder" title="Создать папку (внутри открытой сейчас папки)">
               <i class="fas fa-folder-plus"></i> <span>Папка</span>
             </button>
@@ -1599,6 +1662,16 @@
         }
         if (e.target === overlay || e.target.closest('[data-action="close"]')) {
           this.closeDraftsModal();
+          return;
+        }
+        if (e.target.closest('[data-action="new-draft"]')) {
+          this.closeDraftsModal();
+          this.clearForm();
+          const curParams = new URLSearchParams(window.location.search);
+          if (curParams.get('edit') || curParams.get('draft')) {
+            window.history.pushState({ antropediaView: 'write' }, '', '/antropedia?view=write');
+          }
+          showMessage('Открыта чистая форма для новой статьи', 'info');
           return;
         }
         if (e.target.closest('[data-action="new-folder"]')) { this.createDraftFolder(); return; }

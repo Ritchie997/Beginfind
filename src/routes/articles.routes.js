@@ -18,6 +18,7 @@ const articleLayers = require('../services/article-layers');
 const mapAccess = require('../services/map-access');
 const gallery = require('../services/gallery-store');
 const userNotifications = require('../services/user-notifications');
+const articleCollabStore = require('../services/article-collab-store');
 const mentions = require('../services/mentions');
 const { PORT, HOST } = require('../config/env');
 const { dbPath } = require('../config/paths');
@@ -423,6 +424,9 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     server_id: serverId,
     author,
     co_authors: (article.co_author_ids || []).map((id) => ({ id, display_name: map.get(id) || 'Неизвестный', avatar: getAvatarUrl(id) })),
+    pending_collab_requests: (req && req.user && resolvedAuthorId && Number(resolvedAuthorId) === Number(req.user.id))
+      ? await articleCollabStore.listPendingForArticle(article.slug)
+      : [],
     ...permissions
   };
 }
@@ -722,13 +726,59 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
       }
     }
 
-    // Если статью редактирует не её автор — это админ-панель, править может
-    // кто угодно с доступом, но редактор автоматически становится соавтором,
-    // если явно не снял галочку "добавить себя как соавтора" в форме
-    // (add_as_coauthor === false). Сам author_id при этом не меняется —
-    // см. store.updateArticle. Если владелец явно управляет авторами
-    // (ownerAuthors), список соавторов берётся из его запроса как есть —
-    // автодобавление редактора не применяется.
+    const effAuthorId = effectiveAuthorId(existing, legacyNameToId);
+    const isForeignArticle = !!(effAuthorId && Number(effAuthorId) !== Number(req.user.id) && !req.user.is_root);
+
+    // Если редактируется чужая статья и включена опция "добавить себя как соавтора" —
+    // не перезаписываем статью сразу, а создаём заявку на подтверждение автору статьи
+    if (isForeignArticle && req.body.add_as_coauthor !== false) {
+      const { author_id: _ignoredAuthorId, ...foreignBodyFields } = req.body;
+      const srvChanged = Object.prototype.hasOwnProperty.call(foreignBodyFields, 'server') &&
+        String(foreignBodyFields.server || '') !== String(existing.server || '');
+      const nxtHubId = Object.prototype.hasOwnProperty.call(foreignBodyFields, 'hub_id')
+        ? foreignBodyFields.hub_id
+        : (srvChanged ? null : existing.hub_id);
+      const nxtServerId = Object.prototype.hasOwnProperty.call(foreignBodyFields, 'server') ? foreignBodyFields.server : existing.server;
+      const hubErr = await validateArticleHub(nxtServerId, nxtHubId);
+      if (hubErr) return res.status(400).json({ error: hubErr });
+
+      const collabReq = await articleCollabStore.createOrUpdateRequest({
+        articleSlug: existing.slug,
+        articleTitle: foreignBodyFields.title || existing.title || existing.slug,
+        authorId: effAuthorId,
+        proposerId: req.user.id,
+        proposerName: req.user.display_name || req.user.username,
+        proposedData: {
+          ...foreignBodyFields,
+          server: nxtServerId,
+          hub_id: nxtHubId
+        },
+        comment: req.body.collab_comment || null
+      });
+
+      try {
+        await userNotifications.create(effAuthorId, {
+          type: 'collab_request',
+          actorId: req.user.id,
+          actorName: req.user.display_name || req.user.username,
+          targetType: 'article',
+          targetId: existing.slug,
+          targetTitle: existing.title || existing.slug,
+          excerpt: 'Предложил обновление статьи и добавление себя в соавторы'
+        });
+      } catch (err) {
+        console.error('Ошибка отправки уведомления автору:', err);
+      }
+
+      return res.json({
+        status: 'pending_approval',
+        pending_approval: true,
+        message: 'Правки и заявка на соавторство отправлены автору статьи на подтверждение',
+        slug: existing.slug,
+        requestId: collabReq.id
+      });
+    }
+
     let coAuthorIds = existing.co_author_ids || [];
     if (ownerAuthors) {
       coAuthorIds = ownerAuthors.co_author_ids;
@@ -827,6 +877,50 @@ router.delete('/articles/:id', auth.authenticateToken, auth.checkApproved, async
     res.json({ deleted: 1 });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// === Заявки на соавторство и обновление статей ===
+
+// GET /api/articles/:slug/collab-requests
+router.get('/articles/:slug/collab-requests', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const existing = store.getArticle(req.params.slug);
+    if (!existing) return res.status(404).json({ error: 'Article not found' });
+    const legacyNameToId = await resolveLegacyAuthorIds([existing.legacyAuthorName]);
+    const effAuthorId = effectiveAuthorId(existing, legacyNameToId);
+
+    const isAuthor = effAuthorId && Number(effAuthorId) === Number(req.user.id);
+    const isRoot = !!req.user.is_root;
+    const allReqs = await articleCollabStore.listPendingForArticle(existing.slug);
+
+    if (!isAuthor && !isRoot) {
+      return res.json({ requests: allReqs.filter((r) => r.proposer_id === req.user.id) });
+    }
+    res.json({ requests: allReqs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/articles/:slug/collab-requests/:id/approve
+router.post('/articles/:slug/collab-requests/:id/approve', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const result = await articleCollabStore.approveRequest(req.params.id, req.user);
+    await assignColorsForArticle(result.article);
+    res.json({ success: true, message: 'Обновление статьи утверждено, соавтор добавлен' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/articles/:slug/collab-requests/:id/decline
+router.post('/articles/:slug/collab-requests/:id/decline', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    await articleCollabStore.declineRequest(req.params.id, req.user, req.body.comment || null);
+    res.json({ success: true, message: 'Заявка отклонена' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

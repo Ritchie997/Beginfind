@@ -30,6 +30,15 @@
   function headline(n) {
     const where = n.targetType === 'gallery' ? 'к работе' : 'к статье';
     const title = n.targetTitle ? ` ${where} «${escapeHtml(n.targetTitle)}»` : '';
+    if (n.type === 'collab_request') {
+      return `<b>${escapeHtml(n.actorName)}</b> предложил правку и соавторство${title}`;
+    }
+    if (n.type === 'collab_approved') {
+      return `<b>${escapeHtml(n.actorName)}</b> одобрил вашу правку и добавил в соавторы${title}`;
+    }
+    if (n.type === 'collab_declined') {
+      return `<b>${escapeHtml(n.actorName)}</b> отклонил вашу предложенную правку${title}`;
+    }
     return n.type === 'reply'
       ? `<b>${escapeHtml(n.actorName)}</b> — ответ на ваш комментарий${title}`
       : `<b>${escapeHtml(n.actorName)}</b> упоминает вас в комментарии${title}`;
@@ -39,8 +48,16 @@
     return window.apiClient.makeAuthenticatedRequest(path, method, body);
   }
 
-  // Переход к комментарию: статья — в Antropedia, работа — просмотр галереи.
+  // Переход: соавторство / комментарий в Antropedia / работа в галерее.
   async function openNotification(n) {
+    if (n.type === 'collab_request' || n.type === 'collab_approved' || n.type === 'collab_declined') {
+      if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
+        window.PublicSite.navigateTo('/antropedia/' + encodeURIComponent(n.targetId));
+      } else {
+        window.location.href = '/antropedia/' + encodeURIComponent(n.targetId);
+      }
+      return;
+    }
     if (n.targetType === 'gallery') {
       await window.galleryViewer?.openWork(n.targetId);
       if (n.commentId) window.galleryViewer?.focusComment(n.commentId);

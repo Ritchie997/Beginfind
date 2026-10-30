@@ -1289,6 +1289,108 @@
       }
       detail.appendChild(toolbar);
 
+      if (Array.isArray(article.pending_collab_requests) && article.pending_collab_requests.length > 0) {
+        var collabBanner = makeEl('div', 'article-collab-banner');
+        var bannerHeader = makeEl('div', 'article-collab-header');
+        var bannerHeaderIcon = document.createElement('i');
+        bannerHeaderIcon.className = 'fas fa-user-pen';
+        bannerHeader.append(bannerHeaderIcon, document.createTextNode(' Заявки на соавторство и обновление статьи (' + article.pending_collab_requests.length + ')'));
+        collabBanner.appendChild(bannerHeader);
+
+        var bannerList = makeEl('div', 'article-collab-list');
+        article.pending_collab_requests.forEach(function (reqItem) {
+          var item = makeEl('div', 'article-collab-item');
+          var info = makeEl('div', 'article-collab-info');
+          var userLine = makeEl('div', 'article-collab-user-line');
+          var strong = document.createElement('strong');
+          strong.textContent = reqItem.proposer_name || 'Пользователь';
+          userLine.append(strong, document.createTextNode(' предложил(а) правки к статье и добавление себя в соавторы'));
+          info.appendChild(userLine);
+          if (reqItem.comment) {
+            var cEl = makeEl('p', 'article-collab-comment', reqItem.comment);
+            info.appendChild(cEl);
+          }
+          item.appendChild(info);
+
+          var actions = makeEl('div', 'article-collab-actions');
+          var approveBtn = makeEl('button', 'btn btn-primary btn-sm article-collab-approve-btn');
+          approveBtn.type = 'button';
+          approveBtn.innerHTML = '<i class="fas fa-check"></i><span> Принять и обновить</span>';
+          approveBtn.addEventListener('click', async function () {
+            approveBtn.disabled = true;
+            try {
+              var token = getAuthToken();
+              var res = await fetch('/api/articles/' + encodeURIComponent(article.slug) + '/collab-requests/' + encodeURIComponent(reqItem.id) + '/approve', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + token
+                }
+              });
+              var data = await res.json().catch(function () { return {}; });
+              if (!res.ok) throw new Error(data.error || 'Не удалось подтвердить заявку');
+              if (window.confirmDialog) {
+                await window.confirmDialog.alert({ title: 'Соавторство', message: 'Обновление статьи утверждено, соавтор добавлен!' });
+              } else {
+                alert('Обновление статьи утверждено, соавтор добавлен!');
+              }
+              window.location.reload();
+            } catch (err) {
+              approveBtn.disabled = false;
+              if (window.confirmDialog) {
+                await window.confirmDialog.alert({ title: 'Ошибка', message: err.message });
+              } else {
+                alert('Ошибка: ' + err.message);
+              }
+            }
+          });
+
+          var declineBtn = makeEl('button', 'btn btn-secondary btn-sm article-collab-decline-btn');
+          declineBtn.type = 'button';
+          declineBtn.innerHTML = '<i class="fas fa-times"></i><span> Отклонить</span>';
+          declineBtn.addEventListener('click', async function () {
+            var confirmed = window.confirmDialog
+              ? await window.confirmDialog.open({
+                  title: 'Отклонить заявку?',
+                  message: 'Отклонить предложенные изменения статьи от пользователя ' + (reqItem.proposer_name || 'соавтора') + '?',
+                  confirmLabel: 'Отклонить',
+                  cancelLabel: 'Отмена',
+                  danger: true
+                })
+              : confirm('Отклонить предложенные изменения статьи?');
+            if (!confirmed) return;
+            declineBtn.disabled = true;
+            try {
+              var token = getAuthToken();
+              var res = await fetch('/api/articles/' + encodeURIComponent(article.slug) + '/collab-requests/' + encodeURIComponent(reqItem.id) + '/decline', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + token
+                }
+              });
+              var data = await res.json().catch(function () { return {}; });
+              if (!res.ok) throw new Error(data.error || 'Не удалось отклонить заявку');
+              item.remove();
+              if (bannerList.children.length === 0) collabBanner.remove();
+            } catch (err) {
+              declineBtn.disabled = false;
+              if (window.confirmDialog) {
+                await window.confirmDialog.alert({ title: 'Ошибка', message: err.message });
+              } else {
+                alert('Ошибка: ' + err.message);
+              }
+            }
+          });
+
+          actions.append(approveBtn, declineBtn);
+          item.appendChild(actions);
+          bannerList.appendChild(item);
+        });
+        collabBanner.appendChild(bannerList);
+        detail.appendChild(collabBanner);
+      }
+
       var coverUrl = safePublicImageUrl(article.image);
       if (coverUrl) {
         var cover = makeEl('figure', 'public-article-cover');
@@ -1332,6 +1434,29 @@
           authorLabel.appendChild(makeEl('span', 'public-article-author-name', author.display_name));
         }
         meta.appendChild(authorLabel);
+      }
+      if (Array.isArray(article.co_authors) && article.co_authors.length) {
+        var coAuthorsLabel = makeEl('span', 'public-article-coauthors');
+        var coAuthorsIcon = document.createElement('i');
+        coAuthorsIcon.className = 'fas fa-user-group';
+        coAuthorsIcon.style.marginRight = '4px';
+        coAuthorsIcon.style.opacity = '0.7';
+        coAuthorsLabel.append(coAuthorsIcon, document.createTextNode('Соавторы: '));
+        article.co_authors.forEach(function (ca, idx) {
+          if (idx > 0) coAuthorsLabel.append(document.createTextNode(', '));
+          if (ca.id != null) {
+            var caLink = document.createElement('a');
+            caLink.className = 'public-article-coauthor-link';
+            caLink.href = '/profile/' + encodeURIComponent(ca.id);
+            caLink.textContent = ca.display_name || ca.username || 'Соавтор';
+            coAuthorsLabel.appendChild(caLink);
+          } else {
+            var caSpan = document.createElement('span');
+            caSpan.textContent = ca.display_name || ca.username || 'Соавтор';
+            coAuthorsLabel.appendChild(caSpan);
+          }
+        });
+        meta.appendChild(coAuthorsLabel);
       }
       var created = formatDate(article.created_at);
       if (created) {
