@@ -7558,7 +7558,13 @@ textarea.alltell-hub-desc-textarea {
     cursor: pointer;
 }
 .site-profile-media-retry:hover { border-color: var(--blurple); }
-.site-profile-media { display: grid; gap: 8px; padding-top: 10px; }
+.site-profile-media {
+    display: grid;
+    gap: 8px;
+    padding-top: 10px;
+    width: 100%;
+    min-width: 0;
+}
 
 /* Публичный профиль - Списки статей */
 .site-profile-articles-list {
@@ -7650,9 +7656,21 @@ textarea.alltell-hub-desc-textarea {
     margin-bottom: 12px;
 }
 .site-profile-arts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 14px;
+    width: 100%;
+    min-width: 0;
+}
+.site-profile-arts-grid .gallery-card {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+.site-profile-arts-grid .gallery-card-media {
+    aspect-ratio: 1 / 1 !important;
+    border-radius: 10px;
+    width: 100%;
 }
 .site-profile-art-card {
     position: relative;
@@ -7665,6 +7683,9 @@ textarea.alltell-hub-desc-textarea {
     cursor: pointer;
     text-decoration: none;
     color: var(--text-normal);
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .site-profile-art-card:hover {
@@ -7675,7 +7696,7 @@ textarea.alltell-hub-desc-textarea {
 .site-profile-art-thumb {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 1 / 1;
     background: #141518;
     overflow: hidden;
 }
@@ -7683,7 +7704,18 @@ textarea.alltell-hub-desc-textarea {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
     transition: transform 0.25s ease;
+}
+.site-profile-art-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 28px;
+    background: #141518;
 }
 .site-profile-art-card:hover .site-profile-art-thumb img {
     transform: scale(1.04);
@@ -7745,9 +7777,11 @@ textarea.alltell-hub-desc-textarea {
     gap: 8px;
 }
 .site-profile-stickers-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 14px;
+    width: 100%;
+    min-width: 0;
 }
 .site-profile-sticker-card {
     position: relative;
@@ -7759,6 +7793,10 @@ textarea.alltell-hub-desc-textarea {
     border: 1px solid var(--background-accent);
     border-radius: 10px;
     cursor: pointer;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 .site-profile-sticker-card:hover {
@@ -7771,15 +7809,38 @@ textarea.alltell-hub-desc-textarea {
     align-items: center;
     gap: 8px;
     height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 .site-profile-sticker-thumb {
     width: 44px;
     height: 44px;
-    object-fit: contain;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 44px;
+    max-height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(20, 22, 26, 0.8);
     border-radius: 8px;
-    padding: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.site-profile-sticker-thumb img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+    user-select: none;
 }
 .site-profile-sticker-info {
     display: flex;
@@ -7994,10 +8055,18 @@ a.site-profile-media-row:hover {
     .site-profile-server { align-items: flex-start; flex-direction: column; gap: 5px; }
     .site-profile-server span { text-align: left; }
     .site-profile-state h1 { font-size: 21px; }
-    .site-profile-arts-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-    .site-profile-stickers-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .site-profile-arts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
+    .site-profile-stickers-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; gap: 10px; }
+    .site-profile-sticker-card { padding: 10px 12px; }
+    .site-profile-sticker-thumbs { gap: 6px; height: 42px; min-height: 42px; max-height: 42px; }
+    .site-profile-sticker-thumb { width: 38px; height: 38px; min-width: 38px; min-height: 38px; max-width: 38px; max-height: 38px; padding: 3px; }
     .site-profile-article-card { padding: 12px; }
     .site-profile-tab { padding: 10px 14px; font-size: 13px; }
+}
+
+@media (max-width: 360px) {
+    .site-profile-arts-grid { grid-template-columns: 1fr !important; }
+    .site-profile-stickers-grid { grid-template-columns: 1fr !important; }
 }
 
 /* ============================================================

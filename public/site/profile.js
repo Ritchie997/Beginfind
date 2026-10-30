@@ -435,7 +435,7 @@
         return;
       }
 
-      var grid = make('div', 'site-profile-arts-grid gallery-grid');
+      var grid = make('div', 'site-profile-arts-grid profile-arts-grid');
       grid.id = 'publicProfileArtsGrid';
       grid.addEventListener('click', function (e) {
         var card = e.target.closest('[data-work-id]');
@@ -522,8 +522,10 @@
           preview.forEach(function (s) {
             var thumb = make('div', 'site-profile-sticker-thumb');
             var img = document.createElement('img');
-            img.src = s.fileUrl;
-            img.alt = '';
+            img.src = s.fileUrl || s.url || '';
+            img.alt = s.alias || '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
             thumb.appendChild(img);
             thumbs.appendChild(thumb);
           });
@@ -600,8 +602,10 @@
             preview.forEach(function (s) {
               var thumb = make('div', 'site-profile-sticker-thumb');
               var img = document.createElement('img');
-              img.src = s.fileUrl;
-              img.alt = '';
+              img.src = s.fileUrl || s.url || '';
+              img.alt = s.alias || '';
+              img.loading = 'lazy';
+              img.decoding = 'async';
               thumb.appendChild(img);
               thumbs.appendChild(thumb);
             });
