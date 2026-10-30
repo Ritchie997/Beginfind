@@ -380,6 +380,10 @@
       this._suggestEl = null;
       this._selectedIds = new Set(); // выделенные блоки для массового удаления (см. toggleBlockSelection)
       this._selectAnchor = null; // { list, block } — от него Shift+клик выделяет диапазон
+      this._history = [];
+      this._historyIndex = -1;
+      this._historyDebounce = null;
+      this._isApplyingHistory = false;
     }
 
     // Вызывается spa-router'ом при каждом открытии страницы /articles.
@@ -409,6 +413,7 @@
       this.setupAutosizeObserver();
       this.observeArticleIdForBacklinks();
       this.scheduleRenderPreview();
+      this.resetHistory();
     }
 
     // См. isIOS(): maximum-scale=1 только пока открыта страница статей (класс
@@ -498,7 +503,7 @@
             if (!doc || !Array.isArray(doc.blocks)) doc = { version: 1, blocks: [] };
             self._selectedIds.clear();
             self._selectAnchor = null;
-            if (self.container) { self.doc = doc; self.renderAll(); self.scheduleRenderPreview(); }
+            if (self.container) { self.doc = doc; self.renderAll(); self.scheduleRenderPreview(); self.resetHistory(); }
             else self._pendingDoc = doc;
           }
         });
@@ -521,6 +526,7 @@
     }
 
     cleanup() {
+      if (this._historyDebounce) { clearTimeout(this._historyDebounce); this._historyDebounce = null; }
       this.endBlockDrag(false);
       this.sweepMapPreviews();
       window.MapCore?.sweepEmbeds();
@@ -560,6 +566,7 @@
       this._active = { list, block };
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
       return block;
     }
 
@@ -580,6 +587,7 @@
       if (this._active && this._active.block === block) this._active = null;
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
     }
 
     // ===== Копировать/вставить блок (буфер — см. readBlockClipboard) =====
@@ -699,6 +707,7 @@
       }
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
       this.showEditorToast(`Удалено: ${pluralBlocks(n)}`);
     }
 
@@ -951,6 +960,7 @@
       this._active = { list: toList, block: d.block };
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
 
       const moved = this.container.querySelector(`[data-block-id="${d.block.id}"]`);
       if (moved) {
@@ -1162,6 +1172,17 @@
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
+        e.preventDefault();
+        if (e.shiftKey) this.redo();
+        else this.undo();
+        return;
+      }
+      if (mod && (e.key.toLowerCase() === 'y' || e.code === 'KeyY')) {
+        e.preventDefault();
+        this.redo();
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); this.applyInlineFormat('**'); }
       else if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); this.applyInlineFormat('_'); }
       else if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); this.applyInlineFormat('++'); }
@@ -1182,6 +1203,7 @@
       this._pendingFocusBlockId = newBlock.id;
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
     }
 
     renderTextBody(block, list, { placeholder, className, autofocus, splitOnEnter }) {
@@ -1220,6 +1242,7 @@
       el.selectionEnd = coreStart + core.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       refocusField(el);
+      this.recordHistory(true);
     }
 
     async insertLinkInline() {
@@ -1611,7 +1634,7 @@
       lang.placeholder = 'язык (необязательно, например js)';
       lang.style.marginBottom = '6px';
       lang.value = block.data.language || '';
-      lang.addEventListener('input', () => { block.data.language = lang.value; this.scheduleRenderPreview(); });
+      lang.addEventListener('input', () => { block.data.language = lang.value; this.scheduleRenderPreview(); this.recordHistory(false); });
 
       const code = document.createElement('textarea');
       code.className = 'eb-text eb-code-text';
@@ -1620,7 +1643,7 @@
       code.dataset.autofocus = '1';
       const autosize = () => autosizeField(code);
       requestAnimationFrame(autosize);
-      code.addEventListener('input', () => { block.data.code = code.value; autosize(); this.scheduleRenderPreview(); });
+      code.addEventListener('input', () => { block.data.code = code.value; autosize(); this.scheduleRenderPreview(); this.recordHistory(false); });
       code.addEventListener('focus', () => { this._active = { list, block }; this._activeTextInput = null; });
 
       wrap.append(lang, code);
@@ -1638,7 +1661,7 @@
         btn.type = 'button';
         btn.textContent = label;
         btn.classList.toggle('active', block.data.style === style);
-        btn.addEventListener('click', () => { block.data.style = style; this.renderAll(); this.scheduleRenderPreview(); });
+        btn.addEventListener('click', () => { block.data.style = style; this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
         styleGroup.appendChild(btn);
       });
       wrap.appendChild(styleGroup);
@@ -1669,7 +1692,7 @@
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = !!item.checked;
-        cb.addEventListener('change', () => { item.checked = cb.checked; this.scheduleRenderPreview(); });
+        cb.addEventListener('change', () => { item.checked = cb.checked; this.scheduleRenderPreview(); this.recordHistory(true); });
         row.appendChild(cb);
       } else {
         const marker = document.createElement('span');
@@ -1691,11 +1714,15 @@
           block.data.items.splice(idx + 1, 0, { markdown: '', checked: false });
           this._pendingFocusBlockId = block.id;
           this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
         } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && block.data.items.length > 1) {
           e.preventDefault();
           block.data.items.splice(idx, 1);
           this._pendingFocusBlockId = block.id;
           this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
         }
       });
 
@@ -1709,6 +1736,7 @@
         block.data.items.splice(idx, 1);
         this.renderAll();
         this.scheduleRenderPreview();
+        this.recordHistory(true);
       });
 
       row.append(ta, del);
@@ -1730,7 +1758,7 @@
           input.value = cell;
           input.placeholder = block.data.header && r === 0 ? `Колонка ${c + 1}` : '';
           input.addEventListener('focus', () => { this._activeTextInput = { el: input, list, block }; this._active = { list, block }; });
-          input.addEventListener('input', () => { block.data.rows[r][c] = input.value; this.scheduleRenderPreview(); });
+          input.addEventListener('input', () => { block.data.rows[r][c] = input.value; this.scheduleRenderPreview(); this.recordHistory(false); });
           td.appendChild(input);
           tr.appendChild(td);
         });
@@ -1746,6 +1774,7 @@
         block.data.rows.push(Array.from({ length: columnCount }, () => ''));
         this.renderAll();
         this.scheduleRenderPreview();
+        this.recordHistory(true);
       });
       const removeRow = document.createElement('button'); removeRow.type = 'button'; removeRow.className = 'eb-mini-btn'; removeRow.innerHTML = '<i class="fas fa-minus"></i> Последнюю строку';
       removeRow.disabled = block.data.rows.length <= 1;
@@ -1754,12 +1783,13 @@
         block.data.rows.pop();
         this.renderAll();
         this.scheduleRenderPreview();
+        this.recordHistory(true);
       });
       const addCol = document.createElement('button'); addCol.type = 'button'; addCol.className = 'eb-mini-btn'; addCol.innerHTML = '<i class="fas fa-plus"></i> Колонка';
-      addCol.addEventListener('click', () => { block.data.rows.forEach((row) => row.push('')); this.renderAll(); this.scheduleRenderPreview(); });
+      addCol.addEventListener('click', () => { block.data.rows.forEach((row) => row.push('')); this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
       const headerToggle = document.createElement('label'); headerToggle.className = 'eb-row'; headerToggle.style.fontSize = '12px'; headerToggle.style.color = 'var(--text-muted)';
       const headerCb = document.createElement('input'); headerCb.type = 'checkbox'; headerCb.checked = block.data.header;
-      headerCb.addEventListener('change', () => { block.data.header = headerCb.checked; this.scheduleRenderPreview(); });
+      headerCb.addEventListener('change', () => { block.data.header = headerCb.checked; this.scheduleRenderPreview(); this.recordHistory(true); });
       headerToggle.append(headerCb, document.createTextNode(' первая строка — заголовок'));
       toolbar.append(addRow, removeRow, addCol, headerToggle);
       wrap.appendChild(toolbar);
@@ -1878,7 +1908,7 @@
       const mapSelect = wrap.querySelector('[data-map-field="mapId"]');
       const preview = wrap.querySelector('.eb-map-preview');
       const note = wrap.querySelector('[data-map-note]');
-      const changed = () => this.scheduleRenderPreview();
+      const changed = (immediate) => { this.scheduleRenderPreview(); this.recordHistory(!!immediate); };
       const hiddenLayers = () => {
         const h = d.hiddenLayers && typeof d.hiddenLayers === 'object' ? d.hiddenLayers : {};
         const arr = (v) => (Array.isArray(v) ? v : []);
@@ -2170,6 +2200,7 @@
       };
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
     }
 
     async pickAndUploadImageForBlock(block) {
@@ -2186,6 +2217,7 @@
         block.data = { src: url, alt: choice.alt, widthPct: choice.width, align: choice.align, frame: { show: choice.frameShow, color: choice.frameColor } };
         this.renderAll();
         this.scheduleRenderPreview();
+        this.recordHistory(true);
       };
       fileInput.click();
     }
@@ -2208,6 +2240,7 @@
       if (gallery) block.data.gallery = gallery;
       this.renderAll();
       this.scheduleRenderPreview();
+      this.recordHistory(true);
     }
 
     // Ищет, в каком списке блоков (верхний уровень / колонка / спойлер-секция)
@@ -2429,7 +2462,7 @@
       titleInput.type = 'text'; titleInput.className = 'eb-input'; titleInput.placeholder = 'Название (например «Ранг «Ветеран»»)';
       titleInput.value = block.data.title || '';
       titleInput.dataset.autofocus = '1';
-      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); });
+      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); this.recordHistory(false); });
       this.wireWikilinkField(titleInput, list, block);
       wrap.appendChild(titleInput);
 
@@ -2438,7 +2471,7 @@
       if (block.data.image) {
         const img = document.createElement('img'); img.src = block.data.image.src;
         const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.className = 'eb-mini-btn'; removeBtn.textContent = 'Убрать картинку';
-        removeBtn.addEventListener('click', () => { block.data.image = null; this.renderAll(); this.scheduleRenderPreview(); });
+        removeBtn.addEventListener('click', () => { block.data.image = null; this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
         coverRow.append(img, removeBtn);
       } else {
         const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'eb-mini-btn';
@@ -2450,7 +2483,7 @@
             const url = await this.uploadImageFile(file);
             if (!url) return;
             block.data.image = { src: url, alt: block.data.title || '' };
-            this.renderAll(); this.scheduleRenderPreview();
+            this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true);
           };
           fileInput.click();
         });
@@ -2464,7 +2497,7 @@
       block.data.rows.forEach((row, idx) => {
         const rowEl = document.createElement('div'); rowEl.className = 'eb-infobox-row';
         const label = document.createElement('input'); label.type = 'text'; label.className = 'eb-input'; label.placeholder = 'Поле'; label.value = row.label;
-        label.addEventListener('input', () => { row.label = label.value; this.scheduleRenderPreview(); });
+        label.addEventListener('input', () => { row.label = label.value; this.scheduleRenderPreview(); this.recordHistory(false); });
         this.wireWikilinkField(label, list, block);
 
         // Значение — как обычные текстовые блоки (eb-text): textarea, сама
@@ -2475,17 +2508,17 @@
         value.className = 'eb-input eb-input-auto'; value.rows = 1; value.placeholder = 'Значение'; value.value = row.value;
         const autosizeValue = () => autosizeField(value);
         requestAnimationFrame(autosizeValue);
-        value.addEventListener('input', () => { row.value = value.value; autosizeValue(); this.scheduleRenderPreview(); });
+        value.addEventListener('input', () => { row.value = value.value; autosizeValue(); this.scheduleRenderPreview(); this.recordHistory(false); });
         this.wireWikilinkField(value, list, block);
 
         const del = document.createElement('button'); del.type = 'button'; del.className = 'eb-icon-btn'; del.innerHTML = '<i class="fas fa-xmark"></i>';
-        del.addEventListener('click', () => { if (block.data.rows.length <= 1) return; block.data.rows.splice(idx, 1); this.renderAll(); this.scheduleRenderPreview(); });
+        del.addEventListener('click', () => { if (block.data.rows.length <= 1) return; block.data.rows.splice(idx, 1); this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
         rowEl.append(label, value, del);
         wrap.appendChild(rowEl);
       });
 
       const addRowBtn = document.createElement('button'); addRowBtn.type = 'button'; addRowBtn.className = 'eb-mini-btn'; addRowBtn.innerHTML = '<i class="fas fa-plus"></i> Строка';
-      addRowBtn.addEventListener('click', () => { block.data.rows.push({ label: '', value: '' }); this.renderAll(); this.scheduleRenderPreview(); });
+      addRowBtn.addEventListener('click', () => { block.data.rows.push({ label: '', value: '' }); this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
       wrap.appendChild(addRowBtn);
       return wrap;
     }
@@ -2501,7 +2534,7 @@
         const btn = document.createElement('button'); btn.type = 'button';
         btn.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
         btn.classList.toggle('active', block.data.variant === variant);
-        btn.addEventListener('click', () => { block.data.variant = variant; this.renderAll(); this.scheduleRenderPreview(); });
+        btn.addEventListener('click', () => { block.data.variant = variant; this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
         variants.appendChild(btn);
       });
       wrap.appendChild(variants);
@@ -2509,7 +2542,7 @@
       const titleInput = document.createElement('input');
       titleInput.type = 'text'; titleInput.className = 'eb-input'; titleInput.placeholder = 'Заголовок плашки';
       titleInput.value = block.data.title || '';
-      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); });
+      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); this.recordHistory(false); });
       wrap.appendChild(titleInput);
 
       wrap.appendChild(this.makeTextArea(block.data.markdown, {
@@ -2529,7 +2562,7 @@
         const colEl = document.createElement('div'); colEl.className = 'eb-column';
         const head = document.createElement('div'); head.className = 'eb-column-head';
         const widthInput = document.createElement('input'); widthInput.type = 'number'; widthInput.min = '10'; widthInput.max = '90'; widthInput.className = 'eb-input'; widthInput.value = col.widthPct;
-        widthInput.addEventListener('input', () => { col.widthPct = parseInt(widthInput.value, 10) || 50; this.scheduleRenderPreview(); });
+        widthInput.addEventListener('input', () => { col.widthPct = parseInt(widthInput.value, 10) || 50; this.scheduleRenderPreview(); this.recordHistory(false); });
         head.append(document.createTextNode(`Колонка ${idx + 1}, `), widthInput, document.createTextNode('%'));
         colEl.appendChild(head);
 
@@ -2547,13 +2580,13 @@
       addCol.addEventListener('click', () => {
         if (block.data.columns.length >= 4) return;
         block.data.columns.push({ widthPct: Math.floor(100 / (block.data.columns.length + 1)), blocks: [] });
-        this.renderAll(); this.scheduleRenderPreview();
+        this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true);
       });
       const removeCol = document.createElement('button'); removeCol.type = 'button'; removeCol.className = 'eb-mini-btn'; removeCol.innerHTML = '<i class="fas fa-minus"></i> Колонка';
       removeCol.addEventListener('click', () => {
         if (block.data.columns.length <= 2) return;
         block.data.columns.pop();
-        this.renderAll(); this.scheduleRenderPreview();
+        this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true);
       });
       toolbar.append(addCol, removeCol);
       wrap.appendChild(toolbar);
@@ -2570,12 +2603,12 @@
       titleInput.type = 'text'; titleInput.className = 'eb-input'; titleInput.placeholder = 'Заголовок секции (например «Патч-ноуты»)';
       titleInput.value = block.data.title || '';
       titleInput.dataset.autofocus = '1';
-      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); });
+      titleInput.addEventListener('input', () => { block.data.title = titleInput.value; this.scheduleRenderPreview(); this.recordHistory(false); });
       wrap.appendChild(titleInput);
 
       const openLabel = document.createElement('label'); openLabel.className = 'eb-row'; openLabel.style.fontSize = '12px'; openLabel.style.color = 'var(--text-muted)';
       const openCb = document.createElement('input'); openCb.type = 'checkbox'; openCb.checked = !!block.data.openByDefault;
-      openCb.addEventListener('change', () => { block.data.openByDefault = openCb.checked; this.scheduleRenderPreview(); });
+      openCb.addEventListener('change', () => { block.data.openByDefault = openCb.checked; this.scheduleRenderPreview(); this.recordHistory(true); });
       openLabel.append(openCb, document.createTextNode(' открыта по умолчанию у читателя'));
       wrap.appendChild(openLabel);
 
@@ -2648,6 +2681,7 @@
           this._pendingFocusBlockId = block.id;
           this.renderAll();
           this.scheduleRenderPreview();
+          this.recordHistory(true);
           if (type === 'image') this.pickAndUploadImageForBlock(block);
         });
         el.appendChild(btn);
@@ -2713,6 +2747,126 @@
       if (this._blockActionsMenuEl) this._blockActionsMenuEl.hidden = true;
     }
 
+// ===== История действий (Undo / Redo) =====
+
+    recordHistory(immediate = false) {
+      if (this._isApplyingHistory || !this.doc || !Array.isArray(this.doc.blocks)) return;
+
+      const snapshot = JSON.stringify(this.doc.blocks);
+
+      if (this._historyIndex >= 0 && this._history[this._historyIndex] === snapshot) {
+        return;
+      }
+
+      const doRecord = () => {
+        this._history = this._history.slice(0, this._historyIndex + 1);
+        this._history.push(snapshot);
+        if (this._history.length > 50) {
+          this._history.shift();
+        }
+        this._historyIndex = this._history.length - 1;
+        this.updateUndoRedoButtons();
+      };
+
+      if (immediate) {
+        if (this._historyDebounce) {
+          clearTimeout(this._historyDebounce);
+          this._historyDebounce = null;
+        }
+        doRecord();
+      } else {
+        if (this._historyDebounce) clearTimeout(this._historyDebounce);
+        this._historyDebounce = setTimeout(() => {
+          this._historyDebounce = null;
+          doRecord();
+        }, 400);
+      }
+    }
+
+    undo() {
+      if (!this._history || !this._history.length) return;
+
+      if (this._historyDebounce) {
+        clearTimeout(this._historyDebounce);
+        this._historyDebounce = null;
+        const currentSnapshot = JSON.stringify(this.doc.blocks);
+        if (this._historyIndex >= 0 && this._history[this._historyIndex] !== currentSnapshot) {
+          this._history = this._history.slice(0, this._historyIndex + 1);
+          this._history.push(currentSnapshot);
+          if (this._history.length > 50) this._history.shift();
+          this._historyIndex = this._history.length - 1;
+        }
+      }
+
+      if (this._historyIndex <= 0) return;
+
+      this._historyIndex--;
+      const snapshot = this._history[this._historyIndex];
+      try {
+        this._isApplyingHistory = true;
+        this.doc.blocks = JSON.parse(snapshot);
+        this.clearBlockSelection();
+        this.renderAll();
+        this.scheduleRenderPreview(true);
+      } catch (err) {
+        console.error('Не удалось отменить действие в редакторе:', err);
+      } finally {
+        this._isApplyingHistory = false;
+      }
+      this.updateUndoRedoButtons();
+    }
+
+    redo() {
+      if (!this._history || this._historyIndex >= this._history.length - 1) return;
+
+      if (this._historyDebounce) {
+        clearTimeout(this._historyDebounce);
+        this._historyDebounce = null;
+      }
+
+      this._historyIndex++;
+      const snapshot = this._history[this._historyIndex];
+      try {
+        this._isApplyingHistory = true;
+        this.doc.blocks = JSON.parse(snapshot);
+        this.clearBlockSelection();
+        this.renderAll();
+        this.scheduleRenderPreview(true);
+      } catch (err) {
+        console.error('Не удалось повторить действие в редакторе:', err);
+      } finally {
+        this._isApplyingHistory = false;
+      }
+      this.updateUndoRedoButtons();
+    }
+
+    resetHistory() {
+      if (this._historyDebounce) {
+        clearTimeout(this._historyDebounce);
+        this._historyDebounce = null;
+      }
+      this._history = [];
+      this._historyIndex = -1;
+      if (this.doc && Array.isArray(this.doc.blocks)) {
+        this.recordHistory(true);
+      } else {
+        this.updateUndoRedoButtons();
+      }
+    }
+
+    updateUndoRedoButtons() {
+      const canUndo = !!(this._history && this._historyIndex > 0);
+      const canRedo = !!(this._history && this._historyIndex < this._history.length - 1);
+      document.querySelectorAll('[data-history-command="undo"], #editorUndoBtn').forEach((btn) => {
+        btn.disabled = !canUndo;
+        btn.classList.toggle('is-disabled', !canUndo);
+      });
+      document.querySelectorAll('[data-history-command="redo"], #editorRedoBtn').forEach((btn) => {
+        btn.disabled = !canRedo;
+        btn.classList.toggle('is-disabled', !canRedo);
+      });
+    }
+
     // ===== Тулбар =====
 
     setupToolbar() {
@@ -2731,6 +2885,18 @@
           this.runBlockCommand(btn.getAttribute('data-block-command'), btn.dataset);
         });
       });
+
+      toolbar.querySelectorAll('[data-history-command]').forEach((btn) => {
+        const handler = (e) => {
+          e.preventDefault();
+          const cmd = btn.getAttribute('data-history-command');
+          if (cmd === 'undo') this.undo();
+          else if (cmd === 'redo') this.redo();
+        };
+        btn.addEventListener('mousedown', handler);
+        btn.addEventListener('click', handler);
+      });
+      this.updateUndoRedoButtons();
 
       this.setupToolbarScrollFade();
 

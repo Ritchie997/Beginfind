@@ -210,6 +210,8 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 
 /* --- буфер блоков (copyBlock/pasteBlockInto) --- */
 .articles-page .toolbar-button.eb-paste-empty { opacity: .4; }
+.articles-page .toolbar-button:disabled,
+.articles-page .toolbar-button.is-disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 .eb-toast {
   position: fixed;
   left: 50%;

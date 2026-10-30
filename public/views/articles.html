@@ -256,6 +256,13 @@
             <div class="toolbar-row toolbar-row-format" id="toolbarFormatRow">
               <div class="toolbar-group-wrap">
                 <div class="toolbar-group">
+                  <button type="button" class="toolbar-button" data-history-command="undo" id="editorUndoBtn" title="Отменить (Ctrl+Z)" disabled><i class="fas fa-rotate-left"></i></button>
+                  <button type="button" class="toolbar-button" data-history-command="redo" id="editorRedoBtn" title="Повторить (Ctrl+Y / Ctrl+Shift+Z)" disabled><i class="fas fa-rotate-right"></i></button>
+                </div>
+                <span class="toolbar-group-label">история</span>
+              </div>
+              <div class="toolbar-group-wrap">
+                <div class="toolbar-group">
                   <!-- На ПК новый абзац разбивается клавишей Enter прямо в тексте
                        (см. splitOnEnter в makeTextArea, editor-manager.js) — на
                        телефоне это не так очевидно, поэтому явная кнопка первой
@@ -910,6 +917,13 @@
   background: var(--blurple);
   border-color: var(--blurple);
   color: white;
+}
+
+.articles-page .toolbar-button:disabled,
+.articles-page .toolbar-button.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .articles-page .toolbar-separator {

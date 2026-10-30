@@ -1019,7 +1019,7 @@ class SPARouter {
     const editorMgr = this.editorManager;
     if (editorMgr) {
       editorMgr.doc = layer.content || { version: 1, blocks: [] };
-      if (editorMgr.container) { editorMgr.renderAll(); editorMgr.scheduleRenderPreview?.(); }
+      if (editorMgr.container) { editorMgr.renderAll(); editorMgr.scheduleRenderPreview?.(); editorMgr.resetHistory?.(); }
     }
 
     this.layerRolesField?.setValues((layer.roles || []).map((r) => this.encodeRoleRef(r)));
