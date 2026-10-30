@@ -933,6 +933,56 @@
     </div>`;
   }
 
+  function formatPostBody(body) {
+    if (!body) return '';
+    var text = escapeHtml(body);
+
+    // Заголовки (###, ##, ####)
+    text = text.replace(/^(#{2,4})\s+(.+)$/gm, function (_, hashes, content) {
+      return '<div class="alltell-post-h' + hashes.length + '">' + content.trim() + '</div>';
+    });
+
+    // Инлайн-спойлеры: ||скрытый текст||
+    text = text.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="alltell-post-spoiler" title="Спойлер (нажмите для просмотра)" onclick="this.classList.toggle(\'is-revealed\')">$1</span>');
+
+    // Жирный текст: **текст**
+    text = text.replace(/\*\*([^\*\n]+?)\*\*/g, '<strong>$1</strong>');
+
+    // Курсив: *текст* (если не звёздочки) или _текст_
+    text = text.replace(/(^|[^\*])\*([^\*\n]+?)\*([^\*]|$)/g, '$1<em>$2</em>$3');
+    text = text.replace(/(^|[^_])_([^_ \n][^_\n]*?[^_ \n])_([^_]|$)/g, '$1<em>$2</em>$3');
+
+    // Зачёркнутый текст: ~~текст~~
+    text = text.replace(/~~([^~\n]+?)~~/g, '<del>$1</del>');
+
+    // Подчёркнутый текст: ++текст++
+    text = text.replace(/\+\+([^\+\n]+?)\+\+/g, '<u>$1</u>');
+
+    // Инлайн-код: `код`
+    text = text.replace(/`([^`\n]+?)`/g, '<code class="alltell-inline-code">$1</code>');
+
+    // Разделитель: --- или ***
+    text = text.replace(/^(?:---|—{3,}|\*\*\*)\s*$/gm, '<hr class="alltell-post-divider">');
+
+    // Цитаты: строки начинающиеся с &gt;
+    text = text.replace(/^(?:&gt;|>)\s*(.+)$/gm, '<blockquote class="alltell-post-quote">$1</blockquote>');
+
+    // Списки: строки начинающиеся с - или *
+    text = text.replace(/^[-•]\s+(.+)$/gm, '<div class="alltell-post-bullet"><span class="alltell-bullet-dot">•</span> <span>$1</span></div>');
+
+    // Wiki-ссылки на Antropedia: [[slug|title]] или [[slug]]
+    text = text.replace(/\[\[([^\]\|]+)(?:\|([^\]]+))?\]\]/g, function (_, slug, title) {
+      var s = slug.trim();
+      var t = (title || s).trim();
+      return '<a href="/antropedia/' + encodeURIComponent(s) + '" class="alltell-post-wikilink"><i class="fas fa-book-bookmark"></i> ' + t + '</a>';
+    });
+
+    // Обычные markdown-ссылки: [название](url)
+    text = text.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="alltell-post-link">$1 <i class="fas fa-arrow-up-right-from-square"></i></a>');
+
+    return text;
+  }
+
   function renderPost(post, hubMap, canManage, social, userId, loggedIn, franchiseId) {
     franchiseId = franchiseId || post.franchise_id;
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
@@ -994,7 +1044,7 @@
           </div>
         ` : ''}
 
-        ${post.body ? `<div class="alltell-post-body">${escapeHtml(post.body)}</div>` : ''}
+        ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body)}</div>` : ''}
 
         ${postArticles.length ? `
           <div class="alltell-post-articles-list">
@@ -1082,6 +1132,48 @@
     }).join('');
   }
 
+  function applyPostFormat(format, form) {
+    var textarea = form ? form.querySelector('textarea[name="body"]') : null;
+    if (!textarea) return;
+    var start = textarea.selectionStart;
+    var end = textarea.selectionEnd;
+    var val = textarea.value;
+    var selected = val.substring(start, end);
+
+    var before = '', after = '', replacement = '';
+    switch (format) {
+      case 'bold': before = '**'; after = '**'; break;
+      case 'italic': before = '*'; after = '*'; break;
+      case 'underline': before = '++'; after = '++'; break;
+      case 'strike': before = '~~'; after = '~~'; break;
+      case 'code': before = '`'; after = '`'; break;
+      case 'spoiler': before = '||'; after = '||'; break;
+      case 'heading': before = '### '; after = ''; break;
+      case 'quote': before = '> '; after = ''; break;
+      case 'list': before = '- '; after = ''; break;
+      case 'divider': replacement = '\n---\n'; break;
+    }
+
+    if (replacement) {
+      textarea.value = val.substring(0, start) + replacement + val.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + replacement.length;
+    } else {
+      var leadWs = selected.match(/^\s*/)[0];
+      var trailWs = selected.match(/\s*$/)[0];
+      var core = selected.slice(leadWs.length, selected.length - trailWs.length);
+      if (!core && !selected) core = 'текст';
+      var inserted = leadWs + before + core + after + trailWs;
+      textarea.value = val.substring(0, start) + inserted + val.substring(end);
+      var newStart = start + leadWs.length + before.length;
+      var newEnd = newStart + core.length;
+      textarea.selectionStart = newStart;
+      textarea.selectionEnd = newEnd;
+    }
+
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.focus();
+  }
+
   function renderPostForm(state, hubs, canManage) {
     var post = state.editingPost;
     var images = state.postImages || [];
@@ -1090,100 +1182,230 @@
     }).join('');
     var postArticles = state.postArticles || [];
     return `
-      <form class="alltell-post-form" data-post-form>
-        <div class="alltell-form-header">
-          <div class="alltell-form-icon"><i class="fas ${post ? 'fa-pen-to-square' : 'fa-wand-magic-sparkles'}"></i></div>
-          <div>
-            <h3>${post ? 'Редактировать публикацию' : (canManage ? 'Новая публикация' : 'Предложить публикацию')}</h3>
-            <p>${canManage ? 'Запись будет опубликована от имени франшизы' : 'Запись появится в ленте после подтверждения модератором'}</p>
+      <div class="antropedia-editor-view alltell-post-editor-view" data-post-form-container>
+        <div class="antropedia-editor-header">
+          <div class="antropedia-editor-header-left">
+            <button type="button" class="btn btn-secondary btn-sm antropedia-editor-back-btn" data-action="${post ? 'cancel-edit' : 'cancel-post-form'}">
+              <i class="fas fa-arrow-left"></i> <span>Назад к ленте</span>
+            </button>
+            <h2 class="antropedia-editor-title">
+              <i class="fas ${post ? 'fa-pen-to-square' : 'fa-wand-magic-sparkles'}" style="color:#818cf8; margin-right:8px;"></i>
+              ${post ? 'Редактировать публикацию' : (canManage ? 'Новая публикация' : 'Предложить публикацию')}
+            </h2>
+            <span class="draft-save-status">
+              <i class="fas ${canManage ? 'fa-shield-halved' : 'fa-clock'}"></i>
+              ${canManage ? 'От имени франшизы' : 'На модерацию'}
+            </span>
+          </div>
+          <div class="antropedia-editor-header-right">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="${post ? 'cancel-edit' : 'cancel-post-form'}">
+              <i class="fas fa-xmark"></i> <span>Отмена</span>
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" data-action="submit-post-form-top">
+              <i class="fas ${post ? 'fa-check' : 'fa-paper-plane'}"></i>
+              <span>${post ? 'Сохранить' : (canManage ? 'Опубликовать' : 'Отправить')}</span>
+            </button>
           </div>
         </div>
 
-        <div class="alltell-form-grid">
-          <label class="alltell-field">
-            <span class="alltell-field-label">Тип публикации</span>
-            <select name="type">
-              ${Object.keys(POST_TYPES).map(function (type) {
-                var selected = post ? post.type === type : type === 'news';
-                return `<option value="${type}" ${selected ? 'selected' : ''}>${POST_TYPES[type]}</option>`;
-              }).join('')}
-            </select>
-          </label>
-          <label class="alltell-field">
-            <span class="alltell-field-label">Привязка к хабу</span>
-            <select name="hub_id">
-              <option value="">Вся франшиза (общий пост)</option>${hubOptions}
-            </select>
-          </label>
-        </div>
-
-        <label class="alltell-field" data-hub-status-field ${post && post.hub_id ? '' : 'hidden'}>
-          <span class="alltell-field-label">Статус хаба</span>
-          <select name="hub_status" ${post && post.hub_id ? '' : 'disabled'}>
-            <option value="">Выберите статус</option>
-            ${Object.keys(HUB_STATUSES).map(function (status) {
-              return `<option value="${status}" ${post && post.hub_status === status ? 'selected' : ''}>${HUB_STATUSES[status]}</option>`;
-            }).join('')}
-          </select>
-        </label>
-
-        <label class="alltell-field">
-          <span class="alltell-field-label">Заголовок публикации</span>
-          <input name="title" maxlength="160" required value="${escapeHtml(post ? post.title : '')}" placeholder="Короткий и выразительный заголовок">
-        </label>
-
-        <label class="alltell-field">
-          <span class="alltell-field-label">Текст публикации</span>
-          <textarea name="body" maxlength="10000" rows="5" placeholder="Опишите событие, новости или обращение к сообществу…">${escapeHtml(post ? post.body : '')}</textarea>
-        </label>
-
-        <div class="alltell-form-grid">
-          <div class="alltell-field alltell-article-picker-field">
-            <div class="alltell-article-picker-header">
-              <span class="alltell-field-label">Связанные статьи Antropedia</span>
-              <span class="alltell-article-picker-counter" data-article-count>${postArticles.length ? postArticles.length + ' выбрано' : 'Не выбрано'}</span>
-            </div>
-            <div class="alltell-article-picker-box" data-article-picker-box>
-              <div class="alltell-selected-articles" data-selected-articles>
-                ${renderSelectedArticleChips(postArticles)}
+        <form class="antropedia-editor-container" data-post-form>
+          <!-- СЕКЦИЯ 1: ПАРАМЕТРЫ ПУБЛИКАЦИИ -->
+          <details class="form-section antropedia-editor-section" open>
+            <summary>
+              <i class="fas fa-paper-plane"></i>
+              <span>Параметры публикации</span>
+              <span class="form-section-hint">Заголовок, тип записи и привязка к хабу</span>
+              <i class="fas fa-chevron-down form-section-chevron"></i>
+            </summary>
+            <div class="form-section-body">
+              <div class="form-group full-width">
+                <label class="form-label" for="postTitleInput">
+                  Заголовок публикации <span style="color:var(--red,#ed4245); font-weight:bold;">*</span>
+                </label>
+                <input id="postTitleInput" name="title" class="form-input" maxlength="160" required
+                       value="${escapeHtml(post ? post.title : '')}"
+                       placeholder="Короткий и выразительный заголовок новости, хроники или события…">
+                <div class="form-hint">Заголовок отображается в общей ленте вселенных и привлекает внимание читателей.</div>
               </div>
-              <input name="article_search"
-                     type="text"
-                     class="alltell-article-search-input"
-                     autocomplete="off"
-                     value=""
-                     placeholder="${postArticles.length ? 'Добавить ещё статью…' : 'Поиск статьи по названию…'}"
-                     data-article-search>
-            </div>
-            <div class="alltell-article-options" data-article-options hidden></div>
-          </div>
 
-          <div class="alltell-post-image-editor" data-image-drop>
-            <div class="alltell-image-editor-heading">
-              <strong>Изображения</strong>
-              <span data-image-selection>${images.length ? images.length + ' добавлено' : 'Перетащите или выберите'}</span>
+              <div class="form-section-grid">
+                <div class="form-group">
+                  <label class="form-label" for="postTypeSelect">Тип публикации</label>
+                  <select id="postTypeSelect" name="type" class="form-select">
+                    ${Object.keys(POST_TYPES).map(function (type) {
+                      var selected = post ? post.type === type : type === 'news';
+                      return `<option value="${type}" ${selected ? 'selected' : ''}>${POST_TYPES[type]}</option>`;
+                    }).join('')}
+                  </select>
+                  <div class="form-hint">Задаёт тему и акцентную категорию записи в ленте сообщества.</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="postHubSelect">Привязка к хабу <span class="form-section-hint">необязательно</span></label>
+                  <select id="postHubSelect" name="hub_id" class="form-select">
+                    <option value="">Вся франшиза (общий пост)</option>${hubOptions}
+                  </select>
+                  <div class="form-hint">Выберите ролевую сессию или оставьте пост общим для всей вселенной.</div>
+                </div>
+
+                <div class="form-group" data-hub-status-field ${post && post.hub_id ? '' : 'hidden'}>
+                  <label class="form-label" for="postHubStatusSelect">Статус хаба <span class="form-section-hint">при изменении</span></label>
+                  <select id="postHubStatusSelect" name="hub_status" class="form-select" ${post && post.hub_id ? '' : 'disabled'}>
+                    <option value="">Без изменения статуса</option>
+                    ${Object.keys(HUB_STATUSES).map(function (status) {
+                      return `<option value="${status}" ${post && post.hub_status === status ? 'selected' : ''}>${HUB_STATUSES[status]}</option>`;
+                    }).join('')}
+                  </select>
+                  <div class="form-hint">Статус активности хаба обновится одновременно с публикацией.</div>
+                </div>
+              </div>
             </div>
-            <label class="alltell-image-dropzone">
-              <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden ${state.uploadingImages ? 'disabled' : ''}>
-              <i class="fas fa-cloud-arrow-up" aria-hidden="true"></i>
-              <span><strong>Нажмите для выбора</strong> или перетащите изображения сюда</span>
-            </label>
-            <div class="alltell-form-images" data-post-image-grid>${renderPostImageItems(images, state.uploadingImages)}</div>
-            <div class="alltell-upload-progress" data-image-progress hidden>
-              <div><span data-image-progress-label>Загрузка изображений…</span><span data-image-progress-count></span></div>
-              <progress max="100" value="0" data-image-progress-bar></progress>
+          </details>
+
+          <!-- СЕКЦИЯ 2: СОДЕРЖАНИЕ (КОНТЕНТ) -->
+          <details class="form-section antropedia-editor-section" open>
+            <summary>
+              <i class="fas fa-align-left"></i>
+              <span>Содержание</span>
+              <span class="form-section-hint">Текст публикации и форматирование</span>
+              <i class="fas fa-chevron-down form-section-chevron"></i>
+            </summary>
+            <div class="form-section-body">
+              <div class="form-group full-width">
+                <label class="form-label" for="postBodyInput">
+                  <span>Текст публикации</span>
+                </label>
+                <div class="alltell-post-editor-box">
+                  <div class="alltell-post-toolbar" role="toolbar" aria-label="Панель форматирования">
+                    <div class="alltell-post-toolbar-group">
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="code" title="Код"><i class="fas fa-code"></i></button>
+                    </div>
+                    <div class="alltell-post-toolbar-separator"></div>
+                    <div class="alltell-post-toolbar-group">
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="heading" title="Подзаголовок"><i class="fas fa-heading"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="list" title="Список"><i class="fas fa-list-ul"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="spoiler" title="Инлайн-спойлер (скрытый текст)"><i class="fas fa-eye-slash"></i></button>
+                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="divider" title="Разделитель"><i class="fas fa-minus"></i></button>
+                    </div>
+                  </div>
+                  <textarea id="postBodyInput"
+                            name="body"
+                            class="form-textarea alltell-post-body-input"
+                            maxlength="10000"
+                            rows="6"
+                            data-autogrow
+                            placeholder="Опишите события вселенной, свежие новости, сюжетный отрывок или обращение к сообществу…">${escapeHtml(post ? post.body : '')}</textarea>
+                </div>
+                <div class="alltell-post-body-footer">
+                  <span class="alltell-post-format-hint">
+                    <i class="fab fa-markdown"></i> Поддерживается разметка: **жирный**, *курсив*, ||спойлеры||, списки и цитаты
+                  </span>
+                  <span class="alltell-post-char-counter" data-char-counter>
+                    ${(post && post.body ? post.body.length : 0).toLocaleString('ru-RU')} / 10 000
+                  </span>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- СЕКЦИЯ 3: МЕДИА И СТАТЬИ -->
+          <details class="form-section antropedia-editor-section" open>
+            <summary>
+              <i class="fas fa-paperclip"></i>
+              <span>Медиа и статьи</span>
+              <span class="form-section-hint">Изображения галереи и прикрепление статей Antropedia</span>
+              <i class="fas fa-chevron-down form-section-chevron"></i>
+            </summary>
+            <div class="form-section-body">
+              <!-- ГАЛЕРЕЯ ИЗОБРАЖЕНИЙ -->
+              <div class="form-group full-width alltell-post-image-editor" data-image-drop>
+                <div class="alltell-image-editor-heading">
+                  <label class="form-label" style="margin:0;">
+                    <i class="fas fa-images"></i>
+                    <span>Галерея изображений публикации</span>
+                  </label>
+                  <span class="alltell-editor-badge" data-image-selection>
+                    ${images.length ? images.length + ' добавлено' : 'Перетащите или выберите'}
+                  </span>
+                </div>
+
+                <label class="alltell-image-dropzone">
+                  <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden ${state.uploadingImages ? 'disabled' : ''}>
+                  <div class="alltell-image-dropzone-content">
+                    <div class="alltell-image-dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                    <div class="alltell-image-dropzone-text">
+                      <strong>Нажмите для выбора изображений</strong> или перетащите файлы в эту область
+                      <div class="form-hint" style="margin-top:4px;">Поддерживаются форматы JPG, PNG, WEBP и GIF</div>
+                    </div>
+                  </div>
+                </label>
+
+                <div class="alltell-form-images" data-post-image-grid>
+                  ${renderPostImageItems(images, state.uploadingImages)}
+                </div>
+
+                <div class="alltell-upload-progress" data-image-progress hidden>
+                  <div>
+                    <span data-image-progress-label>Загрузка изображений…</span>
+                    <span data-image-progress-count></span>
+                  </div>
+                  <progress max="100" value="0" data-image-progress-bar></progress>
+                </div>
+              </div>
+
+              <!-- СВЯЗАННЫЕ СТАТЬИ -->
+              <div class="form-group full-width alltell-article-picker-field">
+                <div class="alltell-article-picker-header">
+                  <label class="form-label" style="margin:0;">
+                    <i class="fas fa-book-bookmark"></i>
+                    <span>Связанные статьи Antropedia</span>
+                  </label>
+                  <span class="alltell-editor-badge" data-article-count>
+                    ${postArticles.length ? postArticles.length + ' выбрано' : 'Не выбрано'}
+                  </span>
+                </div>
+
+                <div class="alltell-article-picker-box" data-article-picker-box>
+                  <div class="alltell-selected-articles" data-selected-articles>
+                    ${renderSelectedArticleChips(postArticles)}
+                  </div>
+                  <input name="article_search"
+                         type="text"
+                         class="alltell-article-search-input"
+                         autocomplete="off"
+                         value=""
+                         placeholder="${postArticles.length ? 'Прикрепить ещё статью…' : 'Поиск статьи по названию для прикрепления…'}"
+                         data-article-search>
+                </div>
+                <div class="alltell-article-options" data-article-options hidden></div>
+                <div class="form-hint">Прикреплённые статьи появятся в виде кликабельных карточек с быстрым переходом к чтению.</div>
+              </div>
+            </div>
+          </details>
+
+          <!-- НИЖНИЕ ДЕЙСТВИЯ -->
+          <div class="alltell-post-form-footer">
+            <div class="alltell-post-form-footer-left">
+              <i class="fas fa-info-circle"></i>
+              <span>${canManage ? 'Запись появится в ленте франшизы сразу после сохранения' : 'Запись поступит создателю франшизы на модерацию'}</span>
+            </div>
+            <div class="alltell-post-form-footer-right">
+              <button class="btn btn-secondary" type="button" data-action="${post ? 'cancel-edit' : 'cancel-post-form'}">
+                <i class="fas fa-xmark"></i> Отмена
+              </button>
+              <button class="btn btn-primary" type="submit">
+                <i class="fas ${post ? 'fa-check' : 'fa-paper-plane'}"></i>
+                <span>${post ? 'Сохранить изменения' : (canManage ? 'Опубликовать запись' : 'Отправить на модерацию')}</span>
+              </button>
             </div>
           </div>
-        </div>
-
-        <div class="alltell-post-form-actions">
-          <button class="btn btn-primary" type="submit">
-            <i class="fas ${post ? 'fa-check' : 'fa-paper-plane'}"></i>
-            <span>${post ? 'Сохранить изменения' : (canManage ? 'Опубликовать запись' : 'Отправить на модерацию')}</span>
-          </button>
-          <button class="btn btn-secondary" type="button" data-action="${post ? 'cancel-edit' : 'cancel-post-form'}">Отмена</button>
-        </div>
-      </form>`;
+        </form>
+      </div>`;
   }
 
   function renderMembersView(state, data, canManage, isOwner, isRoot) {
@@ -2160,7 +2382,7 @@
     root.querySelectorAll('textarea[data-autogrow]').forEach(function (ta) {
       ta.style.height = 'auto';
       ta.style.overflow = 'hidden';
-      ta.style.height = Math.max(96, ta.scrollHeight) + 'px';
+      ta.style.height = Math.max(140, ta.scrollHeight) + 'px';
     });
   }
 
@@ -3651,6 +3873,13 @@
     }
 
     async function onClick(event) {
+      var postCmdBtn = event.target.closest('[data-post-cmd]');
+      if (postCmdBtn) {
+        var cmd = postCmdBtn.dataset.postCmd;
+        var form = postCmdBtn.closest('[data-post-form]') || root.querySelector('[data-post-form]');
+        applyPostFormat(cmd, form);
+        return;
+      }
       var commentSticker = event.target.closest('.alltell-comment-sticker[data-pack-id]');
       if (commentSticker) {
         if (!token()) {
@@ -3859,13 +4088,21 @@
           button.disabled = false;
           notifyError(error.message);
         });
+      } else if (action === 'submit-post-form-top') {
+        var postForm = root.querySelector('[data-post-form]');
+        if (postForm) {
+          if (typeof postForm.requestSubmit === 'function') postForm.requestSubmit();
+          else postForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+        return;
       } else if (action === 'toggle-post-form') {
         state.editingPost = null;
         state.showPostForm = true;
         setPostImages(null);
         setPostArticles(null);
         renderDetail(root, state);
-        root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        root.querySelector('#postTitleInput')?.focus();
       } else if (action === 'edit-post') {
         state.editingPost = state.detail.posts.find(function (post) {
           return String(post.id) === button.dataset.postId;
@@ -3874,7 +4111,8 @@
         setPostImages(state.editingPost);
         setPostArticles(state.editingPost);
         renderDetail(root, state);
-        root.querySelector('[data-post-form]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        root.querySelector('#postTitleInput')?.focus();
       } else if (action === 'cancel-edit') {
         state.editingPost = null;
         state.showPostForm = false;
@@ -4052,7 +4290,42 @@
       if (event.target.matches('textarea[data-autogrow]')) {
         event.target.style.height = 'auto';
         event.target.style.overflow = 'hidden';
-        event.target.style.height = Math.max(96, event.target.scrollHeight) + 'px';
+        event.target.style.height = Math.max(140, event.target.scrollHeight) + 'px';
+      }
+      if (event.target.matches('textarea[name="body"]')) {
+        var form = event.target.closest('[data-post-form]');
+        var counter = form ? form.querySelector('[data-char-counter]') : null;
+        if (counter) {
+          var len = event.target.value.length;
+          counter.textContent = len.toLocaleString('ru-RU') + ' / 10 000';
+          counter.classList.toggle('is-near-limit', len > 9500);
+        }
+      }
+    }
+
+    function onKeyDown(event) {
+      if (event.target.matches('textarea[name="body"]')) {
+        var mod = event.ctrlKey || event.metaKey;
+        if (mod) {
+          var key = event.key.toLowerCase();
+          var form = event.target.closest('[data-post-form]') || root.querySelector('[data-post-form]');
+          if (key === 'b') {
+            event.preventDefault();
+            applyPostFormat('bold', form);
+          } else if (key === 'i') {
+            event.preventDefault();
+            applyPostFormat('italic', form);
+          } else if (key === 'u') {
+            event.preventDefault();
+            applyPostFormat('underline', form);
+          } else if (key === 'enter') {
+            event.preventDefault();
+            if (form) {
+              if (typeof form.requestSubmit === 'function') form.requestSubmit();
+              else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+          }
+        }
       }
     }
 
@@ -4121,7 +4394,7 @@
       if (event.target.matches('textarea[data-autogrow]')) {
         event.target.style.height = 'auto';
         event.target.style.overflow = 'hidden';
-        event.target.style.height = Math.max(96, event.target.scrollHeight) + 'px';
+        event.target.style.height = Math.max(140, event.target.scrollHeight) + 'px';
       }
       if (event.target.id === 'settings-avatar-file') {
         var sFile = event.target.files && event.target.files[0];
@@ -4327,7 +4600,8 @@
         if (state.uploadingImages) return;
         var formData = new FormData(event.target);
         state.uploadingImages = true;
-        event.target.querySelectorAll('input, select, textarea, button').forEach(function (control) {
+        var container = event.target.closest('[data-post-form-container]') || event.target;
+        container.querySelectorAll('input, select, textarea, button').forEach(function (control) {
           control.disabled = true;
         });
         renderPostImageQueue();
@@ -4337,11 +4611,17 @@
           var progress = root.querySelector('[data-image-progress]');
           if (progress) progress.hidden = true;
           renderPostImageQueue();
-          var activeForm = root.querySelector('[data-post-form]');
-          if (activeForm) {
-            activeForm.querySelectorAll('input, select, textarea, button').forEach(function (control) {
+          var activeContainer = root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]');
+          if (activeContainer) {
+            activeContainer.querySelectorAll('input, select, textarea, button').forEach(function (control) {
               control.disabled = false;
             });
+            var statusField = activeContainer.querySelector('[data-hub-status-field]');
+            var hubSelect = activeContainer.querySelector('[name="hub_id"]');
+            if (statusField && hubSelect && !hubSelect.value) {
+              var statusSel = statusField.querySelector('[name="hub_status"]');
+              if (statusSel) statusSel.disabled = true;
+            }
           }
         });
       }
@@ -4389,6 +4669,7 @@
 
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
+    root.addEventListener('keydown', onKeyDown);
     root.addEventListener('scroll', onScroll, true);
     root.addEventListener('change', onChange);
     root.addEventListener('dragover', onDragOver);
@@ -4405,6 +4686,7 @@
       state.disposed = true;
       root.removeEventListener('click', onClick);
       root.removeEventListener('input', onInput);
+      root.removeEventListener('keydown', onKeyDown);
       root.removeEventListener('scroll', onScroll, true);
       root.removeEventListener('change', onChange);
       root.removeEventListener('dragover', onDragOver);
