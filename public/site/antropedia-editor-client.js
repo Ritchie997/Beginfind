@@ -220,15 +220,67 @@
     }
 
     updateAuthorChip() {
+      this.resetArticleAuthorInfo();
+    }
+
+    resetArticleAuthorInfo() {
       const chip = document.getElementById('articleAuthorChip');
-      if (!chip) return;
       const user = currentUser();
-      if (user) {
-        chip.textContent = user.display_name || user.username || 'Пользователь';
-        chip.title = 'Вы публикуете статью как ' + (user.display_name || user.username);
-      } else {
-        chip.textContent = 'Гость (требуется вход для публикации)';
-        chip.title = 'Войдите в аккаунт, чтобы опубликовать статью';
+      if (chip) {
+        if (user) {
+          chip.textContent = user.display_name || user.username || 'Вы';
+          chip.title = 'Вы публикуете статью как ' + (user.display_name || user.username);
+        } else {
+          chip.textContent = 'Гость (требуется вход для публикации)';
+          chip.title = 'Войдите в аккаунт, чтобы опубликовать статью';
+        }
+      }
+      const coAuthorsList = document.getElementById('coAuthorsList') || document.getElementById('articleCoauthorsList');
+      if (coAuthorsList) {
+        coAuthorsList.innerHTML = '';
+        coAuthorsList.hidden = true;
+      }
+      const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+      if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = true;
+    }
+
+    renderArticleAuthorInfo(article) {
+      if (!article) {
+        this.resetArticleAuthorInfo();
+        return;
+      }
+      const user = currentUser();
+      const chip = document.getElementById('articleAuthorChip');
+      if (chip) {
+        const authorName = (article.author && article.author.display_name)
+          || (article.author && article.author.username)
+          || 'Неизвестный автор';
+        chip.textContent = authorName;
+        chip.title = 'Автор статьи: ' + authorName;
+      }
+
+      const coAuthors = Array.isArray(article.co_authors) ? article.co_authors : [];
+      const coAuthorsList = document.getElementById('coAuthorsList') || document.getElementById('articleCoauthorsList');
+      if (coAuthorsList) {
+        coAuthorsList.innerHTML = '';
+        coAuthors.forEach((co) => {
+          const chipEl = document.createElement('span');
+          chipEl.className = 'author-chip is-coauthor';
+          chipEl.textContent = co.display_name || co.username || 'Соавтор';
+          chipEl.title = 'Соавтор статьи';
+          coAuthorsList.appendChild(chipEl);
+        });
+        coAuthorsList.hidden = coAuthors.length === 0;
+      }
+
+      const isForeignArticle = !!(article.author && user && Number(article.author.id) !== Number(user.id));
+      const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+      if (addAsCoauthorWrap) {
+        addAsCoauthorWrap.hidden = !isForeignArticle;
+      }
+      const checkbox = document.getElementById('addAsCoauthorCheckbox');
+      if (checkbox) {
+        checkbox.checked = true;
       }
     }
 
@@ -460,7 +512,7 @@
       const field = forLayers ? this.layerRolesField : this.rolesField;
       if (!field) return;
       if (!franchiseId) {
-        field.setChoices([]);
+        if (typeof field.setOptions === 'function') field.setOptions([]);
         return;
       }
       try {
@@ -470,10 +522,14 @@
             value: forLayers ? `server:${r.id}` : String(r.id),
             label: r.name
           }));
-          field.setChoices(choices);
+          if (typeof field.setOptions === 'function') {
+            field.setOptions(choices);
+          }
+        } else {
+          if (typeof field.setOptions === 'function') field.setOptions([]);
         }
       } catch (e) {
-        field.setChoices([]);
+        if (typeof field.setOptions === 'function') field.setOptions([]);
       }
     }
 
@@ -783,6 +839,7 @@
       this.currentDraftRev = null;
       this._lastLoadedDraftData = null;
       this.updateDraftSaveStatus(null);
+      this.resetArticleAuthorInfo();
 
       const saveBtn = document.getElementById('saveArticleBtn');
       if (saveBtn) saveBtn.removeAttribute('data-article-id');
@@ -1204,6 +1261,8 @@
         const formTitle = document.getElementById('article-form-title');
         if (formTitle) formTitle.textContent = 'Редактирование: ' + (article.title || article.slug);
 
+        this.renderArticleAuthorInfo(article);
+
         const titleInput = document.getElementById('articleTitle');
         if (titleInput) titleInput.value = article.title || '';
 
@@ -1233,6 +1292,10 @@
 
         const lockedSelect = document.getElementById('articleLocked');
         if (lockedSelect) lockedSelect.value = article.locked ? 'true' : 'false';
+
+        if (this.rolesField && Array.isArray(article.roles)) {
+          this.rolesField.setValues(article.roles);
+        }
 
         if (this.tagsField && Array.isArray(article.tags)) {
           this.tagsField.setValues(article.tags);
