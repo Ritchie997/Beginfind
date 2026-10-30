@@ -362,9 +362,7 @@
             <div class="alltell-hub-info-section-title">
               <i class="fas fa-book-open"></i> Описание и сюжет ролевой игры
             </div>
-            <div class="alltell-hub-info-desc-content">
-              ${hub.description ? escapeHtml(hub.description) : '<p style="color:var(--text-muted);font-style:italic;margin:0;">Описание ролевого хаба пока не добавлено создателем.</p>'}
-            </div>
+            <div class="alltell-hub-info-desc-content">${(hub.description || '').trim() ? escapeHtml((hub.description || '').trim()) : '<p style="color:var(--text-muted);font-style:italic;margin:0;">Описание ролевого хаба пока не добавлено создателем.</p>'}</div>
           </div>
         </div>
       `,
@@ -386,7 +384,7 @@
     return FRANCHISE_GRADIENTS[Math.abs(hash) % FRANCHISE_GRADIENTS.length];
   }
 
-  function franchiseCard(franchise, member, isOwner, isRoot, isExpanded, previewHubs) {
+  function franchiseCard(franchise, member, isOwner, isRoot, isExpanded, previewHubs, cardKey) {
     var hubSummary = [
       franchise.active_hubs ? franchise.active_hubs + ' активных' : '',
       franchise.paused_hubs ? franchise.paused_hubs + ' на паузе' : '',
@@ -413,7 +411,7 @@
           <div class="alltell-live-title-row">
             <h3 title="${escapeHtml(franchise.name)}"><a href="/alltell?franchise=${Number(franchise.id)}">${escapeHtml(franchise.name)}</a></h3>
           </div>
-          <p class="alltell-live-description ${!franchise.description ? 'is-placeholder' : ''}">${escapeHtml(franchise.description || 'Описание сообщества пока не заполнено.')}</p>
+          <p class="alltell-live-description ${!franchise.description ? 'is-placeholder' : ''}">${escapeHtml((franchise.description || '').trim() || 'Описание сообщества пока не заполнено.')}</p>
           <div class="alltell-live-chips">
             <span class="alltell-meta-chip"><i class="fas fa-layer-group" aria-hidden="true"></i> ${totalHubs} хабов</span>
             <span class="alltell-meta-chip ${hasActiveHubs ? 'is-active' : ''}">
@@ -422,7 +420,7 @@
             </span>
           </div>
           <div class="alltell-card-hubs-dropdown-wrap">
-            <button type="button" class="alltell-card-hubs-toggle ${isExpanded ? 'is-expanded' : ''}" data-action="toggle-hub-preview" data-franchise-id="${Number(franchise.id)}" aria-expanded="${isExpanded}">
+            <button type="button" class="alltell-card-hubs-toggle ${isExpanded ? 'is-expanded' : ''}" data-action="toggle-hub-preview" data-franchise-id="${Number(franchise.id)}" data-card-key="${cardKey || ''}" aria-expanded="${isExpanded}">
               <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> ${isExpanded ? 'Скрыть хабы' : 'Показать хабы (' + totalHubs + ')'}
             </button>
             ${isExpanded ? `
@@ -431,7 +429,7 @@
                   <span class="alltell-card-hubs-header-title"><i class="fas fa-layer-group"></i> Игровые хабы</span>
                   <div style="display:flex;align-items:center;gap:8px;">
                     <span class="alltell-card-hubs-header-count">${previewHubs ? previewHubs.length : '…'}</span>
-                    <button type="button" class="alltell-card-hubs-close-btn" data-action="toggle-hub-preview" data-franchise-id="${Number(franchise.id)}" title="Скрыть хабы">
+                    <button type="button" class="alltell-card-hubs-close-btn" data-action="toggle-hub-preview" data-franchise-id="${Number(franchise.id)}" data-card-key="${cardKey || ''}" title="Скрыть хабы">
                       <i class="fas fa-xmark"></i>
                     </button>
                   </div>
@@ -608,11 +606,12 @@
               var catalogItem = state.franchises.find(function (franchise) { return Number(franchise.id) === Number(item.id); });
               var isOwner = currentUserId && (Number(item.owner_id) === Number(currentUserId) || (catalogItem && Number(catalogItem.owner_id) === Number(currentUserId)));
               var itemIdNum = Number(item.id);
-              var isExpanded = state.expandedHubs.has(itemIdNum);
+              var cardKey = 'mine:' + itemIdNum;
+              var isExpanded = state.expandedCardKey === cardKey;
               var previewHubs = state.hubPreviewCache.get(itemIdNum);
               return franchiseCard(Object.assign({
                 active_hubs: 0, paused_hubs: 0, finished_hubs: 0, member_count: 0
-              }, catalogItem || item, item), true, isOwner, isRoot, isExpanded, previewHubs);
+              }, catalogItem || item, item), true, isOwner, isRoot, isExpanded, previewHubs, cardKey);
             }).join('')}</div>
           </section>
         ` : ''}
@@ -640,9 +639,10 @@
               var isUserMember = mine && mine.some(function (item) { return Number(item.id) === Number(franchise.id); });
               var isOwner = currentUserId && Number(franchise.owner_id) === Number(currentUserId);
               var franchiseIdNum = Number(franchise.id);
-              var isExpanded = state.expandedHubs.has(franchiseIdNum);
+              var cardKey = 'catalog:' + franchiseIdNum;
+              var isExpanded = state.expandedCardKey === cardKey;
               var previewHubs = state.hubPreviewCache.get(franchiseIdNum);
-              return franchiseCard(franchise, isUserMember, isOwner, isRoot, isExpanded, previewHubs);
+              return franchiseCard(franchise, isUserMember, isOwner, isRoot, isExpanded, previewHubs, cardKey);
             }).join('')}</div>
           ` : `
             <div class="alltell-state alltell-state-empty">
@@ -1505,10 +1505,6 @@
             </div>
           </div>
         </div>
-        <label class="alltell-perm-check">
-          <input type="checkbox" name="is_public" ${editingHub.is_public ? 'checked' : ''}>
-          <span><strong>Публичный хаб</strong> (виден всем посетителям каталога)</span>
-        </label>
         <div style="display:flex;gap:10px;margin-top:6px;">
           <button type="submit" class="btn btn-primary" id="hub-form-submit-btn">${editingId === 'new' ? 'Создать хаб' : 'Сохранить'}</button>
           <button type="button" class="btn btn-secondary" data-action="manage-cancel-hub">Отмена</button>
@@ -1549,14 +1545,15 @@
                         <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
                         ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
                       </span>
-                      <span style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--background-tertiary);color:var(--text-muted);border:1px solid var(--background-accent);">
-                        ${hub.is_public ? 'Публичный' : 'Скрытый'}
-                      </span>
+                      <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="${canManage ? 'Нажмите, чтобы переключить видимость хаба' : ''}">
+                        <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''} ${!canManage ? 'disabled' : ''}>
+                        <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
+                      </label>
                     </div>
                   </div>
                 </div>
                 <div class="alltell-hub-card-desc-wrap">
-                  <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                  <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml((hub.description || '').trim() || 'Описание ролевого хаба пока не добавлено.')}</p>
                   ${hub.description ? `
                     <button type="button" class="alltell-hub-desc-toggle-btn" data-action="open-hub-desc" data-hub-id="${hub.id}">
                       <i class="fas fa-expand"></i> <span>Читать описание</span>
@@ -1581,11 +1578,12 @@
                         <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
                         ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
                       </span>
-                      <span style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--background-tertiary);color:var(--text-muted);border:1px solid var(--background-accent);">
-                        ${hub.is_public ? 'Публичный' : 'Скрытый'}
-                      </span>
+                      <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="${canManage ? 'Нажмите, чтобы переключить видимость хаба' : ''}">
+                        <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''} ${!canManage ? 'disabled' : ''}>
+                        <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
+                      </label>
                     </div>
-                    <div class="alltell-hub-modal-body">${escapeHtml(hub.description)}</div>
+                    <div class="alltell-hub-modal-body">${escapeHtml((hub.description || '').trim())}</div>
                     <div class="alltell-hub-modal-footer">
                       <button type="button" class="btn btn-secondary btn-sm" data-action="close-hub-desc" data-hub-id="${hub.id}">
                         <i class="fas fa-compress"></i> <span>Свернуть</span>
@@ -1974,14 +1972,26 @@
                   </div>
                         <div class="alltell-hub-title-block">
                           <h3>${escapeHtml(hub.name)}</h3>
-                          <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
-                            <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
-                            ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
-                          </span>
+                          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span class="alltell-hub-status alltell-hub-status-${escapeHtml(hub.status)}">
+                              <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
+                              ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
+                            </span>
+                            ${canManage ? `
+                              <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="Нажмите, чтобы переключить видимость хаба">
+                                <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''}>
+                                <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
+                              </label>
+                            ` : (hub.is_public ? `
+                              <span class="alltell-hub-pub-toggle is-pub" style="cursor:default;"><i class="fas fa-globe" style="font-size:10px;"></i> Публичный</span>
+                            ` : `
+                              <span class="alltell-hub-pub-toggle is-priv" style="cursor:default;"><i class="fas fa-lock" style="font-size:10px;"></i> Скрытый</span>
+                            `)}
+                          </div>
                         </div>
                       </div>
                       <div class="alltell-hub-card-desc-wrap">
-                        <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml(hub.description || 'Описание ролевого хаба пока не добавлено.')}</p>
+                        <p class="alltell-hub-card-desc ${!hub.description ? 'is-placeholder' : ''}">${escapeHtml((hub.description || '').trim() || 'Описание ролевого хаба пока не добавлено.')}</p>
                         ${hub.description ? `
                           <button type="button" class="alltell-hub-desc-toggle-btn" data-action="open-hub-desc" data-hub-id="${hub.id}">
                             <i class="fas fa-expand"></i> <span>Читать описание</span>
@@ -2006,8 +2016,18 @@
                               <span class="alltell-status-dot ${isHubActive ? 'active' : (isHubPaused ? 'paused' : '')}"></span>
                               ${escapeHtml(HUB_STATUSES[hub.status] || 'Неизвестно')}
                             </span>
+                            ${canManage ? `
+                              <label class="alltell-hub-pub-toggle ${hub.is_public ? 'is-pub' : 'is-priv'}" title="Нажмите, чтобы переключить видимость хаба">
+                                <input type="checkbox" data-action="toggle-hub-public" data-hub-id="${hub.id}" data-franchise-id="${data.franchise.id}" ${hub.is_public ? 'checked' : ''}>
+                                <span>${hub.is_public ? 'Публичный' : 'Скрытый'}</span>
+                              </label>
+                            ` : (hub.is_public ? `
+                              <span class="alltell-hub-pub-toggle is-pub" style="cursor:default;"><i class="fas fa-globe" style="font-size:10px;"></i> Публичный</span>
+                            ` : `
+                              <span class="alltell-hub-pub-toggle is-priv" style="cursor:default;"><i class="fas fa-lock" style="font-size:10px;"></i> Скрытый</span>
+                            `)}
                           </div>
-                          <div class="alltell-hub-modal-body">${escapeHtml(hub.description)}</div>
+                          <div class="alltell-hub-modal-body">${escapeHtml((hub.description || '').trim())}</div>
                           <div class="alltell-hub-modal-footer">
                             <button type="button" class="btn btn-secondary btn-sm" data-action="close-hub-desc" data-hub-id="${hub.id}">
                               <i class="fas fa-compress"></i> <span>Свернуть</span>
@@ -2125,6 +2145,7 @@
       catalogHubFilter: 'all',
       catalogSort: 'created_desc',
       expandedHubs: new Set(),
+      expandedCardKey: null,
       hubPreviewCache: new Map(),
       workspaceTab: new URLSearchParams(window.location.search).get('wstab') || 'overview',
       workspaceData: {
@@ -2768,14 +2789,17 @@
       }
     }
 
-    async function toggleHubPreview(franchiseId) {
+    async function toggleHubPreview(franchiseId, cardKey) {
       var id = Number(franchiseId);
       if (!id) return;
-      if (state.expandedHubs.has(id)) {
-        state.expandedHubs.delete(id);
+      var key = cardKey || ('catalog:' + id);
+      if (state.expandedCardKey === key) {
+        state.expandedCardKey = null;
+        state.expandedHubs.clear();
         renderCatalog(root, state);
         return;
       }
+      state.expandedCardKey = key;
       state.expandedHubs.clear();
       state.expandedHubs.add(id);
       if (!state.hubPreviewCache.has(id)) {
@@ -3734,7 +3758,10 @@
         }
         openCreateFranchiseModal();
       } else if (action === 'toggle-hub-preview') {
-        toggleHubPreview(button.dataset.franchiseId);
+        toggleHubPreview(button.dataset.franchiseId, button.dataset.cardKey);
+      } else if (action === 'close-hub-desc') {
+        var modal = root.querySelector('[data-hub-modal="' + button.dataset.hubId + '"]');
+        if (modal) modal.hidden = true;
       } else if (action === 'toggle-manage') {
         state.detailTab = (state.detailTab === 'manage' ? 'all' : 'manage');
         if (state.detailTab === 'manage' && state.detail) {
@@ -3959,6 +3986,39 @@
         });
         return;
       }
+      if (event.target.matches('[data-action="toggle-hub-public"]')) {
+        var hubId = event.target.dataset.hubId;
+        var fId = event.target.dataset.franchiseId || (state.detail && state.detail.franchise ? state.detail.franchise.id : null);
+        if (!fId || !hubId) return;
+        var isPublic = event.target.checked;
+        event.target.disabled = true;
+        request('/api/servers/' + fId + '/hubs/' + hubId + '/visibility', 'PUT', { is_public: isPublic }).then(function () {
+          showToast(isPublic ? 'Хаб теперь публичный' : 'Хаб теперь скрытый');
+          if (state.workspaceData && state.workspaceData.hubs) {
+            var h = state.workspaceData.hubs.find(function (x) { return String(x.id) === String(hubId); });
+            if (h) h.is_public = isPublic ? 1 : 0;
+          }
+          if (state.detail && state.detail.hubs) {
+            var h2 = state.detail.hubs.find(function (x) { return String(x.id) === String(hubId); });
+            if (h2) h2.is_public = isPublic ? 1 : 0;
+          }
+          if (state.hubPreviewCache && state.hubPreviewCache.has(Number(fId))) {
+            var cached = state.hubPreviewCache.get(Number(fId));
+            var h3 = cached && cached.find(function (x) { return String(x.id) === String(hubId); });
+            if (h3) h3.is_public = isPublic ? 1 : 0;
+          }
+          if (state.view === 'franchise' && state.detail) {
+            renderDetail(root, state);
+          } else {
+            renderCatalog(root, state);
+          }
+        }).catch(function (err) {
+          event.target.checked = !isPublic;
+          event.target.disabled = false;
+          notifyError(err.message);
+        });
+        return;
+      }
       if (event.target.matches('[data-action="change-hub-filter"]')) {
         state.catalogHubFilter = event.target.value;
         renderCatalog(root, state);
@@ -3996,9 +4056,14 @@
         var hubPayload = {
           name: (hubFormData.get('name') || '').trim(),
           description: (hubFormData.get('description') || '').trim(),
-          avatar_url: (hubFormData.get('avatar_url') || '').trim() || null,
-          is_public: event.target.querySelector('[name="is_public"]')?.checked ? 1 : 0
+          avatar_url: (hubFormData.get('avatar_url') || '').trim() || null
         };
+        var isPubInput = event.target.querySelector('[name="is_public"]');
+        if (isPubInput) {
+          hubPayload.is_public = isPubInput.checked ? 1 : 0;
+        } else if (state.editingHubId === 'new') {
+          hubPayload.is_public = 1;
+        }
         var fId = state.detail.franchise.id;
         var submitBtn = event.target.querySelector('#hub-form-submit-btn');
         if (submitBtn) submitBtn.disabled = true;
@@ -4106,7 +4171,8 @@
       var flyoutToggle = event.target.closest('[data-action="toggle-hub-preview"]');
       var flyoutBox = event.target.closest('.alltell-card-hubs-flyout');
       var hubInfoBtn = event.target.closest('[data-action="open-hub-info"]');
-      if (!flyoutToggle && !flyoutBox && !hubInfoBtn && state.expandedHubs && state.expandedHubs.size > 0) {
+      if (!flyoutToggle && !flyoutBox && !hubInfoBtn && (state.expandedCardKey || (state.expandedHubs && state.expandedHubs.size > 0))) {
+        state.expandedCardKey = null;
         state.expandedHubs.clear();
         renderCatalog(root, state);
       }

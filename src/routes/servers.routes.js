@@ -205,6 +205,29 @@ router.put('/servers/:id/hubs/:hubId', auth.authenticateToken, auth.checkApprove
   }
 });
 
+router.put('/servers/:id/hubs/:hubId/visibility', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const serverId = Number(req.params.id);
+    const hubId = Number(req.params.hubId);
+    if (!(await isServerAdmin(req.user, serverId))) {
+      return res.status(403).json({ error: 'Only the franchise creator or an administrator can manage hubs' });
+    }
+    const isPublic = req.body.is_public === true || req.body.is_public === 1 || req.body.is_public === '1';
+    const existing = await dbGet('servers.db', 'SELECT id, name, is_public FROM franchise_hubs WHERE id = ? AND server_id = ?', [hubId, serverId]);
+    if (!existing) return res.status(404).json({ error: 'Hub not found in this franchise' });
+    const actor = hubActorName(req.user);
+    await dbRun('servers.db', `
+      UPDATE franchise_hubs
+      SET is_public = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND server_id = ?
+    `, [isPublic ? 1 : 0, hubId, serverId]);
+    await serverSystem.logServerAction(serverId, req.user.id, actor, 'hub_updated', { hubId, name: existing.name, isPublic: isPublic ? 1 : 0 });
+    res.json(await dbGet('servers.db', 'SELECT * FROM franchise_hubs WHERE id = ?', [hubId]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.put('/servers/:id/hubs/:hubId/status', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const serverId = Number(req.params.id);

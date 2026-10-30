@@ -3781,22 +3781,39 @@
 
 .alltell-hub-desc-toggle-btn {
     align-self: flex-start;
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--blurple, #5865f2);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    transition: color 0.15s ease;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #caced7;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.18s ease;
+    text-decoration: none !important;
 }
 
 .alltell-hub-desc-toggle-btn:hover {
-    color: #7983f5;
-    text-decoration: underline;
+    background: rgba(88, 101, 242, 0.18);
+    border-color: rgba(88, 101, 242, 0.45);
+    color: #fff;
+    box-shadow: 0 3px 12px rgba(88, 101, 242, 0.25);
+    transform: translateY(-1px);
+    text-decoration: none !important;
+}
+
+.alltell-hub-desc-toggle-btn i {
+    font-size: 11px;
+    color: #818cf8;
+    transition: color 0.18s ease;
+}
+
+.alltell-hub-desc-toggle-btn:hover i {
+    color: #fff;
 }
 
 /* Модульное всплывающее окно описания хаба внутри карточки (без деформации сетки) */
@@ -4854,22 +4871,125 @@
 }
 
 .alltell-card-hubs-toggle {
-    background: transparent;
-    border: none;
-    color: var(--blurple);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 4px 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 4px;
-    transition: opacity 0.15s;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 14px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #d1d5db;
+    font-size: 0.81rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    margin-top: 6px;
 }
 
 .alltell-card-hubs-toggle:hover {
-    opacity: 0.85;
+    background: rgba(88, 101, 242, 0.16);
+    border-color: rgba(88, 101, 242, 0.5);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(88, 101, 242, 0.22);
+    transform: translateY(-1px);
+}
+
+.alltell-card-hubs-toggle.is-expanded {
+    background: rgba(88, 101, 242, 0.22);
+    border-color: #5865f2;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(88, 101, 242, 0.3);
+}
+
+.alltell-card-hubs-toggle i {
+    font-size: 11px;
+    color: var(--blurple, #818cf8);
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.alltell-card-hubs-toggle:hover i,
+.alltell-card-hubs-toggle.is-expanded i {
+    color: #fff;
+}
+
+/* Переключатель / галочка публичности рядом с хабом */
+.alltell-hub-pub-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.18s ease;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.alltell-hub-pub-toggle:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-normal);
+}
+
+.alltell-hub-pub-toggle input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    position: relative;
+    outline: none;
+    margin: 0;
+    padding: 0;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.alltell-hub-pub-toggle input[type="checkbox"]:checked {
+    background: #10b981;
+    border-color: #10b981;
+}
+
+.alltell-hub-pub-toggle input[type="checkbox"]:checked::after {
+    content: "✓";
+    font-size: 10px;
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+}
+
+.alltell-hub-pub-toggle.is-pub {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.alltell-hub-pub-toggle.is-priv {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+.alltell-hub-pub-toggle input[type="checkbox"]:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.alltell-hub-pub-toggle:has(input[type="checkbox"]:disabled) {
+    cursor: default;
 }
 
 /* Выпадающее всплывающее меню хабов в каталоге (поверх контента) */
