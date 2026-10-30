@@ -6,19 +6,30 @@
   'use strict';
 
   function currentUser() {
-    return window.authManager && typeof window.authManager.getUser === 'function'
-      ? window.authManager.getUser()
-      : null;
+    if (window.authManager && typeof window.authManager.getUser === 'function') {
+      const u = window.authManager.getUser();
+      if (u) return u;
+    }
+    try {
+      const raw = localStorage.getItem('currentUser') || localStorage.getItem('user');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return null;
   }
 
   function token() {
-    return window.authManager && typeof window.authManager.getToken === 'function'
-      ? window.authManager.getToken()
-      : null;
+    if (window.authManager && typeof window.authManager.getToken === 'function') {
+      const t = window.authManager.getToken();
+      if (t) return t;
+    }
+    return localStorage.getItem('token') || localStorage.getItem('authToken') || null;
   }
 
   function isAuthenticated() {
-    return !!(window.authManager && window.authManager.isAuthenticated && window.authManager.isAuthenticated());
+    if (window.authManager && typeof window.authManager.isAuthenticated === 'function') {
+      if (window.authManager.isAuthenticated()) return true;
+    }
+    return !!token();
   }
 
   // Общий клиент для авторизованных запросов
@@ -926,13 +937,16 @@
     async draftsFetch(method, path, body, base = '/api/drafts') {
       const tokenVal = token();
       if (!tokenVal) return { ok: false, status: 401, json: null };
+      const headers = {
+        Authorization: `Bearer ${tokenVal}`
+      };
+      if (body != null) {
+        headers['Content-Type'] = 'application/json';
+      }
       const response = await fetch(`${base}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${tokenVal}`
-        },
-        body: body ? JSON.stringify(body) : undefined
+        headers,
+        body: body != null ? JSON.stringify(body) : undefined
       });
       let json = null;
       try { json = await response.json(); } catch (e) {}
@@ -1109,7 +1123,11 @@
       if (titleInput) titleInput.value = data.title || '';
 
       const contentEl = document.getElementById('articleContent');
-      if (contentEl) contentEl.innerHTML = data.content || JSON.stringify({ version: 1, blocks: [] });
+      if (contentEl) {
+        contentEl.innerHTML = typeof data.content === 'object'
+          ? JSON.stringify(data.content)
+          : (data.content || JSON.stringify({ version: 1, blocks: [] }));
+      }
 
       if (data.image) {
         this.setCoverImage(data.image);
@@ -1153,9 +1171,18 @@
       }
 
       this.updateDraftSaveStatus('saved_local');
-      if (this.editorManager) {
-        this.editorManager.renderAll();
-        this.editorManager.scheduleRenderPreview(true);
+      const editor = this.editorManager || window.editorManager;
+      if (editor) {
+        if (contentEl && contentEl.innerHTML) {
+          try {
+            const parsed = JSON.parse(contentEl.innerHTML);
+            if (parsed && Array.isArray(parsed.blocks)) {
+              editor.doc = parsed;
+            }
+          } catch (e) {}
+        }
+        editor.renderAll();
+        editor.scheduleRenderPreview?.(true);
       }
       showMessage('Черновик загружен', 'success');
     }
@@ -1389,10 +1416,14 @@
       if (isAuthenticated()) {
         try {
           const res = await this.draftsFetch('GET', '');
-          if (res.ok && res.json && Array.isArray(res.json.items)) {
-            serverItems = res.json.items;
+          if (res.ok && res.json) {
+            serverItems = Array.isArray(res.json)
+              ? res.json
+              : (Array.isArray(res.json.items) ? res.json.items : []);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('Ошибка загрузки черновиков с сервера:', e);
+        }
 
         try {
           const fRes = await this.draftsFetch('GET', '', null, '/api/draft-folders');
@@ -1418,7 +1449,7 @@
 
       // Фильтрация
       let items = this._draftsModalItems.filter((d) => {
-        if (currentFolder) return d.folderId === currentFolder;
+        if (currentFolder) return String(d.folderId || '') === String(currentFolder);
         return !d.folderId;
       });
 
@@ -1433,12 +1464,13 @@
       // Папки
       const childFolders = (this._draftsFolders || []).filter((f) => {
         if (q) return false;
-        return (f.parentId || null) === currentFolder;
+        if (currentFolder) return String(f.parentId || '') === String(currentFolder);
+        return !f.parentId;
       });
 
       // Хлебные крошки
       if (currentFolder) {
-        const curF = (this._draftsFolders || []).find((f) => f.id === currentFolder);
+        const curF = (this._draftsFolders || []).find((f) => String(f.id) === String(currentFolder));
         els.crumbs.hidden = false;
         els.crumbs.innerHTML = `
           <button type="button" class="drafts-crumb-link" data-action="folder-open" data-folder-id="">Все черновики</button>

@@ -491,6 +491,24 @@
   }
 
   function renderCatalog(root, state) {
+    if (state.loading && (!state.franchises || !state.franchises.length)) {
+      root.innerHTML = `
+        <div class="alltell-catalog-view">
+          <div class="alltell-toolbar-container">
+            ${renderViewTabs(state.view, { total: null, unread: 0 })}
+            <div class="alltell-toolbar">
+              <div class="alltell-toolbar-header">
+                <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
+                <p>Исследуйте сообщества AllTell, знакомьтесь с ролевыми мирами и следите за развитием историй.</p>
+              </div>
+            </div>
+          </div>
+          <div class="alltell-state"><div class="alltell-spinner-sm"></div> Загрузка каталога…</div>
+        </div>
+      `;
+      return;
+    }
+
     var query = state.query.trim().toLocaleLowerCase();
     var filter = state.catalogFilter || 'all';
     var hubFilter = state.catalogHubFilter || 'all';
@@ -499,7 +517,8 @@
     var currentUserId = currentUser && currentUser.id;
     var isRoot = !!(currentUser && currentUser.is_root);
 
-    var franchises = state.franchises.filter(function (franchise) {
+    var allFranchises = Array.isArray(state.franchises) ? state.franchises : [];
+    var franchises = allFranchises.filter(function (franchise) {
       var matchQuery = !query || (franchise.name + ' ' + (franchise.description || '')).toLocaleLowerCase().includes(query);
       if (!matchQuery) return false;
       if (filter === 'active' && Number(franchise.active_hubs || 0) <= 0) return false;
@@ -524,13 +543,13 @@
 
     var mine = state.mine;
     var counts = {
-      total: state.franchises.length,
+      total: Array.isArray(state.franchises) ? state.franchises.length : null,
       unread: state.mine ? state.mine.reduce(function (sum, item) { return sum + Number(item.unread_count || 0); }, 0) : 0
     };
 
-    var totalFranchises = state.franchises.length;
-    var totalHubs = state.franchises.reduce(function (sum, f) { return sum + Number(f.hub_count || 0); }, 0);
-    var totalMembers = state.franchises.reduce(function (sum, f) { return sum + Number(f.member_count || 0); }, 0);
+    var totalFranchises = allFranchises.length;
+    var totalHubs = allFranchises.reduce(function (sum, f) { return sum + Number(f.hub_count || 0); }, 0);
+    var totalMembers = allFranchises.reduce(function (sum, f) { return sum + Number(f.member_count || 0); }, 0);
 
     root.innerHTML = `
       <div class="alltell-catalog-view">
@@ -553,10 +572,10 @@
 
           <div class="alltell-filter-chips" role="group" aria-label="Фильтры каталога">
             <button type="button" class="alltell-filter-chip ${filter === 'all' ? 'active' : ''}" data-action="filter-catalog" data-filter="all">
-              <i class="fas fa-globe"></i> Все сообщества (${state.franchises.length})
+              <i class="fas fa-globe"></i> Все сообщества (${totalFranchises})
             </button>
             <button type="button" class="alltell-filter-chip ${filter === 'active' ? 'active' : ''}" data-action="filter-catalog" data-filter="active">
-              <span class="alltell-status-dot active"></span> С активными играми (${state.franchises.filter(function (f) { return Number(f.active_hubs || 0) > 0; }).length})
+              <span class="alltell-status-dot active"></span> С активными играми (${allFranchises.filter(function (f) { return Number(f.active_hubs || 0) > 0; }).length})
             </button>
             ${mine && mine.length ? `
               <button type="button" class="alltell-filter-chip ${filter === 'mine' ? 'active' : ''}" data-action="filter-catalog" data-filter="mine">
@@ -603,7 +622,7 @@
               <span class="alltell-section-count">${mine.length}</span>
             </div>
             <div class="alltell-live-grid">${mine.map(function (item) {
-              var catalogItem = state.franchises.find(function (franchise) { return Number(franchise.id) === Number(item.id); });
+              var catalogItem = allFranchises.find(function (franchise) { return Number(franchise.id) === Number(item.id); });
               var isOwner = currentUserId && (Number(item.owner_id) === Number(currentUserId) || (catalogItem && Number(catalogItem.owner_id) === Number(currentUserId)));
               var itemIdNum = Number(item.id);
               var cardKey = 'mine:' + itemIdNum;
@@ -683,7 +702,7 @@
       return true;
     });
     var counts = {
-      total: state.franchises ? state.franchises.length : null,
+      total: Array.isArray(state.franchises) ? state.franchises.length : null,
       unread: state.mine ? state.mine.reduce(function (sum, item) { return sum + Number(item.unread_count || 0); }, 0) : 0
     };
 
@@ -2152,7 +2171,7 @@
     var section = root.closest('section');
     if (main && section) main.replaceChildren(section);
     var state = {
-      franchises: [],
+      franchises: null,
       mine: [],
       detail: null,
       detailTab: new URLSearchParams(window.location.search).get('tab') || 'all',
@@ -2602,7 +2621,7 @@
 
     async function loadCatalog() {
       state.view = 'catalog';
-      state.loading = true;
+      state.loading = (!state.franchises || !state.franchises.length);
       state.error = '';
       renderCatalog(root, state);
       try {
@@ -2628,25 +2647,41 @@
       state.loading = true;
       state.error = '';
       renderFeed(root, state);
-      if (!token()) {
-        state.feedPosts = [];
-        state.followedCount = 0;
-        state.loading = false;
-        renderFeed(root, state);
-        return;
-      }
+
+      var feedPromise = token()
+        ? request('/api/franchises/feed').catch(function (err) { return { error: err.message }; })
+        : Promise.resolve({ posts: [], followed_count: 0 });
+
+      var catalogPromise = (!state.franchises || !state.franchises.length)
+        ? request('/api/public/franchises').catch(function () { return []; })
+        : Promise.resolve(state.franchises);
+
+      var minePromise = token()
+        ? loadMine().catch(function () { return []; })
+        : Promise.resolve(state.mine || []);
+
       try {
-        var result = await request('/api/franchises/feed');
+        var results = await Promise.all([feedPromise, catalogPromise, minePromise]);
         if (state.disposed) return;
-        state.feedPosts = result.posts || [];
-        state.followedCount = Number(result.followed_count || 0);
-        state.loading = false;
-        renderFeed(root, state);
-        if (state.followedCount) {
-          request('/api/franchises/feed/read', 'POST', {}).catch(function (error) {
-            notifyError(error.message);
-          });
+
+        var feedResult = results[0];
+        if (Array.isArray(results[1])) {
+          state.franchises = results[1];
         }
+
+        state.loading = false;
+        if (feedResult && feedResult.error) {
+          state.error = feedResult.error;
+        } else {
+          state.feedPosts = (feedResult && feedResult.posts) || [];
+          state.followedCount = Number((feedResult && feedResult.followed_count) || 0);
+          if (state.followedCount) {
+            request('/api/franchises/feed/read', 'POST', {}).catch(function (error) {
+              notifyError(error.message);
+            });
+          }
+        }
+        renderFeed(root, state);
       } catch (error) {
         if (state.disposed) return;
         state.loading = false;
