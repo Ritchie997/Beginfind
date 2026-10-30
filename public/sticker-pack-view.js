@@ -51,6 +51,7 @@
   }
 
   const STYLES = `
+    #stickerPackViewModal { z-index: 2060; }
     .spv-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
     .spv-description { color: var(--text-normal); font-size: 14px; line-height: 1.5; margin: -6px 0 14px; }
     .spv-description:empty { display: none; }
@@ -263,6 +264,9 @@
             if (!result.success) throw new Error(result.data?.error || 'Не удалось изменить подписку');
           }
           await this.open(pack.id);
+          if (window.stickerStore && typeof window.stickerStore.refresh === "function") {
+            window.stickerStore.refresh();
+          }
         } catch (err) {
           notifyError(err.message || 'Не удалось изменить подписку на набор');
           btn.disabled = false;

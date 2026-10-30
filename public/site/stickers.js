@@ -8,8 +8,6 @@
   var subscribedPacks = null;
   var favoriteStickers = null;
   var activeTab = null;
-  var storeOverlay = null;
-  var storeSearchTimer = null;
 
   function token() {
     try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (error) { return ''; }
@@ -229,15 +227,7 @@
     storeLink.addEventListener('click', function (e) {
       e.preventDefault();
       closePicker();
-      if (window.stickerStore && typeof window.stickerStore.open === 'function') {
-        window.stickerStore.open(function () {
-          subscribedPacks = null;
-          favoriteStickers = null;
-          loadSubscribed().then(renderPicker);
-        });
-      } else {
-        openStore();
-      }
+      openStore();
     });
     links.appendChild(storeLink);
     header.appendChild(links);
@@ -272,107 +262,32 @@
     createPicker(trigger, onSelect);
   }
 
-  function ensureStore() {
-    if (storeOverlay) return storeOverlay;
-    storeOverlay = element('div', 'pub-sticker-store-overlay');
-    storeOverlay.hidden = true;
-    var dialog = element('div', 'pub-sticker-store');
-    dialog.setAttribute('role', 'dialog');
-    dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', 'Магазин наборов стикеров');
-    var heading = element('div', 'pub-sticker-store-heading');
-    heading.appendChild(element('h2', null, 'Магазин наборов'));
-    var close = element('button', 'pub-sticker-store-close', '×');
-    close.type = 'button';
-    close.setAttribute('aria-label', 'Закрыть');
-    close.addEventListener('click', function () { storeOverlay.hidden = true; });
-    heading.appendChild(close);
-    var search = element('input', 'pub-sticker-store-search');
-    search.type = 'search';
-    search.placeholder = 'Поиск наборов…';
-    search.setAttribute('aria-label', 'Поиск наборов');
-    var results = element('div', 'pub-sticker-store-results');
-    dialog.append(heading, search, results);
-    storeOverlay.appendChild(dialog);
-    storeOverlay.addEventListener('click', function (event) {
-      if (event.target === storeOverlay) storeOverlay.hidden = true;
-    });
-    search.addEventListener('input', function () {
-      clearTimeout(storeSearchTimer);
-      storeSearchTimer = setTimeout(function () { loadCatalog(search.value, results); }, 250);
-    });
-    document.body.appendChild(storeOverlay);
-    storeOverlay._search = search;
-    storeOverlay._results = results;
-    return storeOverlay;
-  }
-
-  function renderCatalog(packs, results) {
-    results.replaceChildren();
-    if (!packs.length) {
-      results.appendChild(element('p', 'pub-sticker-empty', 'Наборы не найдены.'));
-      return;
-    }
-    packs.forEach(function (pack) {
-      var card = element('article', 'pub-sticker-catalog-card');
-      var info = element('div', 'pub-sticker-catalog-info');
-      info.appendChild(element('strong', null, pack.title || 'Набор'));
-      if (pack.description) info.appendChild(element('span', null, pack.description));
-      var preview = element('div', 'pub-sticker-catalog-preview');
-      (pack.stickers || []).slice(0, 3).forEach(function (sticker) {
-        var src = safeImage(sticker.fileUrl || sticker.url);
-        if (!src) return;
-        var image = document.createElement('img');
-        image.src = src;
-        image.alt = '';
-        image.loading = 'lazy';
-        preview.appendChild(image);
-      });
-      var action = element('button', 'btn btn-sm ' + (pack.subscribed ? 'btn-secondary' : 'btn-primary'), pack.subscribed ? 'Убрать' : 'Добавить');
-      action.type = 'button';
-      action.addEventListener('click', async function () {
-        action.disabled = true;
-        try {
-          await request('/api/stickers/packs/' + encodeURIComponent(pack.id) + '/subscribe', { method: pack.subscribed ? 'DELETE' : 'POST' });
-          pack.subscribed = !pack.subscribed;
-          subscribedPacks = null;
-          favoriteStickers = null;
-          renderCatalog(packs, results);
-          if (picker && pickerTrigger) {
-            await loadSubscribed();
-            renderPicker();
-          }
-        } catch (error) {
-          action.disabled = false;
-          card.appendChild(element('p', 'pub-sticker-error', error.message || 'Не удалось изменить набор'));
+  function openStore() {
+    closePicker();
+    if (window.stickerStore && typeof window.stickerStore.open === 'function') {
+      window.stickerStore.open(function () {
+        subscribedPacks = null;
+        favoriteStickers = null;
+        if (picker && pickerTrigger) {
+          loadSubscribed().then(renderPicker);
         }
       });
-      card.append(info, preview, action);
-      results.appendChild(card);
-    });
-  }
-
-  async function loadCatalog(query, results) {
-    results.replaceChildren(element('p', 'pub-sticker-empty', 'Загружаем наборы…'));
-    try {
-      var path = '/api/stickers/catalog' + (query ? '?q=' + encodeURIComponent(query) : '');
-      var packs = await request(path);
-      if (!Array.isArray(packs)) throw new Error('Сервер вернул неверный список наборов');
-      renderCatalog(packs, results);
-    } catch (error) {
-      results.replaceChildren(element('p', 'pub-sticker-error', error.message || 'Не удалось загрузить наборы'));
-    }
-  }
-
-  function openStore() {
-    if (!token()) {
-      login();
       return;
     }
-    var overlay = ensureStore();
-    overlay.hidden = false;
-    overlay._search.value = '';
-    loadCatalog('', overlay._results);
+    var script = document.createElement('script');
+    script.src = '/sticker-store.js';
+    script.onload = function () {
+      if (window.stickerStore && typeof window.stickerStore.open === 'function') {
+        window.stickerStore.open(function () {
+          subscribedPacks = null;
+          favoriteStickers = null;
+          if (picker && pickerTrigger) {
+            loadSubscribed().then(renderPicker);
+          }
+        });
+      }
+    };
+    document.head.appendChild(script);
   }
 
   window.PublicStickerPicker = {
