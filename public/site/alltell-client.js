@@ -3655,6 +3655,16 @@
             is_public: source ? !!source.is_public : true
           });
         }
+        var searchInput = form && form.querySelector('[data-article-search]');
+        if (searchInput) {
+          searchInput.value = '';
+          searchInput.focus();
+        }
+        var options = form && form.querySelector('[data-article-options]');
+        if (options) {
+          options.hidden = true;
+          options.replaceChildren();
+        }
         updateArticlePickerUI(form);
         return;
       }
