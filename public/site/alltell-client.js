@@ -1241,6 +1241,38 @@
     }).join('');
   }
 
+  function updatePostPreview(form) {
+    if (!form) return;
+    var textarea = form.querySelector('textarea[name="body"]');
+    var previewEl = form.querySelector('[data-post-preview-pane]');
+    if (!textarea || !previewEl) return;
+    var val = textarea.value.trim();
+    if (!val) {
+      previewEl.innerHTML = '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>';
+    } else {
+      previewEl.innerHTML = formatPostBody(val);
+    }
+  }
+
+  function setPostEditorMode(form, mode) {
+    if (!form) return;
+    var panes = form.querySelector('[data-post-panes]');
+    if (panes) panes.setAttribute('data-mode', mode);
+    form.querySelectorAll('[data-post-mode]').forEach(function (tab) {
+      tab.classList.toggle('active', (tab.dataset.postMode || tab.getAttribute('data-mode')) === mode);
+    });
+    if (mode !== 'edit') {
+      updatePostPreview(form);
+    }
+  }
+
+  function updatePostToolbarFade(scrollEl) {
+    if (!scrollEl) return;
+    var maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    scrollEl.classList.toggle('can-scroll-l', scrollEl.scrollLeft > 2);
+    scrollEl.classList.toggle('can-scroll-r', maxScroll > 2 && scrollEl.scrollLeft < maxScroll - 2);
+  }
+
   function applyPostFormat(cmd, form, extra) {
     extra = extra || {};
     var textarea = form ? form.querySelector('textarea[name="body"]') : null;
@@ -1249,9 +1281,49 @@
     var end = textarea.selectionEnd;
     var val = textarea.value;
 
+    if (cmd === 'paragraph') {
+      if (!val.trim()) {
+        textarea.value = 'Текст абзаца…';
+        textarea.selectionStart = 0;
+        textarea.selectionEnd = textarea.value.length;
+      } else {
+        var needsDouble = !val.endsWith('\n\n');
+        var nl = val.endsWith('\n') ? '\n' : (needsDouble ? '\n\n' : '');
+        var insPos = (start === end && start < val.length) ? start : val.length;
+        if (insPos === val.length) {
+          textarea.value = val + nl + 'Новый абзац…';
+          textarea.selectionStart = val.length + nl.length;
+          textarea.selectionEnd = textarea.value.length;
+        } else {
+          var beforeText = val.substring(0, insPos);
+          var afterText = val.substring(insPos);
+          var sepBefore = beforeText.endsWith('\n\n') ? '' : (beforeText.endsWith('\n') ? '\n' : '\n\n');
+          var sepAfter = afterText.startsWith('\n\n') ? '' : (afterText.startsWith('\n') ? '\n' : '\n\n');
+          var newBlock = sepBefore + 'Новый абзац…' + sepAfter;
+          textarea.value = beforeText + newBlock + afterText;
+          textarea.selectionStart = beforeText.length + sepBefore.length;
+          textarea.selectionEnd = beforeText.length + sepBefore.length + 'Новый абзац…'.length;
+        }
+      }
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.focus();
+      updatePostPreview(form);
+      return;
+    }
+
     if (cmd === 'heading') {
       var level = parseInt(extra.level, 10) || 1;
       var prefix = '#'.repeat(level) + ' ';
+      if (!val.trim()) {
+        var ph = 'Заголовок ' + level;
+        textarea.value = prefix + ph;
+        textarea.selectionStart = prefix.length;
+        textarea.selectionEnd = textarea.value.length;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.focus();
+        updatePostPreview(form);
+        return;
+      }
       var lineStart = val.lastIndexOf('\n', start - 1) + 1;
       var lineEnd = val.indexOf('\n', end);
       if (lineEnd === -1) lineEnd = val.length;
@@ -1268,11 +1340,23 @@
       textarea.selectionEnd = lineStart + rep.length;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.focus();
+      updatePostPreview(form);
       return;
     }
 
     if (cmd === 'list') {
       var style = extra.style || 'bullet';
+      if (!val.trim()) {
+        var itemPrefix = style === 'ordered' ? '1. ' : (style === 'checklist' ? '- [ ] ' : '- ');
+        var placeholder = style === 'checklist' ? 'Новая задача' : (style === 'ordered' ? 'Первый пункт' : 'Пункт списка');
+        textarea.value = itemPrefix + placeholder;
+        textarea.selectionStart = itemPrefix.length;
+        textarea.selectionEnd = textarea.value.length;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.focus();
+        updatePostPreview(form);
+        return;
+      }
       var lineStartL = val.lastIndexOf('\n', start - 1) + 1;
       var lineEndL = val.indexOf('\n', end);
       if (lineEndL === -1) lineEndL = val.length;
@@ -1305,10 +1389,20 @@
       textarea.selectionEnd = lineStartL + repL.length;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.focus();
+      updatePostPreview(form);
       return;
     }
 
     if (cmd === 'quote') {
+      if (!val.trim()) {
+        textarea.value = '> Цитата…';
+        textarea.selectionStart = 2;
+        textarea.selectionEnd = textarea.value.length;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.focus();
+        updatePostPreview(form);
+        return;
+      }
       var lineStartQ = val.lastIndexOf('\n', start - 1) + 1;
       var lineEndQ = val.indexOf('\n', end);
       if (lineEndQ === -1) lineEndQ = val.length;
@@ -1325,6 +1419,7 @@
       textarea.selectionEnd = lineStartQ + repQ.length;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.focus();
+      updatePostPreview(form);
       return;
     }
 
@@ -1359,6 +1454,7 @@
     textarea.selectionEnd = newEnd;
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.focus();
+    updatePostPreview(form);
   }
 
   function renderPostForm(state, hubs, canManage) {
@@ -1462,16 +1558,22 @@
                 <label class="form-label" for="postBodyInput">
                   <span>Текст публикации</span>
                 </label>
-                <div class="alltell-post-editor-box">
+                <div class="editor-wrapper">
                   <div class="editor-toolbar-sticky alltell-post-toolbar">
                     <div class="toolbar-format-scroll" data-alltell-toolbar-scroll>
                       <div class="toolbar-row toolbar-row-format" data-alltell-toolbar-row>
                         <div class="toolbar-group-wrap">
                           <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="paragraph" title="Текст — новый абзац"><i class="fas fa-paragraph"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">текст</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
                             <button type="button" class="toolbar-button" data-post-cmd="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
-                            <button type="button" class="toolbar-button" data-post-cmd="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="strike" title="Зачёркнутый (Ctrl+Shift+X)"><i class="fas fa-strikethrough"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="highlight" title="Выделение цветом"><i class="fas fa-highlighter"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="code" title="Код (строка)"><i class="fas fa-code"></i></button>
                           </div>
@@ -1504,14 +1606,26 @@
                       <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>
                       <div class="toolbar-fade toolbar-fade-r"><i class="fas fa-chevron-right toolbar-fade-arrow"></i></div>
                     </div>
+                    <div class="toolbar-row toolbar-row-modes">
+                      <div class="editor-mode-tabs" data-post-mode-tabs>
+                        <button type="button" class="editor-mode-tab active" data-mode="edit" data-post-mode="edit" title="Редактирование"><i class="fas fa-pen"></i> <span class="editor-mode-tab-label">Редактирование</span></button>
+                        <button type="button" class="editor-mode-tab" data-mode="preview" data-post-mode="preview" title="Просмотр"><i class="fas fa-eye"></i> <span class="editor-mode-tab-label">Просмотр</span></button>
+                        <button type="button" class="editor-mode-tab" data-mode="split" data-post-mode="split" title="Двойной просмотр"><i class="fas fa-columns"></i> <span class="editor-mode-tab-label">Разделить</span></button>
+                      </div>
+                    </div>
                   </div>
-                  <textarea id="postBodyInput"
-                            name="body"
-                            class="form-textarea alltell-post-body-input"
-                            maxlength="10000"
-                            rows="6"
-                            data-autogrow
-                            placeholder="Опишите события вселенной, свежие новости, сюжетный отрывок или обращение к сообществу…">${escapeHtml(post ? post.body : '')}</textarea>
+                  <div class="editor-panes" data-mode="edit" data-post-panes>
+                    <div class="editor-pane">
+                      <textarea id="postBodyInput"
+                                name="body"
+                                class="form-textarea alltell-post-body-input"
+                                maxlength="10000"
+                                placeholder="Нажмите «P» в тулбаре или начните писать текст публикации…">${escapeHtml(post ? post.body : '')}</textarea>
+                    </div>
+                    <div class="preview-pane alltell-post-body" data-post-preview-pane>
+                      ${post && post.body ? formatPostBody(post.body) : '<p class="preview-empty">Нечего показывать — начните писать в редакторе.</p>'}
+                    </div>
+                  </div>
                 </div>
                 <div class="alltell-post-body-footer">
                   <span class="alltell-post-format-hint">
@@ -2596,6 +2710,8 @@
       ta.style.overflow = 'hidden';
       ta.style.height = Math.max(140, ta.scrollHeight) + 'px';
     });
+    var toolbarScroll = root.querySelector('[data-alltell-toolbar-scroll]');
+    if (toolbarScroll) updatePostToolbarFade(toolbarScroll);
   }
 
   async function init() {
@@ -4161,14 +4277,25 @@
     async function onClick(event) {
       var postCmdBtn = event.target.closest('[data-post-cmd]');
       if (postCmdBtn) {
-        var cmd = postCmdBtn.dataset.postCmd;
-        var form = postCmdBtn.closest('[data-post-form]') || root.querySelector('[data-post-form]');
-        if (cmd === 'highlight') {
-          openPostHighlightPicker(postCmdBtn, form);
+        event.preventDefault();
+        return;
+      }
+      var modeTab = event.target.closest('[data-post-mode]');
+      if (modeTab) {
+        event.preventDefault();
+        var mode = modeTab.dataset.postMode || modeTab.getAttribute('data-mode');
+        var form = modeTab.closest('[data-post-form]') || root.querySelector('[data-post-form]');
+        setPostEditorMode(form, mode);
+        return;
+      }
+      var fadeArrow = event.target.closest('.toolbar-fade');
+      if (fadeArrow) {
+        var scrollContainer = fadeArrow.closest('[data-alltell-toolbar-scroll]');
+        if (scrollContainer) {
+          var delta = fadeArrow.classList.contains('toolbar-fade-l') ? -180 : 180;
+          scrollContainer.scrollBy({ left: delta, behavior: 'smooth' });
           return;
         }
-        applyPostFormat(cmd, form, postCmdBtn.dataset);
-        return;
       }
       var commentSticker = event.target.closest('.alltell-comment-sticker[data-pack-id]');
       if (commentSticker) {
@@ -4590,6 +4717,7 @@
           counter.textContent = len.toLocaleString('ru-RU') + ' / 10 000';
           counter.classList.toggle('is-near-limit', len > 9500);
         }
+        updatePostPreview(form);
       }
     }
 
@@ -4673,14 +4801,9 @@
     }
 
     function onScroll(event) {
-      var toolbarRow = event.target.closest('[data-alltell-toolbar-row]');
-      if (toolbarRow) {
-        var scrollWrap = toolbarRow.closest('[data-alltell-toolbar-scroll]');
-        if (scrollWrap) {
-          var maxScroll = toolbarRow.scrollWidth - toolbarRow.clientWidth;
-          scrollWrap.classList.toggle('can-scroll-l', toolbarRow.scrollLeft > 2);
-          scrollWrap.classList.toggle('can-scroll-r', toolbarRow.scrollLeft < maxScroll - 2);
-        }
+      var scrollWrap = event.target.closest('[data-alltell-toolbar-scroll]');
+      if (scrollWrap) {
+        updatePostToolbarFade(scrollWrap);
       }
       var track = event.target.closest('[data-image-track]');
       if (!track) return;
