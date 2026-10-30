@@ -77,45 +77,69 @@
     if (event.key === 'Escape') closePicker();
   }
 
+  function isMobilePickerLayout() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
   function positionPicker() {
     if (!picker || !pickerTrigger) return;
+    if (isMobilePickerLayout()) {
+      picker.style.left = '';
+      picker.style.top = '';
+      return;
+    }
+
     var rect = pickerTrigger.getBoundingClientRect();
-    var width = Math.min(360, window.innerWidth - 24);
-    picker.style.width = width + 'px';
-    picker.style.left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) + 'px';
-    var height = Math.min(picker.offsetHeight || 360, window.innerHeight - 24);
-    picker.style.top = rect.top - height - 8 >= 12 ? (rect.top - height - 8) + 'px' : Math.min(rect.bottom + 8, window.innerHeight - height - 12) + 'px';
+    var vv = window.visualViewport;
+    var viewportWidth = vv ? vv.width : window.innerWidth;
+    var viewportHeight = vv ? vv.height : window.innerHeight;
+    var viewportLeft = vv ? vv.offsetLeft : 0;
+    var viewportTop = vv ? vv.offsetTop : 0;
+
+    var width = picker.offsetWidth || 380;
+    var left = rect.right - width;
+    if (left < viewportLeft + 8) left = viewportLeft + 8;
+    if (left + width > viewportLeft + viewportWidth - 8) left = viewportLeft + viewportWidth - width - 8;
+
+    var height = Math.min(480, picker.scrollHeight || 480);
+    var top = rect.top - height - 8;
+    if (top < viewportTop + 8) top = rect.bottom + 8;
+    if (top + height > viewportTop + viewportHeight - 8) top = Math.max(viewportTop + 8, viewportTop + viewportHeight - height - 8);
+
+    picker.style.left = left + 'px';
+    picker.style.top = top + 'px';
   }
 
   function showPickerMessage(message, error) {
     if (!picker) return;
-    var body = picker.querySelector('.pub-sticker-picker-body');
-    body.replaceChildren(element('p', error ? 'pub-sticker-error' : 'pub-sticker-empty', message));
+    var body = picker.querySelector('.antropedia-sticker-picker-body, .pub-sticker-picker-body');
+    body.replaceChildren(element('div', error ? 'pub-sticker-error' : 'antropedia-sticker-picker-empty pub-sticker-empty', message));
   }
 
   function renderPicker() {
     if (!picker) return;
-    var body = picker.querySelector('.pub-sticker-picker-body');
+    var body = picker.querySelector('.antropedia-sticker-picker-body, .pub-sticker-picker-body');
     var packs = (subscribedPacks || []).filter(function (pack) {
       return Array.isArray(pack.stickers) && pack.stickers.length;
     });
     var favorites = favoriteStickers || [];
-    var tabs = picker.querySelector('.pub-sticker-picker-tabs');
-    var subtitle = picker.querySelector('.pub-sticker-picker-subtitle');
+    var tabs = picker.querySelector('.antropedia-sticker-picker-tabs, .pub-sticker-picker-tabs');
+    var subtitle = picker.querySelector('.antropedia-sticker-picker-subtitle, .pub-sticker-picker-subtitle');
     var validTabs = ['favorites'].concat(packs.map(function (pack) { return String(pack.slug); }));
     if (validTabs.indexOf(activeTab) === -1) activeTab = favorites.length ? 'favorites' : (packs[0] && String(packs[0].slug));
 
     tabs.replaceChildren();
-    var favoriteTab = element('button', 'pub-sticker-picker-tab pub-sticker-picker-tab-fav' + (activeTab === 'favorites' ? ' active' : ''), '★');
+    var favoriteTab = element('button', 'antropedia-sticker-picker-tab antropedia-sticker-picker-tab-fav pub-sticker-picker-tab pub-sticker-picker-tab-fav' + (activeTab === 'favorites' ? ' active' : ''));
     favoriteTab.type = 'button';
     favoriteTab.title = 'Избранное';
+    favoriteTab.innerHTML = '<i class="fas fa-star" aria-hidden="true"></i>';
     favoriteTab.addEventListener('click', function () {
       activeTab = 'favorites';
       renderPicker();
     });
     tabs.appendChild(favoriteTab);
     packs.forEach(function (pack) {
-      var tab = element('button', 'pub-sticker-picker-tab' + (activeTab === String(pack.slug) ? ' active' : ''));
+      var tab = element('button', 'antropedia-sticker-picker-tab pub-sticker-picker-tab' + (activeTab === String(pack.slug) ? ' active' : ''));
       tab.type = 'button';
       tab.title = pack.title || pack.slug;
       var firstImage = safeImage(pack.stickers[0].fileUrl || pack.stickers[0].url);
@@ -137,15 +161,15 @@
     var activeStickers = activePack ? activePack.stickers.map(function (sticker) {
       return Object.assign({}, sticker, { packSlug: activePack.slug, packTitle: activePack.title });
     }) : activeFavorites;
-    var groupTitle = activePack ? (activePack.title || activePack.slug) : (activeFavorites.length ? 'Избранное' : '');
+    var groupTitle = activePack ? (activePack.description ? (activePack.title + ' — ' + activePack.description) : (activePack.title || activePack.slug)) : (activeFavorites.length ? 'Избранное' : '');
     subtitle.textContent = groupTitle;
     body.replaceChildren();
-    var grid = element('div', 'pub-sticker-grid');
+    var grid = element('div', 'antropedia-sticker-picker-grid pub-sticker-grid');
     activeStickers.forEach(function (sticker) {
       var src = safeImage(sticker.fileUrl || sticker.url);
       if (!src) return;
       var shortcode = ':' + sticker.packSlug + ':' + sticker.alias + ':';
-      var button = element('button', 'pub-sticker-item');
+      var button = element('button', 'antropedia-sticker-picker-item pub-sticker-item');
       button.type = 'button';
       button.title = sticker.alias || sticker.packTitle || 'Стикер';
       var image = document.createElement('img');
@@ -160,7 +184,7 @@
       grid.appendChild(button);
     });
     if (grid.childNodes.length) body.appendChild(grid);
-    else body.appendChild(element('p', 'pub-sticker-empty', packs.length ? 'В этом разделе пока нет стикеров.' : 'Добавьте набор в магазине, чтобы использовать стикеры.'));
+    else body.appendChild(element('div', 'antropedia-sticker-picker-empty pub-sticker-empty', packs.length ? 'В этом разделе пока нет стикеров.' : 'Добавьте набор в магазине, чтобы использовать стикеры.'));
     positionPicker();
   }
 
@@ -180,23 +204,48 @@
     closePicker();
     pickerTrigger = trigger;
     pickerSelect = onSelect;
-    picker = element('div', 'pub-sticker-picker');
+    picker = element('div', 'antropedia-sticker-picker pub-sticker-picker');
     picker.setAttribute('role', 'dialog');
     picker.setAttribute('aria-label', 'Выбор стикера');
 
-    var heading = element('div', 'pub-sticker-picker-heading');
-    heading.appendChild(element('strong', null, 'Стикеры'));
-    var storeButton = element('button', 'pub-sticker-store-open', 'Магазин наборов');
-    storeButton.type = 'button';
-    storeButton.addEventListener('click', function () {
+    var header = element('div', 'antropedia-sticker-picker-header pub-sticker-picker-heading');
+    header.appendChild(element('span', null, 'Стикеры'));
+
+    var links = element('span', 'antropedia-sticker-picker-links');
+    var manageLink = element('a', null, 'Управление наборами');
+    manageLink.href = '/stickers';
+    manageLink.setAttribute('data-nav', '/stickers');
+    manageLink.addEventListener('click', function (e) {
+      e.preventDefault();
       closePicker();
-      openStore();
+      window.location.href = '/stickers';
     });
-    heading.appendChild(storeButton);
-    picker.appendChild(heading);
-    picker.appendChild(element('div', 'pub-sticker-picker-tabs'));
-    picker.appendChild(element('div', 'pub-sticker-picker-subtitle'));
-    picker.appendChild(element('div', 'pub-sticker-picker-body'));
+    links.appendChild(manageLink);
+    links.appendChild(document.createTextNode(' · '));
+
+    var storeLink = element('a', null, 'Магазин наборов');
+    storeLink.href = '#';
+    storeLink.setAttribute('data-role', 'open-store');
+    storeLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      closePicker();
+      if (window.stickerStore && typeof window.stickerStore.open === 'function') {
+        window.stickerStore.open(function () {
+          subscribedPacks = null;
+          favoriteStickers = null;
+          loadSubscribed().then(renderPicker);
+        });
+      } else {
+        openStore();
+      }
+    });
+    links.appendChild(storeLink);
+    header.appendChild(links);
+
+    picker.appendChild(header);
+    picker.appendChild(element('div', 'antropedia-sticker-picker-tabs pub-sticker-picker-tabs'));
+    picker.appendChild(element('div', 'antropedia-sticker-picker-subtitle pub-sticker-picker-subtitle'));
+    picker.appendChild(element('div', 'antropedia-sticker-picker-body pub-sticker-picker-body'));
     document.body.appendChild(picker);
     trigger.classList.add('active');
     document.addEventListener('click', onOutsideClick);

@@ -1197,91 +1197,163 @@
 }
 .pub-login-link:hover { text-decoration: underline; }
 
+/* --- Unified Sticker Picker (Antropedia & AllTell) --- */
+.antropedia-sticker-picker,
 .pub-sticker-picker {
-    position: fixed;
-    z-index: 1200;
-    display: flex;
-    flex-direction: column;
-    max-height: min(480px, calc(100vh - 16px));
-    overflow: hidden;
-    border: 1px solid var(--background-accent);
-    border-radius: 8px;
-    background: var(--background-secondary);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  position: fixed;
+  width: min(400px, calc(100vw - 16px));
+  max-height: min(480px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  z-index: 1500;
+  overflow: hidden;
+  animation: stickerPickerIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.pub-sticker-picker-heading,
-.pub-sticker-store-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+@keyframes stickerPickerIn {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
+
+@media (max-width: 640px) {
+  .antropedia-sticker-picker,
+  .pub-sticker-picker {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-height: 70vh;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+.antropedia-sticker-picker-header,
 .pub-sticker-picker-heading {
-    flex: none;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--background-accent);
-    color: var(--text-muted);
-    font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted, #72767d);
+  border-bottom: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
 }
-.pub-sticker-picker-tabs {
-    display: flex;
-    flex: none;
-    gap: 5px;
-    padding: 5px 10px;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--background-accent);
+.antropedia-sticker-picker-links {
+  display: inline-flex;
+  gap: 4px;
 }
-.pub-sticker-picker-tab {
-    display: flex;
-    flex: none;
-    width: 28px;
-    height: 28px;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    padding: 0;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    background: var(--background-tertiary);
-    color: var(--yellow);
-    cursor: pointer;
-}
-.pub-sticker-picker-tab:hover { background: var(--background-accent); }
-.pub-sticker-picker-tab.active { border-color: var(--blurple); }
-.pub-sticker-picker-tab-fav.active { border-color: var(--yellow); }
-.pub-sticker-picker-tab img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.pub-sticker-picker-subtitle {
-    flex: none;
-    overflow: hidden;
-    padding: 6px 12px 0;
-    color: var(--text-muted);
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.pub-sticker-picker-subtitle:empty { display: none; }
-.pub-sticker-picker-body {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding: 8px;
-    overscroll-behavior: contain;
-}
+.antropedia-sticker-picker-links a,
 .pub-sticker-store-open {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--blurple);
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
+  color: var(--blurple, #5865f2);
+  text-decoration: none;
+  font-size: 12px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
 }
-.pub-sticker-pack + .pub-sticker-pack { margin-top: 12px; }
-.pub-sticker-pack h4 { margin: 0 0 7px; color: var(--text-muted); font-size: 0.82rem; }
+.antropedia-sticker-picker-links a:hover,
+.pub-sticker-store-open:hover {
+  text-decoration: underline;
+}
+
+.antropedia-sticker-picker-tabs,
+.pub-sticker-picker-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 5px 10px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08));
+  overscroll-behavior: contain;
+}
+.antropedia-sticker-picker-tabs::-webkit-scrollbar,
+.pub-sticker-picker-tabs::-webkit-scrollbar { height: 3px; }
+
+.antropedia-sticker-picker-tab,
+.pub-sticker-picker-tab {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-tertiary, #202225);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text-muted, #72767d);
+  font-size: 13px;
+}
+.antropedia-sticker-picker-tab:hover,
+.pub-sticker-picker-tab:hover { background: var(--background-accent, rgba(255, 255, 255, 0.08)); }
+.antropedia-sticker-picker-tab.active,
+.pub-sticker-picker-tab.active { border-color: var(--blurple, #5865f2); }
+.antropedia-sticker-picker-tab img,
+.pub-sticker-picker-tab img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.antropedia-sticker-picker-tab-fav,
+.pub-sticker-picker-tab-fav { color: var(--yellow, #faa81a); }
+.antropedia-sticker-picker-tab-fav.active,
+.pub-sticker-picker-tab-fav.active { border-color: var(--yellow, #faa81a); }
+
+.antropedia-sticker-picker-subtitle,
+.pub-sticker-picker-subtitle {
+  padding: 6px 12px 0;
+  font-size: 12px;
+  color: var(--text-muted, #72767d);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.antropedia-sticker-picker-subtitle:empty,
+.pub-sticker-picker-subtitle:empty { display: none; }
+
+.antropedia-sticker-picker-body,
+.pub-sticker-picker-body {
+  overflow-y: auto;
+  padding: 8px;
+  flex: 1 1 auto;
+  overscroll-behavior: contain;
+}
+
+.antropedia-sticker-picker-grid,
 .pub-sticker-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-    gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.antropedia-sticker-picker-item,
+.pub-sticker-item {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.antropedia-sticker-picker-item:hover,
+.pub-sticker-item:hover { background: var(--background-accent, rgba(255, 255, 255, 0.08)); }
+.antropedia-sticker-picker-item img,
+.pub-sticker-item img { width: 100%; height: 56px; object-fit: contain; display: block; pointer-events: none; }
+
+.antropedia-sticker-picker-empty,
+.pub-sticker-empty {
+  color: var(--text-muted, #72767d);
+  font-size: 13px;
+  padding: 12px;
+  text-align: center;
 }
 .pub-sticker-catalog-preview {
     display: flex;
