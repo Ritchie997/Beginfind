@@ -30,44 +30,57 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
   } else {
     console.log('Connected to articles SQLite database');
     articlesDb.run("PRAGMA encoding = 'UTF-8'");
-    // Сущность "Категории" полностью убрана из проекта (остались только
-    // теги) — справочник categories в articles.db больше не нужен. DROP TABLE
-    // IF EXISTS безопасно вызывать на каждом старте: там, где таблицы уже нет,
-    // ничего не происходит. Поле categories в самих файлах статей вычищает
-    // articles-store.stripLegacyCategoryFields (см. server.js).
-    articlesDb.run('DROP TABLE IF EXISTS categories', (dropErr) => {
-      if (dropErr) console.error('Не удалось удалить устаревшую таблицу categories:', dropErr);
+    articlesDb.serialize(() => {
+      // Сущность "Категории" полностью убрана из проекта (остались только
+      // теги) — справочник categories в articles.db больше не нужен. DROP TABLE
+      // IF EXISTS безопасно вызывать на каждом старте: там, где таблицы уже нет,
+      // ничего не происходит. Поле categories в самих файлах статей вычищает
+      // articles-store.stripLegacyCategoryFields (см. server.js).
+      articlesDb.run('DROP TABLE IF EXISTS categories', (dropErr) => {
+        if (dropErr) console.error('Не удалось удалить устаревшую таблицу categories:', dropErr);
+      });
+
+      // Цвет тега (граф связей, вкладка "Теги") — один на тег во всей системе, см.
+      // src/services/tag-colors.js. tag_key — название тега в нижнем регистре и
+      // без ведущего "#" (одно название = один цвет), tag_name — как оно
+      // написано в первый раз (для подписей), color — #rrggbb.
+      articlesDb.run(`CREATE TABLE IF NOT EXISTS tag_colors (
+        tag_key TEXT PRIMARY KEY,
+        tag_name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Заявки на соавторство и обновление статьи
+      articlesDb.run(`CREATE TABLE IF NOT EXISTS article_collab_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_slug TEXT NOT NULL,
+        article_title TEXT NOT NULL,
+        author_id INTEGER NOT NULL,
+        proposer_id INTEGER NOT NULL,
+        proposer_name TEXT NOT NULL,
+        proposed_data TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        comment TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolved_at DATETIME,
+        resolved_by INTEGER
+      )`, (tableErr) => {
+        if (tableErr) {
+          console.error('Error creating article_collab_requests table:', tableErr);
+          return;
+        }
+        articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_article_slug ON article_collab_requests(article_slug)', (err) => {
+          if (err) console.error('Error creating idx_acr_article_slug index:', err);
+        });
+        articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_author_status ON article_collab_requests(author_id, status)', (err) => {
+          if (err) console.error('Error creating idx_acr_author_status index:', err);
+        });
+        articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_proposer ON article_collab_requests(proposer_id)', (err) => {
+          if (err) console.error('Error creating idx_acr_proposer index:', err);
+        });
+      });
     });
-
-    // Цвет тега (граф связей, вкладка "Теги") — один на тег во всей системе, см.
-    // src/services/tag-colors.js. tag_key — название тега в нижнем регистре и
-    // без ведущего "#" (одно название = один цвет), tag_name — как оно
-    // написано в первый раз (для подписей), color — #rrggbb.
-    articlesDb.run(`CREATE TABLE IF NOT EXISTS tag_colors (
-      tag_key TEXT PRIMARY KEY,
-      tag_name TEXT NOT NULL,
-      color TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-
-    // Заявки на соавторство и обновление статьи
-    articlesDb.run(`CREATE TABLE IF NOT EXISTS article_collab_requests (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      article_slug TEXT NOT NULL,
-      article_title TEXT NOT NULL,
-      author_id INTEGER NOT NULL,
-      proposer_id INTEGER NOT NULL,
-      proposer_name TEXT NOT NULL,
-      proposed_data TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      comment TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      resolved_at DATETIME,
-      resolved_by INTEGER
-    )`);
-    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_article_slug ON article_collab_requests(article_slug)');
-    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_author_status ON article_collab_requests(author_id, status)');
-    articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_proposer ON article_collab_requests(proposer_id)');
   }
 });
 

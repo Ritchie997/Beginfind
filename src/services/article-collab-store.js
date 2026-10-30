@@ -6,7 +6,40 @@ const { articlesDb } = require('../db/connections');
 const articlesStore = require('./articles-store');
 const userNotifications = require('./user-notifications');
 
-function run(sql, params = []) {
+let schemaReadyPromise = null;
+
+function ensureSchema() {
+  if (!schemaReadyPromise) {
+    schemaReadyPromise = new Promise((resolve, reject) => {
+      articlesDb.serialize(() => {
+        articlesDb.run(`CREATE TABLE IF NOT EXISTS article_collab_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          article_slug TEXT NOT NULL,
+          article_title TEXT NOT NULL,
+          author_id INTEGER NOT NULL,
+          proposer_id INTEGER NOT NULL,
+          proposer_name TEXT NOT NULL,
+          proposed_data TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          comment TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          resolved_at DATETIME,
+          resolved_by INTEGER
+        )`, (err) => {
+          if (err) return reject(err);
+          articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_article_slug ON article_collab_requests(article_slug)', () => {});
+          articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_author_status ON article_collab_requests(author_id, status)', () => {});
+          articlesDb.run('CREATE INDEX IF NOT EXISTS idx_acr_proposer ON article_collab_requests(proposer_id)', () => {});
+          resolve();
+        });
+      });
+    });
+  }
+  return schemaReadyPromise;
+}
+
+async function run(sql, params = []) {
+  await ensureSchema();
   return new Promise((resolve, reject) => {
     articlesDb.run(sql, params, function (err) {
       if (err) reject(err);
@@ -15,7 +48,8 @@ function run(sql, params = []) {
   });
 }
 
-function get(sql, params = []) {
+async function get(sql, params = []) {
+  await ensureSchema();
   return new Promise((resolve, reject) => {
     articlesDb.get(sql, params, (err, row) => {
       if (err) reject(err);
@@ -24,7 +58,8 @@ function get(sql, params = []) {
   });
 }
 
-function all(sql, params = []) {
+async function all(sql, params = []) {
+  await ensureSchema();
   return new Promise((resolve, reject) => {
     articlesDb.all(sql, params, (err, rows) => {
       if (err) reject(err);
