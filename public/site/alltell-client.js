@@ -220,23 +220,93 @@
     }
   }
 
-  function openModal(contentHtml, onMount) {
+  function openModal(arg1, arg2, arg3) {
+    var title = '';
+    var subtitle = '';
+    var hero = null;
+    var bodyHtml = '';
+    var footerHtml = '';
+    var onMount = null;
+    var wide = false;
+
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      title = arg1.title || '';
+      subtitle = arg1.subtitle || '';
+      hero = arg1.hero || null;
+      bodyHtml = arg1.bodyHtml || '';
+      footerHtml = arg1.footerHtml || '';
+      onMount = arg1.onMount || arg2;
+      wide = !!arg1.wide;
+    } else if (typeof arg1 === 'string' && typeof arg2 === 'string') {
+      title = arg1;
+      bodyHtml = arg2;
+      onMount = arg3;
+    } else if (typeof arg1 === 'string') {
+      bodyHtml = arg1;
+      onMount = arg2;
+    }
+
     closeModal();
+
     var container = document.createElement('div');
     container.id = 'alltell-modal-container';
     container.className = 'alltell-modal-overlay';
+
+    var headerHtml = '';
+    if (hero) {
+      headerHtml = `
+        <div class="alltell-modal-header">
+          <div class="alltell-modal-header-hero">
+            ${hero}
+            <div>
+              <h3 class="alltell-modal-title">${escapeHtml(title)}</h3>
+              ${subtitle ? `<p class="alltell-modal-subtitle">${escapeHtml(subtitle)}</p>` : ''}
+            </div>
+          </div>
+          <button type="button" class="alltell-modal-close" data-modal-close aria-label="Закрыть">&times;</button>
+        </div>
+      `;
+    } else if (title) {
+      headerHtml = `
+        <div class="alltell-modal-header">
+          <div>
+            <h3 class="alltell-modal-title">${escapeHtml(title)}</h3>
+            ${subtitle ? `<p class="alltell-modal-subtitle">${escapeHtml(subtitle)}</p>` : ''}
+          </div>
+          <button type="button" class="alltell-modal-close" data-modal-close aria-label="Закрыть">&times;</button>
+        </div>
+      `;
+    }
+
     container.innerHTML = `
-      <div class="alltell-modal-box">
-        ${contentHtml}
+      <div class="alltell-modal-box ${wide ? 'alltell-modal-box-wide' : ''}">
+        ${headerHtml}
+        <div class="alltell-modal-body">
+          ${bodyHtml}
+        </div>
+        ${footerHtml ? `<div class="alltell-modal-footer">${footerHtml}</div>` : ''}
       </div>
     `;
+
     document.body.appendChild(container);
+
     container.addEventListener('click', function (e) {
       if (e.target === container || e.target.closest('[data-modal-close]')) {
         closeModal();
       }
     });
-    if (typeof onMount === 'function') onMount(container);
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', onKeyDown);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+
+    if (typeof onMount === 'function') {
+      onMount(container);
+    }
     return container;
   }
 
@@ -274,9 +344,6 @@
           <div class="alltell-live-avatar" style="background: ${gradient}">${escapeHtml(initials(franchise.name))}</div>
           <div class="alltell-live-title-row">
             <h3 title="${escapeHtml(franchise.name)}"><a href="/alltell?franchise=${Number(franchise.id)}">${escapeHtml(franchise.name)}</a></h3>
-            ${(isOwner || isRoot) ? `
-              <button class="alltell-card-del-btn" type="button" data-action="quick-delete-franchise" data-franchise-id="${franchise.id}" title="Удалить франшизу"><i class="fas fa-trash"></i></button>
-            ` : ''}
           </div>
           <p class="alltell-live-description ${!franchise.description ? 'is-placeholder' : ''}">${escapeHtml(franchise.description || 'Описание сообщества пока не заполнено.')}</p>
           <div class="alltell-live-chips">
@@ -2464,147 +2531,191 @@
     }
 
     function openCreateFranchiseModal() {
-      var modalHtml = `
+      var heroHtml = `<div class="alltell-modal-avatar-preview" id="create-franchise-avatar-preview" style="background:${FRANCHISE_GRADIENTS[0]}">?</div>`;
+
+      var bodyHtml = `
         <form id="alltell-create-franchise-form">
-          <div class="alltell-modal-header-hero">
-            <div class="alltell-modal-avatar-preview" id="create-franchise-avatar-preview">?</div>
-            <div>
-              <h3 style="margin:0 0 4px;font-size:1.15rem;color:var(--text-normal);">Новая вселенная AllTell</h3>
-              <p style="margin:0;font-size:0.85rem;color:var(--text-muted);">Франшиза объединяет ваши ролевые миры, хабы и статьи Antropedia.</p>
-            </div>
-          </div>
           <div class="alltell-field">
-            <label class="alltell-field-label">Название вселенной <span style="color:#f23f43">*</span></label>
-            <input type="text" id="create-franchise-name-input" name="name" maxlength="100" placeholder="Например: Хроники Серебряного Ветра" required autofocus>
+            <label class="alltell-field-label" for="create-franchise-name-input">
+              Название вселенной <span style="color:#f23f43">*</span>
+            </label>
+            <input type="text"
+                   id="create-franchise-name-input"
+                   name="name"
+                   maxlength="100"
+                   placeholder="Например: Хроники Серебряного Ветра"
+                   autocomplete="off"
+                   required
+                   autofocus>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
+              Уникальное название вашей франшизы в каталоге AllTell
+            </span>
           </div>
+
           <div class="alltell-field">
-            <label class="alltell-field-label">Краткое описание</label>
-            <textarea id="create-franchise-desc-input" name="description" rows="3" maxlength="500" placeholder="Опишите сеттинг, атмосферу или ключевую тему вашей франшизы"></textarea>
+            <label class="alltell-field-label" for="create-franchise-desc-input">Краткое описание</label>
+            <textarea id="create-franchise-desc-input"
+                      name="description"
+                      rows="3"
+                      maxlength="500"
+                      placeholder="Опишите сеттинг, атмосферу или ключевую тему вашей франшизы"></textarea>
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+
+          <div class="alltell-modal-hint" style="margin-top:4px;">
+            <i class="fas fa-circle-info"></i>
+            <span>После создания вы автоматически становитесь администратором франшизы и сможете настроить хабы, роли и статьи лора.</span>
+          </div>
+
+          <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
             <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-            <button type="submit" class="btn btn-primary" id="create-franchise-submit-btn"><i class="fas fa-plus"></i> Создать франшизу</button>
+            <button type="submit" class="btn btn-primary" id="create-franchise-submit-btn">
+              <i class="fas fa-plus"></i> Создать франшизу
+            </button>
           </div>
         </form>
       `;
 
-      openModal('Создание франшизы', modalHtml, function (container) {
-        var nameInput = container.querySelector('#create-franchise-name-input');
-        var avatarPreview = container.querySelector('#create-franchise-avatar-preview');
-        var form = container.querySelector('#alltell-create-franchise-form');
+      openModal({
+        title: 'Новая вселенная AllTell',
+        subtitle: 'Создание ролевой франшизы сообщества',
+        hero: heroHtml,
+        bodyHtml: bodyHtml,
+        onMount: function (container) {
+          var nameInput = container.querySelector('#create-franchise-name-input');
+          var avatarPreview = container.querySelector('#create-franchise-avatar-preview');
+          var form = container.querySelector('#alltell-create-franchise-form');
 
-        nameInput.addEventListener('input', function () {
-          var val = nameInput.value.trim();
-          avatarPreview.textContent = initials(val) || '?';
-          avatarPreview.style.background = franchiseAvatarColor(val || 'Franchise');
-        });
+          nameInput.addEventListener('input', function () {
+            var val = nameInput.value.trim();
+            avatarPreview.textContent = initials(val) || '?';
+            avatarPreview.style.background = franchiseAvatarColor(val || 'Franchise');
+          });
 
-        form.addEventListener('submit', async function (e) {
-          e.preventDefault();
-          var name = nameInput.value.trim();
-          var description = container.querySelector('#create-franchise-desc-input').value.trim();
-          if (!name) return;
-          var btn = container.querySelector('#create-franchise-submit-btn');
-          btn.disabled = true;
-          try {
-            var server = await request('/api/servers', 'POST', { name: name, description: description });
-            closeModal();
-            showToast('Франшиза «' + name + '» создана!');
-            window.history.pushState({}, '', '/alltell?franchise=' + server.id + '&tab=manage');
-            state.detailTab = 'manage';
-            state.workspaceTab = 'overview';
-            await loadDetail(server.id);
-            await loadMine();
-          } catch (error) {
-            btn.disabled = false;
-            notifyError(error.message);
-          }
-        });
+          form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var name = nameInput.value.trim();
+            var description = container.querySelector('#create-franchise-desc-input').value.trim();
+            if (!name) return;
+            var btn = container.querySelector('#create-franchise-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создание…';
+            try {
+              var server = await request('/api/servers', 'POST', { name: name, description: description });
+              closeModal();
+              showToast('Франшиза «' + name + '» успешно создана!');
+              window.history.pushState({}, '', '/alltell?franchise=' + server.id + '&tab=manage');
+              state.detailTab = 'manage';
+              state.workspaceTab = 'overview';
+              await loadDetail(server.id);
+              await loadMine();
+            } catch (error) {
+              btn.disabled = false;
+              btn.innerHTML = '<i class="fas fa-plus"></i> Создать франшизу';
+              notifyError(error.message);
+            }
+          });
+
+          setTimeout(function () { nameInput.focus(); }, 60);
+        }
       });
     }
 
     function openAddMemberModal(franchiseId) {
-      var modalHtml = `
+      var bodyHtml = `
         <div class="alltell-field">
-          <label class="alltell-field-label">Поиск пользователя по имени</label>
+          <label class="alltell-field-label" for="add-member-search-input">Поиск пользователя по имени</label>
           <div class="alltell-user-search-wrap">
             <input type="search" id="add-member-search-input" placeholder="Начните вводить имя участника..." autocomplete="off">
-            <div id="add-member-search-results" class="alltell-user-search-dropdown" hidden></div>
+            <div id="add-member-search-results" class="alltell-user-dropdown" hidden></div>
           </div>
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
+            Поиск работает по подтверждённым пользователям платформы.
+          </span>
         </div>
         <div class="alltell-field" style="margin-top:14px;">
-          <label class="alltell-field-label">Или укажите точный ID пользователя</label>
+          <label class="alltell-field-label" for="add-member-id-input">Или укажите точный ID пользователя</label>
           <input type="number" id="add-member-id-input" placeholder="Например: 12" min="1">
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
           <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-          <button type="button" class="btn btn-primary" id="confirm-add-member-btn"><i class="fas fa-user-plus"></i> Добавить</button>
+          <button type="button" class="btn btn-primary" id="confirm-add-member-btn">
+            <i class="fas fa-user-plus"></i> Добавить участника
+          </button>
         </div>
       `;
 
-      openModal('Добавить участника', modalHtml, function (container) {
-        var searchInput = container.querySelector('#add-member-search-input');
-        var resultsDropdown = container.querySelector('#add-member-search-results');
-        var idInput = container.querySelector('#add-member-id-input');
-        var confirmBtn = container.querySelector('#confirm-add-member-btn');
-        var debounceTimer = null;
+      openModal({
+        title: 'Добавить участника',
+        subtitle: 'Приглашение пользователя во вселенную',
+        bodyHtml: bodyHtml,
+        onMount: function (container) {
+          var searchInput = container.querySelector('#add-member-search-input');
+          var resultsDropdown = container.querySelector('#add-member-search-results');
+          var idInput = container.querySelector('#add-member-id-input');
+          var confirmBtn = container.querySelector('#confirm-add-member-btn');
+          var debounceTimer = null;
 
-        searchInput.addEventListener('input', function () {
-          window.clearTimeout(debounceTimer);
-          var q = searchInput.value.trim();
-          if (!q) {
-            resultsDropdown.hidden = true;
-            resultsDropdown.innerHTML = '';
-            return;
-          }
-          debounceTimer = window.setTimeout(async function () {
-            try {
-              var users = await request('/api/users/search?q=' + encodeURIComponent(q));
-              if (!Array.isArray(users) || !users.length) {
-                resultsDropdown.innerHTML = '<div class="alltell-user-search-item" style="color:var(--text-muted);cursor:default;">Никого не найдено</div>';
-              } else {
-                resultsDropdown.innerHTML = users.map(function (u) {
-                  return `<div class="alltell-user-search-item" data-uid="${u.id}" data-uname="${escapeHtml(u.display_name)}">
-                    <strong>${escapeHtml(u.display_name)}</strong>
-                    <span style="color:var(--text-muted);font-size:11px;">ID ${u.id}</span>
-                  </div>`;
-                }).join('');
-                resultsDropdown.querySelectorAll('[data-uid]').forEach(function (item) {
-                  item.addEventListener('click', function () {
-                    idInput.value = item.dataset.uid;
-                    searchInput.value = item.dataset.uname;
-                    resultsDropdown.hidden = true;
-                  });
-                });
-              }
-              resultsDropdown.hidden = false;
-            } catch (err) {
+          searchInput.addEventListener('input', function () {
+            window.clearTimeout(debounceTimer);
+            var q = searchInput.value.trim();
+            if (!q) {
               resultsDropdown.hidden = true;
+              resultsDropdown.innerHTML = '';
+              return;
             }
-          }, 300);
-        });
+            debounceTimer = window.setTimeout(async function () {
+              try {
+                var users = await request('/api/users/search?q=' + encodeURIComponent(q));
+                if (!Array.isArray(users) || !users.length) {
+                  resultsDropdown.innerHTML = '<div class="alltell-user-item" style="color:var(--text-muted);cursor:default;">Никого не найдено</div>';
+                } else {
+                  resultsDropdown.innerHTML = users.map(function (u) {
+                    return `<div class="alltell-user-item" data-uid="${u.id}" data-uname="${escapeHtml(u.display_name)}">
+                      <strong>${escapeHtml(u.display_name)}</strong>
+                      <span style="color:var(--text-muted);font-size:11px;">ID ${u.id}</span>
+                    </div>`;
+                  }).join('');
+                  resultsDropdown.querySelectorAll('[data-uid]').forEach(function (item) {
+                    item.addEventListener('click', function () {
+                      idInput.value = item.dataset.uid;
+                      searchInput.value = item.dataset.uname;
+                      resultsDropdown.hidden = true;
+                    });
+                  });
+                }
+                resultsDropdown.hidden = false;
+              } catch (err) {
+                resultsDropdown.hidden = true;
+              }
+            }, 300);
+          });
 
-        confirmBtn.addEventListener('click', async function () {
-          var targetUserId = idInput.value.trim();
-          if (!targetUserId) {
-            notifyError('Укажите пользователя или его ID');
-            return;
-          }
-          confirmBtn.disabled = true;
-          try {
-            await request('/api/servers/' + franchiseId + '/users/' + targetUserId, 'POST', {});
-            closeModal();
-            showToast('Участник добавлен');
-            await loadWorkspaceData(franchiseId);
-            if (state.detail && state.detail.franchise) {
-              state.detail.franchise.member_count = Number(state.detail.franchise.member_count || 0) + 1;
+          confirmBtn.addEventListener('click', async function () {
+            var targetUserId = idInput.value.trim();
+            if (!targetUserId) {
+              notifyError('Укажите пользователя или его точный ID');
+              return;
             }
-            renderDetail(root, state);
-          } catch (error) {
-            confirmBtn.disabled = false;
-            notifyError(error.message);
-          }
-        });
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Добавление…';
+            try {
+              await request('/api/servers/' + franchiseId + '/users/' + targetUserId, 'POST', {});
+              closeModal();
+              showToast('Участник успешно добавлен');
+              await loadWorkspaceData(franchiseId);
+              if (state.detail && state.detail.franchise) {
+                state.detail.franchise.member_count = Number(state.detail.franchise.member_count || 0) + 1;
+              }
+              renderDetail(root, state);
+            } catch (error) {
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="fas fa-user-plus"></i> Добавить участника';
+              notifyError(error.message);
+            }
+          });
+
+          setTimeout(function () { searchInput.focus(); }, 60);
+        }
       });
     }
 
@@ -2614,61 +2725,74 @@
         notifyError('Во франшизе пока нет созданных ролей. Сначала создайте роль во вкладке «Роли».');
         return;
       }
-      var modalHtml = `
+      var bodyHtml = `
         <p style="margin:0 0 14px;font-size:0.9rem;color:var(--text-muted);">
-          Пользователь: <strong>${escapeHtml(userName)}</strong> (ID ${userId})
+          Пользователь: <strong style="color:var(--text-normal);">${escapeHtml(userName)}</strong> (ID ${userId})
         </p>
         <div class="alltell-field">
-          <label class="alltell-field-label">Выберите роль</label>
+          <label class="alltell-field-label" for="assign-role-select">Выберите роль</label>
           <select id="assign-role-select" class="alltell-select" style="width:100%;">
             ${roles.map(function (r) {
               return `<option value="${r.id}">${escapeHtml(r.name)} (уровень ${r.hierarchy_level}${r.role_type === 'system' ? ', системная' : ''})</option>`;
             }).join('')}
           </select>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
           <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-          <button type="button" class="btn btn-primary" id="confirm-assign-role-btn"><i class="fas fa-check"></i> Назначить роль</button>
+          <button type="button" class="btn btn-primary" id="confirm-assign-role-btn">
+            <i class="fas fa-check"></i> Назначить роль
+          </button>
         </div>
       `;
 
-      openModal('Назначить роль участнику', modalHtml, function (container) {
-        var confirmBtn = container.querySelector('#confirm-assign-role-btn');
-        confirmBtn.addEventListener('click', async function () {
-          var roleId = container.querySelector('#assign-role-select').value;
-          if (!roleId) return;
-          confirmBtn.disabled = true;
-          try {
-            await request('/api/servers/' + franchiseId + '/users/' + userId + '/roles/' + roleId, 'POST', {});
-            closeModal();
-            showToast('Роль назначена');
-            await loadWorkspaceData(franchiseId);
-            renderDetail(root, state);
-          } catch (error) {
-            confirmBtn.disabled = false;
-            notifyError(error.message);
-          }
-        });
+      openModal({
+        title: 'Назначить роль участнику',
+        subtitle: 'Управление доступом во франшизе',
+        bodyHtml: bodyHtml,
+        onMount: function (container) {
+          var confirmBtn = container.querySelector('#confirm-assign-role-btn');
+          confirmBtn.addEventListener('click', async function () {
+            var roleId = container.querySelector('#assign-role-select').value;
+            if (!roleId) return;
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Назначение…';
+            try {
+              await request('/api/servers/' + franchiseId + '/users/' + userId + '/roles/' + roleId, 'POST', {});
+              closeModal();
+              showToast('Роль успешно назначена');
+              await loadWorkspaceData(franchiseId);
+              renderDetail(root, state);
+            } catch (error) {
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="fas fa-check"></i> Назначить роль';
+              notifyError(error.message);
+            }
+          });
+        }
       });
     }
 
     function openRoleEditorModal(franchiseId, roleId) {
       var role = roleId ? (state.workspaceData.roles || []).find(function (r) { return String(r.id) === String(roleId); }) : null;
       var perms = (role && role.permissions) || {};
-      var modalHtml = `
+      var bodyHtml = `
         <form id="role-editor-form">
           <div class="alltell-field">
-            <label class="alltell-field-label">Название роли <span style="color:#f23f43">*</span></label>
+            <label class="alltell-field-label" for="role-name-input">
+              Название роли <span style="color:#f23f43">*</span>
+            </label>
             <input type="text" id="role-name-input" maxlength="50" required placeholder="Например: Мастер игры" value="${escapeHtml(role ? role.name : '')}" autofocus>
           </div>
           <div class="alltell-field">
-            <label class="alltell-field-label">Уровень иерархии (0–99)</label>
+            <label class="alltell-field-label" for="role-level-input">Уровень иерархии (0–99)</label>
             <input type="number" id="role-level-input" min="0" max="99" value="${role ? role.hierarchy_level : 0}">
-            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">Чем выше число, тем выше приоритет роли при проверках доступа.</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
+              Чем выше число, тем выше приоритет роли при проверках доступа.
+            </span>
           </div>
           <div class="alltell-field">
             <label class="alltell-field-label">Права роли</label>
-            <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
               <label class="alltell-perm-check">
                 <input type="checkbox" id="perm-read-messages" ${perms.read_messages ? 'checked' : (!role ? 'checked' : '')}>
                 <span>Чтение сообщений</span>
@@ -2691,149 +2815,182 @@
               </label>
             </div>
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+          <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
             <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-            <button type="submit" class="btn btn-primary" id="role-submit-btn">${role ? 'Сохранить изменения' : 'Создать роль'}</button>
+            <button type="submit" class="btn btn-primary" id="role-submit-btn">
+              ${role ? '<i class="fas fa-check"></i> Сохранить изменения' : '<i class="fas fa-plus"></i> Создать роль'}
+            </button>
           </div>
         </form>
       `;
 
-      openModal(role ? 'Редактировать роль' : 'Создать роль', modalHtml, function (container) {
-        var form = container.querySelector('#role-editor-form');
-        form.addEventListener('submit', async function (e) {
-          e.preventDefault();
-          var name = container.querySelector('#role-name-input').value.trim();
-          var level = Number(container.querySelector('#role-level-input').value) || 0;
-          if (!name) return;
-          var permissions = {
-            read_messages: container.querySelector('#perm-read-messages').checked,
-            send_messages: container.querySelector('#perm-send-messages').checked,
-            manage_channels: container.querySelector('#perm-manage-channels').checked,
-            manage_roles: container.querySelector('#perm-manage-roles').checked,
-            ban_users: container.querySelector('#perm-ban-users').checked
-          };
-          var btn = container.querySelector('#role-submit-btn');
-          btn.disabled = true;
-          try {
-            if (roleId) {
-              await request('/api/servers/' + franchiseId + '/roles/' + roleId, 'PUT', { name: name, hierarchy_level: level, permissions: permissions });
-              showToast('Роль обновлена');
-            } else {
-              await request('/api/servers/' + franchiseId + '/roles', 'POST', { name: name, hierarchy_level: level, permissions: permissions });
-              showToast('Роль создана');
+      openModal({
+        title: role ? 'Редактировать роль' : 'Создать новую роль',
+        subtitle: role ? `Настройка роли «${role.name}»` : 'Роль для участников франшизы и прав в Antropedia',
+        bodyHtml: bodyHtml,
+        onMount: function (container) {
+          var form = container.querySelector('#role-editor-form');
+          form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var name = container.querySelector('#role-name-input').value.trim();
+            var level = Number(container.querySelector('#role-level-input').value) || 0;
+            if (!name) return;
+            var permissions = {
+              read_messages: container.querySelector('#perm-read-messages').checked,
+              send_messages: container.querySelector('#perm-send-messages').checked,
+              manage_channels: container.querySelector('#perm-manage-channels').checked,
+              manage_roles: container.querySelector('#perm-manage-roles').checked,
+              ban_users: container.querySelector('#perm-ban-users').checked
+            };
+            var btn = container.querySelector('#role-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение…';
+            try {
+              if (roleId) {
+                await request('/api/servers/' + franchiseId + '/roles/' + roleId, 'PUT', { name: name, hierarchy_level: level, permissions: permissions });
+                showToast('Роль успешно обновлена');
+              } else {
+                await request('/api/servers/' + franchiseId + '/roles', 'POST', { name: name, hierarchy_level: level, permissions: permissions });
+                showToast('Роль успешно создана');
+              }
+              closeModal();
+              await loadWorkspaceData(franchiseId);
+              renderDetail(root, state);
+            } catch (error) {
+              btn.disabled = false;
+              btn.innerHTML = role ? '<i class="fas fa-check"></i> Сохранить изменения' : '<i class="fas fa-plus"></i> Создать роль';
+              notifyError(error.message);
             }
-            closeModal();
-            await loadWorkspaceData(franchiseId);
-            renderDetail(root, state);
-          } catch (error) {
-            btn.disabled = false;
-            notifyError(error.message);
-          }
-        });
+          });
+
+          setTimeout(function () { container.querySelector('#role-name-input')?.focus(); }, 60);
+        }
       });
     }
 
     function openChannelEditorModal(franchiseId, channelId) {
       var channel = channelId ? (state.workspaceData.channels || []).find(function (c) { return String(c.id) === String(channelId); }) : null;
-      var modalHtml = `
+      var bodyHtml = `
         <form id="channel-editor-form">
           <div class="alltell-field">
-            <label class="alltell-field-label">Название канала <span style="color:#f23f43">*</span></label>
+            <label class="alltell-field-label" for="channel-name-input">
+              Название канала <span style="color:#f23f43">*</span>
+            </label>
             <input type="text" id="channel-name-input" maxlength="100" required placeholder="Например: general или таверна" value="${escapeHtml(channel ? channel.name : '')}" autofocus>
           </div>
           <div class="alltell-field">
-            <label class="alltell-field-label">Тип канала</label>
+            <label class="alltell-field-label" for="channel-type-select">Тип канала</label>
             <select id="channel-type-select" class="alltell-select" style="width:100%;">
               <option value="text" ${channel && channel.channel_type === 'text' ? 'selected' : ''}>💬 Текстовый</option>
               <option value="voice" ${channel && channel.channel_type === 'voice' ? 'selected' : ''}>🔊 Голосовой</option>
             </select>
           </div>
           <div class="alltell-field">
-            <label class="alltell-field-label">Тема / Описание канала</label>
+            <label class="alltell-field-label" for="channel-desc-input">Тема / Описание канала</label>
             <textarea id="channel-desc-input" rows="2" maxlength="500" placeholder="О чём этот канал...">${escapeHtml(channel ? channel.description || '' : '')}</textarea>
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+          <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
             <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-            <button type="submit" class="btn btn-primary" id="channel-submit-btn">${channel ? 'Сохранить изменения' : 'Создать канал'}</button>
+            <button type="submit" class="btn btn-primary" id="channel-submit-btn">
+              ${channel ? '<i class="fas fa-check"></i> Сохранить изменения' : '<i class="fas fa-plus"></i> Создать канал'}
+            </button>
           </div>
         </form>
       `;
 
-      openModal(channel ? 'Редактировать канал' : 'Создать канал', modalHtml, function (container) {
-        var form = container.querySelector('#channel-editor-form');
-        form.addEventListener('submit', async function (e) {
-          e.preventDefault();
-          var name = container.querySelector('#channel-name-input').value.trim();
-          var channelType = container.querySelector('#channel-type-select').value;
-          var description = container.querySelector('#channel-desc-input').value.trim();
-          if (!name) return;
-          var btn = container.querySelector('#channel-submit-btn');
-          btn.disabled = true;
-          try {
-            if (channelId) {
-              await request('/api/servers/' + franchiseId + '/channels/' + channelId, 'PUT', { name: name, channel_type: channelType, description: description });
-              showToast('Канал обновлён');
-            } else {
-              await request('/api/servers/' + franchiseId + '/channels', 'POST', { name: name, channel_type: channelType, description: description });
-              showToast('Канал создан');
+      openModal({
+        title: channel ? 'Редактировать канал' : 'Создать канал',
+        subtitle: channel ? `Настройка канала #${channel.name}` : 'Канал для общения участников вселенной',
+        bodyHtml: bodyHtml,
+        onMount: function (container) {
+          var form = container.querySelector('#channel-editor-form');
+          form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var name = container.querySelector('#channel-name-input').value.trim();
+            var channelType = container.querySelector('#channel-type-select').value;
+            var description = container.querySelector('#channel-desc-input').value.trim();
+            if (!name) return;
+            var btn = container.querySelector('#channel-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение…';
+            try {
+              if (channelId) {
+                await request('/api/servers/' + franchiseId + '/channels/' + channelId, 'PUT', { name: name, channel_type: channelType, description: description });
+                showToast('Канал обновлён');
+              } else {
+                await request('/api/servers/' + franchiseId + '/channels', 'POST', { name: name, channel_type: channelType, description: description });
+                showToast('Канал создан');
+              }
+              closeModal();
+              await loadWorkspaceData(franchiseId);
+              renderDetail(root, state);
+            } catch (error) {
+              btn.disabled = false;
+              btn.innerHTML = channel ? '<i class="fas fa-check"></i> Сохранить изменения' : '<i class="fas fa-plus"></i> Создать канал';
+              notifyError(error.message);
             }
-            closeModal();
-            await loadWorkspaceData(franchiseId);
-            renderDetail(root, state);
-          } catch (error) {
-            btn.disabled = false;
-            notifyError(error.message);
-          }
-        });
+          });
+
+          setTimeout(function () { container.querySelector('#channel-name-input')?.focus(); }, 60);
+        }
       });
     }
 
     function openChangeOwnerModal(franchiseId) {
-      var modalHtml = `
+      var bodyHtml = `
         <p style="margin:0 0 14px;font-size:0.9rem;color:var(--text-muted);">
           Выберите подтверждённого пользователя для передачи прав создателя (владельца) этой франшизы.
         </p>
         <div class="alltell-field">
-          <label class="alltell-field-label">Новый владелец</label>
+          <label class="alltell-field-label" for="change-owner-select">Новый владелец</label>
           <select id="change-owner-select" class="alltell-select" style="width:100%;">
             <option value="">Загрузка пользователей…</option>
           </select>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <div class="alltell-modal-footer" style="padding:16px 0 0;margin-top:14px;background:none;border-top:1px solid var(--background-accent);">
           <button type="button" class="btn btn-secondary" data-modal-close>Отмена</button>
-          <button type="button" class="btn btn-primary" id="confirm-change-owner-btn"><i class="fas fa-crown"></i> Передать права</button>
+          <button type="submit" class="btn btn-primary" id="confirm-change-owner-btn">
+            <i class="fas fa-crown"></i> Передать права
+          </button>
         </div>
       `;
 
-      openModal('Передать владение франшизой', modalHtml, async function (container) {
-        var select = container.querySelector('#change-owner-select');
-        var confirmBtn = container.querySelector('#confirm-change-owner-btn');
-        try {
-          var users = await request('/api/users/search?q=');
-          if (!Array.isArray(users) || !users.length) {
-            users = state.workspaceData.members || [];
-          }
-          select.innerHTML = users.map(function (u) {
-            return `<option value="${u.id}">${escapeHtml(u.display_name || u.username)} (ID ${u.id})</option>`;
-          }).join('') || '<option value="">Нет доступных пользователей</option>';
-        } catch (err) {
-          select.innerHTML = '<option value="">Не удалось загрузить список</option>';
-        }
-
-        confirmBtn.addEventListener('click', async function () {
-          var newOwnerId = select.value;
-          if (!newOwnerId) return;
-          confirmBtn.disabled = true;
+      openModal({
+        title: 'Передать владение франшизой',
+        subtitle: 'Действие доступно только администратору платформы (root)',
+        bodyHtml: bodyHtml,
+        onMount: async function (container) {
+          var select = container.querySelector('#change-owner-select');
+          var confirmBtn = container.querySelector('#confirm-change-owner-btn');
           try {
-            await request('/api/servers/' + franchiseId + '/owner', 'PUT', { new_owner_id: Number(newOwnerId) });
-            closeModal();
-            showToast('Владелец франшизы изменён');
-            await loadDetail(franchiseId);
-          } catch (error) {
-            confirmBtn.disabled = false;
-            notifyError(error.message);
+            var users = await request('/api/users/search?q=');
+            if (!Array.isArray(users) || !users.length) {
+              users = state.workspaceData.members || [];
+            }
+            select.innerHTML = users.map(function (u) {
+              return `<option value="${u.id}">${escapeHtml(u.display_name || u.username)} (ID ${u.id})</option>`;
+            }).join('') || '<option value="">Нет доступных пользователей</option>';
+          } catch (err) {
+            select.innerHTML = '<option value="">Не удалось загрузить список</option>';
           }
-        });
+
+          confirmBtn.addEventListener('click', async function () {
+            var newOwnerId = select.value;
+            if (!newOwnerId) return;
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Передача прав…';
+            try {
+              await request('/api/servers/' + franchiseId + '/owner', 'PUT', { new_owner_id: Number(newOwnerId) });
+              closeModal();
+              showToast('Владелец франшизы успешно изменён');
+              await loadDetail(franchiseId);
+            } catch (error) {
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '<i class="fas fa-crown"></i> Передать права';
+              notifyError(error.message);
+            }
+          });
+        }
       });
     }
 
@@ -3235,10 +3392,6 @@
           return;
         }
         openCreateFranchiseModal();
-      } else if (action === 'quick-delete-franchise') {
-        var qId = button.dataset.franchiseId;
-        var qItem = state.franchises.find(function (f) { return String(f.id) === String(qId); });
-        deleteFranchise(qId, qItem && qItem.name);
       } else if (action === 'toggle-hub-preview') {
         toggleHubPreview(button.dataset.franchiseId);
       } else if (action === 'toggle-manage') {
@@ -3502,6 +3655,7 @@
     function onDocClick(event) {
       var createBtn = event.target.closest('[data-action="open-create-franchise"]');
       if (createBtn) {
+        if (root && root.contains(createBtn)) return;
         if (!token()) {
           if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
           else window.location.href = '/admin-panel';
