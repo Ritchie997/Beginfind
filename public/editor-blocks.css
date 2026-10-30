@@ -27,11 +27,10 @@
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 8px 10px 8px 34px;
-  /* Не ниже стека кнопок слева (грип/копировать/удалить: 8px сверху + 3×22px
-     + 2×2px зазоры + 8px снизу) — иначе на коротких блоках (разделитель,
-     однострочный текст) стек вылезает на соседний блок. Только редактор:
-     предпросмотр рендерится отдельно (blocks-renderer.js). */
-  min-height: 86px;
+  /* Высота под явные кнопки управления блоком слева (ручка, вверх, вниз,
+     дублировать, удалить: 6px сверху + 5×18px + 4×2px + 6px снизу = ~106px).
+     На мобильных/тач-экранах переключается на компактную кнопку ⋮ высотой 26px. */
+  min-height: 104px;
   transition: border-color .12s, background .12s;
 }
 .eb-block:hover,
@@ -42,18 +41,19 @@
 .eb-block-controls {
   position: absolute;
   left: 2px;
-  top: 8px;
+  top: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   opacity: 0;
   transition: opacity .12s;
+  z-index: 2;
 }
 .eb-block:hover .eb-block-controls,
 .eb-block:focus-within .eb-block-controls { opacity: 1; }
 .eb-block-controls button {
   width: 24px;
-  height: 22px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -62,10 +62,28 @@
   border-radius: 4px;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10.5px;
+  padding: 0;
+  transition: color .1s, background .1s;
 }
-.eb-block-controls button:hover { background: var(--background-accent); color: var(--text-normal); }
-.eb-block-controls button.eb-remove:hover { color: var(--red); }
+.eb-block-controls button:hover:not(:disabled) {
+  background: var(--background-accent);
+  color: var(--text-normal);
+}
+.eb-block-controls button:disabled {
+  opacity: .22;
+  cursor: default;
+  pointer-events: none;
+}
+.eb-block-controls button.eb-move-btn:hover:not(:disabled) {
+  color: var(--blurple, #5865f2);
+}
+.eb-block-controls button.eb-copy-btn:hover:not(:disabled) {
+  color: var(--blurple, #5865f2);
+}
+.eb-block-controls button.eb-remove:hover:not(:disabled) {
+  color: var(--red, #ed4245);
+}
 
 /* Кнопка "⋮" (открывает попап с теми же тремя действиями, см.
    openBlockActionsMenu в editor-manager.js) — замена стека из трёх кнопок
@@ -232,7 +250,7 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 }
 .eb-toast.eb-toast-visible { opacity: 1; transform: translate(-50%, 0); }
 
-@media (hover: none) and (pointer: coarse) {
+@media (max-width: 640px), (hover: none) and (pointer: coarse) {
   /* Стек кнопок скрыт целиком — вместо него .eb-block-more-btn. */
   .eb-block-controls { display: none; }
   .eb-block-more-btn { display: flex; }
@@ -649,4 +667,62 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   .eb-spoiler-section-editor { padding: 8px; }
   .eb-input { padding: 6px 8px; }
   .eb-table input { padding: 5px 6px; }
+}
+
+
+/* Меню действий блока (.eb-block-action-menu) */
+.eb-block-action-menu {
+  position: fixed;
+  z-index: 10003;
+  background: var(--background-floating, #1e1f22);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+}
+.eb-block-action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-normal, #dbdee1);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background .1s, color .1s;
+}
+.eb-block-action-menu button:hover:not(:disabled) {
+  background: var(--background-accent, rgba(255, 255, 255, 0.08));
+  color: #fff;
+}
+.eb-block-action-menu button:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+.eb-block-action-menu button i {
+  width: 14px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.eb-block-action-menu button:hover:not(:disabled) i {
+  color: inherit;
+}
+.eb-block-action-menu button.eb-action-danger {
+  color: var(--red, #ed4245);
+}
+.eb-block-action-menu button.eb-action-danger i {
+  color: var(--red, #ed4245);
+}
+.eb-block-action-menu button.eb-action-danger:hover:not(:disabled) {
+  background: rgba(237, 66, 69, 0.15);
+  color: #ff6b6b;
 }

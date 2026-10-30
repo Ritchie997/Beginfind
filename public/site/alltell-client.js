@@ -1740,12 +1740,18 @@
 
   function duplicatePostBlock(state, blockId) {
     if (!state || !state.postBlocks) return;
-    var idx = state.postBlocks.findIndex(function (b) { return b.id === blockId; });
-    if (idx === -1) return;
-    var clone = JSON.parse(JSON.stringify(state.postBlocks[idx]));
-    clone.id = genBlockId();
-    state.postBlocks.splice(idx + 1, 0, clone);
-    state._pendingFocusBlockId = clone.id;
+    var eb = window.EditorBlocks;
+    var res = eb ? eb.duplicateBlockInList(state.postBlocks, blockId) : null;
+    if (res && res.duplicated) {
+      state._pendingFocusBlockId = res.newBlock.id;
+    } else {
+      var idx = state.postBlocks.findIndex(function (b) { return b.id === blockId; });
+      if (idx === -1) return;
+      var clone = JSON.parse(JSON.stringify(state.postBlocks[idx]));
+      clone.id = genBlockId();
+      state.postBlocks.splice(idx + 1, 0, clone);
+      state._pendingFocusBlockId = clone.id;
+    }
     recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
     if (container) renderPostBlocksList(container, state);
@@ -2043,20 +2049,24 @@
 
   function removePostBlock(state, blockId, focusPrev) {
     if (!state || !state.postBlocks) return;
-    var blocks = state.postBlocks;
-    if (blocks.length <= 1) {
-      blocks[0] = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
-      state._pendingFocusBlockId = blocks[0].id;
+    var eb = window.EditorBlocks;
+    var idx = state.postBlocks.findIndex(function (b) { return b.id === blockId; });
+    if (idx !== -1) {
+      if (focusPrev && idx > 0) {
+        state._pendingFocusBlockId = state.postBlocks[idx - 1].id;
+        state._pendingFocusAtEnd = true;
+      } else if (idx < state.postBlocks.length - 1) {
+        state._pendingFocusBlockId = state.postBlocks[idx + 1].id;
+      }
+    }
+    if (eb && typeof eb.removeBlockFromList === 'function') {
+      eb.removeBlockFromList(state.postBlocks, blockId, true);
     } else {
-      var idx = blocks.findIndex(function (b) { return b.id === blockId; });
-      if (idx !== -1) {
-        if (focusPrev && idx > 0) {
-          state._pendingFocusBlockId = blocks[idx - 1].id;
-          state._pendingFocusAtEnd = true;
-        } else if (idx < blocks.length - 1) {
-          state._pendingFocusBlockId = blocks[idx + 1].id;
-        }
-        blocks.splice(idx, 1);
+      if (state.postBlocks.length <= 1) {
+        state.postBlocks[0] = { id: genBlockId(), type: 'paragraph', data: { markdown: '' } };
+        state._pendingFocusBlockId = state.postBlocks[0].id;
+      } else if (idx !== -1) {
+        state.postBlocks.splice(idx, 1);
       }
     }
     recordPostEditorHistory(state, true);
@@ -2067,14 +2077,17 @@
 
   function movePostBlock(state, blockId, dir) {
     if (!state || !state.postBlocks) return;
-    var blocks = state.postBlocks;
-    var idx = blocks.findIndex(function (b) { return b.id === blockId; });
-    if (idx === -1) return;
-    var targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= blocks.length) return;
-    var temp = blocks[idx];
-    blocks[idx] = blocks[targetIdx];
-    blocks[targetIdx] = temp;
+    var eb = window.EditorBlocks;
+    var res = eb ? eb.moveBlockInList(state.postBlocks, blockId, dir) : null;
+    if (!res || !res.moved) {
+      var idx = state.postBlocks.findIndex(function (b) { return b.id === blockId; });
+      if (idx === -1) return;
+      var targetIdx = idx + dir;
+      if (targetIdx < 0 || targetIdx >= state.postBlocks.length) return;
+      var temp = state.postBlocks[idx];
+      state.postBlocks[idx] = state.postBlocks[targetIdx];
+      state.postBlocks[targetIdx] = temp;
+    }
     state._pendingFocusBlockId = blockId;
     recordPostEditorHistory(state, true);
     var container = document.getElementById('postBlocksContent');
@@ -2299,6 +2312,25 @@
   }
 
   function renderPostBlockBody(block, state, containerEl) {
+    var eb = window.EditorBlocks;
+    if (eb && typeof eb.renderCoreBlockBody === 'function') {
+      var coreEl = eb.renderCoreBlockBody(block, {
+        makeTextarea: function (val, opts) {
+          return createBlockTextarea(val, Object.assign({ block: block, state: state }, opts));
+        },
+        onInput: function () {
+          recordPostEditorHistory(state, false);
+          syncPostEditorState(state);
+        },
+        onStructureChange: function () {
+          recordPostEditorHistory(state, true);
+          renderPostBlocksList(containerEl, state);
+          syncPostEditorState(state);
+        }
+      });
+      if (coreEl) return coreEl;
+    }
+
     if (block.type === 'paragraph') {
       return createBlockTextarea(block.data.markdown, {
         placeholder: 'Начните писать текст… Enter — новый абзац, Shift+Enter — перенос строки.',
@@ -2529,11 +2561,32 @@
   }
 
   function closeBlockMoveMenu() {
+    var eb = window.EditorBlocks;
+    if (eb && typeof eb.closeBlockActionMenu === 'function') {
+      eb.closeBlockActionMenu();
+    }
     var old = document.querySelector('.eb-block-action-menu');
     if (old) old.remove();
   }
 
   function openBlockMoveMenu(button, block, state, containerEl) {
+    var eb = window.EditorBlocks;
+    if (eb && typeof eb.openBlockActionMenu === 'function') {
+      eb.openBlockActionMenu(button, {
+        block: block,
+        list: state.postBlocks,
+        onMove: function (dir) {
+          movePostBlock(state, block.id, dir);
+        },
+        onDuplicate: function () {
+          duplicatePostBlock(state, block.id);
+        },
+        onRemove: function () {
+          removePostBlock(state, block.id, false);
+        }
+      });
+      return;
+    }
     closeBlockMoveMenu();
     var menu = document.createElement('div');
     menu.className = 'eb-block-action-menu';
@@ -2587,57 +2640,103 @@
       state.postBlocks = [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
     }
 
-    state.postBlocks.forEach(function (block) {
+    state.postBlocks.forEach(function (block, idx) {
       var wrap = document.createElement('div');
       wrap.className = 'eb-block eb-' + block.type + (block.type === 'heading' ? ' eb-heading-' + (block.data.level || 2) : '');
       wrap.dataset.blockId = block.id;
 
-      var controls = document.createElement('div');
-      controls.className = 'eb-block-controls';
-
-      var dragBtn = document.createElement('button');
-      dragBtn.type = 'button';
-      dragBtn.className = 'eb-drag-handle';
-      dragBtn.title = 'Потяните — переместить, клик — меню позиции';
-      dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
-      dragBtn.draggable = true;
-      dragBtn.addEventListener('dragstart', function (e) {
-        e.dataTransfer.setData('text/plain', block.id);
-        e.dataTransfer.effectAllowed = 'move';
-        wrap.classList.add('eb-dragging');
-      });
-      dragBtn.addEventListener('dragend', function () {
-        wrap.classList.remove('eb-dragging');
-        containerEl.querySelectorAll('.eb-block').forEach(function (el) {
-          el.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+      var eb = window.EditorBlocks;
+      var controls, moreBtn;
+      if (eb && typeof eb.renderBlockControls === 'function') {
+        var res = eb.renderBlockControls({
+          block: block,
+          list: state.postBlocks,
+          index: idx,
+          wrap: wrap,
+          onMove: function (dir) {
+            movePostBlock(state, block.id, dir);
+          },
+          onDuplicate: function () {
+            duplicatePostBlock(state, block.id);
+          },
+          onRemove: function () {
+            removePostBlock(state, block.id, false);
+          },
+          attachDragHandle: function (btn, wrapEl) {
+            btn.draggable = true;
+            btn.addEventListener('dragstart', function (e) {
+              e.dataTransfer.setData('text/plain', block.id);
+              e.dataTransfer.effectAllowed = 'move';
+              wrapEl.classList.add('eb-dragging');
+            });
+            btn.addEventListener('dragend', function () {
+              wrapEl.classList.remove('eb-dragging');
+              containerEl.querySelectorAll('.eb-block').forEach(function (el) {
+                el.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+              });
+            });
+          }
         });
-      });
-      dragBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        openBlockMoveMenu(dragBtn, block, state, containerEl);
-      });
+        controls = res.controls;
+        moreBtn = res.moreBtn;
+      } else {
+        controls = document.createElement('div');
+        controls.className = 'eb-block-controls';
 
-      var copyBtn = document.createElement('button');
-      copyBtn.type = 'button';
-      copyBtn.className = 'eb-copy-btn';
-      copyBtn.title = 'Копировать / дублировать блок (Ctrl+D)';
-      copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
-      copyBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        duplicatePostBlock(state, block.id);
-      });
+        var dragBtn = document.createElement('button');
+        dragBtn.type = 'button';
+        dragBtn.className = 'eb-drag-handle';
+        dragBtn.title = 'Потяните — переместить, клик — меню позиции';
+        dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        dragBtn.draggable = true;
+        dragBtn.addEventListener('dragstart', function (e) {
+          e.dataTransfer.setData('text/plain', block.id);
+          e.dataTransfer.effectAllowed = 'move';
+          wrap.classList.add('eb-dragging');
+        });
+        dragBtn.addEventListener('dragend', function () {
+          wrap.classList.remove('eb-dragging');
+          containerEl.querySelectorAll('.eb-block').forEach(function (el) {
+            el.classList.remove('eb-drop-target-above', 'eb-drop-target-below');
+          });
+        });
+        dragBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openBlockMoveMenu(dragBtn, block, state, containerEl);
+        });
 
-      var delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'eb-remove';
-      delBtn.title = 'Удалить блок';
-      delBtn.innerHTML = '<i class="fas fa-trash"></i>';
-      delBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        removePostBlock(state, block.id, false);
-      });
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'eb-copy-btn';
+        copyBtn.title = 'Дублировать блок';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+        copyBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          duplicatePostBlock(state, block.id);
+        });
 
-      controls.append(dragBtn, copyBtn, delBtn);
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'eb-remove';
+        delBtn.title = 'Удалить блок';
+        delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          removePostBlock(state, block.id, false);
+        });
+
+        controls.append(dragBtn, copyBtn, delBtn);
+
+        moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'eb-block-more-btn eb-drag-handle';
+        moreBtn.title = 'Действия с блоком';
+        moreBtn.innerHTML = '<i class="fas fa-ellipsis-vertical"></i>';
+        moreBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openBlockMoveMenu(moreBtn, block, state, containerEl);
+        });
+      }
 
       // Drag & drop перетаскивание между блоками
       wrap.addEventListener('dragover', function (e) {
@@ -2677,7 +2776,7 @@
 
       var body = renderPostBlockBody(block, state, containerEl);
 
-      wrap.append(controls, tag, body);
+      wrap.append(controls, moreBtn, tag, body);
       containerEl.appendChild(wrap);
     });
 

@@ -570,6 +570,43 @@
       return block;
     }
 
+    moveBlock(list, block, dir) {
+      if (!list || !block) return;
+      const eb = window.EditorBlocks;
+      const res = eb ? eb.moveBlockInList(list, block, dir) : null;
+      if (res && res.moved) {
+        this.recordHistory(true);
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.focusBlock(res.block.id);
+        this.showEditorToast(dir < 0 ? 'Блок перемещён выше' : 'Блок перемещён ниже');
+      }
+    }
+
+    duplicateBlockInPlace(list, block) {
+      if (!list || !block) return;
+      const eb = window.EditorBlocks;
+      const res = eb ? eb.duplicateBlockInList(list, block) : null;
+      if (res && res.duplicated) {
+        this.recordHistory(true);
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.focusBlock(res.newBlock.id);
+        this.showEditorToast('Блок продублирован');
+      }
+    }
+
+    focusBlock(blockId, atEnd = false) {
+      if (!this.container || !blockId) return;
+      const el = this.container.querySelector(`[data-block-id="${blockId}"] textarea, [data-block-id="${blockId}"] input`);
+      if (el) {
+        el.focus();
+        if (atEnd && typeof el.value === 'string') {
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
+      }
+    }
+
     async removeBlockFrom(list, block) {
       const idx = list.indexOf(block);
       if (idx === -1) return;
@@ -1044,43 +1081,54 @@
       if (this._selectedIds.has(block.id)) wrap.classList.add('eb-selected');
       wrap.dataset.blockId = block.id;
 
-      const controls = document.createElement('div');
-      controls.className = 'eb-block-controls';
-      const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Нажмите — выделить блок (Shift — диапазон), потяните — переместить'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
-      dragBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._suppressHandleClick) return;
-        this.toggleBlockSelection(list, block, { range: e.shiftKey });
-      });
-      this.attachDragHandle(dragBtn, wrap, list, block);
-      const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.title = 'Копировать блок (вставить можно и в другой статье)'; copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
-      copyBtn.addEventListener('click', () => this.copyBlock(block));
-      const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.title = 'Удалить блок'; delBtn.className = 'eb-remove'; delBtn.innerHTML = '<i class="fas fa-trash"></i>';
-      delBtn.addEventListener('click', () => this.removeBlockFrom(list, block));
-      controls.append(dragBtn, copyBtn, delBtn);
-
-      // Та же тройка действий, но одной кнопкой "⋮" с попап-меню — только для
-      // тач-экрана (см. .eb-block-more-btn в editor-blocks.css). Стек из трёх
-      // кнопок ПО ВЫСОТЕ (~100px) не помещается в короткие блоки (разделитель,
-      // однострочный заголовок) и наезжает на соседний блок снизу — этого не
-      // было видно на десктопе, пока контролы появлялись только по :hover, но
-      // стало заметно, когда на тач-устройствах их сделали видимыми всегда
-      // (там :hover нет физически). Одна кнопка высотой ~26px помещается
-      // в любой блок.
-      const moreBtn = document.createElement('button');
-      moreBtn.type = 'button';
-      // Она же — ручка перетаскивания: нажал — меню, зажал и повёл — блок едет.
-      moreBtn.className = 'eb-block-more-btn eb-drag-handle';
-      moreBtn.title = 'Нажмите — действия с блоком, потяните — переместить';
-      moreBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
-      moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._suppressHandleClick) return;
-        // Пока идёт выделение, тап по ручке выделяет/снимает блок, а не открывает меню.
-        if (this._selectedIds.size) { this.toggleBlockSelection(list, block); return; }
-        this.openBlockActionsMenu(moreBtn, list, block);
-      });
-      this.attachDragHandle(moreBtn, wrap, list, block);
+      const eb = window.EditorBlocks;
+      let controls, moreBtn;
+      if (eb && typeof eb.renderBlockControls === 'function') {
+        const res = eb.renderBlockControls({
+          block,
+          list,
+          index: list.indexOf(block),
+          wrap,
+          hasSelection: this._selectedIds.size > 0,
+          onMove: (dir) => this.moveBlock(list, block, dir),
+          onDuplicate: () => this.duplicateBlockInPlace(list, block),
+          onRemove: () => this.removeBlockFrom(list, block),
+          onSelect: (opts) => {
+            if (this._suppressHandleClick) return;
+            this.toggleBlockSelection(list, block, opts);
+          },
+          getExtraMenuItems: () => {
+            const items = [
+              { icon: 'fa-copy', label: 'Копировать в буфер', action: () => this.copyBlock(block) }
+            ];
+            if (readBlockClipboard()) {
+              items.push({ icon: 'fa-paste', label: 'Вставить скопированный ниже', action: () => this.pasteBlockInto(list, list.indexOf(block) + 1) });
+            }
+            items.push({ icon: 'fa-check-square', label: 'Выделить (удалить несколько)', action: () => this.toggleBlockSelection(list, block) });
+            return items;
+          },
+          attachDragHandle: (btn, wrapEl) => this.attachDragHandle(btn, wrapEl, list, block)
+        });
+        controls = res.controls;
+        moreBtn = res.moreBtn;
+      } else {
+        controls = document.createElement('div');
+        controls.className = 'eb-block-controls';
+        const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Переместить / действия'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        this.attachDragHandle(dragBtn, wrap, list, block);
+        const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.title = 'Дублировать блок'; copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+        copyBtn.addEventListener('click', () => this.duplicateBlockInPlace(list, block));
+        const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.title = 'Удалить блок'; delBtn.className = 'eb-remove'; delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        delBtn.addEventListener('click', () => this.removeBlockFrom(list, block));
+        controls.append(dragBtn, copyBtn, delBtn);
+        moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'eb-block-more-btn eb-drag-handle';
+        moreBtn.title = 'Действия с блоком';
+        moreBtn.innerHTML = '<i class="fas fa-ellipsis-vertical"></i>';
+        moreBtn.addEventListener('click', () => this.openBlockActionsMenu(moreBtn, list, block));
+        this.attachDragHandle(moreBtn, wrap, list, block);
+      }
 
       const tag = document.createElement('span');
       tag.className = 'eb-block-type-tag';
@@ -1181,6 +1229,30 @@
       if (mod && (e.key.toLowerCase() === 'y' || e.code === 'KeyY')) {
         e.preventDefault();
         this.redo();
+        return;
+      }
+      if (mod && (e.key.toLowerCase() === 'd' || e.code === 'KeyD')) {
+        e.preventDefault();
+        const active = this._activeTextInput || this._active;
+        if (active && active.list && active.block) {
+          this.duplicateBlockInPlace(active.list, active.block);
+        }
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowUp' || e.code === 'ArrowUp')) {
+        e.preventDefault();
+        const active = this._activeTextInput || this._active;
+        if (active && active.list && active.block) {
+          this.moveBlock(active.list, active.block, -1);
+        }
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowDown' || e.code === 'ArrowDown')) {
+        e.preventDefault();
+        const active = this._activeTextInput || this._active;
+        if (active && active.list && active.block) {
+          this.moveBlock(active.list, active.block, 1);
+        }
         return;
       }
       if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); this.applyInlineFormat('**'); }
@@ -2716,6 +2788,29 @@
     }
 
     openBlockActionsMenu(anchorBtn, list, block) {
+      const eb = window.EditorBlocks;
+      if (eb && typeof eb.openBlockActionMenu === 'function') {
+        eb.openBlockActionMenu(anchorBtn, {
+          block,
+          list,
+          index: list.indexOf(block),
+          onMove: (dir) => this.moveBlock(list, block, dir),
+          onDuplicate: () => this.duplicateBlockInPlace(list, block),
+          onRemove: () => this.removeBlockFrom(list, block),
+          getExtraMenuItems: () => {
+            const items = [
+              { icon: 'fa-copy', label: 'Копировать в буфер', action: () => this.copyBlock(block) }
+            ];
+            if (readBlockClipboard()) {
+              items.push({ icon: 'fa-paste', label: 'Вставить скопированный ниже', action: () => this.pasteBlockInto(list, list.indexOf(block) + 1) });
+            }
+            items.push({ icon: 'fa-check-square', label: 'Выделить (удалить несколько)', action: () => this.toggleBlockSelection(list, block) });
+            return items;
+          }
+        });
+        return;
+      }
+
       const el = this.ensureBlockActionsMenuEl();
       this._blockActionsMenuAnchor = anchorBtn;
       el.innerHTML = '';
@@ -2744,6 +2839,9 @@
     }
 
     closeBlockActionsMenu() {
+      if (window.EditorBlocks && typeof window.EditorBlocks.closeBlockActionMenu === 'function') {
+        window.EditorBlocks.closeBlockActionMenu();
+      }
       if (this._blockActionsMenuEl) this._blockActionsMenuEl.hidden = true;
     }
 

@@ -9,7 +9,7 @@
 
 В `public/index.html` подключены базовые стили, затем Chart.js и клиентские
 скрипты: `request-guard.js`, `auth-system.js`, `app.js`, `chip-field.js`,
-`spa-router.js`, `sidebar-manager.js`, `blocks-renderer.js`,
+`spa-router.js`, `sidebar-manager.js`, `blocks-renderer.js`, `editor-blocks.js`,
 `editor-manager.js`, `graph-view.js`, `antropedia.js`, `gallery.js`,
 `user-notifications.js`, `stickers-manager.js`, `feedback-manager.js`,
 `confirm-dialog.js`, `sticker-pack-view.js`, `sticker-store.js`, `backup-ui.js`,
@@ -29,7 +29,7 @@ CodeMirror, D3 и геометрические библиотеки. Ищите 
 | `public/views/*.html` | HTML-фрагменты экранов, подгружаемые приложением |
 | `src/routes/pages.routes.js`, `public/site/*.html`, `public/site/site.js`, `public/site/router.js`, `public/site/site.css` | Публичная витрина; клиентская SPA-навигация между публичными страницами, сервер рендерит article metadata для preview |
 | `public/site/alltell-client.js` | Каталог опубликованных франшиз, создание и воркспейс управления франшизами, роли, каналы, хабы, членство и лента AllTell |
-| `public/editor-manager.js`, `blocks-renderer.js`, `editor-blocks.css` | Редактор и отображение документов статей-блоков |
+| `public/editor-blocks.js`, `editor-manager.js`, `blocks-renderer.js`, `editor-blocks.css` | Общий модуль блоков (EditorBlocks), редактор и отображение документов статей и публикаций |
 | `public/antropedia.js`, `antropedia.css`, `editor-obsidian.css` | Вики-экран и оформление Antropedia |
 | `public/graph-view.js` | Граф статей |
 | `public/maps/*.js`, `maps.css` | Ядро карт, календарь, редактор, UI; см. `map-core.js` |
