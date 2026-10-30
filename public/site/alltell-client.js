@@ -933,14 +933,111 @@
     </div>`;
   }
 
+  function pickTextColor(hex) {
+    var c = String(hex || '').replace('#', '');
+    var full = c.length === 3 ? c.split('').map(function (ch) { return ch + ch; }).join('') : c.padEnd(6, '0').slice(0, 6);
+    var r = parseInt(full.slice(0, 2), 16), g = parseInt(full.slice(2, 4), 16), b = parseInt(full.slice(4, 6), 16);
+    var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6 ? '#1a1a1a' : '#ffffff';
+  }
+
+  var HIGHLIGHT_PRESETS = [
+    { hex: '#faa81a', label: 'Жёлтый (по умолчанию)' },
+    { hex: '#3ba55d', label: 'Зелёный' },
+    { hex: '#5865f2', label: 'Синий' },
+    { hex: '#ed4245', label: 'Красный' },
+    { hex: '#eb459e', label: 'Розовый' }
+  ];
+
+  var activePostHlPicker = null;
+
+  function closePostHighlightPicker() {
+    if (activePostHlPicker) {
+      activePostHlPicker.remove();
+      activePostHlPicker = null;
+    }
+  }
+
+  function openPostHighlightPicker(anchorBtn, form) {
+    if (activePostHlPicker) {
+      closePostHighlightPicker();
+      return;
+    }
+    var picker = document.createElement('div');
+    picker.className = 'alltell-color-picker';
+    var swatches = document.createElement('div');
+    swatches.className = 'eb-color-picker-swatches';
+
+    HIGHLIGHT_PRESETS.forEach(function (preset) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'eb-color-swatch';
+      btn.style.background = preset.hex;
+      btn.title = preset.label;
+      btn.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        applyPostFormat('highlight', form, { hex: preset.hex === '#faa81a' ? null : preset.hex });
+        closePostHighlightPicker();
+      });
+      swatches.appendChild(btn);
+    });
+
+    var custom = document.createElement('input');
+    custom.type = 'color';
+    custom.className = 'eb-color-swatch-custom';
+    custom.title = 'Свой цвет';
+    custom.value = '#faa81a';
+    custom.addEventListener('change', function () {
+      applyPostFormat('highlight', form, { hex: custom.value });
+      closePostHighlightPicker();
+    });
+    custom.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    swatches.appendChild(custom);
+    picker.appendChild(swatches);
+
+    document.body.appendChild(picker);
+    activePostHlPicker = picker;
+
+    var rect = anchorBtn.getBoundingClientRect();
+    var left = Math.max(10, Math.min(window.innerWidth - 200, rect.left - 10));
+    var top = rect.bottom + 6;
+    picker.style.top = top + 'px';
+    picker.style.left = left + 'px';
+
+    function onDocHlClick(e) {
+      if (picker.contains(e.target) || anchorBtn.contains(e.target)) return;
+      closePostHighlightPicker();
+      document.removeEventListener('mousedown', onDocHlClick);
+    }
+    setTimeout(function () {
+      document.addEventListener('mousedown', onDocHlClick);
+    }, 10);
+  }
+
   function formatPostBody(body) {
     if (!body) return '';
     var text = escapeHtml(body);
 
-    // Заголовки (###, ##, ####)
-    text = text.replace(/^(#{2,4})\s+(.+)$/gm, function (_, hashes, content) {
+    // Заголовки (#, ##, ###, ####)
+    text = text.replace(/^(#{1,4})\s+(.+)$/gm, function (_, hashes, content) {
       return '<div class="alltell-post-h' + hashes.length + '">' + content.trim() + '</div>';
     });
+
+    // Чек-листы
+    text = text.replace(/^[-*]\s+\[[xX]\]\s+(.+)$/gm, '<div class="alltell-checklist-item is-checked"><i class="fas fa-square-check"></i> <span>$1</span></div>');
+    text = text.replace(/^[-*]\s+\[\s*\]\s+(.+)$/gm, '<div class="alltell-checklist-item"><i class="far fa-square"></i> <span>$1</span></div>');
+
+    // Нумерованные списки
+    text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<div class="alltell-post-bullet alltell-post-ordered"><span class="alltell-bullet-num">$1.</span> <span>$2</span></div>');
+
+    // Маркированные списки
+    text = text.replace(/^[-*•]\s+(.+)$/gm, '<div class="alltell-post-bullet"><span class="alltell-bullet-dot">•</span> <span>$1</span></div>');
+
+    // Выделение цветом: ==текст==(#hex) или ==текст==
+    text = text.replace(/==([\s\S]+?)==\((#[0-9a-fA-F]{3,8})\)/g, function (_, content, hex) {
+      return '<mark class="alltell-post-highlight" style="background:' + hex + ';color:' + pickTextColor(hex) + ';">' + content + '</mark>';
+    });
+    text = text.replace(/==([\s\S]+?)==/g, '<mark class="alltell-post-highlight">$1</mark>');
 
     // Инлайн-спойлеры: ||скрытый текст||
     text = text.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="alltell-post-spoiler" title="Спойлер (нажмите для просмотра)" onclick="this.classList.toggle(\'is-revealed\')">$1</span>');
@@ -955,8 +1052,9 @@
     // Зачёркнутый текст: ~~текст~~
     text = text.replace(/~~([^~\n]+?)~~/g, '<del>$1</del>');
 
-    // Подчёркнутый текст: ++текст++
+    // Подчёркнутый текст: ++текст++ или <u>текст</u>
     text = text.replace(/\+\+([^\+\n]+?)\+\+/g, '<u>$1</u>');
+    text = text.replace(/&lt;u&gt;([\s\S]+?)&lt;\/u&gt;/gi, '<u>$1</u>');
 
     // Инлайн-код: `код`
     text = text.replace(/`([^`\n]+?)`/g, '<code class="alltell-inline-code">$1</code>');
@@ -967,14 +1065,14 @@
     // Цитаты: строки начинающиеся с &gt;
     text = text.replace(/^(?:&gt;|>)\s*(.+)$/gm, '<blockquote class="alltell-post-quote">$1</blockquote>');
 
-    // Списки: строки начинающиеся с - или *
-    text = text.replace(/^[-•]\s+(.+)$/gm, '<div class="alltell-post-bullet"><span class="alltell-bullet-dot">•</span> <span>$1</span></div>');
-
-    // Wiki-ссылки на Antropedia: [[slug|title]] или [[slug]]
+    // Wiki-ссылки на Antropedia: [[slug|title]], [[slug]] или [title]((slug))
     text = text.replace(/\[\[([^\]\|]+)(?:\|([^\]]+))?\]\]/g, function (_, slug, title) {
       var s = slug.trim();
       var t = (title || s).trim();
       return '<a href="/antropedia/' + encodeURIComponent(s) + '" class="alltell-post-wikilink"><i class="fas fa-book-bookmark"></i> ' + t + '</a>';
+    });
+    text = text.replace(/\[([^\]]+)\]\(\(([a-zA-Z0-9_\-\.]+)\)\)/g, function (_, title, slug) {
+      return '<a href="/antropedia/' + encodeURIComponent(slug.trim()) + '" class="alltell-post-wikilink"><i class="fas fa-book-bookmark"></i> ' + title.trim() + '</a>';
     });
 
     // Обычные markdown-ссылки: [название](url)
@@ -1095,14 +1193,25 @@
 
   function renderPostImageItems(images, disabled) {
     return images.map(function (image, index) {
-      return `<article class="alltell-form-image-item${image.file ? ' is-pending' : ''}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
+      var statusHtml = '';
+      if (image.uploading) {
+        statusHtml = '<span class="alltell-image-status is-uploading" title="Загрузка на сервер…"><i class="fas fa-spinner fa-spin"></i> Загрузка…</span>';
+      } else if (image.error) {
+        statusHtml = '<span class="alltell-image-status is-error" title="' + escapeHtml(image.error) + '"><i class="fas fa-triangle-exclamation"></i> Сбой</span>';
+      } else if (image.url) {
+        statusHtml = '<span class="alltell-image-status is-uploaded" title="Загружено на сервер"><i class="fas fa-check"></i> Загружено</span>';
+      } else if (image.file) {
+        statusHtml = '<span class="alltell-image-status is-new" title="Новое изображение (ещё не отправлено на сервер)"><i class="fas fa-cloud-arrow-up"></i> new</span>';
+      }
+
+      return `<article class="alltell-form-image-item${image.uploading ? ' is-uploading' : (image.url ? ' is-uploaded' : ' is-pending')}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
         <div class="alltell-form-image-thumb">
           <img class="alltell-form-image-preview" src="${escapeHtml(image.preview || image.url)}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
           <span class="alltell-form-image-order" title="Порядковый номер">${index + 1}</span>
           <button class="alltell-form-image-delete" type="button" data-action="remove-image" data-image-index="${index}" title="Удалить изображение" aria-label="Удалить изображение" ${disabled ? 'disabled' : ''}>
             <i class="fas fa-xmark" aria-hidden="true"></i>
           </button>
-          ${image.file ? '<span class="alltell-image-pending"><i class="fas fa-clock" aria-hidden="true"></i> Ожидает</span>' : ''}
+          ${statusHtml}
         </div>
         <div class="alltell-form-image-bar">
           <button class="alltell-form-image-nav" type="button" data-action="move-image" data-direction="-1" data-image-index="${index}" title="Переместить левее" aria-label="Переместить влево" ${index === 0 || disabled ? 'disabled' : ''}>
@@ -1132,44 +1241,122 @@
     }).join('');
   }
 
-  function applyPostFormat(format, form) {
+  function applyPostFormat(cmd, form, extra) {
+    extra = extra || {};
     var textarea = form ? form.querySelector('textarea[name="body"]') : null;
     if (!textarea) return;
     var start = textarea.selectionStart;
     var end = textarea.selectionEnd;
     var val = textarea.value;
+
+    if (cmd === 'heading') {
+      var level = parseInt(extra.level, 10) || 1;
+      var prefix = '#'.repeat(level) + ' ';
+      var lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      var lineEnd = val.indexOf('\n', end);
+      if (lineEnd === -1) lineEnd = val.length;
+      var selText = val.substring(lineStart, lineEnd);
+      var lines = selText.split('\n');
+      var allHave = lines.every(function (l) { return l.startsWith(prefix); });
+      var newLines = lines.map(function (l) {
+        if (allHave) return l.replace(/^#{1,6}\s+/, '');
+        return prefix + l.replace(/^#{1,6}\s+/, '');
+      });
+      var rep = newLines.join('\n');
+      textarea.value = val.substring(0, lineStart) + rep + val.substring(lineEnd);
+      textarea.selectionStart = lineStart;
+      textarea.selectionEnd = lineStart + rep.length;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.focus();
+      return;
+    }
+
+    if (cmd === 'list') {
+      var style = extra.style || 'bullet';
+      var lineStartL = val.lastIndexOf('\n', start - 1) + 1;
+      var lineEndL = val.indexOf('\n', end);
+      if (lineEndL === -1) lineEndL = val.length;
+      var selTextL = val.substring(lineStartL, lineEndL);
+      var linesL = selTextL.split('\n');
+
+      var newLinesL = [];
+      if (style === 'bullet') {
+        var allBullet = linesL.every(function (l) { return /^[-*•]\s+(?!\[[ xX]\])/.test(l); });
+        newLinesL = linesL.map(function (l) {
+          if (allBullet) return l.replace(/^[-*•]\s+/, '');
+          return '- ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
+        });
+      } else if (style === 'ordered') {
+        var allOrd = linesL.every(function (l) { return /^\d+\.\s+/.test(l); });
+        newLinesL = linesL.map(function (l, idx) {
+          if (allOrd) return l.replace(/^\d+\.\s+/, '');
+          return (idx + 1) + '. ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
+        });
+      } else if (style === 'checklist') {
+        var allCheck = linesL.every(function (l) { return /^[-*]\s+\[[ xX]\]\s+/.test(l); });
+        newLinesL = linesL.map(function (l) {
+          if (allCheck) return l.replace(/^[-*]\s+\[[ xX]\]\s+/, '');
+          return '- [ ] ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
+        });
+      }
+      var repL = newLinesL.join('\n');
+      textarea.value = val.substring(0, lineStartL) + repL + val.substring(lineEndL);
+      textarea.selectionStart = lineStartL;
+      textarea.selectionEnd = lineStartL + repL.length;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.focus();
+      return;
+    }
+
+    if (cmd === 'quote') {
+      var lineStartQ = val.lastIndexOf('\n', start - 1) + 1;
+      var lineEndQ = val.indexOf('\n', end);
+      if (lineEndQ === -1) lineEndQ = val.length;
+      var selTextQ = val.substring(lineStartQ, lineEndQ);
+      var linesQ = selTextQ.split('\n');
+      var allQuote = linesQ.every(function (l) { return /^>\s*/.test(l); });
+      var newLinesQ = linesQ.map(function (l) {
+        if (allQuote) return l.replace(/^>\s*/, '');
+        return '> ' + l.replace(/^[-*•]\s+|\d+\.\s+|> \s*|- \[[ xX]\]\s*/, '');
+      });
+      var repQ = newLinesQ.join('\n');
+      textarea.value = val.substring(0, lineStartQ) + repQ + val.substring(lineEndQ);
+      textarea.selectionStart = lineStartQ;
+      textarea.selectionEnd = lineStartQ + repQ.length;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.focus();
+      return;
+    }
+
+    // Inline commands
+    var before = '', after = '';
+    var placeholder = 'текст';
+    switch (cmd) {
+      case 'bold': before = '**'; after = '**'; placeholder = 'жирный текст'; break;
+      case 'italic': before = '*'; after = '*'; placeholder = 'курсив'; break;
+      case 'underline': before = '++'; after = '++'; placeholder = 'подчёркнутый текст'; break;
+      case 'strike': before = '~~'; after = '~~'; placeholder = 'зачёркнутый текст'; break;
+      case 'code': before = '`'; after = '`'; placeholder = 'код'; break;
+      case 'spoiler': before = '||'; after = '||'; placeholder = 'спойлер'; break;
+      case 'highlight':
+        before = '==';
+        after = extra.hex ? '==(' + extra.hex + ')' : '==';
+        placeholder = 'выделение';
+        break;
+      default: return;
+    }
+
     var selected = val.substring(start, end);
-
-    var before = '', after = '', replacement = '';
-    switch (format) {
-      case 'bold': before = '**'; after = '**'; break;
-      case 'italic': before = '*'; after = '*'; break;
-      case 'underline': before = '++'; after = '++'; break;
-      case 'strike': before = '~~'; after = '~~'; break;
-      case 'code': before = '`'; after = '`'; break;
-      case 'spoiler': before = '||'; after = '||'; break;
-      case 'heading': before = '### '; after = ''; break;
-      case 'quote': before = '> '; after = ''; break;
-      case 'list': before = '- '; after = ''; break;
-      case 'divider': replacement = '\n---\n'; break;
-    }
-
-    if (replacement) {
-      textarea.value = val.substring(0, start) + replacement + val.substring(end);
-      textarea.selectionStart = textarea.selectionEnd = start + replacement.length;
-    } else {
-      var leadWs = selected.match(/^\s*/)[0];
-      var trailWs = selected.match(/\s*$/)[0];
-      var core = selected.slice(leadWs.length, selected.length - trailWs.length);
-      if (!core && !selected) core = 'текст';
-      var inserted = leadWs + before + core + after + trailWs;
-      textarea.value = val.substring(0, start) + inserted + val.substring(end);
-      var newStart = start + leadWs.length + before.length;
-      var newEnd = newStart + core.length;
-      textarea.selectionStart = newStart;
-      textarea.selectionEnd = newEnd;
-    }
-
+    var leadWs = selected.match(/^\s*/)[0];
+    var trailWs = selected.match(/\s*$/)[0];
+    var core = selected.slice(leadWs.length, selected.length - trailWs.length);
+    if (!core && !selected) core = placeholder;
+    var inserted = leadWs + before + core + after + trailWs;
+    textarea.value = val.substring(0, start) + inserted + val.substring(end);
+    var newStart = start + leadWs.length + before.length;
+    var newEnd = newStart + core.length;
+    textarea.selectionStart = newStart;
+    textarea.selectionEnd = newEnd;
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.focus();
   }
@@ -1276,21 +1463,46 @@
                   <span>Текст публикации</span>
                 </label>
                 <div class="alltell-post-editor-box">
-                  <div class="alltell-post-toolbar" role="toolbar" aria-label="Панель форматирования">
-                    <div class="alltell-post-toolbar-group">
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="code" title="Код"><i class="fas fa-code"></i></button>
-                    </div>
-                    <div class="alltell-post-toolbar-separator"></div>
-                    <div class="alltell-post-toolbar-group">
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="heading" title="Подзаголовок"><i class="fas fa-heading"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="list" title="Список"><i class="fas fa-list-ul"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="spoiler" title="Инлайн-спойлер (скрытый текст)"><i class="fas fa-eye-slash"></i></button>
-                      <button type="button" class="alltell-post-tool-btn" data-post-cmd="divider" title="Разделитель"><i class="fas fa-minus"></i></button>
+                  <div class="editor-toolbar-sticky alltell-post-toolbar">
+                    <div class="toolbar-format-scroll" data-alltell-toolbar-scroll>
+                      <div class="toolbar-row toolbar-row-format" data-alltell-toolbar-row>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="bold" title="Жирный (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="italic" title="Курсив (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="underline" title="Подчёркнутый (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="strike" title="Зачёркнутый"><i class="fas fa-strikethrough"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="highlight" title="Выделение цветом"><i class="fas fa-highlighter"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="code" title="Код (строка)"><i class="fas fa-code"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">формат</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="spoiler" title="Инлайн-спойлер — скрытая фраза"><i class="fas fa-eye-slash"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">спойлер</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="heading" data-level="1" title="Заголовок 1"><i class="fas fa-heading"></i>1</button>
+                            <button type="button" class="toolbar-button" data-post-cmd="heading" data-level="2" title="Заголовок 2"><i class="fas fa-heading"></i>2</button>
+                            <button type="button" class="toolbar-button" data-post-cmd="heading" data-level="3" title="Заголовок 3"><i class="fas fa-heading"></i>3</button>
+                          </div>
+                          <span class="toolbar-group-label">заголовки</span>
+                        </div>
+                        <div class="toolbar-group-wrap">
+                          <div class="toolbar-group">
+                            <button type="button" class="toolbar-button" data-post-cmd="list" data-style="bullet" title="Маркированный список"><i class="fas fa-list-ul"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="list" data-style="ordered" title="Нумерованный список"><i class="fas fa-list-ol"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="list" data-style="checklist" title="Чек-лист"><i class="fas fa-check-square"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="quote" title="Цитата"><i class="fas fa-quote-right"></i></button>
+                          </div>
+                          <span class="toolbar-group-label">списки</span>
+                        </div>
+                      </div>
+                      <div class="toolbar-fade toolbar-fade-l"><i class="fas fa-chevron-left toolbar-fade-arrow"></i></div>
+                      <div class="toolbar-fade toolbar-fade-r"><i class="fas fa-chevron-right toolbar-fade-arrow"></i></div>
                     </div>
                   </div>
                   <textarea id="postBodyInput"
@@ -2465,7 +2677,7 @@
         ? post.images
         : (post && post.image_url ? [post.image_url] : []);
       state.postImages = images.map(function (url) {
-        return { url: url, preview: url, file: null };
+        return { url: url, preview: url, file: null, uploading: false, error: null };
       });
     }
 
@@ -2519,10 +2731,80 @@
       var form = root.querySelector('[data-post-form]');
       if (!form) return;
       var grid = form.querySelector('[data-post-image-grid]');
-      grid.innerHTML = renderPostImageItems(state.postImages, state.uploadingImages);
-      form.querySelector('[data-image-selection]').textContent = state.postImages.length
-        ? state.postImages.length + ' изображений · добавляйте ещё или изменяйте порядок'
-        : 'Можно добавить любое количество изображений';
+      if (grid) {
+        grid.innerHTML = renderPostImageItems(state.postImages, state.uploadingImages);
+      }
+      var badge = form.querySelector('[data-image-selection]');
+      if (badge) {
+        var total = state.postImages.length;
+        var uploaded = state.postImages.filter(function (img) { return img.url && !img.file; }).length;
+        var uploading = state.postImages.filter(function (img) { return img.uploading; }).length;
+        var errors = state.postImages.filter(function (img) { return img.error; }).length;
+
+        if (uploading > 0) {
+          badge.textContent = 'Загрузка: ' + uploaded + ' / ' + total;
+        } else if (errors > 0) {
+          badge.textContent = errors + ' с ошибкой · нажмите чтобы удалить';
+        } else if (total > 0 && uploaded === total) {
+          badge.textContent = total + ' загружено на сервер';
+        } else if (total > 0) {
+          badge.textContent = total + ' изображений';
+        } else {
+          badge.textContent = 'Перетащите или выберите';
+        }
+      }
+    }
+
+    async function uploadPendingPostImages() {
+      if (state.uploadingImages) return;
+      var pending = state.postImages.filter(function (img) { return img.file && !img.url && !img.uploading; });
+      if (!pending.length) return;
+
+      state.uploadingImages = true;
+      pending.forEach(function (img) {
+        img.uploading = true;
+        img.error = null;
+      });
+      renderPostImageQueue();
+
+      for (var i = 0; i < pending.length; i += IMAGE_UPLOAD_CHUNK) {
+        var chunk = pending.slice(i, i + IMAGE_UPLOAD_CHUNK);
+        var formData = new FormData();
+        chunk.forEach(function (img) { formData.append('images', img.file); });
+
+        try {
+          var uploadResponse = await fetch('/api/upload-images', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token() },
+            credentials: 'same-origin',
+            body: formData
+          });
+          var uploadResult = {};
+          try { uploadResult = await uploadResponse.json(); } catch (e) {}
+          if (!uploadResponse.ok || !Array.isArray(uploadResult.urls) || uploadResult.urls.length !== chunk.length) {
+            throw new Error(uploadResult.error || 'Не удалось загрузить изображения');
+          }
+          chunk.forEach(function (image, index) {
+            image.url = uploadResult.urls[index];
+            image.file = null;
+            image.uploading = false;
+            image.error = null;
+            if (image.preview && image.preview.startsWith('blob:')) {
+              URL.revokeObjectURL(image.preview);
+            }
+            image.preview = image.url;
+          });
+        } catch (err) {
+          chunk.forEach(function (image) {
+            image.uploading = false;
+            image.error = err.message || 'Ошибка загрузки';
+          });
+          notifyError('Ошибка загрузки изображений: ' + (err.message || 'Сбой сети'));
+        }
+        renderPostImageQueue();
+      }
+      state.uploadingImages = false;
+      renderPostImageQueue();
     }
 
     function addPostImages(fileList) {
@@ -2536,9 +2818,16 @@
         return;
       }
       files.forEach(function (file) {
-        state.postImages.push({ file: file, preview: URL.createObjectURL(file), url: null });
+        state.postImages.push({
+          file: file,
+          preview: URL.createObjectURL(file),
+          url: null,
+          uploading: false,
+          error: null
+        });
       });
       renderPostImageQueue();
+      uploadPendingPostImages();
     }
 
     function updateImageProgress(done, total, currentName) {
@@ -3753,35 +4042,17 @@
     }
 
     async function savePost(form, formData) {
+      if (state.uploadingImages) {
+        notifyError('Пожалуйста, дождитесь завершения загрузки изображений на сервер');
+        return;
+      }
       var pendingImages = state.postImages.filter(function (image) { return image.file && !image.url; });
-      var done = 0;
-      for (var i = 0; i < pendingImages.length; i += IMAGE_UPLOAD_CHUNK) {
-        var chunk = pendingImages.slice(i, i + IMAGE_UPLOAD_CHUNK);
-        updateImageProgress(done, pendingImages.length, chunk.length === 1
-          ? chunk[0].file.name
-          : `Пачка ${i + 1}–${i + chunk.length} из ${pendingImages.length}`);
-        var uploadData = new FormData();
-        chunk.forEach(function (image) { uploadData.append('images', image.file); });
-        var uploadResponse = await fetch('/api/upload-images', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + token() },
-          credentials: 'same-origin',
-          body: uploadData
-        });
-        var uploadResult = {};
-        try { uploadResult = await uploadResponse.json(); } catch (error) { /* Report the HTTP failure below. */ }
-        if (!uploadResponse.ok || !Array.isArray(uploadResult.urls) || uploadResult.urls.length !== chunk.length) {
-          throw new Error(uploadResult.error || 'Не удалось загрузить изображения');
-        }
-        chunk.forEach(function (image, index) {
-          image.url = uploadResult.urls[index];
-          image.file = null;
-          if (image.preview && image.preview.startsWith('blob:')) URL.revokeObjectURL(image.preview);
-          image.preview = image.url;
-        });
-        done += chunk.length;
-        updateImageProgress(done, pendingImages.length);
-        renderPostImageQueue();
+      if (pendingImages.length) {
+        await uploadPendingPostImages();
+      }
+      var failedImages = state.postImages.filter(function (image) { return image.error; });
+      if (failedImages.length) {
+        throw new Error('Некоторые изображения не удалось загрузить на сервер. Удалите их или попробуйте снова.');
       }
       var imageUrls = state.postImages.map(function (image) { return image.url; }).filter(Boolean);
       var postArticles = state.postArticles || [];
@@ -3811,7 +4082,7 @@
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
         ? 'Предложение отправлено создателю франшизы'
-        : (postId ? 'Публикация обновлена' : 'Публикация добавлена'));
+        : (postId ? 'Публикация обновлена' : 'Публикация сохранена'));
     }
 
     function renderArticleOptions(input) {
@@ -3872,12 +4143,31 @@
       options.hidden = false;
     }
 
+    function onMouseDown(event) {
+      var postCmdBtn = event.target.closest('[data-post-cmd]');
+      if (postCmdBtn) {
+        event.preventDefault();
+        var cmd = postCmdBtn.dataset.postCmd;
+        var form = postCmdBtn.closest('[data-post-form]') || root.querySelector('[data-post-form]');
+        if (cmd === 'highlight') {
+          openPostHighlightPicker(postCmdBtn, form);
+          return;
+        }
+        applyPostFormat(cmd, form, postCmdBtn.dataset);
+        return;
+      }
+    }
+
     async function onClick(event) {
       var postCmdBtn = event.target.closest('[data-post-cmd]');
       if (postCmdBtn) {
         var cmd = postCmdBtn.dataset.postCmd;
         var form = postCmdBtn.closest('[data-post-form]') || root.querySelector('[data-post-form]');
-        applyPostFormat(cmd, form);
+        if (cmd === 'highlight') {
+          openPostHighlightPicker(postCmdBtn, form);
+          return;
+        }
+        applyPostFormat(cmd, form, postCmdBtn.dataset);
         return;
       }
       var commentSticker = event.target.closest('.alltell-comment-sticker[data-pack-id]');
@@ -4318,6 +4608,9 @@
           } else if (key === 'u') {
             event.preventDefault();
             applyPostFormat('underline', form);
+          } else if (event.shiftKey && key === 'x') {
+            event.preventDefault();
+            applyPostFormat('strike', form);
           } else if (key === 'enter') {
             event.preventDefault();
             if (form) {
@@ -4380,6 +4673,15 @@
     }
 
     function onScroll(event) {
+      var toolbarRow = event.target.closest('[data-alltell-toolbar-row]');
+      if (toolbarRow) {
+        var scrollWrap = toolbarRow.closest('[data-alltell-toolbar-scroll]');
+        if (scrollWrap) {
+          var maxScroll = toolbarRow.scrollWidth - toolbarRow.clientWidth;
+          scrollWrap.classList.toggle('can-scroll-l', toolbarRow.scrollLeft > 2);
+          scrollWrap.classList.toggle('can-scroll-r', toolbarRow.scrollLeft < maxScroll - 2);
+        }
+      }
       var track = event.target.closest('[data-image-track]');
       if (!track) return;
       var carousel = track.closest('[data-image-carousel]');
@@ -4667,6 +4969,7 @@
       }
     }
 
+    root.addEventListener('mousedown', onMouseDown);
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
     root.addEventListener('keydown', onKeyDown);
@@ -4684,6 +4987,8 @@
     await refreshCurrentView();
     return function () {
       state.disposed = true;
+      closePostHighlightPicker();
+      root.removeEventListener('mousedown', onMouseDown);
       root.removeEventListener('click', onClick);
       root.removeEventListener('input', onInput);
       root.removeEventListener('keydown', onKeyDown);

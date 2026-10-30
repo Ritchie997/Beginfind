@@ -4175,55 +4175,123 @@
     box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22);
 }
 
-.alltell-post-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 7px 10px;
+.alltell-post-editor-box .editor-toolbar-sticky {
+    position: relative;
+    top: auto;
+    border-radius: 10px 10px 0 0;
     background: rgba(26, 28, 33, 0.95);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    flex-wrap: wrap;
-    user-select: none;
+    padding: 8px 10px;
+    z-index: 5;
 }
 
-.alltell-post-toolbar-group {
+.alltell-post-editor-box .toolbar-format-scroll {
+    position: relative;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 2px 0;
+    min-width: 0;
+}
+
+.alltell-post-editor-box .toolbar-format-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.alltell-post-editor-box .toolbar-row-format {
     display: flex;
-    align-items: center;
-    gap: 3px;
+    align-items: stretch;
+    gap: 4px;
+    min-width: max-content;
 }
 
-.alltell-post-toolbar-separator {
-    width: 1px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.12);
-    margin: 0 5px;
-    flex-shrink: 0;
+/* Color Picker Popup for Highlights */
+.alltell-color-picker {
+    position: fixed;
+    z-index: 10002;
+    background: #1e1f22;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    padding: 8px;
+    box-sizing: border-box;
 }
 
-.alltell-post-tool-btn {
-    display: inline-flex;
+.alltell-color-picker .eb-color-picker-swatches {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: transparent;
-    border: none;
-    color: var(--header-secondary);
-    font-size: 13px;
+    gap: 8px;
+}
+
+.alltell-color-picker .eb-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.15);
     cursor: pointer;
-    transition: all 0.15s ease;
+    padding: 0;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.alltell-color-picker .eb-color-swatch:hover {
+    border-color: #fff;
+    transform: scale(1.15);
+}
+
+.alltell-color-picker .eb-color-swatch-custom {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    overflow: hidden;
+    padding: 0;
+    cursor: pointer;
+    background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+}
+
+.alltell-color-picker .eb-color-swatch-custom::-webkit-color-swatch-wrapper {
     padding: 0;
 }
 
-.alltell-post-tool-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    transform: translateY(-1px);
+.alltell-post-highlight {
+    background: #faa81a;
+    color: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
-.alltell-post-tool-btn:active {
-    transform: translateY(0);
+.alltell-checklist-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 4px 0;
+    line-height: 1.5;
+}
+
+.alltell-checklist-item i {
+    color: var(--header-secondary, #b9bbbe);
+    font-size: 13.5px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.alltell-checklist-item.is-checked i {
+    color: #818cf8;
+}
+
+.alltell-checklist-item.is-checked span {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.alltell-post-bullet.alltell-post-ordered .alltell-bullet-num {
+    font-weight: 700;
+    color: #818cf8;
+    min-width: 18px;
+    display: inline-block;
+    flex-shrink: 0;
 }
 
 .alltell-post-body-input {
@@ -4576,24 +4644,56 @@
     cursor: not-allowed;
 }
 
-.alltell-image-pending {
+.alltell-image-status {
     position: absolute;
     bottom: 6px;
     left: 6px;
     right: 6px;
     padding: 3px 6px;
     border-radius: 6px;
-    background: rgba(245, 158, 11, 0.85);
-    backdrop-filter: blur(4px);
-    color: #111;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     font-size: 10.5px;
     font-weight: 700;
     text-align: center;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 5px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
     z-index: 2;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.alltell-image-status.is-uploaded {
+    background: rgba(46, 204, 113, 0.9);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.alltell-image-status.is-uploading {
+    background: rgba(88, 101, 242, 0.92);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.alltell-image-status.is-new {
+    background: rgba(245, 158, 11, 0.9);
+    color: #111;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.alltell-image-status.is-error {
+    background: rgba(237, 66, 69, 0.92);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.alltell-form-image-item.is-uploading .alltell-form-image-preview {
+    opacity: 0.75;
+    filter: brightness(0.85);
 }
 
 .alltell-form-image-bar {
