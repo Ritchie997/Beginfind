@@ -85,6 +85,12 @@
   color: var(--red, #ed4245);
 }
 
+/* В редакторе публикаций AllTell на блоках скрыты стрелки вверх/вниз (перемещение — через drag&drop или меню позиции) */
+#postBlocksContent .eb-move-btn,
+.alltell-post-form .eb-move-btn {
+  display: none !important;
+}
+
 /* Кнопка "⋮" (открывает попап с теми же тремя действиями, см.
    openBlockActionsMenu в editor-manager.js) — замена стека из трёх кнопок
    .eb-block-controls именно на тач-экране, где :hover физически не работает.

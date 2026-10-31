@@ -2955,11 +2955,11 @@
     updateUndoRedoButtons() {
       const canUndo = !!(this._history && this._historyIndex > 0);
       const canRedo = !!(this._history && this._historyIndex < this._history.length - 1);
-      document.querySelectorAll('[data-history-command="undo"], #editorUndoBtn').forEach((btn) => {
+      document.querySelectorAll('[data-history-command="undo"], [data-post-cmd="undo"], #editorUndoBtn').forEach((btn) => {
         btn.disabled = !canUndo;
         btn.classList.toggle('is-disabled', !canUndo);
       });
-      document.querySelectorAll('[data-history-command="redo"], #editorRedoBtn').forEach((btn) => {
+      document.querySelectorAll('[data-history-command="redo"], [data-post-cmd="redo"], #editorRedoBtn').forEach((btn) => {
         btn.disabled = !canRedo;
         btn.classList.toggle('is-disabled', !canRedo);
       });
@@ -2984,10 +2984,10 @@
         });
       });
 
-      toolbar.querySelectorAll('[data-history-command]').forEach((btn) => {
+      toolbar.querySelectorAll('[data-history-command], [data-post-cmd="undo"], [data-post-cmd="redo"]').forEach((btn) => {
         const handler = (e) => {
           e.preventDefault();
-          const cmd = btn.getAttribute('data-history-command');
+          const cmd = btn.getAttribute('data-history-command') || btn.getAttribute('data-post-cmd');
           if (cmd === 'undo') this.undo();
           else if (cmd === 'redo') this.redo();
         };

@@ -329,7 +329,12 @@
       if (opts.onRemove) opts.onRemove();
     });
 
-    controls.append(dragBtn, upBtn, downBtn, dupBtn, delBtn);
+    const showMoveButtons = opts.showMoveButtons !== false && opts.showUpDown !== false;
+    if (showMoveButtons) {
+      controls.append(dragBtn, upBtn, downBtn, dupBtn, delBtn);
+    } else {
+      controls.append(dragBtn, dupBtn, delBtn);
+    }
 
     // Мобильная / компактная кнопка меню
     const moreBtn = document.createElement('button');

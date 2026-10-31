@@ -150,6 +150,16 @@ assert.strictEqual(duplicatedCalled, true, 'Clicking dupBtn must invoke onDuplic
 delBtn._listeners.click[0]({ stopPropagation: () => {} });
 assert.strictEqual(removedCalled, true, 'Clicking delBtn must invoke onRemove()');
 
+// Test renderBlockControls without move buttons (for publication editor)
+const controlsWithoutMove = EB.renderBlockControls({
+  block: list[0],
+  list: list,
+  index: 0,
+  showMoveButtons: false
+});
+assert.strictEqual(controlsWithoutMove.controls.children.length, 3, 'controls with showMoveButtons:false must contain 3 buttons: drag, duplicate, delete (no up/down arrows)');
+
+
 // Test renderCoreBlockBody
 console.log('Testing renderCoreBlockBody...');
 const paraBlock = EB.createBlock('paragraph', { markdown: 'Testing core body' });

@@ -2653,6 +2653,7 @@
           list: state.postBlocks,
           index: idx,
           wrap: wrap,
+          showMoveButtons: false,
           onMove: function (dir) {
             movePostBlock(state, block.id, dir);
           },

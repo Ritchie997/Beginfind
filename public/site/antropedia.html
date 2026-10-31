@@ -413,6 +413,13 @@
                     <div class="toolbar-row toolbar-row-format" id="toolbarFormatRow">
                       <div class="toolbar-group-wrap">
                         <div class="toolbar-group">
+                          <button type="button" class="toolbar-button" data-history-command="undo" data-post-cmd="undo" id="editorUndoBtn" title="Отменить (Ctrl+Z)" disabled><i class="fas fa-rotate-left"></i></button>
+                          <button type="button" class="toolbar-button" data-history-command="redo" data-post-cmd="redo" id="editorRedoBtn" title="Повторить (Ctrl+Y / Ctrl+Shift+Z)" disabled><i class="fas fa-rotate-right"></i></button>
+                        </div>
+                        <span class="toolbar-group-label">история</span>
+                      </div>
+                      <div class="toolbar-group-wrap">
+                        <div class="toolbar-group">
                           <button type="button" class="toolbar-button" data-block-command="paragraph" title="Текст — новый абзац"><i class="fas fa-paragraph"></i></button>
                         </div>
                         <span class="toolbar-group-label">текст</span>
