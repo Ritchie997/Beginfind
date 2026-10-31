@@ -239,7 +239,7 @@
     const prevMin = holder ? holder.style.minHeight : '';
     if (holder) holder.style.minHeight = `${holder.offsetHeight}px`;
     el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${Math.max(26, el.scrollHeight)}px`;
     if (holder) holder.style.minHeight = prevMin;
     if (scroller.scrollTop !== prevScroll) scrollToInstant(prevScroll);
   }
@@ -2891,13 +2891,6 @@
       if (this._historyDebounce) {
         clearTimeout(this._historyDebounce);
         this._historyDebounce = null;
-        const currentSnapshot = JSON.stringify(this.doc.blocks);
-        if (this._historyIndex >= 0 && this._history[this._historyIndex] !== currentSnapshot) {
-          this._history = this._history.slice(0, this._historyIndex + 1);
-          this._history.push(currentSnapshot);
-          if (this._history.length > 50) this._history.shift();
-          this._historyIndex = this._history.length - 1;
-        }
       }
 
       if (this._historyIndex <= 0) return;
@@ -2994,15 +2987,29 @@
         });
       });
 
+      let lastHistoryActionTime = 0;
+      const handleHistoryCmd = (btn, e) => {
+        if (e) e.preventDefault();
+        const now = Date.now();
+        if (now - lastHistoryActionTime < 250) return;
+        lastHistoryActionTime = now;
+        const cmd = btn.getAttribute('data-history-command') || btn.getAttribute('data-post-cmd');
+        if (cmd === 'undo') this.undo();
+        else if (cmd === 'redo') this.redo();
+      };
+
       toolbar.querySelectorAll('[data-history-command], [data-post-cmd="undo"], [data-post-cmd="redo"]').forEach((btn) => {
-        const handler = (e) => {
-          e.preventDefault();
-          const cmd = btn.getAttribute('data-history-command') || btn.getAttribute('data-post-cmd');
-          if (cmd === 'undo') this.undo();
-          else if (cmd === 'redo') this.redo();
-        };
-        btn.addEventListener('mousedown', handler);
-        btn.addEventListener('click', handler);
+        if (btn._historyBound) return;
+        btn._historyBound = true;
+        btn.addEventListener('mousedown', (e) => {
+          handleHistoryCmd(btn, e);
+        });
+        btn.addEventListener('click', (e) => {
+          // Keyboard activation (Enter/Space on focused button) has e.detail === 0.
+          // Mouse clicks are handled by mousedown and ignored here.
+          if (e.detail !== 0) return;
+          handleHistoryCmd(btn, e);
+        });
       });
       this.updateUndoRedoButtons();
 
@@ -3189,6 +3196,19 @@
         if (!this._selectedIds.size || e.defaultPrevented || this._drag) return;
         const ae = document.activeElement;
         const typing = ae && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
+
+        if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ') && !typing) {
+          e.preventDefault();
+          if (e.shiftKey) this.redo();
+          else this.undo();
+          return;
+        }
+        if (mod && (e.key.toLowerCase() === 'y' || e.code === 'KeyY') && !typing) {
+          e.preventDefault();
+          this.redo();
+          return;
+        }
+
         if (e.key === 'Escape') {
           this.clearBlockSelection();
         } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) {
