@@ -1182,6 +1182,7 @@
         if (onInput) onInput(ta.value);
         this.scheduleRenderPreview();
         this.updateWikilinkSuggest(ta);
+        this.recordHistory(false);
       });
       ta.addEventListener('keydown', (e) => this.handleTextKeydown(e, ta));
       // Палец на списке автодополнения (прокрутка/выбор) не должен закрывать его
@@ -1199,7 +1200,10 @@
     // показывал список статей — вставка ссылки в них молча не работала.
     wireWikilinkField(el, list, block) {
       el.addEventListener('focus', () => this.setActive(list, block, el));
-      el.addEventListener('input', () => this.updateWikilinkSuggest(el));
+      el.addEventListener('input', () => {
+        this.updateWikilinkSuggest(el);
+        this.recordHistory(false);
+      });
       el.addEventListener('keydown', (e) => this.handleTextKeydown(e, el));
       el.addEventListener('blur', () => setTimeout(() => { if (!this._suggestTouching) this.closeSuggest(); }, 150));
     }
@@ -2904,6 +2908,9 @@
         this._isApplyingHistory = true;
         this.doc.blocks = JSON.parse(snapshot);
         this.clearBlockSelection();
+        if (this._active && this._active.block && this._active.block.id) {
+          this._pendingFocusBlockId = this._active.block.id;
+        }
         this.renderAll();
         this.scheduleRenderPreview(true);
       } catch (err) {
@@ -2928,6 +2935,9 @@
         this._isApplyingHistory = true;
         this.doc.blocks = JSON.parse(snapshot);
         this.clearBlockSelection();
+        if (this._active && this._active.block && this._active.block.id) {
+          this._pendingFocusBlockId = this._active.block.id;
+        }
         this.renderAll();
         this.scheduleRenderPreview(true);
       } catch (err) {
