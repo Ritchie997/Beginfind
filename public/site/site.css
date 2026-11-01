@@ -2182,6 +2182,8 @@
 .alltell-search-box {
     position: relative;
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
     width: min(100%, 440px);
@@ -2252,6 +2254,7 @@
 }
 
 .alltell-search-btn {
+    width: auto;
     border-radius: 999px;
     padding: 9px 18px;
     font-size: 13px;
@@ -5911,21 +5914,45 @@
     .alltell-search-box {
         width: 100%;
         display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
         align-items: center;
         gap: 8px;
+        position: relative;
+    }
+    .alltell-search-input-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        position: relative;
+        display: flex;
+        align-items: center;
     }
     .alltell-search-input-wrap input {
+        width: 100%;
+        min-width: 0;
         height: 42px;
         padding: 0 38px;
         font-size: 13.5px;
         border-radius: 999px;
+        box-sizing: border-box;
     }
-    .alltell-search-btn {
-        height: 42px;
-        padding: 0 18px;
-        border-radius: 999px;
-        font-size: 13.5px;
-        font-weight: 600;
+    .alltell-search-btn,
+    .alltell-search-box .btn.alltell-search-btn {
+        width: auto !important;
+        max-width: none !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        height: 42px !important;
+        padding: 0 18px !important;
+        min-width: 76px !important;
+        border-radius: 999px !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+        box-sizing: border-box !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
 
     /* Элементы управления под кнопкой «Найти» уместить в 1-2 строки */
