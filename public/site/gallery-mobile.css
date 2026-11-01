@@ -116,12 +116,14 @@
      2. Панель управления, фильтры и свайп тегов
      -------------------------------------------------------------------------- */
   .gallery-toolbar-container {
-    margin-bottom: 8px !important;
+    margin: 0 0 8px 0 !important;
+    padding: 0 !important;
   }
 
   .gallery-toolbar {
     position: static !important;
     padding: 0 !important;
+    margin: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
     border: none !important;
@@ -131,7 +133,8 @@
   }
 
   .gallery-toolbar-header {
-    margin-bottom: 8px !important;
+    margin: 0 0 6px 0 !important;
+    padding: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
@@ -141,6 +144,7 @@
     font-size: 16px !important;
     font-weight: 700 !important;
     margin: 0 !important;
+    padding: 0 !important;
     display: flex !important;
     align-items: center !important;
     gap: 7px !important;
@@ -152,14 +156,23 @@
     color: var(--accent-teal, #2dd4bf) !important;
   }
 
-  .gallery-toolbar-header p {
-    display: none !important; /* Убираем пустой длинный текст на мобильных */
+  .gallery-toolbar-header p,
+  .gallery-toolbar-desc {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+    overflow: hidden !important;
   }
 
   .gallery-toolbar-controls {
     display: flex !important;
     flex-direction: column !important;
-    gap: 7px !important;
+    gap: 6px !important;
+    margin: 0 !important;
+    padding: 0 !important;
     width: 100% !important;
   }
 
@@ -170,12 +183,15 @@
     display: flex !important;
     align-items: center !important;
     min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .gallery-search-input {
     width: 100% !important;
     min-width: 0 !important;
     height: 38px !important;
+    margin: 0 !important;
     padding: 0 14px 0 36px !important;
     font-size: 13px !important;
     border-radius: 999px !important;
@@ -212,6 +228,8 @@
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 6px !important;
+    margin: 0 !important;
+    padding: 0 !important;
     width: 100% !important;
   }
 
