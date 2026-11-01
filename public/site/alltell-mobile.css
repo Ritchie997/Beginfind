@@ -1,0 +1,1180 @@
+/* ==========================================================================
+   AllTell Mobile Stylesheet (Independent Mobile-First View for Screens <= 768px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+
+  /* --------------------------------------------------------------------------
+     1. Базовый каркас и общий вид страницы
+     -------------------------------------------------------------------------- */
+  body[data-page="alltell"] {
+    overflow-x: clip;
+  }
+
+  body[data-page="alltell"] .site-main {
+    padding: 0;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: clip;
+  }
+
+  body[data-page="alltell"] .alltell-app-section {
+    padding: 14px 12px 36px !important;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: clip;
+  }
+
+  /* AllTell Hero Section */
+  .alltell-hero-section {
+    padding: 30px 16px 24px !important;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .alltell-hero-glow {
+    width: 280px !important;
+    height: 160px !important;
+    top: -40px !important;
+    filter: blur(32px) !important;
+  }
+
+  .alltell-hero-section .site-hero-badge {
+    font-size: 12px !important;
+    padding: 4px 10px !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .alltell-hero-section h1 {
+    font-size: 21px !important;
+    line-height: 1.25 !important;
+    font-weight: 800 !important;
+    margin: 6px 0 8px !important;
+    letter-spacing: -0.01em;
+  }
+
+  .alltell-hero-section p {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    max-width: 360px !important;
+    margin: 0 auto 14px !important;
+  }
+
+  .alltell-hero-features {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    margin: 0 auto 16px !important;
+    max-width: 360px !important;
+  }
+
+  .alltell-hero-feature {
+    padding: 5px 10px !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .alltell-hero-section .site-hero-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+  }
+
+  .alltell-hero-section .site-hero-actions .btn {
+    width: 100% !important;
+    height: 42px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Переключатель разделов: Лента подписок / Каталог франшиз */
+  .alltell-tabs-wrapper {
+    width: 100% !important;
+    margin: 0 0 16px !important;
+  }
+
+  .alltell-view-tabs {
+    width: 100% !important;
+    max-width: 420px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    padding: 4px !important;
+    gap: 4px !important;
+    border-radius: 999px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-tab-btn {
+    flex: 1 1 50% !important;
+    height: 40px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    white-space: nowrap !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--header-secondary, #949ba4) !important;
+    transition: all 0.15s ease !important;
+    cursor: pointer !important;
+    touch-action: manipulation;
+  }
+
+  .alltell-tab-btn.active {
+    background: var(--blurple, #5865f2) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(88, 101, 242, 0.35) !important;
+  }
+
+  .alltell-tab-btn .alltell-tab-badge,
+  .alltell-tab-btn .alltell-tab-counter {
+    font-size: 10.5px !important;
+    padding: 2px 6px !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+  }
+
+
+  /* --------------------------------------------------------------------------
+     2. Каталог франшиз и карточки сообществ
+     -------------------------------------------------------------------------- */
+  .alltell-toolbar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    margin-top: 4px !important;
+  }
+
+  .alltell-toolbar-header h2 {
+    font-size: 19px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  .alltell-toolbar-header p {
+    font-size: 12.5px !important;
+    line-height: 1.4 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    margin: 4px 0 0 !important;
+  }
+
+  .alltell-search-box {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  .alltell-search-input-wrap {
+    flex: 1 1 auto !important;
+    position: relative !important;
+  }
+
+  .alltell-search-input-wrap input {
+    width: 100% !important;
+    height: 42px !important;
+    padding: 0 36px 0 38px !important;
+    font-size: 13.5px !important;
+    border-radius: 999px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-search-input-wrap .alltell-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--header-secondary, #949ba4);
+    pointer-events: none;
+    font-size: 13px;
+  }
+
+  .alltell-search-input-wrap .alltell-search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--header-secondary, #949ba4);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .alltell-search-btn {
+    height: 42px !important;
+    padding: 0 18px !important;
+    min-width: 80px !important;
+    border-radius: 999px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    touch-action: manipulation !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .alltell-search-btn:active {
+    transform: scale(0.96);
+  }
+
+  /* Фильтры под кнопкой «Найти»: ровно 2 аккуратные строки */
+  .alltell-filter-chips {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 7px !important;
+    margin-top: 10px !important;
+    padding: 6px 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .alltell-filter-chips::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .alltell-filter-chip {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    padding: 6px 13px !important;
+    border-radius: 999px !important;
+    height: 33px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    cursor: pointer !important;
+    touch-action: manipulation;
+  }
+
+  .alltell-filter-chip.active {
+    background: var(--blurple, #5865f2) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
+  }
+
+  /* Строка 2: выпадающие списки в 2 равные колонки */
+  .alltell-catalog-controls {
+    margin-top: 8px !important;
+    padding-top: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .alltell-controls-selects {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .alltell-controls-selects .alltell-select {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 38px !important;
+    padding: 6px 10px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    border-radius: 10px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-catalog-controls .alltell-stats-chips {
+    display: none !important;
+  }
+
+  /* Карточки каталога франшиз */
+  .alltell-live-section {
+    margin-bottom: 24px !important;
+  }
+
+  .alltell-live-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-auto-flow: row !important;
+    gap: 14px !important;
+    width: 100% !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .alltell-live-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+  }
+
+  .alltell-live-card-banner {
+    height: 74px !important;
+    position: relative !important;
+    width: 100% !important;
+  }
+
+  /* Бейджи карточки строго в верхнем правом углу баннера */
+  .alltell-card-banner-badges {
+    position: absolute !important;
+    top: 8px !important;
+    right: 10px !important;
+    z-index: 3 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .alltell-card-member-pill,
+  .alltell-card-owner-pill,
+  .alltell-unread-badge {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    padding: 3px 9px !important;
+    border-radius: 999px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  .alltell-card-member-pill {
+    background: #23a55a !important;
+    color: #ffffff !important;
+  }
+
+  .alltell-card-owner-pill {
+    background: #f0b232 !important;
+    color: #000000 !important;
+  }
+
+  .alltell-live-avatar {
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 15px !important;
+    border: 3px solid var(--background-secondary, #2b2d31) !important;
+    margin-top: -26px !important;
+    margin-left: 14px !important;
+    position: relative !important;
+    z-index: 2 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .alltell-live-card-content {
+    padding: 0 14px 14px !important;
+    margin-top: -26px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+  }
+
+  .alltell-live-title-row {
+    margin-top: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .alltell-live-title-row h3 {
+    font-size: 16.5px !important;
+    font-weight: 700 !important;
+    color: var(--text-normal, #dbdee1) !important;
+    margin: 0 !important;
+    line-height: 1.3 !important;
+  }
+
+  .alltell-live-description {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    margin: 8px 0 12px !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+    line-clamp: 3 !important;
+    overflow: hidden !important;
+    min-height: auto !important;
+    max-height: none !important;
+  }
+
+  .alltell-live-chips {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .alltell-meta-chip {
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    padding: 4px 10px !important;
+    border-radius: 8px !important;
+    background: var(--background-primary, #313338) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-normal, #dbdee1) !important;
+  }
+
+  .alltell-card-hubs-toggle {
+    width: 100% !important;
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+    border-radius: 8px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    color: var(--text-muted, #949ba4) !important;
+    margin-bottom: 4px !important;
+    cursor: pointer !important;
+    touch-action: manipulation;
+  }
+
+  .alltell-card-hubs-flyout {
+    position: static !important;
+    width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    box-sizing: border-box !important;
+    margin-top: 6px !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .alltell-live-card-foot {
+    margin-top: auto !important;
+    padding-top: 10px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .alltell-members-count {
+    font-size: 12px !important;
+    color: var(--header-secondary, #949ba4) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+  }
+
+  .alltell-card-action {
+    height: 36px !important;
+    padding: 0 14px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+  }
+
+  .alltell-live-open-btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+
+  /* --------------------------------------------------------------------------
+     3. Лента подписок
+     -------------------------------------------------------------------------- */
+  .alltell-feed-view {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .alltell-guest-showcase {
+    padding: 24px 16px !important;
+    border-radius: 16px !important;
+    margin: 14px 0 24px !important;
+    text-align: center !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .alltell-guest-showcase h3 {
+    font-size: 19px !important;
+    font-weight: 800 !important;
+    margin: 0 0 8px !important;
+  }
+
+  .alltell-guest-showcase p {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    margin-bottom: 16px !important;
+  }
+
+  .alltell-guest-features {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    margin-bottom: 18px !important;
+    text-align: left !important;
+  }
+
+  .alltell-guest-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+  }
+
+  .alltell-guest-actions .btn {
+    width: 100% !important;
+    height: 40px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 999px !important;
+    justify-content: center !important;
+  }
+
+  /* Карточки публикаций в ленте */
+  .alltell-post-card {
+    padding: 14px !important;
+    border-radius: 14px !important;
+    margin-bottom: 14px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-post-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .alltell-post-avatar {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .alltell-post-meta {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .alltell-post-author-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .alltell-author-link {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: var(--text-normal, #dbdee1) !important;
+    text-decoration: none !important;
+  }
+
+  .alltell-post-body {
+    font-size: 13.5px !important;
+    line-height: 1.55 !important;
+    color: var(--text-normal, #dbdee1) !important;
+    word-break: break-word !important;
+  }
+
+  .alltell-post-body img {
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 10px !important;
+    margin: 8px 0 !important;
+  }
+
+  .alltell-social-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-top: 12px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .alltell-reaction-bar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding-bottom: 2px !important;
+  }
+
+  .alltell-reaction-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .alltell-reaction-btn {
+    height: 32px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+  }
+
+  .alltell-social-actions {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+
+  /* --------------------------------------------------------------------------
+     4. Управление и просмотр франшизы (Внутри сообщества)
+     -------------------------------------------------------------------------- */
+  .alltell-detail-view {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .alltell-detail-navigation {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .alltell-back-link {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* Шапка франшизы (Franchise Hero) */
+  .alltell-franchise-hero {
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-bottom: 16px !important;
+  }
+
+  .alltell-franchise-cover {
+    height: 110px !important;
+    position: relative !important;
+    width: 100% !important;
+  }
+
+  .alltell-franchise-header-body {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 0 14px 16px !important;
+  }
+
+  .alltell-franchise-avatar {
+    width: 68px !important;
+    height: 68px !important;
+    border-radius: 18px !important;
+    margin-top: -34px !important;
+    border: 3px solid var(--background-secondary, #2b2d31) !important;
+    font-size: 24px !important;
+    font-weight: 800 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  .alltell-franchise-meta {
+    margin-top: 8px !important;
+    width: 100% !important;
+  }
+
+  .alltell-franchise-title-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .alltell-franchise-title-row h2 {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+  }
+
+  .alltell-franchise-desc {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    margin: 8px auto 12px !important;
+    max-width: 440px !important;
+  }
+
+  .alltell-franchise-stats {
+    display: flex !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .alltell-franchise-actions {
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 12px auto 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .alltell-franchise-actions .btn {
+    width: 100% !important;
+    height: 40px !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+    border-radius: 999px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Вкладки навигации внутри франшизы: свайп-полоса в стиле нативных табов */
+  .alltell-detail-subnav-container {
+    margin-bottom: 16px !important;
+    width: 100% !important;
+  }
+
+  .alltell-detail-subnav {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding: 5px !important;
+    border-radius: 12px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    max-height: none !important;
+  }
+
+  .alltell-detail-subnav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .alltell-subnav-btn {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    white-space: nowrap !important;
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    background: transparent !important;
+    border: none !important;
+    color: var(--header-secondary, #949ba4) !important;
+    touch-action: manipulation;
+  }
+
+  .alltell-subnav-btn.active {
+    background: var(--background-primary, #313338) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .alltell-subnav-btn .alltell-count-badge {
+    font-size: 10.5px !important;
+    padding: 2px 6px !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Хабы франшизы */
+  .alltell-hub-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .alltell-hub-card {
+    padding: 14px !important;
+    border-radius: 12px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  }
+
+  /* Рабочее пространство франшизы (Workspace) */
+  .alltell-workspace {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+  }
+
+  .alltell-workspace-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding: 6px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border-radius: 12px !important;
+    margin-bottom: 14px !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .alltell-workspace-nav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .alltell-ws-tab-btn {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: transparent !important;
+    border: none !important;
+    color: var(--header-secondary, #949ba4) !important;
+    touch-action: manipulation;
+  }
+
+  .alltell-ws-tab-btn.active {
+    background: var(--blurple, #5865f2) !important;
+    color: #ffffff !important;
+  }
+
+  .alltell-workspace-body {
+    padding: 14px !important;
+    border-radius: 14px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .alltell-ws-stats-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .alltell-ws-stat-card {
+    padding: 12px !important;
+    border-radius: 10px !important;
+    text-align: center !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+  }
+
+  /* Список участников */
+  .alltell-member-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    border-radius: 10px !important;
+    margin-bottom: 6px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+  }
+
+  .alltell-member-info {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+
+  /* Таблицы участников и ролей внутри Workspace */
+  .alltell-ws-section-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .alltell-ws-section-header .btn {
+    width: 100% !important;
+    height: 38px !important;
+    justify-content: center !important;
+  }
+
+  .alltell-table-wrap {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 10px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-top: 10px !important;
+  }
+
+  .alltell-table {
+    width: 100% !important;
+    min-width: 480px !important;
+    border-collapse: collapse !important;
+  }
+
+  .alltell-table th,
+  .alltell-table td {
+    padding: 8px 10px !important;
+    font-size: 12.5px !important;
+  }
+
+  /* Форма редактирования хаба */
+  .alltell-hub-edit-form {
+    padding: 14px !important;
+    border-radius: 12px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    margin-bottom: 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .alltell-hub-edit-form input[type="text"],
+  .alltell-hub-edit-form textarea {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    color: var(--text-normal, #dbdee1) !important;
+  }
+
+  .alltell-hub-edit-form input[type="text"] {
+    height: 42px !important;
+  }
+
+
+  /* --------------------------------------------------------------------------
+     5. Настройки франшиз (Franchise Settings)
+     -------------------------------------------------------------------------- */
+  form[data-settings-form] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-field {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .alltell-field-label {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--text-normal, #dbdee1) !important;
+  }
+
+  form[data-settings-form] input[type="text"],
+  form[data-settings-form] textarea {
+    width: 100% !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    box-sizing: border-box !important;
+  }
+
+  form[data-settings-form] input[type="text"] {
+    height: 42px !important;
+  }
+
+  form[data-settings-form] #save-settings-btn {
+    width: 100% !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 10px !important;
+    margin-top: 6px !important;
+  }
+
+  .alltell-danger-box {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    margin-top: 24px !important;
+    border: 1px solid rgba(237, 66, 69, 0.4) !important;
+    background: rgba(237, 66, 69, 0.08) !important;
+    box-sizing: border-box !important;
+  }
+
+  .alltell-danger-box h4 {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: var(--status-danger, #ed4245) !important;
+    margin: 0 0 6px !important;
+  }
+
+  .alltell-danger-box p {
+    font-size: 12.5px !important;
+    line-height: 1.45 !important;
+    color: var(--text-muted, #949ba4) !important;
+    margin: 0 0 12px !important;
+  }
+
+  .alltell-danger-box .btn-danger {
+    width: 100% !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    border-radius: 10px !important;
+  }
+
+  .alltell-perm-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .alltell-perm-row {
+    padding: 10px 12px !important;
+    border-radius: 8px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+  }
+
+  /* Нижний баннер создания франшизы */
+  .alltell-create-banner {
+    padding: 22px 14px !important;
+    border-radius: 16px !important;
+    margin-top: 24px !important;
+    text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .alltell-create-banner-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 10px !important;
+  }
+
+  .alltell-create-banner-actions .btn {
+    width: 100% !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+    border-radius: 999px !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     6. Модальные окна AllTell на мобильных
+     -------------------------------------------------------------------------- */
+  .alltell-modal-overlay {
+    padding: 16px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .alltell-modal-box {
+    width: 100% !important;
+    max-width: 440px !important;
+    max-height: calc(100vh - 32px) !important;
+    border-radius: 16px !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .alltell-modal-footer {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .alltell-modal-footer .btn {
+    width: 100% !important;
+    height: 40px !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+  }
+}
