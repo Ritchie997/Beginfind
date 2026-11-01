@@ -566,7 +566,7 @@
                 <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
                 ${state.query ? `<button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск"><i class="fas fa-xmark"></i></button>` : ''}
               </div>
-              <button class="btn btn-secondary alltell-search-btn" type="submit">Найти</button>
+              <button class="btn btn-secondary alltell-search-btn" type="submit" data-action="search-catalog">Найти</button>
             </form>
           </div>
 
@@ -5651,6 +5651,15 @@
     }
 
     async function onClick(event) {
+      var searchSubmitBtn = event.target.closest('.alltell-search-btn') || event.target.closest('[data-action="search-catalog"]');
+      if (searchSubmitBtn) {
+        event.preventDefault();
+        var sForm = searchSubmitBtn.closest('form') || root.querySelector('[data-search-form]');
+        var sInput = sForm ? sForm.querySelector('#alltell-search-input') : root.querySelector('#alltell-search-input');
+        state.query = sInput ? sInput.value.trim() : '';
+        renderCatalog(root, state);
+        return;
+      }
       var postCmdBtn = event.target.closest('[data-post-cmd]');
       if (postCmdBtn) {
         event.preventDefault();
@@ -6158,6 +6167,12 @@
     }
 
     function onKeyDown(event) {
+      if (event.target.matches('#alltell-search-input') && event.key === 'Enter') {
+        event.preventDefault();
+        state.query = event.target.value.trim();
+        renderCatalog(root, state);
+        return;
+      }
       if (event.key === 'Escape') {
         var openModals = root.querySelectorAll('.alltell-hub-desc-modal:not([hidden])');
         if (openModals.length) {
@@ -6454,11 +6469,15 @@
         });
         return;
       }
-      if (event.target.matches('[data-search-form]')) {
+      var sForm = event.target.closest('[data-search-form]');
+      if (sForm) {
         event.preventDefault();
-        state.query = new FormData(event.target).get('q') || '';
+        var sInput = sForm.querySelector('#alltell-search-input');
+        state.query = sInput ? sInput.value.trim() : (new FormData(sForm).get('q') || '').trim();
         renderCatalog(root, state);
-      } else if (event.target.matches('[data-comment-form]')) {
+        return;
+      }
+      if (event.target.matches('[data-comment-form]')) {
         event.preventDefault();
         if (!token()) {
           if (typeof window.showModalLogin === 'function') window.showModalLogin('login');

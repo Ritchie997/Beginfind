@@ -1563,25 +1563,35 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 22px;
-  pointer-events: none;
+  width: 28px;
+  pointer-events: auto;
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
-  z-index: 2;
+  z-index: 5;
 }
-.toolbar-fade-l { left: 0; background: linear-gradient(to right, rgba(0,0,0,.45), transparent); }
-.toolbar-fade-r { right: 0; background: linear-gradient(to left, rgba(0,0,0,.45), transparent); }
+.toolbar-fade-l { left: 0; background: linear-gradient(to right, rgba(0,0,0,.65), transparent); }
+.toolbar-fade-r { right: 0; background: linear-gradient(to left, rgba(0,0,0,.65), transparent); }
 .toolbar-format-scroll.can-scroll-l .toolbar-fade-l { opacity: 1; }
 .toolbar-format-scroll.can-scroll-r .toolbar-fade-r { opacity: 1; }
 .toolbar-fade-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 10px;
-  color: rgba(255,255,255,.9);
+  font-size: 11px;
+  color: rgba(255,255,255,.95);
 }
-.toolbar-fade-l .toolbar-fade-arrow { left: 2px; }
-.toolbar-fade-r .toolbar-fade-arrow { right: 2px; }
+.toolbar-fade-l .toolbar-fade-arrow { left: 4px; }
+.toolbar-fade-r .toolbar-fade-arrow { right: 4px; }
+
+.editor-toolbar-sticky .toolbar-format-scroll {
+  margin-left: -14px;
+  margin-right: -14px;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+.editor-toolbar-sticky .toolbar-fade-r { right: 0; }
+.editor-toolbar-sticky .toolbar-fade-l { left: 0; }
 
 /* Чек-листы в превью и карточках */
 .alltell-checklist-item {
