@@ -398,9 +398,11 @@
       <article class="alltell-live-card ${isExpanded ? 'has-flyout' : ''}" data-franchise-id="${Number(franchise.id)}">
         <div class="alltell-live-card-banner" style="background: ${gradient}">
           <div class="alltell-card-banner-pattern" aria-hidden="true"></div>
-          ${member ? '<span class="alltell-card-member-pill"><i class="fas fa-check" aria-hidden="true"></i> Вы состоите</span>' : ''}
-          ${isOwner ? '<span class="alltell-card-owner-pill"><i class="fas fa-crown" aria-hidden="true"></i> Вы создатель</span>' : ''}
-          ${unread ? `<span class="alltell-unread-badge"><i class="fas fa-bell" aria-hidden="true"></i> ${unread} новых</span>` : ''}
+          <div class="alltell-card-banner-badges">
+            ${member ? '<span class="alltell-card-member-pill"><i class="fas fa-check" aria-hidden="true"></i> Вы состоите</span>' : ''}
+            ${isOwner ? '<span class="alltell-card-owner-pill"><i class="fas fa-crown" aria-hidden="true"></i> Вы создатель</span>' : ''}
+            ${unread ? `<span class="alltell-unread-badge"><i class="fas fa-bell" aria-hidden="true"></i> ${unread} новых</span>` : ''}
+          </div>
         </div>
         <div class="alltell-live-card-content">
           <div class="alltell-live-avatar" style="background: ${gradient}">
@@ -560,13 +562,13 @@
               <h2><i class="fas fa-compass" aria-hidden="true"></i> Каталог франшиз</h2>
               <p>Исследуйте сообщества AllTell, знакомьтесь с ролевыми мирами и следите за развитием историй.</p>
             </div>
-            <form class="alltell-search-box" data-search-form role="search">
+            <form class="alltell-search-box" data-search-form role="search" onsubmit="return false;">
               <div class="alltell-search-input-wrap">
                 <i class="fas fa-search alltell-search-icon" aria-hidden="true"></i>
                 <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
                 ${state.query ? `<button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск"><i class="fas fa-xmark"></i></button>` : ''}
               </div>
-              <button class="btn btn-secondary alltell-search-btn" type="submit" data-action="search-catalog">Найти</button>
+              <button class="btn btn-secondary alltell-search-btn" type="button" data-action="search-catalog">Найти</button>
             </form>
           </div>
 
@@ -585,7 +587,7 @@
           </div>
 
           <div class="alltell-catalog-controls">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div class="alltell-controls-selects">
               <select class="alltell-select" data-action="change-hub-filter" aria-label="Фильтр по хабам">
                 <option value="all" ${hubFilter === 'all' ? 'selected' : ''}>Все франшизы</option>
                 <option value="with" ${hubFilter === 'with' ? 'selected' : ''}>С хабами</option>
@@ -5650,14 +5652,19 @@
       }
     }
 
+    function executeCatalogSearch(queryText) {
+      var sInput = root.querySelector('#alltell-search-input');
+      var newQuery = (typeof queryText === 'string' ? queryText : (sInput ? sInput.value : '')).trim();
+      state.query = newQuery;
+      renderCatalog(root, state);
+    }
+
     async function onClick(event) {
       var searchSubmitBtn = event.target.closest('.alltell-search-btn') || event.target.closest('[data-action="search-catalog"]');
       if (searchSubmitBtn) {
         event.preventDefault();
-        var sForm = searchSubmitBtn.closest('form') || root.querySelector('[data-search-form]');
-        var sInput = sForm ? sForm.querySelector('#alltell-search-input') : root.querySelector('#alltell-search-input');
-        state.query = sInput ? sInput.value.trim() : '';
-        renderCatalog(root, state);
+        event.stopPropagation();
+        executeCatalogSearch();
         return;
       }
       var postCmdBtn = event.target.closest('[data-post-cmd]');
@@ -5800,6 +5807,7 @@
       } else if (action === 'clear-search') {
         state.query = '';
         state.catalogFilter = 'all';
+        state.catalogHubFilter = 'all';
         renderCatalog(root, state);
       } else if (action === 'toggle-post-like') {
         if (!token()) {
@@ -6154,6 +6162,12 @@
         event.target.style.overflow = 'hidden';
         event.target.style.height = Math.max(140, event.target.scrollHeight) + 'px';
       }
+      if (event.target.matches('#alltell-search-input')) {
+        if (event.target.value === '' && state.query !== '') {
+          executeCatalogSearch('');
+          return;
+        }
+      }
       if (event.target.matches('textarea[name="body"]')) {
         var form = event.target.closest('[data-post-form]');
         var counter = form ? form.querySelector('[data-char-counter]') : null;
@@ -6169,8 +6183,8 @@
     function onKeyDown(event) {
       if (event.target.matches('#alltell-search-input') && event.key === 'Enter') {
         event.preventDefault();
-        state.query = event.target.value.trim();
-        renderCatalog(root, state);
+        event.stopPropagation();
+        executeCatalogSearch(event.target.value);
         return;
       }
       if (event.key === 'Escape') {
@@ -6472,9 +6486,8 @@
       var sForm = event.target.closest('[data-search-form]');
       if (sForm) {
         event.preventDefault();
-        var sInput = sForm.querySelector('#alltell-search-input');
-        state.query = sInput ? sInput.value.trim() : (new FormData(sForm).get('q') || '').trim();
-        renderCatalog(root, state);
+        event.stopPropagation();
+        executeCatalogSearch();
         return;
       }
       if (event.target.matches('[data-comment-form]')) {
