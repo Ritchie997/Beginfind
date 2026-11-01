@@ -116,37 +116,50 @@
      2. Панель управления, фильтры и свайп тегов
      -------------------------------------------------------------------------- */
   .gallery-toolbar-container {
-    margin-bottom: 16px !important;
+    margin-bottom: 8px !important;
   }
 
   .gallery-toolbar {
-    padding: 14px 12px !important;
-    border-radius: 14px !important;
-    background: var(--background-secondary, #2b2d31) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    position: static !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
     box-sizing: border-box !important;
   }
 
+  .gallery-toolbar-header {
+    margin-bottom: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
   .gallery-toolbar-header h2 {
-    font-size: 18px !important;
-    font-weight: 800 !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
     margin: 0 !important;
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 7px !important;
+    color: var(--header-primary, #f2f3f5) !important;
+  }
+
+  .gallery-toolbar-header h2 i {
+    font-size: 15px !important;
+    color: var(--accent-teal, #2dd4bf) !important;
   }
 
   .gallery-toolbar-header p {
-    font-size: 12.5px !important;
-    line-height: 1.4 !important;
-    color: var(--header-secondary, #949ba4) !important;
-    margin: 4px 0 12px !important;
+    display: none !important; /* Убираем пустой длинный текст на мобильных */
   }
 
   .gallery-toolbar-controls {
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 7px !important;
     width: 100% !important;
   }
 
@@ -162,14 +175,19 @@
   .gallery-search-input {
     width: 100% !important;
     min-width: 0 !important;
-    height: 42px !important;
-    padding: 0 14px 0 38px !important;
-    font-size: 13.5px !important;
+    height: 38px !important;
+    padding: 0 14px 0 36px !important;
+    font-size: 13px !important;
     border-radius: 999px !important;
-    background: var(--background-tertiary, #1e1f22) !important;
-    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-normal, #dbdee1) !important;
     box-sizing: border-box !important;
+  }
+
+  .gallery-search-input:focus {
+    border-color: var(--blurple, #5865f2) !important;
+    outline: none !important;
   }
 
   .gallery-search-input::-webkit-search-cancel-button,
@@ -180,11 +198,11 @@
 
   .gallery-search-icon {
     position: absolute !important;
-    left: 14px !important;
+    left: 12px !important;
     top: 50% !important;
     transform: translateY(-50%) !important;
     color: var(--header-secondary, #949ba4) !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
     pointer-events: none !important;
     z-index: 1 !important;
   }
@@ -193,7 +211,7 @@
   .gallery-actions-wrap {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
+    gap: 6px !important;
     width: 100% !important;
   }
 
@@ -205,11 +223,11 @@
 
   .gallery-select-icon {
     position: absolute !important;
-    left: 12px !important;
+    left: 11px !important;
     top: 50% !important;
     transform: translateY(-50%) !important;
     color: var(--header-secondary, #949ba4) !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     pointer-events: none !important;
     z-index: 1 !important;
   }
@@ -217,13 +235,13 @@
   .gallery-sort {
     width: 100% !important;
     min-width: 0 !important;
-    height: 38px !important;
-    padding: 0 10px 0 32px !important;
-    font-size: 12.5px !important;
+    height: 36px !important;
+    padding: 0 10px 0 28px !important;
+    font-size: 12px !important;
     font-weight: 500 !important;
-    border-radius: 10px !important;
-    background: var(--background-tertiary, #1e1f22) !important;
-    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08)) !important;
+    border-radius: 999px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-normal, #dbdee1) !important;
     box-sizing: border-box !important;
     text-overflow: ellipsis !important;
@@ -234,43 +252,52 @@
   .gallery-mine-btn {
     width: 100% !important;
     max-width: none !important;
-    height: 38px !important;
+    height: 36px !important;
     padding: 0 10px !important;
-    font-size: 12.5px !important;
+    font-size: 12px !important;
     font-weight: 600 !important;
-    border-radius: 10px !important;
+    border-radius: 999px !important;
     justify-content: center !important;
     display: inline-flex !important;
     align-items: center !important;
     gap: 6px !important;
     white-space: nowrap !important;
     box-sizing: border-box !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
     touch-action: manipulation !important;
+  }
+
+  .gallery-mine-btn.active {
+    background: var(--blurple, #5865f2) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
   }
 
   .gallery-upload-btn {
     grid-column: 1 / -1 !important;
     width: 100% !important;
-    height: 42px !important;
-    font-size: 13.5px !important;
+    height: 36px !important;
+    font-size: 12.5px !important;
     font-weight: 600 !important;
     border-radius: 999px !important;
     justify-content: center !important;
     display: inline-flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 7px !important;
     box-sizing: border-box !important;
     touch-action: manipulation !important;
   }
 
-  /* Полоса тегов: плавный свайп */
+  /* Полоса тегов: бесшовный горизонтальный свайп в стиле AllTell */
   .gallery-tags-bar {
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
-    margin-top: 10px !important;
-    padding-top: 10px !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    gap: 6px !important;
+    margin-top: 6px !important;
+    padding: 0 !important;
+    border-top: none !important;
     width: 100% !important;
     overflow: hidden !important;
   }
@@ -288,7 +315,7 @@
     gap: 6px !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    padding-bottom: 2px !important;
+    padding: 2px 0 !important;
   }
 
   .gallery-tags::-webkit-scrollbar {
@@ -298,15 +325,15 @@
   .gallery-tags .filter-chip {
     flex: 0 0 auto !important;
     white-space: nowrap !important;
-    font-size: 12px !important;
+    font-size: 11.5px !important;
     font-weight: 500 !important;
-    padding: 6px 12px !important;
+    padding: 4px 11px !important;
     border-radius: 999px !important;
-    height: 32px !important;
+    height: 28px !important;
     display: inline-flex !important;
     align-items: center !important;
     gap: 5px !important;
-    background: var(--background-tertiary, #1e1f22) !important;
+    background: var(--background-secondary, #2b2d31) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-normal, #dbdee1) !important;
     touch-action: manipulation !important;
@@ -319,12 +346,12 @@
   }
 
   .gallery-count-badge {
-    flex-shrink: 0 !important;
+    flex: 0 0 auto !important;
     font-size: 11px !important;
     font-weight: 600 !important;
     padding: 3px 8px !important;
     border-radius: 999px !important;
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.07) !important;
     color: var(--header-secondary, #949ba4) !important;
     white-space: nowrap !important;
   }
@@ -577,38 +604,220 @@
   /* --------------------------------------------------------------------------
      6. Папки и модальные окна папок
      -------------------------------------------------------------------------- */
+  .gallery-folder-section {
+    position: relative !important;
+    margin: 4px 0 8px !important;
+  }
+
+  .gallery-folder-section.is-root-view {
+    margin: 0 0 4px !important;
+  }
+
   .gallery-folder-header {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
-    padding: 12px !important;
-    border-radius: 12px !important;
-    background: var(--background-secondary, #2b2d31) !important;
-    margin-bottom: 12px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    margin-bottom: 6px !important;
+  }
+
+  .gallery-folder-section.is-root-view .gallery-folder-header {
+    justify-content: flex-end !important;
   }
 
   .gallery-folder-breadcrumb {
+    display: flex !important;
+    align-items: center !important;
     flex-wrap: wrap !important;
+    gap: 6px !important;
     font-size: 12.5px !important;
+    min-width: 0 !important;
+  }
+
+  .gallery-folder-breadcrumb[hidden] {
+    display: none !important;
+  }
+
+  .gallery-folder-crumb-root {
+    padding: 4px 10px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 999px !important;
+    color: var(--text-normal, #dbdee1) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    cursor: pointer !important;
+  }
+
+  .gallery-folder-crumb-current {
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    max-width: 140px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .gallery-folder-crumb-action {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    box-sizing: border-box !important;
+  }
+
+  .gallery-folder-crumb-action.is-danger {
+    color: var(--red, #f23f43) !important;
+  }
+
+  .gallery-folder-exit {
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+    border-radius: 999px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+  }
+
+  .gallery-folder-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .gallery-folder-tools {
+    position: relative !important;
+    display: inline-flex !important;
+  }
+
+  .gallery-folder-tools-toggle {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+  }
+
+  .gallery-folder-tools-toggle:active,
+  .gallery-folder-tools-toggle[aria-expanded="true"] {
+    background: var(--background-modifier-hover, rgba(255, 255, 255, 0.12)) !important;
+    border-color: var(--blurple, #5865f2) !important;
+    color: #ffffff !important;
+  }
+
+  /* Меню трёх точек: строго под кнопкой, не вылетает за экран */
+  .gallery-folder-tools-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    right: 0 !important;
+    left: auto !important;
+    z-index: 1000 !important;
+    min-width: 180px !important;
+    max-width: min(260px, calc(100vw - 24px)) !important;
+    padding: 6px !important;
+    border-radius: 12px !important;
+    background: var(--background-floating, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+  }
+
+  .gallery-folder-tools-menu[hidden] {
+    display: none !important;
+  }
+
+  .gallery-folder-tools-menu > button {
+    width: 100% !important;
+    height: 36px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    color: var(--text-normal, #dbdee1) !important;
+    background: transparent !important;
+    border: none !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    white-space: nowrap !important;
+  }
+
+  .gallery-folder-tools-menu > button:active,
+  .gallery-folder-tools-menu > button:hover {
+    background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08)) !important;
+    color: #ffffff !important;
   }
 
   .gallery-selection-actions {
     display: flex !important;
     flex-wrap: wrap !important;
+    align-items: center !important;
     gap: 6px !important;
     width: 100% !important;
   }
 
   .gallery-selection-actions .btn {
-    height: 36px !important;
+    height: 34px !important;
     font-size: 12px !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
     flex: 1 1 auto !important;
     justify-content: center !important;
   }
 
+  .gallery-folder-move-menu {
+    position: absolute !important;
+    z-index: 1000 !important;
+    top: calc(100% + 6px) !important;
+    right: 0 !important;
+    left: auto !important;
+    max-width: min(300px, calc(100vw - 24px)) !important;
+    background: var(--background-floating, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    overflow-y: auto !important;
+  }
+
   .gallery-folder-name-box {
     width: 100% !important;
-    max-width: 400px !important;
+    max-width: 360px !important;
     border-radius: 14px !important;
     padding: 16px !important;
     box-sizing: border-box !important;

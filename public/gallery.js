@@ -1215,22 +1215,21 @@
       const isForeignFolder = !!active && !isFolderOwner;
       const canManageActive = !active || (this.canManageFolders && isFolderOwner);
       const activeAuthor = active?.author?.display_name || '';
-      this.folderBreadcrumbEl.innerHTML = [
-        '<button type="button" class="gallery-folder-crumb-root" data-folder-parent="">Галерея</button>',
+      this.folderBreadcrumbEl.innerHTML = active ? [
+        '<button type="button" class="gallery-folder-crumb-root" data-folder-parent=""><i class="fas fa-arrow-left"></i> Галерея</button>',
         ...breadcrumb.slice(0, -1).map((folder) => `<span aria-hidden="true">/</span><button type="button" data-folder-parent="${folder.id}">${escapeHtml(folder.name)}</button>`),
-        ...(active ? [
-          '<span aria-hidden="true">/</span>',
-          `<span class="gallery-folder-crumb-current">${escapeHtml(active.name)}</span>`,
-          ...(activeAuthor ? [`<span class="gallery-folder-crumb-author">Автор: ${escapeHtml(activeAuthor)}</span>`] : []),
-          ...(isForeignFolder ? ['<button type="button" class="gallery-folder-exit" data-folder-exit><i class="fas fa-arrow-left"></i> Выйти из папки</button>'] : []),
-          ...(active && canManageActive ? [
-            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderCreateChild" title="Создать подпапку" aria-label="Создать подпапку"><i class="fas fa-folder-plus"></i></button>',
-            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
-            '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
-            '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
-          ] : [])
+        '<span aria-hidden="true">/</span>',
+        `<span class="gallery-folder-crumb-current">${escapeHtml(active.name)}</span>`,
+        ...(activeAuthor ? [`<span class="gallery-folder-crumb-author">Автор: ${escapeHtml(activeAuthor)}</span>`] : []),
+        ...(isForeignFolder ? ['<button type="button" class="gallery-folder-exit" data-folder-exit><i class="fas fa-arrow-left"></i> Выйти из папки</button>'] : []),
+        ...(canManageActive ? [
+          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderCreateChild" title="Создать подпапку" aria-label="Создать подпапку"><i class="fas fa-folder-plus"></i></button>',
+          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderRename" title="Переименовать папку" aria-label="Переименовать папку"><i class="fas fa-pen"></i></button>',
+          '<button type="button" class="gallery-folder-crumb-action" id="galleryFolderMove" title="Переместить папку" aria-label="Переместить папку"><i class="fas fa-share"></i></button>',
+          '<button type="button" class="gallery-folder-crumb-action is-danger" id="galleryFolderDelete" title="Удалить папку" aria-label="Удалить папку"><i class="fas fa-trash"></i></button>'
         ] : [])
-      ].join('');
+      ].join('') : '';
+      this.folderBreadcrumbEl.hidden = !active;
       let children = active
         ? (active.children || [])
         : this.folderTree;
@@ -1251,7 +1250,11 @@
       }
       const tools = this.folderToolsToggleEl?.closest('.gallery-folder-tools');
       if (tools && this.isPublicGallery) tools.hidden = !this.canManageFolders || !canManageActive;
-      this.folderSectionEl.hidden = false;
+      const isSelecting = !!(this.selectionActionsEl && !this.selectionActionsEl.hidden);
+      const isRoot = !active;
+      const canShowTools = tools && !tools.hidden;
+      this.folderSectionEl.classList.toggle('is-root-view', isRoot);
+      this.folderSectionEl.hidden = isRoot && !canShowTools && !isSelecting;
       this.updateSelectionUi();
       if (this.items.length) this.layout();
     }
