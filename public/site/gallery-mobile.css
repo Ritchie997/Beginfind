@@ -178,6 +178,9 @@
 
   /* Поиск */
   .gallery-search-wrap {
+    flex: none !important;
+    height: auto !important;
+    min-height: 0 !important;
     width: 100% !important;
     position: relative !important;
     display: flex !important;
