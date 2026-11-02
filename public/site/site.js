@@ -785,50 +785,69 @@
         body.appendChild(tags);
       }
 
+      var meta = document.createElement('div');
+      meta.className = 'public-card-meta public-card-details';
+
+      var metaLeft = document.createElement('div');
+      metaLeft.className = 'public-card-meta-left';
+
       var date = formatDate(article.created_at);
-      if ((article.author && article.author.display_name) || date) {
-        var meta = document.createElement('div');
-        meta.className = 'public-card-meta public-card-details';
-        if (article.author && article.author.display_name) {
-          var author = article.author;
-          var authorImage = safePublicImageUrl(author.avatar);
-          var authorLink = author.id != null ? document.createElement('a') : document.createElement('span');
-          authorLink.className = 'public-card-author';
-          if (author.id != null) {
-            authorLink.href = '/profile/' + encodeURIComponent(author.id);
-            authorLink.setAttribute('aria-label', 'Профиль: ' + author.display_name);
-          }
-          if (authorImage) {
-            var avatar = document.createElement('img');
-            avatar.src = authorImage;
-            avatar.srcset = window.avatarSrcSet(authorImage);
-            avatar.alt = '';
-            avatar.width = 28;
-            avatar.height = 28;
-            avatar.loading = 'lazy';
-            avatar.decoding = 'async';
-            authorLink.appendChild(avatar);
-          } else {
-            authorLink.appendChild(makeEl('span', 'public-card-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
-          }
-          authorLink.appendChild(makeEl('span', 'public-card-author-name', author.display_name));
-          meta.appendChild(authorLink);
+      if (article.author && article.author.display_name) {
+        var author = article.author;
+        var authorImage = safePublicImageUrl(author.avatar);
+        var authorLink = author.id != null ? document.createElement('a') : document.createElement('span');
+        authorLink.className = 'public-card-author';
+        if (author.id != null) {
+          authorLink.href = '/profile/' + encodeURIComponent(author.id);
+          authorLink.setAttribute('aria-label', 'Профиль: ' + author.display_name);
         }
-        if (date) {
-          var dateMeta = makeEl('span', 'public-card-date');
-          var calendar = document.createElement('i');
-          calendar.className = 'far fa-calendar';
-          calendar.setAttribute('aria-hidden', 'true');
-          dateMeta.append(calendar, document.createTextNode(' ' + date));
-          meta.appendChild(dateMeta);
+        if (authorImage) {
+          var avatar = document.createElement('img');
+          avatar.src = authorImage;
+          avatar.srcset = window.avatarSrcSet(authorImage);
+          avatar.alt = '';
+          avatar.width = 28;
+          avatar.height = 28;
+          avatar.loading = 'lazy';
+          avatar.decoding = 'async';
+          authorLink.appendChild(avatar);
+        } else {
+          authorLink.appendChild(makeEl('span', 'public-card-author-avatar', author.display_name.trim().charAt(0).toUpperCase() || '?'));
         }
-        body.appendChild(meta);
+        authorLink.appendChild(makeEl('span', 'public-card-author-name', author.display_name));
+        metaLeft.appendChild(authorLink);
       }
+      if (date) {
+        var dateMeta = makeEl('span', 'public-card-date');
+        var calendar = document.createElement('i');
+        calendar.className = 'far fa-calendar';
+        calendar.setAttribute('aria-hidden', 'true');
+        dateMeta.append(calendar, document.createTextNode(' ' + date));
+        metaLeft.appendChild(dateMeta);
+      }
+      meta.appendChild(metaLeft);
+
+      var metaStats = document.createElement('div');
+      metaStats.className = 'public-card-meta-stats';
+      var commentsLink = document.createElement('a');
+      commentsLink.className = 'engage-item is-comment';
+      commentsLink.href = '/antropedia/' + encodeURIComponent(article.slug) + '#publicArticleComments';
+      commentsLink.title = 'Открыть комментарии';
+      commentsLink.append(
+        makeEl('i', 'far fa-comment'),
+        makeEl('span', null, formatCount(article.commentsCount))
+      );
+      metaStats.append(commentsLink, makeStat('far fa-eye', article.viewsCount, 'Просмотры'));
+      meta.appendChild(metaStats);
+
+      body.appendChild(meta);
 
       var foot = document.createElement('div');
-      foot.className = 'wiki-card-foot';
-      var group = document.createElement('div');
-      group.className = 'engage-group';
+      foot.className = 'wiki-card-foot antropedia-card-foot';
+
+      var reactionsTrack = document.createElement('div');
+      reactionsTrack.className = 'antropedia-card-reactions-track';
+
       var likeButton = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
       likeButton.classList.toggle('active', !!article.liked);
       likeButton.querySelector('i').className = article.liked ? 'fas fa-heart' : 'far fa-heart';
@@ -865,18 +884,11 @@
           }
         }
       });
-      var commentsLink = document.createElement('a');
-      commentsLink.className = 'engage-item is-comment';
-      commentsLink.href = '/antropedia/' + encodeURIComponent(article.slug) + '#publicArticleComments';
-      commentsLink.title = 'Открыть комментарии';
-      commentsLink.append(
-        makeEl('i', 'far fa-comment'),
-        makeEl('span', null, formatCount(article.commentsCount))
-      );
-      group.append(likeButton, commentsLink);
-      foot.append(group, makeStat('far fa-eye', article.viewsCount, 'Просмотры'));
+
+      reactionsTrack.appendChild(likeButton);
+      reactionsTrack.appendChild(createCardReactionBar(article, getAuthToken() ? {} : null));
+      foot.appendChild(reactionsTrack);
       body.appendChild(foot);
-      body.appendChild(createCardReactionBar(article, getAuthToken() ? {} : null));
 
       card.appendChild(body);
       return card;
@@ -1105,7 +1117,8 @@
         image.alt = '';
         image.loading = 'lazy';
         button.append(image, makeEl('span', null, String(reaction.count || 0)));
-        button.addEventListener('click', function () {
+        button.addEventListener('click', function (event) {
+          if (event) { event.preventDefault(); event.stopPropagation(); }
           if (!user) { openLogin(); return; }
           var img = button.querySelector('img');
           changeReaction(reaction.shortcode, img ? img.src : null);
@@ -1118,7 +1131,8 @@
       add.title = 'Добавить реакцию';
       add.setAttribute('aria-label', 'Добавить реакцию');
       add.innerHTML = '<i class="far fa-face-smile" aria-hidden="true"></i>';
-      add.addEventListener('click', function () {
+      add.addEventListener('click', function (event) {
+        if (event) { event.preventDefault(); event.stopPropagation(); }
         if (!user) { openLogin(); return; }
         if (window.PublicStickerPicker) {
           window.PublicStickerPicker.open(add, function (shortcode, pickedUrl) {

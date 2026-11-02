@@ -550,7 +550,7 @@
     flex-shrink: 0 !important;
   }
 
-  /* Мета: автор и дата */
+  /* Мета: автор и дата слева, комментарии и просмотры справа */
   .public-wiki-card .public-card-meta,
   #publicArticleGrid:not(.is-list) .public-wiki-card .public-card-meta {
     position: relative !important;
@@ -565,6 +565,15 @@
     font-size: 10px !important;
     color: var(--text-muted, #949ba4) !important;
     min-width: 0 !important;
+  }
+
+  .public-card-meta-left {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    max-width: 58% !important;
+    overflow: hidden !important;
   }
 
   .public-card-author {
@@ -609,57 +618,122 @@
     display: none !important;
   }
 
-  /* Подвал карточки (Лайки, комментарии, просмотры) */
+  .public-card-meta-stats {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .public-card-meta-stats .engage-item {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    font-size: 9.5px !important;
+    color: var(--text-muted, #949ba4) !important;
+    text-decoration: none !important;
+    line-height: 1 !important;
+  }
+
+  .public-card-meta-stats .engage-item i {
+    font-size: 9px !important;
+  }
+
+  /* Подвал карточки: Единая горизонтальная скролл-дорожка реакций (Лайк + Стикеры + Добавить) */
   .public-wiki-card .wiki-card-foot,
   #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-foot {
     position: relative !important;
     z-index: 1 !important;
     display: flex !important;
     align-items: center !important;
-    justify-content: space-between !important;
     padding-top: 3px !important;
-    margin-top: 1px !important;
+    margin-top: 2px !important;
     border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
-    gap: 3px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
   }
 
-  .public-wiki-card .wiki-card-foot .engage-group {
+  .antropedia-card-reactions-track {
     display: flex !important;
     align-items: center !important;
-    gap: 3px !important;
+    gap: 3.5px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+    padding: 1px 0 !important;
   }
 
-  .public-wiki-card .engage-item,
-  #publicArticleGrid:not(.is-list) .public-wiki-card .engage-item {
+  .antropedia-card-reactions-track::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .antropedia-card-reactions-track .public-card-reactions,
+  .antropedia-card-reactions-track .pub-reactions {
+    display: contents !important;
+  }
+
+  .antropedia-card-reactions-track .engage-item.is-like,
+  .antropedia-card-reactions-track .pub-reaction-pill,
+  .antropedia-card-reactions-track .pub-reaction-add {
+    flex-shrink: 0 !important;
+    height: 21px !important;
+    min-height: 21px !important;
+    border-radius: 999px !important;
+    padding: 1px 6px !important;
     display: inline-flex !important;
     align-items: center !important;
-    gap: 2px !important;
-    padding: 2px 4px !important;
-    border-radius: 4px !important;
+    gap: 3.5px !important;
     font-size: 10px !important;
     font-weight: 600 !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-muted, #949ba4) !important;
-    line-height: 1 !important;
-    background: transparent !important;
-    border: none !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
   }
 
-  .public-wiki-card .engage-item i {
+  .antropedia-card-reactions-track .engage-item.is-like i {
     font-size: 9.5px !important;
   }
 
-  .public-wiki-card .engage-item.is-like.active {
+  .antropedia-card-reactions-track .engage-item.is-like.active {
+    background: rgba(255, 93, 143, 0.15) !important;
+    border-color: rgba(255, 93, 143, 0.45) !important;
     color: #ff5d8f !important;
   }
 
-  .public-wiki-card .engage-item.is-like.active i {
+  .antropedia-card-reactions-track .engage-item.is-like.active i {
     color: #ff5d8f !important;
   }
 
-  /* Скрыть реакционные стикеры на мобильной сетке */
-  .antropedia-grid .public-card-reactions,
-  #publicArticleGrid:not(.is-list) .public-card-reactions {
-    display: none !important;
+  .antropedia-card-reactions-track .pub-reaction-pill img {
+    width: 13px !important;
+    height: 13px !important;
+    min-width: 13px !important;
+    min-height: 13px !important;
+    object-fit: contain !important;
+  }
+
+  .antropedia-card-reactions-track .pub-reaction-pill.active {
+    background: rgba(88, 101, 242, 0.2) !important;
+    border-color: rgba(99, 102, 241, 0.45) !important;
+    color: #ffffff !important;
+  }
+
+  .antropedia-card-reactions-track .pub-reaction-add {
+    width: 21px !important;
+    min-width: 21px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+
+  .antropedia-card-reactions-track .pub-reaction-add i {
+    font-size: 9.5px !important;
   }
 
   /* --------------------------------------------------------------------------
