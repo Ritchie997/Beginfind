@@ -238,60 +238,100 @@
   .antropedia-random-btn {
     grid-column: 2 / 3 !important;
     height: 32px !important;
-    width: 32px !important;
-    min-width: 32px !important;
-    max-width: 32px !important;
-    padding: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0 8px !important;
     border-radius: 8px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    gap: 4px !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .antropedia-random-btn:hover,
+  .antropedia-random-btn:active {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--header-primary, #f2f3f5) !important;
   }
 
   .antropedia-random-btn i {
-    font-size: 13px !important;
+    font-size: 11px !important;
+    color: var(--text-muted, #949ba4) !important;
   }
 
   .antropedia-random-btn span {
-    display: none !important;
+    display: inline !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
   }
 
   .antropedia-filters-toggle {
     grid-column: 3 / 4 !important;
     height: 32px !important;
-    width: 32px !important;
-    min-width: 32px !important;
-    max-width: 32px !important;
-    padding: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0 8px !important;
     border-radius: 8px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-normal, #dbdee1) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    gap: 4px !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     position: relative !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .antropedia-filters-toggle:hover,
+  .antropedia-filters-toggle:active {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--header-primary, #f2f3f5) !important;
   }
 
   .antropedia-filters-toggle i.fa-filter {
-    font-size: 12px !important;
+    font-size: 11px !important;
+    color: var(--text-muted, #949ba4) !important;
   }
 
   .antropedia-filters-toggle span:not(.antropedia-filters-count) {
-    display: none !important;
+    display: inline !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
   }
 
   .antropedia-filters-chev {
-    display: none !important;
+    display: inline-block !important;
+    font-size: 8.5px !important;
+    color: var(--text-muted, #949ba4) !important;
+    margin-left: 2px !important;
+    opacity: 0.7 !important;
   }
 
   .antropedia-filters-count {
-    position: absolute !important;
-    top: -3px !important;
-    right: -3px !important;
     padding: 1px 4px !important;
     font-size: 9px !important;
     background: var(--blurple, #5865f2) !important;
     color: #fff !important;
     border-radius: 999px !important;
     line-height: 1 !important;
+    margin-left: 2px !important;
   }
 
   .antropedia-view-toggle {
