@@ -1,0 +1,818 @@
+/* ==========================================================================
+   Antropedia Mobile Stylesheet (Independent Mobile-First View for Screens <= 768px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+
+  /* --------------------------------------------------------------------------
+     1. Базовый каркас страницы
+     -------------------------------------------------------------------------- */
+  body[data-page="antropedia"] {
+    overflow-x: clip;
+  }
+
+  body[data-page="antropedia"] .site-main {
+    padding: 0;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: clip;
+  }
+
+  .site-section.antropedia-section {
+    padding: 8px 10px 32px !important;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: clip;
+  }
+
+  /* --------------------------------------------------------------------------
+     2. Компактный Hero-блок (сжатие высоты)
+     -------------------------------------------------------------------------- */
+  .antropedia-hero-section {
+    padding: 16px 12px 14px !important;
+    text-align: center !important;
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .antropedia-hero-glow {
+    width: 220px !important;
+    height: 120px !important;
+    top: -30px !important;
+    filter: blur(28px) !important;
+  }
+
+  .antropedia-hero-section .site-hero-badge {
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .antropedia-hero-section h1 {
+    font-size: 18px !important;
+    line-height: 1.25 !important;
+    font-weight: 800 !important;
+    margin: 4px 0 6px !important;
+    letter-spacing: -0.01em !important;
+  }
+
+  .antropedia-hero-section p {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    max-width: 340px !important;
+    margin: 0 auto 8px !important;
+  }
+
+  .antropedia-hero-features {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 5px !important;
+    margin: 0 auto 10px !important;
+    padding-bottom: 2px !important;
+    justify-content: flex-start !important;
+    max-width: 100% !important;
+  }
+
+  .antropedia-hero-features::-webkit-scrollbar {
+    display: none;
+  }
+
+  .antropedia-hero-feature {
+    padding: 3px 8px !important;
+    font-size: 10.5px !important;
+    font-weight: 500 !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .antropedia-hero-section .site-hero-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+  }
+
+  .antropedia-hero-section .site-hero-actions .btn {
+    flex: 1 1 50% !important;
+    height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     3. Панель каталога (Toolbar), поиск, действия и теги
+     -------------------------------------------------------------------------- */
+  .antropedia-toolbar-container {
+    margin-bottom: 8px !important;
+  }
+
+  .antropedia-toolbar {
+    padding: 8px 10px 10px !important;
+    border-radius: 12px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .antropedia-toolbar-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 6px !important;
+    gap: 6px !important;
+  }
+
+  .antropedia-toolbar-title-wrap h2 {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .antropedia-toolbar-title-wrap p {
+    display: none !important;
+  }
+
+  .antropedia-toolbar-header-stats {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .antropedia-status-badge {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+  }
+
+  .antropedia-count-badge {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: 999px !important;
+  }
+
+  /* Элементы управления в тулбаре */
+  .antropedia-toolbar-controls {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+  }
+
+  .antropedia-search-wrap {
+    width: 100% !important;
+    position: relative !important;
+    flex: none !important;
+  }
+
+  .antropedia-search-input {
+    width: 100% !important;
+    height: 35px !important;
+    padding: 4px 28px 4px 30px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-sizing: border-box !important;
+  }
+
+  .antropedia-search-icon {
+    left: 9px !important;
+    font-size: 11px !important;
+  }
+
+  .antropedia-search-clear {
+    right: 8px !important;
+    font-size: 11px !important;
+  }
+
+  /* Сетка контролов: Ряд 1 (сортировка + случайная + фильтры + вид), Ряд 2 (написать статью) */
+  .antropedia-actions-wrap {
+    display: grid !important;
+    grid-template-columns: 1fr auto auto auto !important;
+    gap: 5px !important;
+    width: 100% !important;
+    align-items: center !important;
+  }
+
+  .antropedia-select-wrapper {
+    position: relative !important;
+    grid-column: 1 / 2 !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .antropedia-sort {
+    width: 100% !important;
+    height: 32px !important;
+    padding: 3px 20px 3px 22px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+    background-color: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .antropedia-select-icon {
+    left: 7px !important;
+    font-size: 10px !important;
+  }
+
+  .antropedia-random-btn {
+    grid-column: 2 / 3 !important;
+    height: 32px !important;
+    padding: 0 7px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+    gap: 4px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+  }
+
+  .antropedia-filters-toggle {
+    grid-column: 3 / 4 !important;
+    height: 32px !important;
+    padding: 0 7px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+    gap: 4px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+  }
+
+  .antropedia-filters-count {
+    padding: 1px 4px !important;
+    font-size: 9.5px !important;
+  }
+
+  .antropedia-view-toggle {
+    grid-column: 4 / 5 !important;
+    height: 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 2px !important;
+    border-radius: 8px !important;
+    background: var(--background-tertiary, #1e1f22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-sizing: border-box !important;
+  }
+
+  .antropedia-view-toggle .pub-view-btn {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 10.5px !important;
+    border-radius: 6px !important;
+  }
+
+  /* Кнопка "Написать статью" на всю ширину на мобильных — акцентное действие */
+  .antropedia-write-btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    height: 34px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%) !important;
+    box-shadow: 0 2px 8px rgba(88, 101, 242, 0.3) !important;
+  }
+
+  .antropedia-write-btn span,
+  .antropedia-random-btn span,
+  .antropedia-filters-toggle span {
+    display: inline !important;
+  }
+
+  /* Быстрая строка тегов */
+  .antropedia-tags-bar {
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    margin-top: 6px !important;
+    padding-top: 6px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+    overflow: hidden !important;
+  }
+
+  .antropedia-tags-label {
+    display: none !important;
+  }
+
+  .antropedia-quick-tags {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 4px !important;
+    padding: 1px 0 !important;
+    width: 100% !important;
+  }
+
+  .antropedia-quick-tags::-webkit-scrollbar {
+    display: none;
+  }
+
+  .antropedia-tag-chip {
+    font-size: 10.5px !important;
+    padding: 2px 7px !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    height: 22px !important;
+    line-height: 18px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  /* Панель расширенных фильтров */
+  .antropedia-filters-panel {
+    margin-top: 8px !important;
+    padding-top: 8px !important;
+    gap: 8px !important;
+  }
+
+  .antropedia-filter {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    gap: 3px !important;
+  }
+
+  .antropedia-filter label {
+    font-size: 11px !important;
+  }
+
+  .antropedia-date-range {
+    gap: 5px !important;
+    width: 100% !important;
+  }
+
+  .antropedia-date-input {
+    height: 32px !important;
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+  }
+
+  .antropedia-reset-btn {
+    height: 28px !important;
+    font-size: 10.5px !important;
+    padding: 2px 8px !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     4. Сетка статей — 2 колонки в ряду с описанием (Главное требование)
+     -------------------------------------------------------------------------- */
+  .antropedia-grid,
+  #publicArticleGrid:not(.is-list) {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     5. Карточка статьи Antropedia (Компактный размер, ~200-215px высота)
+     -------------------------------------------------------------------------- */
+  .public-wiki-card.antropedia-card,
+  #publicArticleGrid:not(.is-list) .public-wiki-card {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    border-radius: 12px !important;
+    background: var(--background-secondary, #2b2d31) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    overflow: hidden !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+    transform: none !important;
+    transition: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .public-wiki-card:hover {
+    transform: none !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  /* Обложка карточки */
+  .antropedia-card-cover-wrap,
+  #publicArticleGrid:not(.is-list) .antropedia-card-cover-wrap {
+    position: relative !important;
+    width: 100% !important;
+    height: 82px !important;
+    min-height: 82px !important;
+    max-height: 82px !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+  }
+
+  .public-wiki-card .wiki-card-cover,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-cover {
+    height: 82px !important;
+    min-height: 82px !important;
+    width: 100% !important;
+    position: relative !important;
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #14161a !important;
+  }
+
+  .public-wiki-card .wiki-card-cover img,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-cover img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    transform: none !important;
+  }
+
+  .public-wiki-card:hover .wiki-card-cover img {
+    transform: none !important;
+  }
+
+  .public-wiki-card .wiki-card-cover.is-empty i {
+    font-size: 22px !important;
+  }
+
+  /* Бейджи на обложке */
+  .antropedia-card-badges {
+    top: 5px !important;
+    left: 5px !important;
+    right: 5px !important;
+    gap: 4px !important;
+    z-index: 2 !important;
+  }
+
+  .antropedia-card-badge {
+    padding: 2px 5px !important;
+    font-size: 9px !important;
+    gap: 3px !important;
+    border-radius: 4px !important;
+  }
+
+  /* Содержимое карточки */
+  .public-wiki-card .wiki-card-body,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-body {
+    padding: 7px 8px 8px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Заголовок карточки */
+  .public-card-link {
+    text-decoration: none !important;
+    color: inherit !important;
+    display: block !important;
+  }
+
+  .public-wiki-card .wiki-card-title,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-title {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    color: var(--header-primary, #f2f3f5) !important;
+    margin: 0 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    word-break: break-word !important;
+  }
+
+  /* Описание карточки (Всегда видно, 2 строки) */
+  .public-wiki-card .wiki-card-excerpt,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-excerpt {
+    font-size: 10.5px !important;
+    line-height: 1.32 !important;
+    color: var(--header-secondary, #949ba4) !important;
+    margin: 0 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    word-break: break-word !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Теги карточки (в одну полоску без раздувания высоты) */
+  .public-wiki-card-tags,
+  #publicArticleGrid:not(.is-list) .public-wiki-card-tags {
+    position: relative !important;
+    z-index: 1 !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+    gap: 3px !important;
+    margin: 1px 0 !important;
+  }
+
+  .public-wiki-card-tags .wiki-tag {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+    height: 16px !important;
+    line-height: 14px !important;
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-muted, #949ba4) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Мета: автор и дата */
+  .public-wiki-card .public-card-meta,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .public-card-meta {
+    position: relative !important;
+    z-index: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    padding-top: 4px !important;
+    margin-top: auto !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    font-size: 10px !important;
+    color: var(--text-muted, #949ba4) !important;
+    min-width: 0 !important;
+  }
+
+  .public-card-author {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-decoration: none !important;
+  }
+
+  .public-card-author img,
+  .public-card-author-avatar {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    border-radius: 50% !important;
+    font-size: 8.5px !important;
+  }
+
+  .public-card-author-name {
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    color: var(--text-normal, #dbdee1) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .public-card-date {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    font-size: 9.5px !important;
+    color: var(--text-muted, #949ba4) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .public-card-date i {
+    display: none !important;
+  }
+
+  /* Подвал карточки (Лайки, комментарии, просмотры) */
+  .public-wiki-card .wiki-card-foot,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-foot {
+    position: relative !important;
+    z-index: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding-top: 3px !important;
+    margin-top: 1px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+    gap: 3px !important;
+  }
+
+  .public-wiki-card .wiki-card-foot .engage-group {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .public-wiki-card .engage-item,
+  #publicArticleGrid:not(.is-list) .public-wiki-card .engage-item {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    padding: 2px 4px !important;
+    border-radius: 4px !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    color: var(--text-muted, #949ba4) !important;
+    line-height: 1 !important;
+    background: transparent !important;
+    border: none !important;
+  }
+
+  .public-wiki-card .engage-item i {
+    font-size: 9.5px !important;
+  }
+
+  .public-wiki-card .engage-item.is-like.active {
+    color: #ff5d8f !important;
+  }
+
+  .public-wiki-card .engage-item.is-like.active i {
+    color: #ff5d8f !important;
+  }
+
+  /* Скрыть реакционные стикеры на мобильной сетке */
+  .antropedia-grid .public-card-reactions,
+  #publicArticleGrid:not(.is-list) .public-card-reactions {
+    display: none !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     6. Режим "Список" (если пользователь переключает вид)
+     -------------------------------------------------------------------------- */
+  .article-grid.is-list {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .article-grid.is-list .public-wiki-card {
+    flex-direction: row !important;
+    height: auto !important;
+  }
+
+  .article-grid.is-list .public-wiki-card .antropedia-card-cover-wrap {
+    width: 90px !important;
+    min-width: 90px !important;
+    height: auto !important;
+    min-height: 85px !important;
+    max-height: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .article-grid.is-list .public-wiki-card .wiki-card-cover {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 85px !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     7. Скелетоны и служебные состояния
+     -------------------------------------------------------------------------- */
+  .pub-skeleton {
+    min-height: 200px !important;
+    border-radius: 12px !important;
+  }
+
+  .antropedia-empty {
+    padding: 24px 14px !important;
+  }
+
+  .antropedia-create-banner {
+    padding: 14px 12px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    border-radius: 12px !important;
+    margin-top: 14px !important;
+  }
+
+  .antropedia-create-banner-content {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .antropedia-create-banner-icon {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .antropedia-create-banner h3 {
+    font-size: 14px !important;
+    margin: 0 0 2px !important;
+  }
+
+  .antropedia-create-banner p {
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    margin: 0 !important;
+  }
+
+  .antropedia-create-banner .btn {
+    width: 100% !important;
+    height: 34px !important;
+    font-size: 12px !important;
+    justify-content: center !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     8. Детальный просмотр статьи на мобильных
+     -------------------------------------------------------------------------- */
+  .antropedia-detail-view {
+    padding: 12px 10px 24px !important;
+    border-radius: 12px !important;
+  }
+
+  .antropedia-detail-view .public-article-detail-toolbar {
+    margin-bottom: 12px !important;
+    padding-bottom: 10px !important;
+    gap: 8px !important;
+  }
+
+  .antropedia-detail-view .public-article-back,
+  .antropedia-detail-view .public-article-admin-link {
+    padding: 5px 12px !important;
+    font-size: 12px !important;
+    height: 32px !important;
+  }
+
+  .antropedia-detail-view .public-article-cover {
+    margin: 0 0 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .antropedia-detail-view .public-article-cover img {
+    max-height: 220px !important;
+  }
+
+  .antropedia-detail-view .public-article-title {
+    font-size: 20px !important;
+    line-height: 1.25 !important;
+    margin-bottom: 10px !important;
+  }
+
+  .antropedia-detail-view .public-article-meta {
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 12px !important;
+    font-size: 11.5px !important;
+  }
+
+  .antropedia-detail-view .public-article-excerpt {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    padding: 10px 12px !important;
+    margin-bottom: 14px !important;
+  }
+}
+
+/* Дополнительные корректировки для очень узких экранов (<= 380px) */
+@media (max-width: 380px) {
+  .antropedia-actions-wrap .antropedia-random-btn span,
+  .antropedia-actions-wrap .antropedia-filters-toggle span {
+    display: none !important;
+  }
+
+  .antropedia-actions-wrap .antropedia-random-btn,
+  .antropedia-actions-wrap .antropedia-filters-toggle {
+    padding: 0 6px !important;
+  }
+
+  .antropedia-card-cover-wrap,
+  .public-wiki-card .wiki-card-cover {
+    height: 72px !important;
+    min-height: 72px !important;
+    max-height: 72px !important;
+  }
+
+  .public-card-date {
+    display: none !important;
+  }
+}
