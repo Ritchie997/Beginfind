@@ -387,7 +387,7 @@
   .antropedia-grid,
   #publicArticleGrid:not(.is-list) {
     display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
     margin-top: 8px !important;
     width: 100% !important;
@@ -412,6 +412,9 @@
     transform: none !important;
     transition: none !important;
     box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
   }
 
   .public-wiki-card:hover {
@@ -486,7 +489,10 @@
     gap: 4px !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
     box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
   /* Заголовок карточки */
@@ -643,15 +649,17 @@
   .public-wiki-card .wiki-card-foot,
   #publicArticleGrid:not(.is-list) .public-wiki-card .wiki-card-foot {
     position: relative !important;
-    z-index: 1 !important;
+    z-index: 3 !important;
     display: flex !important;
     align-items: center !important;
     padding-top: 3px !important;
     margin-top: 2px !important;
     border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
     width: 100% !important;
+    max-width: 100% !important;
     min-width: 0 !important;
     overflow: hidden !important;
+    box-sizing: border-box !important;
   }
 
   .antropedia-card-reactions-track {
@@ -659,11 +667,16 @@
     align-items: center !important;
     gap: 3.5px !important;
     overflow-x: auto !important;
+    overflow-y: hidden !important;
     scrollbar-width: none !important;
     -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x !important;
     flex-wrap: nowrap !important;
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     padding: 1px 0 !important;
+    box-sizing: border-box !important;
   }
 
   .antropedia-card-reactions-track::-webkit-scrollbar {
@@ -672,66 +685,99 @@
 
   .antropedia-card-reactions-track .public-card-reactions,
   .antropedia-card-reactions-track .pub-reactions {
-    display: contents !important;
-  }
-
-  .antropedia-card-reactions-track .engage-item.is-like,
-  .antropedia-card-reactions-track .pub-reaction-pill,
-  .antropedia-card-reactions-track .pub-reaction-add {
-    flex-shrink: 0 !important;
-    height: 21px !important;
-    min-height: 21px !important;
-    border-radius: 999px !important;
-    padding: 1px 6px !important;
     display: inline-flex !important;
     align-items: center !important;
     gap: 3.5px !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+    min-width: 0 !important;
+  }
+
+  /* Унифицированные микро-пилюли одинакового размера для лайка и стикеров */
+  .antropedia-reaction-chip,
+  .antropedia-card-reactions-track .antropedia-reaction-chip,
+  .antropedia-card-reactions-track .engage-item.is-like,
+  .antropedia-card-reactions-track .pub-reaction-pill,
+  .antropedia-card-reactions-track .pub-reaction-add {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    border-radius: 999px !important;
+    padding: 0 6px !important;
     font-size: 10px !important;
     font-weight: 600 !important;
+    line-height: 1 !important;
+    gap: 3px !important;
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-muted, #949ba4) !important;
     box-sizing: border-box !important;
     white-space: nowrap !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
     cursor: pointer !important;
     touch-action: manipulation !important;
+    position: relative !important;
+    z-index: 4 !important;
   }
 
+  .antropedia-reaction-chip i,
   .antropedia-card-reactions-track .engage-item.is-like i {
     font-size: 9.5px !important;
+    line-height: 1 !important;
   }
 
+  .antropedia-reaction-chip span,
+  .antropedia-card-reactions-track .engage-item span,
+  .antropedia-card-reactions-track .pub-reaction-pill span {
+    font-size: 10px !important;
+    line-height: 1 !important;
+    color: inherit !important;
+  }
+
+  .antropedia-reaction-chip.is-like.active,
   .antropedia-card-reactions-track .engage-item.is-like.active {
     background: rgba(255, 93, 143, 0.15) !important;
     border-color: rgba(255, 93, 143, 0.45) !important;
     color: #ff5d8f !important;
   }
 
+  .antropedia-reaction-chip.is-like.active i,
   .antropedia-card-reactions-track .engage-item.is-like.active i {
     color: #ff5d8f !important;
   }
 
+  .antropedia-reaction-chip.pub-reaction-pill img,
   .antropedia-card-reactions-track .pub-reaction-pill img {
     width: 13px !important;
     height: 13px !important;
     min-width: 13px !important;
     min-height: 13px !important;
+    max-width: 13px !important;
+    max-height: 13px !important;
     object-fit: contain !important;
+    display: block !important;
   }
 
+  .antropedia-reaction-chip.pub-reaction-pill.active,
   .antropedia-card-reactions-track .pub-reaction-pill.active {
     background: rgba(88, 101, 242, 0.2) !important;
     border-color: rgba(99, 102, 241, 0.45) !important;
     color: #ffffff !important;
   }
 
+  .antropedia-reaction-chip.pub-reaction-add,
   .antropedia-card-reactions-track .pub-reaction-add {
-    width: 21px !important;
-    min-width: 21px !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
     padding: 0 !important;
-    justify-content: center !important;
   }
 
+  .antropedia-reaction-chip.pub-reaction-add i,
   .antropedia-card-reactions-track .pub-reaction-add i {
     font-size: 9.5px !important;
   }

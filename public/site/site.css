@@ -9359,7 +9359,55 @@ a.site-profile-media-row:hover {
 
 .antropedia-card-reactions-track .public-card-reactions,
 .antropedia-card-reactions-track .pub-reactions {
-    display: contents;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.antropedia-reaction-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-accent);
+    color: var(--text-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    gap: 4px;
+    cursor: pointer;
+    box-sizing: border-box;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+.antropedia-reaction-chip:hover {
+    color: var(--header-primary);
+    border-color: rgba(99, 102, 241, 0.35);
+}
+.antropedia-reaction-chip.is-like.active {
+    color: #ff5d8f;
+    border-color: rgba(255, 93, 143, 0.4);
+    background: rgba(255, 93, 143, 0.12);
+}
+.antropedia-reaction-chip.is-like.active i {
+    color: #ff5d8f;
+}
+.antropedia-reaction-chip.pub-reaction-pill.active {
+    border-color: var(--blurple);
+    background: rgba(88, 101, 242, 0.18);
+    color: var(--header-primary);
+}
+.antropedia-reaction-chip.pub-reaction-pill img {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+}
+.antropedia-reaction-chip.pub-reaction-add {
+    width: 24px;
+    padding: 0;
 }
 
 .public-wiki-card .wiki-card-foot {

@@ -848,7 +848,7 @@
       var reactionsTrack = document.createElement('div');
       reactionsTrack.className = 'antropedia-card-reactions-track';
 
-      var likeButton = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
+      var likeButton = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like antropedia-reaction-chip');
       likeButton.classList.toggle('active', !!article.liked);
       likeButton.querySelector('i').className = article.liked ? 'fas fa-heart' : 'far fa-heart';
       likeButton.addEventListener('click', async function (event) {
@@ -1106,7 +1106,7 @@
       var bar = makeEl('div', 'pub-reactions');
       bar.dataset.targetId = targetId;
       (reactions || []).forEach(function (reaction) {
-        var button = makeEl('button', 'pub-reaction-pill' + (reaction.reacted ? ' active' : ''));
+        var button = makeEl('button', 'pub-reaction-pill antropedia-reaction-chip' + (reaction.reacted ? ' active' : ''));
         button.type = 'button';
         button.title = reaction.packTitle || reaction.shortcode;
         button.setAttribute('aria-label', 'Реакция ' + (reaction.packTitle || reaction.shortcode) + ', ' + reaction.count);
@@ -1126,7 +1126,7 @@
         bar.appendChild(button);
       });
 
-      var add = makeEl('button', 'pub-reaction-add');
+      var add = makeEl('button', 'pub-reaction-add antropedia-reaction-chip');
       add.type = 'button';
       add.title = 'Добавить реакцию';
       add.setAttribute('aria-label', 'Добавить реакцию');
