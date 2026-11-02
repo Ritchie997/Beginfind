@@ -238,30 +238,60 @@
   .antropedia-random-btn {
     grid-column: 2 / 3 !important;
     height: 32px !important;
-    padding: 0 7px !important;
-    font-size: 11px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    padding: 0 !important;
     border-radius: 8px !important;
-    gap: 4px !important;
     display: inline-flex !important;
     align-items: center !important;
-    white-space: nowrap !important;
+    justify-content: center !important;
+  }
+
+  .antropedia-random-btn i {
+    font-size: 13px !important;
+  }
+
+  .antropedia-random-btn span {
+    display: none !important;
   }
 
   .antropedia-filters-toggle {
     grid-column: 3 / 4 !important;
     height: 32px !important;
-    padding: 0 7px !important;
-    font-size: 11px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    padding: 0 !important;
     border-radius: 8px !important;
-    gap: 4px !important;
     display: inline-flex !important;
     align-items: center !important;
-    white-space: nowrap !important;
+    justify-content: center !important;
+    position: relative !important;
+  }
+
+  .antropedia-filters-toggle i.fa-filter {
+    font-size: 12px !important;
+  }
+
+  .antropedia-filters-toggle span:not(.antropedia-filters-count) {
+    display: none !important;
+  }
+
+  .antropedia-filters-chev {
+    display: none !important;
   }
 
   .antropedia-filters-count {
+    position: absolute !important;
+    top: -3px !important;
+    right: -3px !important;
     padding: 1px 4px !important;
-    font-size: 9.5px !important;
+    font-size: 9px !important;
+    background: var(--blurple, #5865f2) !important;
+    color: #fff !important;
+    border-radius: 999px !important;
+    line-height: 1 !important;
   }
 
   .antropedia-view-toggle {
@@ -299,9 +329,7 @@
     box-shadow: 0 2px 8px rgba(88, 101, 242, 0.3) !important;
   }
 
-  .antropedia-write-btn span,
-  .antropedia-random-btn span,
-  .antropedia-filters-toggle span {
+  .antropedia-write-btn span {
     display: inline !important;
   }
 
@@ -915,16 +943,6 @@
 
 /* Дополнительные корректировки для очень узких экранов (<= 380px) */
 @media (max-width: 380px) {
-  .antropedia-actions-wrap .antropedia-random-btn span,
-  .antropedia-actions-wrap .antropedia-filters-toggle span {
-    display: none !important;
-  }
-
-  .antropedia-actions-wrap .antropedia-random-btn,
-  .antropedia-actions-wrap .antropedia-filters-toggle {
-    padding: 0 6px !important;
-  }
-
   .antropedia-card-cover-wrap,
   .public-wiki-card .wiki-card-cover {
     height: 72px !important;
