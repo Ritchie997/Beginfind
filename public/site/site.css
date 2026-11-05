@@ -6795,6 +6795,7 @@
     margin-top: 1px;
     transition: all 0.18s ease;
     box-sizing: border-box;
+    cursor: pointer;
 }
 
 .alltell-hub-pub-check input[type="checkbox"] {
@@ -6955,6 +6956,7 @@
     border: 1.5px solid rgba(255, 255, 255, 0.1);
     transition: all 0.18s ease;
     box-sizing: border-box;
+    cursor: pointer;
 }
 
 .alltell-card-hub-item.status-active {
