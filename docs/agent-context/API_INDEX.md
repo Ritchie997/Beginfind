@@ -29,6 +29,9 @@
 - `POST /articles`
 - `PUT /articles/:id`
 - `DELETE /articles/:id`
+- `GET /articles/:slug/collab-requests`
+- `POST /articles/:slug/collab-requests/:id/approve`
+- `POST /articles/:slug/collab-requests/:id/decline`
 - `GET /search-articles`
 - `GET /articles/:id/backlinks`
 - `GET /articles/:id/map-refs`
@@ -45,6 +48,7 @@
 - `PUT /tags/color`
 - `GET /articles-graph`
 - `GET /dashboard-summary`
+- `GET /dashboard/stats`
 - `PUT /articles/:id/rename`
 
 ## `auth.routes.js`
@@ -246,6 +250,7 @@
 - `GET /servers/:id/hubs`
 - `POST /servers/:id/hubs`
 - `PUT /servers/:id/hubs/:hubId`
+- `PUT /servers/:id/hubs/:hubId/visibility`
 - `PUT /servers/:id/hubs/:hubId/status`
 - `DELETE /servers/:id/hubs/:hubId`
 - `GET /servers/:id`

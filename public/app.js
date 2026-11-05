@@ -626,6 +626,10 @@ class ApiClient {
     return this.makeAuthenticatedRequest('/api/dashboard-summary');
   }
 
+  async getDashboardStats() {
+    return this.makeAuthenticatedRequest('/api/dashboard/stats');
+  }
+
   // Method for uploading images
   async uploadImage(file) {
     if (!authManager || !authManager.isAuthenticated()) {

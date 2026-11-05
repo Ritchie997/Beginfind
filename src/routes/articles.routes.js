@@ -1477,12 +1477,13 @@ router.get('/articles-graph', auth.authenticateToken, auth.checkApproved, async 
 // (рядом с articles-graph), а не в отдельном роутере, потому что комментарии
 // нужно отфильтровать по canAccessArticle — иначе текст комментариев к
 // закрытым статьям утёк бы на дашборд тем, кому сама статья недоступна.
-router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+async function handleDashboardSummary(req, res) {
   try {
-    const [users, messenger, comments] = await Promise.all([
+    const [users, messenger, comments, galleryWorks] = await Promise.all([
       dashboardStats.getUsersSummary(5),
       dashboardStats.getMessengerSummary(3),
-      dashboardStats.getCommentsSummary(50)
+      dashboardStats.getCommentsSummary(50),
+      gallery.listWorks(null, { limit: 1 }).catch(() => ({ total: 0 }))
     ]);
 
     const allArticles = store.listArticles();
@@ -1550,6 +1551,9 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
         trend: commentsTrend,
         articles: commentedArticles
       },
+      gallery: {
+        total: (galleryWorks && typeof galleryWorks.total === 'number') ? galleryWorks.total : 0
+      },
       recent: {
         users: users.recent,
         messages: messenger.recent,
@@ -1559,7 +1563,10 @@ router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, asy
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
+
+router.get('/dashboard-summary', auth.authenticateToken, auth.checkApproved, handleDashboardSummary);
+router.get('/dashboard/stats', auth.authenticateToken, auth.checkApproved, handleDashboardSummary);
 
 // Переименование статьи: меняет заголовок и slug, автоматически обновляет
 // wiki-ссылки на неё в остальных статьях.

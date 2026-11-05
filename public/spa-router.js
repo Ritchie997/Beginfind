@@ -5906,11 +5906,46 @@ class SPARouter {
             const one = n % 10 === 1 && n % 100 !== 11;
             commentsArticles.textContent = n ? `в ${n} ${one ? 'статье' : 'статьях'}` : '';
           }
+
+          const totalGallery = document.getElementById('total-gallery');
+          if (totalGallery && summary.gallery && typeof summary.gallery.total === 'number') {
+            totalGallery.textContent = summary.gallery.total;
+          }
         } else {
           console.error('Error loading dashboard summary:', summaryResult.data?.error || summaryResult.error);
         }
       } catch (error) {
         console.error('Error loading dashboard summary:', error);
+      }
+
+      // Заполняем счётчик работ галереи, если он ещё не был заполнен из summary
+      const totalGalleryEl = document.getElementById('total-gallery');
+      if (totalGalleryEl && (!summary || !summary.gallery || typeof summary.gallery.total !== 'number')) {
+        try {
+          let count = null;
+          try {
+            const statsRes = await apiClient.getDashboardStats();
+            if (statsRes?.success && statsRes.data?.gallery?.total != null) {
+              count = statsRes.data.gallery.total;
+            }
+          } catch (_) {}
+
+          if (count == null) {
+            const pubRes = await fetch('/api/public/site-summary');
+            if (pubRes.ok) {
+              const pubData = await pubRes.json();
+              if (pubData && typeof pubData.gallery === 'number') {
+                count = pubData.gallery;
+              }
+            }
+          }
+
+          if (count != null) {
+            totalGalleryEl.textContent = count;
+          }
+        } catch (galleryErr) {
+          console.error('Error loading gallery count for dashboard:', galleryErr);
+        }
       }
 
       // Load activity list with recent items

@@ -6,7 +6,7 @@
 
 ## 1. Шапка и навигация
 
-- [ ] **Колокольчик уведомлений на публичном сайте**
+- [x] **Колокольчик уведомлений на публичном сайте**
   - **Что делать:** Добавить иконку колокольчика с индикатором непрочитанных, дропдауном списка уведомлений и кнопкой «Прочитать все».
   - **Где чинить:**
     - `public/site/index.html`, `public/site/antropedia.html`, `public/site/alltell.html`, `public/site/gallery.html`, `public/site/profile.html`: добавить разметку `.notif-bell` в `.site-header-actions` по аналогии с `public/index.html` (строки 30–40).
@@ -14,7 +14,7 @@
     - Подключить скрипт `/user-notifications.js` и стили `/user-notifications.css` в `<head>` всех страниц `public/site/*.html`.
     - `public/user-notifications.js`: убедиться, что базовый путь API `/api/notifications` корректно работает с гостевым/авторизованным токеном (`window.authManager.getToken()`).
 
-- [ ] **Глобальный поиск в шапке админ-панели**
+- [x] **Глобальный поиск в шапке админ-панели**
   - **Что делать:** Добавить поле ввода глобального поиска в шапку админки, перенаправляющее по `Enter` на поиск статей.
   - **Где чинить:**
     - `public/index.html`: в `.header-right` (перед `#public-site-toggle`) добавить `<div class="site-search"><input id="adminSearchInput" placeholder="Поиск статей..."></div>`.
@@ -25,13 +25,13 @@
 
 ## 2. Главная страница (`/`) vs Дашборд (`/dashboard`)
 
-- [ ] **Панель управления графом лора на Главной странице**
+- [x] **Панель управления графом лора на Главной странице**
   - **Что делать:** Добавить тулбар с кнопками «Во весь экран», поиском по узлам/#тегам, экспортом PNG и фильтрами.
   - **Где чинить:**
     - `public/site/index.html`: в секцию `.home-graph-section` над `#homeGraphContainer` скопировать разметку тулбара из `public/views/dashboard.html` (строки 7–46: `#graphSearchInput`, `#graphHideIsolated`, `#graphFullscreenToggle`, `#graphExportPng`).
     - `public/site/site.js`: в функции `loadGraph()` (строки 2572–2600) передать селекторы тулбара в `window.GraphView.renderGraph(graphRoot, data, options)` и повесить обработчики кликов на полноэкранный режим и PNG-экспорт аналогично `public/spa-router.js` (метод `initDashboardGraph`).
 
-- [ ] **Счётчик работ галереи на дашборде админки**
+- [x] **Счётчик работ галереи на дашборде админки**
   - **Что делать:** Добавить плитку «Работ в галерее» в общую полосу статистики.
   - **Где чинить:**
     - `public/views/dashboard.html`: в контейнер `.stat-strip` (строки 53–120) добавить чип `<div class="stat-chip"><span id="total-gallery">0</span>...</div>`.
