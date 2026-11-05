@@ -251,7 +251,9 @@
     var main = document.querySelector('.site-main');
     var hero = document.querySelector('.site-hero');
     var listView = document.getElementById('publicArticleListView');
+    var detailContainer = document.getElementById('publicArticleContainer');
     var detail = document.getElementById('publicArticleDetail');
+    var sidebar = document.getElementById('antropediaViewSidebar');
     var editorView = document.getElementById('publicArticleEditor');
     var heroWriteBtn = document.getElementById('antropediaHeroWriteBtn');
     var toolbarWriteBtn = document.getElementById('antropediaToolbarWriteBtn');
@@ -511,7 +513,9 @@
       options = options || {};
       if (hero) hero.hidden = true;
       listView.hidden = true;
+      if (detailContainer) detailContainer.hidden = true;
       detail.hidden = true;
+      if (sidebar) sidebar.hidden = true;
       if (editorView) editorView.hidden = false;
 
       window.scrollTo({ top: 0, behavior: 'instant' });
@@ -556,7 +560,9 @@
         tocObserver = null;
       }
       listView.hidden = false;
+      if (detailContainer) detailContainer.hidden = true;
       detail.hidden = true;
+      if (sidebar) sidebar.hidden = true;
 
       var curParams = new URLSearchParams(window.location.search);
       if (curParams.get('view') === 'write' || curParams.get('draft') || curParams.get('edit')) {
@@ -572,6 +578,7 @@
       if (hero) hero.hidden = true;
       listView.hidden = true;
       if (editorView) editorView.hidden = true;
+      if (detailContainer) detailContainer.hidden = false;
       detail.hidden = false;
       if (window.antropediaEditor && typeof window.antropediaEditor.closeEditor === 'function') {
         window.antropediaEditor.closeEditor();
@@ -1276,13 +1283,24 @@
         tocObserver = null;
       }
       var panel = document.getElementById('antropediaTocPanel');
-      if (!panel || !contentEl) return;
+      var sb = document.getElementById('antropediaViewSidebar');
+      var toggleBtn = document.getElementById('antropediaSidebarToggleBtn');
+      if (!panel || !contentEl) {
+        if (sb) sb.hidden = true;
+        if (toggleBtn) toggleBtn.hidden = true;
+        return;
+      }
 
       var headings = Array.from(contentEl.querySelectorAll('h1, h2, h3'));
       if (!headings.length) {
+        if (sb) sb.hidden = true;
+        if (toggleBtn) toggleBtn.hidden = true;
         panel.innerHTML = '<div class="antropedia-sidebar-empty">В этой статье нет заголовков.</div>';
         return;
       }
+
+      if (sb) sb.hidden = false;
+      if (toggleBtn) toggleBtn.hidden = false;
 
       panel.innerHTML = '<ul class="antropedia-toc-list">' + headings.map(function (h, idx) {
         var level = parseInt(h.tagName.slice(1), 10) || 2;
@@ -1347,8 +1365,23 @@
     }
     window.renderToc = renderToc;
 
+    document.addEventListener('click', function (e) {
+      var sb = document.getElementById('antropediaViewSidebar');
+      var btn = document.getElementById('antropediaSidebarToggleBtn');
+      if (sb && sb.classList.contains('is-open') && window.innerWidth <= 1024) {
+        if (!sb.contains(e.target) && (!btn || !btn.contains(e.target))) {
+          sb.classList.remove('is-open');
+          if (btn) {
+            btn.classList.remove('is-open');
+            btn.setAttribute('aria-expanded', 'false');
+          }
+        }
+      }
+    });
+
     function renderDetail(article) {
       listView.hidden = true;
+      if (detailContainer) detailContainer.hidden = false;
       detail.hidden = false;
       detail.replaceChildren();
       updateAdminLinks(article.slug);
@@ -1391,7 +1424,8 @@
       sidebarToggleBtn.setAttribute('aria-expanded', 'false');
       sidebarToggleBtn.setAttribute('aria-controls', 'antropediaViewSidebar');
       sidebarToggleBtn.innerHTML = '<i class="fas fa-list-ul"></i> <span class="antropedia-btn-label">Оглавление</span>';
-      sidebarToggleBtn.addEventListener('click', function () {
+      sidebarToggleBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
         var sb = document.getElementById('antropediaViewSidebar');
         if (!sb) return;
         var open = sb.classList.toggle('is-open');
@@ -1501,16 +1535,9 @@
         collabBanner.appendChild(bannerList);
       }
 
-      var layout = makeEl('div', 'antropedia-view-layout');
-      var articleBody = makeEl('article', 'antropedia-view-article');
-
-      var sidebar = makeEl('aside', 'antropedia-view-sidebar');
-      sidebar.id = 'antropediaViewSidebar';
-      sidebar.innerHTML = '<div class="antropedia-sidebar-tabs"><button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button></div><div id="antropediaTocPanel" class="antropedia-sidebar-panel antropedia-toc-panel"></div>';
-
-      articleBody.appendChild(toolbar);
+      detail.appendChild(toolbar);
       if (typeof collabBanner !== 'undefined' && collabBanner) {
-        articleBody.appendChild(collabBanner);
+        detail.appendChild(collabBanner);
       }
 
       var coverUrl = safePublicImageUrl(article.image);
@@ -1525,13 +1552,13 @@
           window.imageLightbox?.open([{ src: coverUrl, alt: article.title || 'Обложка статьи' }]);
         });
         cover.appendChild(coverImage);
-        articleBody.appendChild(cover);
+        detail.appendChild(cover);
       }
 
       var title = document.createElement('h1');
       title.className = 'public-article-title';
       title.textContent = article.title || article.slug;
-      articleBody.appendChild(title);
+      detail.appendChild(title);
       var meta = makeEl('div', 'public-article-meta');
       if (article.author && article.author.display_name) {
         var author = article.author;
@@ -1601,12 +1628,12 @@
         viewsEl.append(eye, document.createTextNode(' ' + formatCount(article.viewsCount)));
         meta.appendChild(viewsEl);
       }
-      if (meta.childNodes.length) articleBody.appendChild(meta);
+      if (meta.childNodes.length) detail.appendChild(meta);
       if (article.excerpt) {
         var excerpt = document.createElement('p');
         excerpt.className = 'public-article-excerpt';
         excerpt.textContent = article.excerpt;
-        articleBody.appendChild(excerpt);
+        detail.appendChild(excerpt);
       }
       if (Array.isArray(article.tags) && article.tags.length) {
         var tags = document.createElement('div');
@@ -1621,19 +1648,16 @@
           });
           tags.appendChild(button);
         });
-        articleBody.appendChild(tags);
+        detail.appendChild(tags);
       }
 
       var userPromise = loadCurrentUser();
-      initArticleEngagement(article, articleBody, userPromise);
+      initArticleEngagement(article, detail, userPromise);
 
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';
-      articleBody.appendChild(content);
+      detail.appendChild(content);
 
-      layout.appendChild(articleBody);
-      layout.appendChild(sidebar);
-      detail.appendChild(layout);
       // Индекс открытых статей — по нему рендерер узнаёт цели вики-ссылок.
       // Без него каждая ссылка на другую статью выглядела как «создать».
       // Остальные цели (закрытые/несуществующие) для гостя одинаково
@@ -1687,7 +1711,7 @@
         content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
         renderToc(content);
       });
-      initComments(article, articleBody, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
+      initComments(article, detail, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
     }
 
@@ -2250,7 +2274,9 @@
     async function loadDetail() {
       listView.hidden = true;
       if (editorView) editorView.hidden = true;
+      if (detailContainer) detailContainer.hidden = false;
       detail.hidden = false;
+      if (sidebar) sidebar.hidden = true;
       detail.replaceChildren(makePublicMessage('Загружаем статью…'));
       try {
         var token = getAuthToken();
@@ -2263,6 +2289,7 @@
         );
         if (response.status === 404) {
           if (state.disposed) return;
+          if (sidebar) sidebar.hidden = true;
           detail.replaceChildren(makePublicMessage('Статья не найдена или недоступна для публичного чтения.'));
           return;
         }
@@ -2273,6 +2300,7 @@
         renderDetail(article);
       } catch (error) {
         if (state.disposed) return;
+        if (sidebar) sidebar.hidden = true;
         detail.replaceChildren(makePublicMessage('Не удалось загрузить статью. Попробуйте обновить страницу.'));
       }
     }

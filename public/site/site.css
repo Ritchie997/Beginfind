@@ -1598,50 +1598,36 @@ body[data-page="antropedia"] .site-main {
     max-width: 1380px;
 }
 
-.public-article-detail {
-    max-width: 1380px;
-    margin: 0 auto;
-    padding: 0;
-    border: none;
-    background: transparent;
-}
-
-.antropedia-view-layout {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 32px;
+.antropedia-detail-container {
     width: 100%;
     position: relative;
 }
 
-.antropedia-view-article {
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: 940px;
-    width: 100%;
-    padding: clamp(20px, 4vw, 42px);
-    border: 1px solid var(--background-accent);
-    border-radius: var(--site-radius-lg);
-    background: var(--background-secondary);
-    box-sizing: border-box;
+.public-article-detail {
+    max-width: 960px;
+    margin: 0 auto;
 }
 
-.antropedia-view-sidebar {
-    flex: 0 0 260px;
-    width: 260px;
-    position: sticky;
-    top: 84px;
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
-    background: var(--background-secondary);
-    border: 1px solid var(--background-accent);
-    border-radius: var(--site-radius-md, 10px);
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    box-sizing: border-box;
+@media (min-width: 1025px) {
+    .antropedia-view-sidebar {
+        position: fixed;
+        right: clamp(16px, 2.5vw, 36px);
+        top: 84px;
+        width: 250px;
+        max-height: calc(100vh - 104px);
+        overflow-y: auto;
+        background: rgba(32, 34, 37, 0.92);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--site-radius-md, 12px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-sizing: border-box;
+        z-index: 100;
+    }
 }
 
 .antropedia-sidebar-tabs {
@@ -1764,23 +1750,27 @@ body[data-page="antropedia"] .site-main {
 }
 
 @media (max-width: 1024px) {
-    .antropedia-view-layout {
-        display: flex;
-        flex-direction: column;
-    }
-
-    .antropedia-view-article {
-        max-width: 100%;
-        padding: clamp(16px, 3.5vw, 24px);
-    }
-
     .antropedia-view-sidebar {
         display: none;
-        width: 100%;
-        position: static;
-        max-height: none;
-        order: -1;
-        margin-bottom: 20px;
+        position: fixed;
+        right: 16px;
+        left: 16px;
+        top: 74px;
+        width: auto;
+        max-width: 440px;
+        max-height: calc(100vh - 120px);
+        margin: 0 auto;
+        overflow-y: auto;
+        background: rgba(32, 34, 37, 0.96);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: var(--site-radius-md, 14px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+        padding: 16px;
+        flex-direction: column;
+        gap: 10px;
+        box-sizing: border-box;
+        z-index: 1000;
     }
 
     .antropedia-view-sidebar.is-open {
@@ -7855,6 +7845,8 @@ textarea.alltell-hub-desc-textarea {
    ============================================================ */
 
 .site-footer {
+    position: relative;
+    z-index: 150;
     border-top: 1px solid var(--background-accent);
     background: var(--background-tertiary);
     padding: 48px 20px 28px;
@@ -9821,6 +9813,29 @@ a.site-profile-media-row:hover {
     border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(14px);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+}
+
+@media (min-width: 1520px) {
+    .antropedia-detail-view {
+        margin: 0 auto;
+    }
+}
+
+@media (min-width: 1025px) and (max-width: 1519px) {
+    .antropedia-detail-view {
+        max-width: min(960px, calc(100vw - 330px));
+        margin-left: max(20px, calc((100vw - 290px - 960px) / 2));
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 1024px) {
+    .antropedia-detail-view {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: clamp(16px, 3.5vw, 24px);
+    }
 }
 
 .antropedia-detail-view .public-article-detail-toolbar {
