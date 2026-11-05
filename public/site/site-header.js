@@ -18,6 +18,16 @@
       <div class="site-header-actions">
         <div class="site-search"><i class="fas fa-search" aria-hidden="true"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
         <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+        <div class="notif-bell" id="notif-bell">
+          <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+          <div class="notif-bell-dropdown" hidden>
+            <div class="notif-bell-head">
+              <b>Уведомления</b>
+              <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+            </div>
+            <div class="notif-bell-list"></div>
+          </div>
+        </div>
         <div class="site-user" id="siteUserMenu" hidden>
           <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
             <span class="site-user-avatar" id="siteUserAvatar"></span>
@@ -83,6 +93,7 @@
         header.innerHTML = HEADER_INNER_HTML;
       }
       this.ensureAdminToggleMarkup();
+      this.ensureNotificationsMarkup();
       return header;
     },
 
@@ -100,6 +111,32 @@
         toggle.innerHTML = '<i class="fas fa-shield-halved"></i><span>Админ-панель</span>';
       }
       toggle.title = 'Переключиться в админ-панель';
+    },
+
+    ensureNotificationsMarkup: function () {
+      if (!this.el) this.el = document.querySelector('.site-header');
+      if (!this.el) return;
+      if (!this.el.querySelector('#notif-bell')) {
+        var userMenu = this.el.querySelector('#siteUserMenu');
+        var actions = this.el.querySelector('.site-header-actions');
+        var markup = `
+          <div class="notif-bell" id="notif-bell">
+            <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+            <div class="notif-bell-dropdown" hidden>
+              <div class="notif-bell-head">
+                <b>Уведомления</b>
+                <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+              </div>
+              <div class="notif-bell-list"></div>
+            </div>
+          </div>
+        `.trim();
+        if (userMenu && userMenu.parentNode) {
+          userMenu.insertAdjacentHTML('beforebegin', markup);
+        } else if (actions) {
+          actions.insertAdjacentHTML('beforeend', markup);
+        }
+      }
     },
 
     init: function () {
@@ -126,6 +163,7 @@
       this.bindBurger();
       this.bindUserMenu();
       this.bindSearch();
+      this.bindNotifications();
 
       this.isInitialized = true;
       this.syncFromDom();
@@ -156,6 +194,12 @@
     closeMobileNav: function () {
       if (this.nav) this.nav.classList.remove('open');
       if (this.overlay) this.overlay.classList.remove('show');
+    },
+
+    bindNotifications: function () {
+      if (window.userNotificationsUI && typeof window.userNotificationsUI.init === 'function') {
+        window.userNotificationsUI.init();
+      }
     },
 
     bindUserMenu: function () {
@@ -227,7 +271,13 @@
       if (this.guestActions) this.guestActions.hidden = isLoggedIn;
       if (this.userDropdown) this.userDropdown.classList.remove('show');
       if (this.userTrigger) this.userTrigger.setAttribute('aria-expanded', 'false');
-      if (!isLoggedIn) return;
+      if (!isLoggedIn) {
+        if (window.userNotificationsUI && typeof window.userNotificationsUI.setUnread === 'function') {
+          window.userNotificationsUI.setUnread(0);
+          window.userNotificationsUI.close();
+        }
+        return;
+      }
 
       var displayName = user.display_name || user.username || 'Пользователь';
       if (this.userName) this.userName.textContent = displayName;
@@ -259,9 +309,16 @@
         return;
       }
       this.renderUser(auth.getCurrentUser());
+      if (window.userNotificationsUI && typeof window.userNotificationsUI.checkUnread === 'function') {
+        window.userNotificationsUI.checkUnread();
+      }
       var self = this;
       auth.validateToken().then(function (isValid) {
-        self.renderUser(isValid || auth.isAuthenticated() ? auth.getUser() : null);
+        var user = isValid || auth.isAuthenticated() ? auth.getUser() : null;
+        self.renderUser(user);
+        if (user && window.userNotificationsUI && typeof window.userNotificationsUI.checkUnread === 'function') {
+          window.userNotificationsUI.checkUnread();
+        }
       }).catch(function (error) {
         console.error('[SiteHeader] Ошибка валидации профиля:', error);
       });
@@ -291,11 +348,13 @@
 
       this.setActivePage(page);
       this.updateAdminLink(slug);
+      this.ensureNotificationsMarkup();
       if (options.searchPlaceholder && this.searchInput) {
         this.searchInput.placeholder = options.searchPlaceholder;
       }
       this.closeMobileNav();
       this.refreshUser();
+      this.bindNotifications();
     },
 
     setActivePage: function (page) {

@@ -12,6 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/user-notifications.css">
+<script src="/user-notifications.js"></script>
 </head>
 <body data-page="home">
 
@@ -29,6 +31,16 @@
     <div class="site-header-actions">
       <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
       <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="notif-bell" id="notif-bell">
+        <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+        <div class="notif-bell-dropdown" hidden>
+          <div class="notif-bell-head">
+            <b>Уведомления</b>
+            <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+          </div>
+          <div class="notif-bell-list"></div>
+        </div>
+      </div>
       <div class="site-user" id="siteUserMenu" hidden>
         <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
           <span class="site-user-avatar" id="siteUserAvatar"></span>
