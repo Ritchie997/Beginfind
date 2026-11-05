@@ -47,7 +47,7 @@
 
 ## 3. Чтение статей Antropedia (`/antropedia/:slug`)
 
-- [ ] **Оглавление статьи (Table of Contents / TOC)**
+- [x] **Оглавление статьи (Table of Contents / TOC)**
   - **Что делать:** Добавить боковую панель оглавления со списком заголовков H1–H3 и автоподсветкой текущего раздела при скролле.
   - **Где чинить:**
     - `public/site/antropedia.html`: в детальный просмотр статьи `#publicArticleDetail` добавить разметку сайдбара `<aside id="antropediaViewSidebar"><div id="antropediaTocPanel"></div></aside>` из `public/views/antropedia.html` (строки 199–207).

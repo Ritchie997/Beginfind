@@ -223,7 +223,14 @@
     </div>
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
-    <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail" hidden></article>
+    <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail" hidden>
+      <aside id="antropediaViewSidebar" class="antropedia-view-sidebar">
+        <div class="antropedia-sidebar-tabs">
+          <button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button>
+        </div>
+        <div id="antropediaTocPanel" class="antropedia-sidebar-panel antropedia-toc-panel"></div>
+      </aside>
+    </article>
 
     <!-- ===== Редактор статьи (заполняет antropedia-editor-client.js) ===== -->
     <div class="antropedia-editor-view" id="publicArticleEditor" hidden>
