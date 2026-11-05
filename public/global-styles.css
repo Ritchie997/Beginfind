@@ -340,6 +340,50 @@ body {
     color: var(--header-primary);
 }
 
+/* Header search input */
+.header .site-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 999px;
+    padding: 6px 14px;
+    width: 200px;
+    transition: all 0.2s ease;
+}
+
+.header .site-search:focus-within {
+    border-color: var(--blurple);
+    box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
+    width: 260px;
+}
+
+.header .site-search i {
+    color: var(--text-muted);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.header .site-search input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-normal);
+    font-size: 13px;
+    width: 100%;
+}
+
+.header .site-search input::placeholder {
+    color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+    .header .site-search {
+        display: none;
+    }
+}
+
 .mode-switch-link {
     color: var(--text-normal);
     background: var(--background-secondary);

@@ -377,30 +377,31 @@ class SPARouter {
   // сам URL (для history.pushState) в navigateTo не трогаем, меняем только
   // ключ поиска обработчика.
   resolveRouteKey(normalizedPath) {
-    const mapMatch = normalizedPath.match(/^\/map\/([a-z0-9_-]{1,40})(\/edit)?$/i);
+    const cleanPath = (normalizedPath || '').split('?')[0];
+    const mapMatch = cleanPath.match(/^\/map\/([a-z0-9_-]{1,40})(\/edit)?$/i);
     if (mapMatch) {
       this.mapRouteId = mapMatch[1];
       return mapMatch[2] ? '/map-edit' : '/map';
     }
     // /antropedia/:slug — та же страница Antropedia + сразу открытая статья
     // (ссылку на статью можно скопировать кнопкой «Поделиться»).
-    const articleMatch = normalizedPath.match(/^\/(?:admin-panel\/)?antropedia\/([^/]+)$/);
+    const articleMatch = cleanPath.match(/^\/(?:admin-panel\/)?antropedia\/([^/]+)$/);
     if (articleMatch) {
       try { this.articleRouteSlug = decodeURIComponent(articleMatch[1]); }
       catch (e) { this.articleRouteSlug = articleMatch[1]; }
-      return normalizedPath.startsWith('/admin-panel/') ? '/admin-panel/antropedia' : '/antropedia';
+      return cleanPath.startsWith('/admin-panel/') ? '/admin-panel/antropedia' : '/antropedia';
     }
-    const galleryMatch = normalizedPath.match(/^\/gallery(?:\/(\d+))?$/);
+    const galleryMatch = cleanPath.match(/^\/gallery(?:\/(\d+))?$/);
     if (galleryMatch) {
       this.galleryWorkId = galleryMatch[1] || null;
       return '/gallery';
     }
-    const profileMatch = normalizedPath.match(/^\/profile(?:\/(\d+))?$/);
+    const profileMatch = cleanPath.match(/^\/profile(?:\/(\d+))?$/);
     if (profileMatch) {
       this.profileUserId = profileMatch[1] || null;
       return '/profile';
     }
-    return normalizedPath;
+    return cleanPath;
   }
 
   // Update active menu item

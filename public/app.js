@@ -915,6 +915,7 @@ if (document.readyState === 'loading') {
     window.initTooltips();
     window.initRootSidebarVisibility();
     window.initLogoutHandler();
+    window.initGlobalSearch();
     window.checkApprovedStatus();
     window.updateUserInfo();
     window.initNotificationBadges();
@@ -924,6 +925,7 @@ if (document.readyState === 'loading') {
   window.initTooltips();
   window.initRootSidebarVisibility();
   window.initLogoutHandler();
+  window.initGlobalSearch();
   window.checkApprovedStatus();
   window.updateUserInfo();
   window.initNotificationBadges();
@@ -1105,4 +1107,21 @@ window.checkApprovedStatus = function() {
   } catch (e) {
     console.error('Error in checkApprovedStatus:', e);
   }
+};
+
+// Обработчик поля глобального поиска в шапке админ-панели
+window.initGlobalSearch = function() {
+  const searchInput = document.getElementById('adminSearchInput');
+  if (!searchInput || searchInput._bound) return;
+  searchInput._bound = true;
+
+  searchInput.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const query = (searchInput.value || '').trim();
+      if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+        window.spaRouter.navigateTo('/admin-panel/antropedia?q=' + encodeURIComponent(query));
+      }
+    }
+  });
 };

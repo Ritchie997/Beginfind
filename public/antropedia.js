@@ -523,6 +523,11 @@ function reactionsBarInnerHtml(reactions) {
       this.initBookmarkGutter();
       this.initEngagement();
 
+      const urlQuery = new URLSearchParams(window.location.search).get('q');
+      if (urlQuery && this.searchEl) {
+        this.searchEl.value = urlQuery;
+      }
+
       await this.resetAndLoad();
     }
 
