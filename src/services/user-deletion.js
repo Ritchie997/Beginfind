@@ -101,6 +101,20 @@ async function deleteAllUserData(user, actingUserId, otherUsers) {
   const retainedReportUploadPaths = new Set(otherReports.flatMap((report) => [...uploadPathsIn(report.attachments)]));
   retainedReportUploadPaths.forEach((filePath) => retainedUploadPaths.add(filePath));
   reportUploadPaths.forEach((filePath) => articleUploadPaths.add(filePath));
+
+  // Сохраняем загрузки, используемые в серверах/хабах/ленте AllTell
+  const allServers = await all(serversDb, 'SELECT avatar_url FROM servers WHERE avatar_url IS NOT NULL').catch(() => []);
+  allServers.forEach((r) => [...uploadPathsIn(r.avatar_url)].forEach((p) => retainedUploadPaths.add(p)));
+  const allHubs = await all(serversDb, 'SELECT avatar_url FROM franchise_hubs WHERE avatar_url IS NOT NULL').catch(() => []);
+  allHubs.forEach((r) => [...uploadPathsIn(r.avatar_url)].forEach((p) => retainedUploadPaths.add(p)));
+  const allPosts = await all(serversDb, 'SELECT image_url, image_urls, body FROM franchise_posts').catch(() => []);
+  allPosts.forEach((r) => {
+    [...uploadPathsIn(r.image_url)].forEach((p) => retainedUploadPaths.add(p));
+    [...uploadPathsIn(r.image_urls)].forEach((p) => retainedUploadPaths.add(p));
+    [...uploadPathsIn(r.body)].forEach((p) => retainedUploadPaths.add(p));
+  });
+  const allPostComments = await all(socialDb, 'SELECT content FROM franchise_post_comments').catch(() => []);
+  allPostComments.forEach((r) => [...uploadPathsIn(r.content)].forEach((p) => retainedUploadPaths.add(p)));
   const packs = await stickersStore.listPacksByAuthor(userId, true);
   const maps = mapsStore.listMaps();
   const ownedMaps = maps.filter((map) => Number(map.author_id) === userId);

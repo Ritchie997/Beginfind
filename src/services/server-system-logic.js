@@ -115,8 +115,11 @@ function deleteServer(serverId) {
               db.run('DELETE FROM franchise_posts WHERE server_id = ?', [serverId], (err) => {
                 if (err) return rollback(err);
 
-                db.run('DELETE FROM franchise_feed_reads WHERE server_id = ?', [serverId], (err) => {
+                db.run('DELETE FROM franchise_hubs WHERE server_id = ?', [serverId], (err) => {
                   if (err) return rollback(err);
+
+                  db.run('DELETE FROM franchise_feed_reads WHERE server_id = ?', [serverId], (err) => {
+                    if (err) return rollback(err);
 
                   db.run('DELETE FROM servers WHERE id = ?', [serverId], function (err) {
                     if (err) return rollback(err);

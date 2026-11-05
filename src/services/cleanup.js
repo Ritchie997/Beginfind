@@ -31,7 +31,17 @@
 const fs = require('fs');
 const path = require('path');
 const { UPLOADS_DIR, STICKERS_DIR } = require('../config/paths');
-const { messengerDb, socialDb, stickersDb, draftsDb } = require('../db/connections');
+const {
+  messengerDb,
+  socialDb,
+  stickersDb,
+  draftsDb,
+  serversDb,
+  serversSchemaReady,
+  galleryDb,
+  feedbackDb,
+  articlesDb
+} = require('../db/connections');
 const articlesStore = require('./articles-store');
 const feedbackStore = require('./feedback-store');
 
@@ -109,13 +119,13 @@ function findOldTrashedArticles(retentionDays) {
 // (стикеры — отдельная категория со своей логикой, см. ниже).
 function extractFlatUploadName(url) {
   if (!url) return null;
-  const m = String(url).match(/\/uploads\/([^\/?#\s"'<>]+)(?:[?#]|$)/);
+  const m = String(url).match(/(?:^|[/\\]|\b)uploads[/\\]([^\/?#\s"'<>\\]+)(?:[?#]|$)/i);
   return m ? m[1] : null;
 }
 
 // То же самое, но ищет ВСЕ вхождения внутри произвольного текста (markdown
 // сообщения/комментария), а не разбирает одно готовое поле-ссылку.
-const UPLOAD_REF_RE = /\/uploads\/([^\s"'()<>]+)/g;
+const UPLOAD_REF_RE = /(?:^|[/\\]|\b)uploads[/\\]([^\s"'()<>]+)/gi;
 function extractFlatUploadNamesFromText(text) {
   if (!text) return [];
   const out = [];
@@ -123,7 +133,7 @@ function extractFlatUploadNamesFromText(text) {
   let m;
   while ((m = UPLOAD_REF_RE.exec(String(text)))) {
     const seg = m[1].split(/[?#]/)[0];
-    if (seg && !seg.includes('/')) out.push(seg); // "stickers/42/x.png" отбрасываем — не эта категория
+    if (seg && !seg.includes('/') && !seg.includes('\\')) out.push(seg); // "stickers/42/x.png" отбрасываем — не эта категория
   }
   return out;
 }
@@ -181,6 +191,57 @@ async function collectUsedUploadNames() {
     } catch (e) {
       data = r.data; // битый JSON — ищем ссылки хотя бы в сыром тексте
     }
+    forEachString(data, (str) => extractFlatUploadNamesFromText(str).forEach((n) => used.add(n)));
+  });
+
+  // Франшизы, хабы и публикации ленты AllTell (servers.db)
+  try {
+    await serversSchemaReady.catch(() => {});
+
+    const servers = await dbAll(serversDb, 'SELECT avatar_url FROM servers WHERE avatar_url IS NOT NULL', []).catch(() => []);
+    servers.forEach((r) => add(r.avatar_url));
+
+    const hubs = await dbAll(serversDb, 'SELECT avatar_url FROM franchise_hubs WHERE avatar_url IS NOT NULL', []).catch(() => []);
+    hubs.forEach((r) => add(r.avatar_url));
+
+    const posts = await dbAll(serversDb, 'SELECT image_url, image_urls, body FROM franchise_posts', []).catch(() => []);
+    posts.forEach((r) => {
+      add(r.image_url);
+      if (r.image_urls) {
+        try {
+          const parsed = JSON.parse(r.image_urls);
+          if (Array.isArray(parsed)) parsed.forEach(add);
+          else if (typeof parsed === 'string') add(parsed);
+        } catch (_) {
+          extractFlatUploadNamesFromText(r.image_urls).forEach((n) => used.add(n));
+        }
+      }
+      extractFlatUploadNamesFromText(r.body).forEach((n) => used.add(n));
+    });
+  } catch (e) {
+    console.error('[Cleanup] Ошибка сбора загрузок AllTell из servers.db:', e.message);
+  }
+
+  // Комментарии к публикациям AllTell (social.db)
+  const franchiseComments = await dbAll(socialDb, 'SELECT content FROM franchise_post_comments', []).catch(() => []);
+  franchiseComments.forEach((r) => extractFlatUploadNamesFromText(r.content).forEach((n) => used.add(n)));
+
+  // Комментарии к обращениям (feedback.db)
+  const feedbackComments = await dbAll(feedbackDb, 'SELECT text FROM feedback_comments', []).catch(() => []);
+  feedbackComments.forEach((r) => extractFlatUploadNamesFromText(r.text).forEach((n) => used.add(n)));
+
+  // Описания работ и комментарии в галерее (gallery.db)
+  const galleryWorks = await dbAll(galleryDb, 'SELECT description FROM gallery_works WHERE description IS NOT NULL', []).catch(() => []);
+  galleryWorks.forEach((r) => extractFlatUploadNamesFromText(r.description).forEach((n) => used.add(n)));
+
+  const galleryComments = await dbAll(galleryDb, 'SELECT content FROM gallery_comments', []).catch(() => []);
+  galleryComments.forEach((r) => extractFlatUploadNamesFromText(r.content).forEach((n) => used.add(n)));
+
+  // Заявки на коллаборацию статей (articles.db)
+  const collabRequests = await dbAll(articlesDb, 'SELECT proposed_data FROM article_collab_requests WHERE proposed_data IS NOT NULL', []).catch(() => []);
+  collabRequests.forEach((r) => {
+    let data;
+    try { data = JSON.parse(r.proposed_data); } catch (_) { data = r.proposed_data; }
     forEachString(data, (str) => extractFlatUploadNamesFromText(str).forEach((n) => used.add(n)));
   });
 
@@ -349,5 +410,8 @@ module.exports = {
   scanGarbage,
   summarizeReport,
   runCleanup,
-  shouldRunScheduled
+  shouldRunScheduled,
+  collectUsedUploadNames,
+  extractFlatUploadName,
+  extractFlatUploadNamesFromText
 };
