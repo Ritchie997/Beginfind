@@ -105,6 +105,46 @@
         <h3 class="chart-title"><i class="fas fa-circle-nodes"></i> Граф связей статей</h3>
         <span id="homeGraphCount" class="graph-page-count"></span>
       </div>
+      <div class="graph-controls">
+        <select id="graphServerFilter" class="form-select graph-controls-select">
+          <option value="">Все серверы</option>
+        </select>
+        <div class="graph-search-wrap">
+          <i class="fas fa-search"></i>
+          <input type="text" id="graphSearchInput" class="form-input" placeholder="Название или тег (#тег — только теги)…">
+          <button type="button" id="graphSearchClear" class="graph-search-clear" title="Очистить поиск" hidden>&times;</button>
+        </div>
+        <label class="graph-controls-checkbox">
+          <input type="checkbox" id="graphHideIsolated">
+          Скрыть изолированные
+        </label>
+        <label class="graph-controls-checkbox">
+          <input type="checkbox" id="graphHideLabels">
+          Подписи только при наведении
+        </label>
+        <label class="graph-controls-checkbox" title="Выключено: чем больше связей, тем крупнее точка и подпись. Включено: все точки одного размера">
+          <input type="checkbox" id="graphUniformSize">
+          Одинаковый размер точек
+        </label>
+        <label class="graph-controls-checkbox" title="Статьи, которые чаще ссылаются друг на друга, собираются в «острова» с подложкой и названием">
+          <input type="checkbox" id="graphClusters" checked>
+          Группы
+        </label>
+        <label class="graph-controls-checkbox" title="Мерцающие звёзды на фоне, параллакс при движении и свечение точек">
+          <input type="checkbox" id="graphCosmos" checked>
+          Космос
+        </label>
+        <button type="button" id="graphControlsToggle" class="btn btn-secondary btn-sm graph-controls-toggle" title="Показать/скрыть фильтры">
+          <i class="fas fa-sliders-h"></i> Фильтры
+        </button>
+        <button type="button" id="graphFullscreenToggle" class="btn btn-secondary btn-sm graph-controls-fullscreen" title="Открыть граф на весь экран">
+          <i class="fas fa-expand"></i> Во весь экран
+        </button>
+        <button type="button" id="graphExportPng" class="btn btn-secondary btn-sm graph-controls-export">
+          <i class="fas fa-download"></i> PNG
+        </button>
+      </div>
+      <div class="graph-focus-bar" id="graphFocusBar" hidden></div>
       <div class="graph-container graph-container-dashboard graph-cosmos" id="homeGraphContainer" aria-live="polite">
         <div class="graph-empty">Загружаем граф…</div>
       </div>

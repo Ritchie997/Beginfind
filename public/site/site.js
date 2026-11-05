@@ -2583,28 +2583,277 @@
       }
     }
 
+    var graphKeydownHandler = null;
+
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
     async function loadGraph() {
       try {
-        var data = await request('/api/public/articles-graph');
-        if (!mounted) return;
-        var pairs = new Set(data.edges.map(function (edge) {
-          return edge.from < edge.to ? edge.from + '\u0000' + edge.to : edge.to + '\u0000' + edge.from;
-        }));
-        var count = document.getElementById('homeGraphCount');
-        if (count) count.textContent = 'Статей: ' + data.nodes.length + ' · Связей: ' + pairs.size;
-        graphInstance = await window.GraphView.renderGraph(graphRoot, data, {
-          onNodeClick: function (slug) {
-            window.location.href = '/antropedia/' + encodeURIComponent(slug);
-          },
-          colorByTag: true,
-          tagColors: data.tagColors,
-          cosmos: true,
-          clusters: true
-        });
-        if (!mounted && graphInstance) {
-          graphInstance.destroy();
-          graphInstance = null;
+        var fullData = await request('/api/public/articles-graph');
+        if (!mounted || !graphRoot) return;
+
+        var serverSelect = document.getElementById('graphServerFilter');
+        var hideIsolatedEl = document.getElementById('graphHideIsolated');
+        var hideLabelsEl = document.getElementById('graphHideLabels');
+        var uniformSizeEl = document.getElementById('graphUniformSize');
+        var clustersEl = document.getElementById('graphClusters');
+        var cosmosEl = document.getElementById('graphCosmos');
+        var countEl = document.getElementById('homeGraphCount') || document.getElementById('graphNodeCount');
+        var searchInput = document.getElementById('graphSearchInput');
+        var searchClearBtn = document.getElementById('graphSearchClear');
+        var fullscreenBtn = document.getElementById('graphFullscreenToggle');
+        var exportBtn = document.getElementById('graphExportPng');
+        var controlsToggleBtn = document.getElementById('graphControlsToggle');
+        var focusBar = document.getElementById('graphFocusBar');
+        var cardEl = graphRoot.closest('.graph-card-top') || graphRoot.parentElement;
+
+        var COSMOS_STORAGE_KEY = 'alltell.graphCosmos';
+        if (cosmosEl) {
+          try {
+            cosmosEl.checked = localStorage.getItem(COSMOS_STORAGE_KEY) !== '0';
+          } catch (_) {}
         }
+
+        if (hideLabelsEl) {
+          hideLabelsEl.checked = fullData.nodes.length > 50;
+          graphRoot.classList.toggle('graph-hide-labels', hideLabelsEl.checked);
+          hideLabelsEl.addEventListener('change', function () {
+            graphRoot.classList.toggle('graph-hide-labels', hideLabelsEl.checked);
+          });
+        }
+
+        if (serverSelect) {
+          try {
+            var serversResult = await request('/api/public/franchises').catch(function () { return null; });
+            var servers = (serversResult && Array.isArray(serversResult.data)) ? serversResult.data : [];
+            if (servers.length) {
+              serverSelect.innerHTML = '<option value="">Все серверы</option>' +
+                servers.map(function (s) {
+                  return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.name) + '</option>';
+                }).join('');
+            }
+          } catch (_) {}
+          serverSelect.addEventListener('change', rerender);
+        }
+
+        var focusSlug = null;
+        var focusDepth = 1;
+
+        function visibleData() {
+          var serverVal = serverSelect ? serverSelect.value : '';
+          var nodes = fullData.nodes;
+          if (serverVal) {
+            nodes = nodes.filter(function (n) { return String(n.server ?? '') === serverVal; });
+          }
+          var slugSet = new Set(nodes.map(function (n) { return n.slug; }));
+          var edges = fullData.edges.filter(function (e) { return slugSet.has(e.from) && slugSet.has(e.to); });
+
+          if (focusSlug && !slugSet.has(focusSlug)) focusSlug = null;
+          if (focusSlug) {
+            var adjacency = new Map();
+            edges.forEach(function (e) {
+              if (!adjacency.has(e.from)) adjacency.set(e.from, new Set());
+              if (!adjacency.has(e.to)) adjacency.set(e.to, new Set());
+              adjacency.get(e.from).add(e.to);
+              adjacency.get(e.to).add(e.from);
+            });
+            var near = new Set([focusSlug]);
+            var frontier = [focusSlug];
+            for (var step = 0; step < focusDepth; step++) {
+              var next = [];
+              frontier.forEach(function (s) {
+                var neighbors = adjacency.get(s);
+                if (neighbors) {
+                  neighbors.forEach(function (t) {
+                    if (!near.has(t)) {
+                      near.add(t);
+                      next.push(t);
+                    }
+                  });
+                }
+              });
+              frontier = next;
+            }
+            nodes = nodes.filter(function (n) { return near.has(n.slug); });
+            slugSet = near;
+            edges = edges.filter(function (e) { return slugSet.has(e.from) && slugSet.has(e.to); });
+          }
+
+          if (hideIsolatedEl && hideIsolatedEl.checked) {
+            var connected = new Set();
+            edges.forEach(function (e) { connected.add(e.from); connected.add(e.to); });
+            nodes = nodes.filter(function (n) { return connected.has(n.slug); });
+            slugSet = new Set(nodes.map(function (n) { return n.slug; }));
+            edges = edges.filter(function (e) { return slugSet.has(e.from) && slugSet.has(e.to); });
+          }
+          return { nodes: nodes, edges: edges, tagColors: fullData.tagColors };
+        }
+
+        function renderFocusBar() {
+          if (!focusBar) return;
+          focusBar.hidden = !focusSlug;
+          if (!focusSlug) {
+            focusBar.innerHTML = '';
+            return;
+          }
+          var n = fullData.nodes.find(function (x) { return x.slug === focusSlug; });
+          var title = n ? (n.title || n.slug) : focusSlug;
+          function depthBtn(d, text) {
+            return '<button type="button" class="btn btn-sm ' + (focusDepth === d ? 'btn-primary' : 'btn-secondary') + '" data-depth="' + d + '">' + text + '</button>';
+          }
+          focusBar.innerHTML =
+            '<span class="graph-focus-title"><i class="fas fa-crosshairs"></i> Окрестность статьи «' + escapeHtml(title) + '»</span>' +
+            depthBtn(1, '1 шаг') + depthBtn(2, '2 шага') +
+            '<button type="button" class="btn btn-sm btn-secondary" data-focus-reset><i class="fas fa-times"></i> Весь граф</button>';
+
+          focusBar.querySelectorAll('[data-depth]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              setFocus(focusSlug, Number(b.dataset.depth));
+            });
+          });
+          var resetBtn = focusBar.querySelector('[data-focus-reset]');
+          if (resetBtn) {
+            resetBtn.addEventListener('click', function () {
+              setFocus(null);
+            });
+          }
+        }
+
+        function setFocus(slug, depth) {
+          focusSlug = slug || null;
+          if (depth) focusDepth = depth;
+          rerender();
+        }
+
+        async function rerender() {
+          if (graphInstance) {
+            graphInstance.destroy();
+            graphInstance = null;
+          }
+          if (!mounted) return;
+          var curData = visibleData();
+          var pairs = new Set();
+          curData.edges.forEach(function (e) {
+            if (e.from !== e.to) {
+              pairs.add(e.from < e.to ? e.from + '\u0000' + e.to : e.to + '\u0000' + e.from);
+            }
+          });
+          var mapCount = curData.nodes.filter(function (n) { return n.kind === 'map'; }).length;
+          if (countEl) {
+            countEl.textContent = 'Статей: ' + (curData.nodes.length - mapCount) + (mapCount ? ' · Карт: ' + mapCount : '') + ' · Связей: ' + pairs.size;
+          }
+          renderFocusBar();
+
+          graphInstance = await window.GraphView.renderGraph(graphRoot, curData, {
+            onNodeClick: function (slug) {
+              if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
+                window.PublicSite.navigateTo('/antropedia/' + encodeURIComponent(slug));
+              } else {
+                window.location.href = '/antropedia/' + encodeURIComponent(slug);
+              }
+            },
+            onNodeFocus: setFocus,
+            centerSlug: focusSlug || undefined,
+            colorByTag: true,
+            tagColors: fullData.tagColors,
+            uniformSize: !!(uniformSizeEl && uniformSizeEl.checked),
+            cosmos: cosmosEl ? cosmosEl.checked : true,
+            clusters: clustersEl ? clustersEl.checked : true
+          });
+
+          if (searchInput && searchInput.value.trim() && graphInstance) {
+            graphInstance.setSearchHighlight(searchInput.value);
+          }
+          if (curData.nodes.length && window.GraphView && typeof window.GraphView.renderGraphLegend === 'function') {
+            window.GraphView.renderGraphLegend(graphRoot, curData.nodes, fullData.tagColors);
+          }
+          if (!mounted && graphInstance) {
+            graphInstance.destroy();
+            graphInstance = null;
+          }
+        }
+
+        hideIsolatedEl?.addEventListener('change', rerender);
+        clustersEl?.addEventListener('change', rerender);
+        uniformSizeEl?.addEventListener('change', function () {
+          graphInstance?.setUniformSize(uniformSizeEl.checked);
+        });
+        cosmosEl?.addEventListener('change', function () {
+          try {
+            localStorage.setItem(COSMOS_STORAGE_KEY, cosmosEl.checked ? '1' : '0');
+          } catch (_) {}
+          graphInstance?.setCosmos(cosmosEl.checked);
+        });
+
+        if (searchInput) {
+          searchInput.addEventListener('input', function () {
+            var q = searchInput.value.trim();
+            if (searchClearBtn) searchClearBtn.hidden = !q;
+            graphInstance?.setSearchHighlight(q);
+          });
+          searchInput.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            var slug = graphInstance?.firstSearchMatch();
+            if (!slug) return;
+            e.preventDefault();
+            setFocus(slug);
+          });
+        }
+        if (searchClearBtn) {
+          searchClearBtn.addEventListener('click', function () {
+            if (!searchInput) return;
+            searchInput.value = '';
+            searchClearBtn.hidden = true;
+            graphInstance?.setSearchHighlight('');
+            searchInput.focus();
+          });
+        }
+
+        if (exportBtn) {
+          exportBtn.addEventListener('click', function () {
+            if (window.GraphView && typeof window.GraphView.exportGraphPng === 'function') {
+              window.GraphView.exportGraphPng(graphRoot);
+            }
+          });
+        }
+
+        function setGraphFullscreen(on) {
+          if (!cardEl) return;
+          cardEl.classList.toggle('graph-fullscreen', on);
+          cardEl.classList.remove('graph-controls-open');
+          if (fullscreenBtn) {
+            fullscreenBtn.innerHTML = on
+              ? '<i class="fas fa-compress"></i> Свернуть'
+              : '<i class="fas fa-expand"></i> Во весь экран';
+            fullscreenBtn.title = on ? 'Свернуть граф' : 'Открыть граф на весь экран';
+          }
+          rerender();
+        }
+
+        if (fullscreenBtn) {
+          fullscreenBtn.addEventListener('click', function () {
+            setGraphFullscreen(!cardEl.classList.contains('graph-fullscreen'));
+          });
+        }
+
+        if (controlsToggleBtn) {
+          controlsToggleBtn.addEventListener('click', function () {
+            cardEl.classList.toggle('graph-controls-open');
+          });
+        }
+
+        graphKeydownHandler = function (e) {
+          if (e.key === 'Escape' && cardEl && cardEl.classList.contains('graph-fullscreen')) {
+            setGraphFullscreen(false);
+          }
+        };
+        document.addEventListener('keydown', graphKeydownHandler);
+
+        await rerender();
       } catch (error) {
         if (error.name === 'AbortError' || !mounted) return;
         console.error('Не удалось загрузить граф связей:', error);
@@ -2615,6 +2864,14 @@
     var cleanup = function () {
       mounted = false;
       controller.abort();
+      if (graphKeydownHandler) {
+        document.removeEventListener('keydown', graphKeydownHandler);
+        graphKeydownHandler = null;
+      }
+      var cardEl = graphRoot ? (graphRoot.closest('.graph-card-top') || graphRoot.parentElement) : null;
+      if (cardEl && cardEl.classList.contains('graph-fullscreen')) {
+        cardEl.classList.remove('graph-fullscreen');
+      }
       if (graphInstance) {
         graphInstance.destroy();
         graphInstance = null;

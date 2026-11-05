@@ -2017,6 +2017,6 @@
   }
 
   window.GraphView = {
-    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng, createPendantLayout
+    renderGraph, loadD3, navigateToArticle, initGraphPage, exportGraphPng, createPendantLayout, renderGraphLegend
   };
 })();
