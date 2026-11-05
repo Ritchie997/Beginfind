@@ -1399,7 +1399,6 @@
         sidebarToggleBtn.setAttribute('aria-expanded', String(Boolean(open)));
       });
       toolbar.appendChild(sidebarToggleBtn);
-      detail.appendChild(toolbar);
 
       if (Array.isArray(article.pending_collab_requests) && article.pending_collab_requests.length > 0) {
         var collabBanner = makeEl('div', 'article-collab-banner');
@@ -1500,15 +1499,19 @@
           bannerList.appendChild(item);
         });
         collabBanner.appendChild(bannerList);
-        detail.appendChild(collabBanner);
       }
 
       var layout = makeEl('div', 'antropedia-view-layout');
-      var articleBody = makeEl('div', 'antropedia-view-article');
+      var articleBody = makeEl('article', 'antropedia-view-article');
 
       var sidebar = makeEl('aside', 'antropedia-view-sidebar');
       sidebar.id = 'antropediaViewSidebar';
       sidebar.innerHTML = '<div class="antropedia-sidebar-tabs"><button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button></div><div id="antropediaTocPanel" class="antropedia-sidebar-panel antropedia-toc-panel"></div>';
+
+      articleBody.appendChild(toolbar);
+      if (typeof collabBanner !== 'undefined' && collabBanner) {
+        articleBody.appendChild(collabBanner);
+      }
 
       var coverUrl = safePublicImageUrl(article.image);
       if (coverUrl) {
@@ -1684,7 +1687,7 @@
         content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
         renderToc(content);
       });
-      initComments(article, detail, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
+      initComments(article, articleBody, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
     }
 
