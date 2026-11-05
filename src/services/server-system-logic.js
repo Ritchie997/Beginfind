@@ -141,6 +141,7 @@ function deleteServer(serverId) {
       });
     });
   });
+});
 }
 
 // Получение всех серверов
