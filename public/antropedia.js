@@ -4226,21 +4226,6 @@ initEngagement() {
             groupEl.appendChild(this.createBookmarkTab(blockEl, blockId, bm));
           });
 
-          if (bookmarks.length < 3) {
-            const addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.className = 'antropedia-bm-tab is-add-btn';
-            addBtn.setAttribute('data-block-id', blockId);
-            addBtn.title = 'Добавить ещё закладку';
-            addBtn.innerHTML = '<i class="fas fa-plus"></i>';
-            addBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              this.openBookmarkPopover(blockId, addBtn);
-            });
-            groupEl.appendChild(addBtn);
-          }
-
           this.bookmarkGutterEl.appendChild(groupEl);
         } else {
           this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmarks[0], contentRect, targetTop));
