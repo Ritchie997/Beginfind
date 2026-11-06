@@ -507,6 +507,7 @@ function reactionsBarInnerHtml(reactions) {
       this.bookmarkPopoverDeleteBtn = document.getElementById('antropediaBookmarkPopoverDelete');
       this.bookmarkPopoverCloseBtn = document.getElementById('antropediaBookmarkPopoverClose');
       this.bookmarkModalBackdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
+      this._bmAllHighlightsActive = false;
 
       // Лайк + комментарии под статьёй
       this.likeBtn = document.getElementById('antropediaLikeBtn');
@@ -3206,6 +3207,15 @@ initEngagement() {
       });
       if (this.tocPanelEl) this.tocPanelEl.hidden = tab !== 'toc';
       if (this.bookmarksPanelEl) this.bookmarksPanelEl.hidden = tab !== 'bookmarks';
+
+      if (tab === 'bookmarks') {
+        this._bmAllHighlightsActive = true;
+        this.renderAllBookmarkHighlights();
+      } else {
+        this._bmAllHighlightsActive = false;
+        this.clearAllBookmarkHighlights();
+      }
+      this.renderBookmarksPanel();
     }
 
     openLayerPickerModal() {
@@ -4141,7 +4151,10 @@ initEngagement() {
 
     scheduleBookmarkGutterRefresh() {
       clearTimeout(this._bmGutterResizeDebounce);
-      this._bmGutterResizeDebounce = setTimeout(() => this.renderBookmarkGutter(), 150);
+      this._bmGutterResizeDebounce = setTimeout(() => {
+        this.renderBookmarkGutter();
+        if (this._bmAllHighlightsActive) this.renderAllBookmarkHighlights();
+      }, 150);
     }
 
     hasWideGutterSpace() {
@@ -4539,11 +4552,225 @@ initEngagement() {
       this.updateBookmarksBadge(this.currentArticleBookmarks.length);
       this.renderBookmarksPanel();
       this.renderBookmarkGutter();
+      if (this._bmAllHighlightsActive) this.renderAllBookmarkHighlights();
+    }
+
+    hexToRgba(hex, alpha) {
+      if (!hex) return `rgba(88, 101, 242, ${alpha})`;
+      if (hex.charAt(0) === '#' && hex.length === 7) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+      return hex;
+    }
+
+    getStripeBackground(colors) {
+      if (!colors || !colors.length) return 'transparent';
+      if (colors.length === 1) {
+        return this.hexToRgba(colors[0], 0.32);
+      }
+      if (colors.length === 2) {
+        const c1 = this.hexToRgba(colors[0], 0.36);
+        const c2 = this.hexToRgba(colors[1], 0.36);
+        return `repeating-linear-gradient(135deg, ${c1} 0px, ${c1} 6px, ${c2} 6px, ${c2} 12px)`;
+      }
+      const c1 = this.hexToRgba(colors[0], 0.40);
+      const c2 = this.hexToRgba(colors[1], 0.40);
+      const c3 = this.hexToRgba(colors[2], 0.40);
+      return `repeating-linear-gradient(135deg, ${c1} 0px, ${c1} 6px, ${c2} 6px, ${c2} 12px, ${c3} 12px, ${c3} 18px)`;
+    }
+
+    decomposeIntervals(intervals, fullLength) {
+      const cutPoints = new Set([0, fullLength]);
+      intervals.forEach((it) => {
+        cutPoints.add(Math.max(0, Math.min(fullLength, it.start)));
+        cutPoints.add(Math.max(0, Math.min(fullLength, it.end)));
+      });
+
+      const sortedPoints = Array.from(cutPoints).sort((a, b) => a - b);
+      const segments = [];
+
+      for (let i = 0; i < sortedPoints.length - 1; i++) {
+        const s = sortedPoints[i];
+        const e = sortedPoints[i + 1];
+        if (s >= e) continue;
+
+        const active = intervals.filter((it) => it.start <= s && it.end >= e);
+        if (!active.length) continue;
+
+        const colors = active.map((it) => it.color);
+        const uniqueColors = Array.from(new Set(colors)).slice(0, 3);
+        const ids = active.map((it) => it.id);
+
+        segments.push({
+          start: s,
+          end: e,
+          colors: uniqueColors,
+          ids: ids
+        });
+      }
+
+      return segments;
+    }
+
+    getRangeOffsetsInBlock(blockEl, range) {
+      try {
+        const preRange = document.createRange();
+        preRange.selectNodeContents(blockEl);
+        preRange.setEnd(range.startContainer, range.startOffset);
+        const start = preRange.toString().length;
+        const len = range.toString().length;
+        return { start: start, end: start + len };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    createRangeFromOffsets(containerEl, startOffset, endOffset) {
+      const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null, false);
+      let currentPos = 0;
+      let startNode = null;
+      let startNodeOffset = 0;
+      let endNode = null;
+      let endNodeOffset = 0;
+      let node;
+
+      while ((node = walker.nextNode())) {
+        const len = node.nodeValue.length;
+        const nextPos = currentPos + len;
+
+        if (!startNode && startOffset >= currentPos && startOffset <= nextPos) {
+          startNode = node;
+          startNodeOffset = startOffset - currentPos;
+        }
+        if (!endNode && endOffset >= currentPos && endOffset <= nextPos) {
+          endNode = node;
+          endNodeOffset = endOffset - currentPos;
+          break;
+        }
+        currentPos = nextPos;
+      }
+
+      if (!startNode || !endNode) return null;
+
+      const range = document.createRange();
+      try {
+        range.setStart(startNode, startNodeOffset);
+        range.setEnd(endNode, endNodeOffset);
+        return range;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    clearAllBookmarkHighlights() {
+      const overlay = document.getElementById('antropediaBmHighlightsOverlay');
+      if (overlay) overlay.remove();
+    }
+
+    renderAllBookmarkHighlights() {
+      this.clearAllBookmarkHighlights();
+      if (!this._bmAllHighlightsActive || !this.currentArticleBookmarks || !this.currentArticleBookmarks.length) return;
+
+      const contentEl = this.contentEl;
+      if (!contentEl) return;
+
+      const contentRect = contentEl.getBoundingClientRect();
+      if (contentRect.width <= 0) return;
+
+      const overlay = document.createElement('div');
+      overlay.id = 'antropediaBmHighlightsOverlay';
+      overlay.className = 'antropedia-bm-highlights-overlay';
+
+      const blocks = Array.from(contentEl.querySelectorAll('[data-block-id]'));
+      if (!blocks.length) return;
+
+      const byBlock = new Map();
+      this.currentArticleBookmarks.forEach((b) => {
+        if (!b.blockId) return;
+        if (!byBlock.has(b.blockId)) byBlock.set(b.blockId, []);
+        byBlock.get(b.blockId).push(b);
+      });
+
+      const scrollY = contentEl.scrollTop || 0;
+      const scrollX = contentEl.scrollLeft || 0;
+
+      blocks.forEach((blockEl) => {
+        const blockId = blockEl.getAttribute('data-block-id');
+        const bookmarks = byBlock.get(blockId);
+        if (!bookmarks || !bookmarks.length) return;
+
+        const fullText = blockEl.textContent || '';
+        if (!fullText.length) return;
+
+        const intervals = [];
+        bookmarks.forEach((bm) => {
+          let range = null;
+          if (bm.quote) {
+            range = this.findQuoteRange(blockEl, bm.quote);
+            if (!range) range = this.findQuoteRange(contentEl, bm.quote);
+          }
+          let offsets = null;
+          if (range) {
+            offsets = this.getRangeOffsetsInBlock(blockEl, range);
+          }
+          if (!offsets) {
+            offsets = { start: 0, end: fullText.length };
+          }
+          intervals.push({
+            id: bm.id,
+            start: offsets.start,
+            end: offsets.end,
+            color: bm.color || '#5865f2'
+          });
+        });
+
+        const segments = this.decomposeIntervals(intervals, fullText.length);
+        segments.forEach((seg) => {
+          const subRange = this.createRangeFromOffsets(blockEl, seg.start, seg.end);
+          if (!subRange) return;
+
+          const clientRects = subRange.getClientRects();
+          if (!clientRects || !clientRects.length) return;
+
+          const bg = this.getStripeBackground(seg.colors);
+
+          for (let i = 0; i < clientRects.length; i++) {
+            const r = clientRects[i];
+            if (r.width <= 0 || r.height <= 0) continue;
+
+            const rectEl = document.createElement('div');
+            rectEl.className = 'antropedia-bm-highlight-rect';
+            rectEl.style.left = `${Math.round(r.left - contentRect.left + scrollX)}px`;
+            rectEl.style.top = `${Math.round(r.top - contentRect.top + scrollY - 1)}px`;
+            rectEl.style.width = `${Math.round(r.width)}px`;
+            rectEl.style.height = `${Math.round(r.height + 2)}px`;
+            rectEl.style.background = bg;
+            rectEl.setAttribute('data-bm-ids', seg.ids.join(','));
+
+            overlay.appendChild(rectEl);
+          }
+        });
+      });
+
+      contentEl.appendChild(overlay);
     }
 
     setBookmarkHighlight(bookmark) {
       this.clearBookmarkHighlight();
       if (!bookmark) return;
+
+      const overlay = document.getElementById('antropediaBmHighlightsOverlay');
+      if (overlay && this._bmAllHighlightsActive) {
+        overlay.classList.add('has-focus');
+        overlay.querySelectorAll('.antropedia-bm-highlight-rect').forEach((r) => {
+          const ids = (r.getAttribute('data-bm-ids') || '').split(',');
+          r.classList.toggle('is-focused', ids.includes(String(bookmark.id)));
+        });
+      }
+
       if (!this.contentEl) return;
       let blockEl = null;
       if (bookmark.blockId) {
@@ -4557,7 +4784,7 @@ initEngagement() {
       const color = bookmark.color || '#5865f2';
       const hoverColor = (color && color.length === 7 && color.charAt(0) === '#') ? (color + '55') : color;
 
-      if (typeof Highlight !== 'undefined' && CSS.highlights) {
+      if (!this._bmAllHighlightsActive && typeof Highlight !== 'undefined' && CSS.highlights) {
         try {
           let range = null;
           if (bookmark.quote) {
@@ -4578,6 +4805,13 @@ initEngagement() {
     }
 
     clearBookmarkHighlight() {
+      const overlay = document.getElementById('antropediaBmHighlightsOverlay');
+      if (overlay) {
+        overlay.classList.remove('has-focus');
+        overlay.querySelectorAll('.is-focused').forEach((r) => {
+          r.classList.remove('is-focused');
+        });
+      }
       if (typeof Highlight !== 'undefined' && CSS.highlights) {
         try { CSS.highlights.delete('antropedia-bm-hover'); } catch (_) {}
       }
@@ -4601,12 +4835,21 @@ initEngagement() {
         });
       }
 
+      const headerHtml = `
+        <div class="antropedia-bookmarks-panel-header">
+          <span class="antropedia-bookmarks-panel-title"><i class="fas fa-bookmark"></i> Закладки (${this.currentArticleBookmarks.length})</span>
+          <button type="button" class="antropedia-bm-highlight-toggle ${this._bmAllHighlightsActive ? 'is-active' : ''}" data-action="toggle-highlights" title="${this._bmAllHighlightsActive ? 'Выключить подсветку в тексте' : 'Включить подсветку в тексте'}">
+            <i class="fas fa-highlighter"></i>
+          </button>
+        </div>
+      `;
+
       if (!this.currentArticleBookmarks.length) {
-        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — выделите текст или нажмите на хвостик закладки, чтобы добавить.</div>';
+        panel.innerHTML = headerHtml + '<div class="antropedia-sidebar-empty">Закладок пока нет — выделите текст или нажмите на хвостик закладки, чтобы добавить.</div>';
         return;
       }
 
-      panel.innerHTML = this.currentArticleBookmarks.map((b) => `
+      const listHtml = this.currentArticleBookmarks.map((b) => `
         <div class="antropedia-bookmark-item" data-id="${b.id}" data-block-id="${escapeHtml(b.blockId || '')}">
           <span class="antropedia-bookmark-dot" style="background:${escapeHtml(b.color)}"></span>
           <div class="antropedia-bookmark-item-body">
@@ -4616,9 +4859,23 @@ initEngagement() {
           <button type="button" class="antropedia-bookmark-item-del" data-action="delete-bookmark" title="Удалить закладку"><i class="fas fa-trash"></i></button>
         </div>
       `).join('');
+
+      panel.innerHTML = headerHtml + listHtml;
     }
 
     handleBookmarksPanelClick(e) {
+      const toggleBtn = e.target.closest('[data-action="toggle-highlights"]');
+      if (toggleBtn) {
+        e.stopPropagation();
+        this._bmAllHighlightsActive = !this._bmAllHighlightsActive;
+        if (this._bmAllHighlightsActive) {
+          this.renderAllBookmarkHighlights();
+        } else {
+          this.clearAllBookmarkHighlights();
+        }
+        this.renderBookmarksPanel();
+        return;
+      }
       const delBtn = e.target.closest('[data-action="delete-bookmark"]');
       const item = e.target.closest('.antropedia-bookmark-item');
       if (!item) return;
