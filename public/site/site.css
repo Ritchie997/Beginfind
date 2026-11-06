@@ -9903,6 +9903,59 @@ a.site-profile-media-row:hover {
     box-shadow: 0 4px 14px rgba(88, 101, 242, 0.5);
 }
 
+/* === Переключатель слоёв секретности / лора статьи === */
+.antropedia-layer-switcher {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 14px 0 16px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--site-radius-sm, 8px);
+    color: var(--text-muted, #949ba4);
+    font-size: 13px;
+}
+
+.antropedia-layer-switcher[hidden] {
+    display: none !important;
+}
+
+.antropedia-layer-switcher > i.fa-layer-group {
+    color: var(--header-secondary, #b9bbbe);
+    font-size: 14px;
+    margin-right: 2px;
+}
+
+.antropedia-layer-btn {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-normal, #dcddde);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.antropedia-layer-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+.antropedia-layer-btn.active {
+    background: var(--blurple, #5865f2);
+    border-color: var(--blurple, #5865f2);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(88, 101, 242, 0.35);
+}
+
 /* === Виджет инлайн-поиска по тексту статьи (в боковой панели оглавления) === */
 .antropedia-toc-search-widget {
     position: relative;

@@ -955,6 +955,12 @@
     margin: 0 0 10px !important;
   }
 
+  .antropedia-layer-switcher {
+    margin: 10px 0 12px !important;
+    padding: 6px 10px !important;
+    gap: 6px !important;
+  }
+
   .antropedia-detail-view .public-article-cover {
     margin: 0 0 14px !important;
     border-radius: 10px !important;

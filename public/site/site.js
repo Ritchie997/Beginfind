@@ -1949,16 +1949,18 @@
 
 
 
-      var coverUrl = safePublicImageUrl(article.image);
-      if (coverUrl) {
-        var cover = makeEl('figure', 'public-article-cover');
-        var coverImage = document.createElement('img');
-        coverImage.src = coverUrl;
+      var cover = null;
+      var coverImage = null;
+      var initialCoverUrl = safePublicImageUrl(article.image);
+      if (initialCoverUrl) {
+        cover = makeEl('figure', 'public-article-cover');
+        coverImage = document.createElement('img');
+        coverImage.src = initialCoverUrl;
         coverImage.alt = article.title || 'Обложка статьи';
         coverImage.style.cursor = 'zoom-in';
-        coverImage.addEventListener('error', function () { cover.remove(); });
+        coverImage.addEventListener('error', function () { if (cover) { cover.remove(); cover = null; coverImage = null; } });
         coverImage.addEventListener('click', function () {
-          window.imageLightbox?.open([{ src: coverUrl, alt: article.title || 'Обложка статьи' }]);
+          window.imageLightbox?.open([{ src: coverImage ? coverImage.src : initialCoverUrl, alt: article.title || 'Обложка статьи' }]);
         });
         cover.appendChild(coverImage);
         detail.appendChild(cover);
@@ -2003,7 +2005,7 @@
         coAuthorsIcon.className = 'fas fa-user-group';
         coAuthorsIcon.style.marginRight = '4px';
         coAuthorsIcon.style.opacity = '0.7';
-        coAuthorsLabel.append(coAuthorsIcon, document.createTextNode('Соавторы: '));
+        coAuthorsIcon.append(coAuthorsIcon, document.createTextNode('Соавторы: '));
         article.co_authors.forEach(function (ca, idx) {
           if (idx > 0) coAuthorsLabel.append(document.createTextNode(', '));
           if (ca.id != null) {
@@ -2038,92 +2040,218 @@
         meta.appendChild(viewsEl);
       }
       if (meta.childNodes.length) detail.appendChild(meta);
+      var excerpt = null;
       if (article.excerpt) {
-        var excerpt = document.createElement('p');
+        excerpt = document.createElement('p');
         excerpt.className = 'public-article-excerpt';
         excerpt.textContent = article.excerpt;
         detail.appendChild(excerpt);
       }
-      if (Array.isArray(article.tags) && article.tags.length) {
-        var tags = document.createElement('div');
-        tags.className = 'wiki-card-tags public-article-tags';
-        article.tags.forEach(function (tag) {
-          var button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'wiki-tag';
-          button.textContent = tag;
-          button.addEventListener('click', function () {
-            window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tag));
+
+      var tagsContainer = null;
+      function renderTags(tagList) {
+        if (!tagsContainer) {
+          tagsContainer = document.createElement('div');
+          tagsContainer.className = 'wiki-card-tags public-article-tags';
+          if (typeof layerSwitcher !== 'undefined' && layerSwitcher && layerSwitcher.parentNode) {
+            detail.insertBefore(tagsContainer, layerSwitcher);
+          } else {
+            detail.appendChild(tagsContainer);
+          }
+        }
+        tagsContainer.innerHTML = '';
+        if (Array.isArray(tagList) && tagList.length) {
+          tagsContainer.hidden = false;
+          tagList.forEach(function (tag) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wiki-tag';
+            button.textContent = tag;
+            button.addEventListener('click', function () {
+              window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tag));
+            });
+            tagsContainer.appendChild(button);
           });
-          tags.appendChild(button);
-        });
-        detail.appendChild(tags);
+        } else {
+          tagsContainer.hidden = true;
+        }
+      }
+      if (Array.isArray(article.tags) && article.tags.length) {
+        renderTags(article.tags);
       }
 
       var userPromise = loadCurrentUser();
       initArticleEngagement(article, detail, userPromise);
+
+      var layerSwitcher = makeEl('div', 'antropedia-layer-switcher');
+      layerSwitcher.id = 'antropediaLayerSwitcher';
+
+      function renderLayerSwitcher() {
+        var options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
+        if (options.length < 2) {
+          layerSwitcher.hidden = true;
+          layerSwitcher.innerHTML = '';
+          return;
+        }
+        layerSwitcher.hidden = false;
+        layerSwitcher.innerHTML = '<i class="fas fa-layer-group" title="Слои статьи" aria-hidden="true"></i>' +
+          options.map(function (opt) {
+            var activeClass = opt.index === article.layerIndex ? ' active' : '';
+            return '<button type="button" class="antropedia-layer-btn' + activeClass + '" data-layer-index="' + opt.index + '">' +
+              escapeHtml(opt.title) + '</button>';
+          }).join('');
+      }
+
+      var isSwitchingLayer = false;
+      async function switchArticleLayer(targetIndex) {
+        if (isSwitchingLayer) return;
+        var slug = article.slug || state.slug;
+        if (!slug) return;
+        isSwitchingLayer = true;
+        try {
+          var token = getAuthToken();
+          var url = (token ? '/api/articles/' : PUBLIC_ARTICLES_API + '/') +
+                    encodeURIComponent(slug) + '?layer=' + encodeURIComponent(targetIndex);
+          var res = await fetch(url, {
+            credentials: 'omit',
+            headers: token ? { Authorization: 'Bearer ' + token } : {}
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          var updated = await res.json();
+          if (state.slug && state.slug !== slug) return;
+          article.title = updated.title;
+          article.content = updated.content;
+          article.layerIndex = updated.layerIndex;
+          if (Array.isArray(updated.layerOptions)) {
+            article.layerOptions = updated.layerOptions;
+          }
+          if (Array.isArray(updated.tags)) {
+            article.tags = updated.tags;
+          }
+          if (title) {
+            title.textContent = updated.title || updated.slug;
+          }
+          var newCoverUrl = safePublicImageUrl(updated.image);
+          if (newCoverUrl) {
+            if (!cover) {
+              cover = makeEl('figure', 'public-article-cover');
+              coverImage = document.createElement('img');
+              coverImage.style.cursor = 'zoom-in';
+              coverImage.addEventListener('error', function () { if (cover) { cover.remove(); cover = null; coverImage = null; } });
+              coverImage.addEventListener('click', function () {
+                window.imageLightbox?.open([{ src: coverImage ? coverImage.src : newCoverUrl, alt: article.title || 'Обложка статьи' }]);
+              });
+              cover.appendChild(coverImage);
+              detail.insertBefore(cover, title);
+            }
+            if (coverImage) {
+              coverImage.src = newCoverUrl;
+              coverImage.alt = article.title || 'Обложка статьи';
+            }
+            cover.hidden = false;
+          } else if (cover) {
+            cover.hidden = true;
+          }
+          if (updated.excerpt) {
+            if (!excerpt) {
+              excerpt = document.createElement('p');
+              excerpt.className = 'public-article-excerpt';
+              detail.insertBefore(excerpt, tagsContainer || layerSwitcher);
+            }
+            excerpt.textContent = updated.excerpt;
+            excerpt.hidden = false;
+          } else if (excerpt) {
+            excerpt.hidden = true;
+          }
+          if (tagsContainer || (Array.isArray(article.tags) && article.tags.length)) {
+            renderTags(article.tags);
+          }
+          renderLayerSwitcher();
+          updateArticleMetadata(article);
+          await renderContentBlocks(article.content);
+        } catch (err) {
+          console.error('Не удалось переключить слой статьи:', err);
+        } finally {
+          isSwitchingLayer = false;
+        }
+      }
+
+      layerSwitcher.addEventListener('click', function (e) {
+        var btn = e.target.closest('.antropedia-layer-btn');
+        if (!btn || btn.classList.contains('active')) return;
+        e.preventDefault();
+        var targetIndex = parseInt(btn.dataset.layerIndex, 10);
+        switchArticleLayer(targetIndex);
+      });
+
+      renderLayerSwitcher();
+      detail.appendChild(layerSwitcher);
 
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';
       detail.appendChild(content);
       currentContentEl = content;
 
-      // Индекс открытых статей — по нему рендерер узнаёт цели вики-ссылок.
-      // Без него каждая ссылка на другую статью выглядела как «создать».
-      // Остальные цели (закрытые/несуществующие) для гостя одинаково
-      // «Недоступно», без приглашения создавать статью и без раскрытия
-      // того, существует ли она.
-      loadPublicIndex(article).then(function (indexData) {
-        if (typeof window.renderArticleBlocks !== 'function') throw new Error('Block renderer is unavailable');
-        var restricted = indexData.authenticated ? indexData.restrictedSlugs : { has: function () { return true; } };
-        return window.renderArticleBlocks(article.content, indexData.index, restricted);
-      }).then(function (html) {
-        content.innerHTML = html;
-        window.attachBlocksInteractions?.(content);
-        content.querySelectorAll('a[data-slug]').forEach(function (link) {
-          link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
-        });
-        renderToc(content);
-        if (inlineSearchEl && inlineSearchEl.value.trim()) {
-          runInArticleSearch(inlineSearchEl.value);
+      content.addEventListener('click', function (event) {
+        var wikiLink = event.target.closest('a[data-slug]');
+        if (wikiLink) return;
+        var tagLink = event.target.closest('[data-tag]');
+        if (tagLink) {
+          window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tagLink.dataset.tag));
+          return;
         }
-        content.addEventListener('click', function (event) {
-          var wikiLink = event.target.closest('a[data-slug]');
-          if (wikiLink) return;
-          var tagLink = event.target.closest('[data-tag]');
-          if (tagLink) {
-            window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tagLink.dataset.tag));
-            return;
-          }
-          var galleryFig = event.target.closest('[data-gallery-work]');
-          if (galleryFig && window.galleryViewer && !event.target.closest('a:not([data-gallery-open])')) {
-            event.preventDefault();
-            window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
-            return;
-          }
-          var imgEl = event.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
-          if (imgEl && window.imageLightbox && !event.target.closest('a') && !galleryFig) {
-            event.preventDefault();
-            var allImgs = Array.from(content.querySelectorAll('.blk-image:not([data-gallery-work]):not(.blk-image-gallery-locked) img, .blk-infobox-art img'))
-              .filter(function (img) { return Boolean(img.src); });
-            var clickedIdx = Math.max(0, allImgs.indexOf(imgEl));
-            var items = (allImgs.length ? allImgs : [imgEl]).map(function (img) {
-              var fig = img.closest('.blk-image');
-              var caption = fig ? fig.querySelector('figcaption')?.textContent?.trim() : '';
-              return {
-                src: img.src,
-                alt: img.alt || '',
-                caption: caption || img.alt || ''
-              };
-            });
-            window.imageLightbox.open(items, clickedIdx);
-            return;
-          }
-        });
-      }).catch(function () {
-        content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
-        renderToc(content);
+        var galleryFig = event.target.closest('[data-gallery-work]');
+        if (galleryFig && window.galleryViewer && !event.target.closest('a:not([data-gallery-open])')) {
+          event.preventDefault();
+          window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
+          return;
+        }
+        var imgEl = event.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
+        if (imgEl && window.imageLightbox && !event.target.closest('a') && !galleryFig) {
+          event.preventDefault();
+          var allImgs = Array.from(content.querySelectorAll('.blk-image:not([data-gallery-work]):not(.blk-image-gallery-locked) img, .blk-infobox-art img'))
+            .filter(function (img) { return Boolean(img.src); });
+          var clickedIdx = Math.max(0, allImgs.indexOf(imgEl));
+          var items = (allImgs.length ? allImgs : [imgEl]).map(function (img) {
+            var fig = img.closest('.blk-image');
+            var caption = fig ? fig.querySelector('figcaption')?.textContent?.trim() : '';
+            return {
+              src: img.src,
+              alt: img.alt || '',
+              caption: caption || img.alt || ''
+            };
+          });
+          window.imageLightbox.open(items, clickedIdx);
+          return;
+        }
       });
+
+      var publicIndexPromise = loadPublicIndex(article);
+
+      async function renderContentBlocks(articleContent) {
+        clearSearchHighlights();
+        updateSearchCount();
+        try {
+          var indexData = await publicIndexPromise;
+          if (typeof window.renderArticleBlocks !== 'function') throw new Error('Block renderer is unavailable');
+          var restricted = indexData.authenticated ? indexData.restrictedSlugs : { has: function () { return true; } };
+          var html = await window.renderArticleBlocks(articleContent, indexData.index, restricted);
+          content.innerHTML = html;
+          window.attachBlocksInteractions?.(content);
+          content.querySelectorAll('a[data-slug]').forEach(function (link) {
+            link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
+          });
+          renderToc(content);
+          if (inlineSearchEl && inlineSearchEl.value.trim()) {
+            runInArticleSearch(inlineSearchEl.value);
+          }
+        } catch (_) {
+          content.replaceChildren(makePublicMessage('Не удалось отобразить содержимое статьи.'));
+          renderToc(content);
+        }
+      }
+
+      renderContentBlocks(article.content);
       initComments(article, detail, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
     }
