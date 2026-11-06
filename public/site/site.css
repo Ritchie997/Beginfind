@@ -9903,96 +9903,81 @@ a.site-profile-media-row:hover {
     box-shadow: 0 4px 14px rgba(88, 101, 242, 0.5);
 }
 
-/* === Поиск по тексту открытой статьи (Inline search) === */
-.antropedia-inline-search {
-    flex: 1 1 240px;
-    min-width: 160px;
-    max-width: 380px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 12px;
-    background: var(--background-primary);
-    border: 1px solid var(--background-accent);
-    border-radius: 999px;
-    height: 38px;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-}
-
-.antropedia-inline-search:focus-within {
-    border-color: rgba(99, 102, 241, 0.4);
-    background: rgba(255, 255, 255, 0.04);
-}
-
-/* Режим следования за пользователем (Floating / Sticky) */
-.antropedia-inline-search.is-floating {
+/* === Виджет поиска по открытой статье (в правом верхнем углу) === */
+.antropedia-article-search-widget {
     position: fixed;
     top: calc(var(--site-header-h, 60px) + 14px);
     right: 24px;
     z-index: 490;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+.antropedia-article-search-widget > * {
+    pointer-events: auto;
+}
+
+/* Кнопка-лупа в правом верхнем углу */
+.antropedia-search-trigger-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(30, 31, 34, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--header-secondary, #b9bbbe);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.antropedia-search-trigger-btn:hover {
+    color: #ffffff;
+    background: var(--blurple, #5865f2);
+    border-color: var(--blurple, #5865f2);
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
+}
+
+/* Раскрытая плавающая панель поиска */
+.antropedia-inline-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 360px;
     max-width: min(380px, calc(100vw - 32px));
-    height: 42px;
-    padding: 0 14px;
+    height: 40px;
+    padding: 0 12px;
     background: rgba(24, 25, 28, 0.94);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 999px;
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.25);
-    animation: antropediaSearchFloatIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    animation: antropediaSearchExpand 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-@keyframes antropediaSearchFloatIn {
+.antropedia-inline-search:focus-within {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+@keyframes antropediaSearchExpand {
     from {
         opacity: 0;
-        transform: translateY(-8px) scale(0.97);
+        transform: scale(0.9) translateX(10px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-/* Плавающая кнопка вызова поиска при скролле */
-.antropedia-floating-search-btn {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 480;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--background-secondary, #2f3136);
-    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.12));
-    color: var(--header-secondary);
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    animation: antropediaSearchBtnIn 0.2s ease;
-}
-
-.antropedia-floating-search-btn:hover {
-    color: #ffffff;
-    background: var(--blurple, #5865f2);
-    border-color: var(--blurple, #5865f2);
-    transform: scale(1.06);
-    box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
-}
-
-@keyframes antropediaSearchBtnIn {
-    from {
-        opacity: 0;
-        transform: scale(0.85);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
+        transform: scale(1) translateX(0);
     }
 }
 

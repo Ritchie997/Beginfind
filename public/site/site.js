@@ -563,13 +563,11 @@
         tocObserver.disconnect();
         tocObserver = null;
       }
-      window.removeEventListener('scroll', onDetailScroll);
       clearTimeout(inlineSearchDebounce);
-      clearInArticleSearch();
+      closeInArticleSearch();
+      document.removeEventListener('click', onArticleSearchOutsideClick);
       currentContentEl = null;
-      currentToolbarEl = null;
-      if (inlineSearchWrap) inlineSearchWrap.classList.remove('is-floating');
-      if (floatingSearchTrigger) floatingSearchTrigger.hidden = true;
+      if (searchWidgetEl) searchWidgetEl.remove();
       listView.hidden = false;
       if (detailContainer) detailContainer.hidden = true;
       detail.hidden = true;
@@ -601,10 +599,14 @@
       showListView: showListView,
       showDetailView: showDetailView,
       openEditor: showEditorView,
+      openInArticleSearch: openInArticleSearch,
+      closeInArticleSearch: closeInArticleSearch,
       runInArticleSearch: runInArticleSearch,
       gotoSearchHit: gotoSearchHit,
       clearInArticleSearch: clearInArticleSearch
     };
+    window.openInArticleSearch = openInArticleSearch;
+    window.closeInArticleSearch = closeInArticleSearch;
     window.runInArticleSearch = runInArticleSearch;
     window.gotoSearchHit = gotoSearchHit;
     window.clearInArticleSearch = clearInArticleSearch;
@@ -1295,56 +1297,49 @@
     // ========================================
     // Поиск по тексту открытой статьи (инлайн-поиск)
     // ========================================
+    var searchWidgetEl = null;
+    var searchTriggerBtn = null;
     var inlineSearchWrap = null;
     var inlineSearchEl = null;
     var inlineSearchCountEl = null;
     var inlineSearchPrevBtn = null;
     var inlineSearchNextBtn = null;
     var inlineSearchClearBtn = null;
-    var floatingSearchTrigger = null;
     var currentContentEl = null;
-    var currentToolbarEl = null;
     var searchHits = [];
     var searchIndex = -1;
     var inlineSearchDebounce = null;
-    var isSearchFocused = false;
-    var isSearchExplicitlyOpen = false;
-    var scrollRaf = null;
 
-    function updateFloatingSearchPosition() {
-      if (!inlineSearchWrap || !currentToolbarEl) return;
-      var inputEl = inlineSearchEl || inlineSearchWrap.querySelector('#antropediaInlineSearch');
-      var hasQuery = !!(inputEl && inputEl.value.trim());
-      var toolbarRect = currentToolbarEl.getBoundingClientRect();
-      // Проверка прокрутки: тулбар ушёл выше шапки сайта
-      var isScrolledPastToolbar = toolbarRect.bottom < 64;
-
-      // Плавающий режим включается, если ушли вниз И есть запрос/фокус/пользователь открыл поиск
-      var shouldFloat = isScrolledPastToolbar && (hasQuery || isSearchFocused || isSearchExplicitlyOpen);
-
-      if (shouldFloat) {
-        if (!inlineSearchWrap.classList.contains('is-floating')) {
-          inlineSearchWrap.classList.add('is-floating');
+    function openInArticleSearch() {
+      if (!searchWidgetEl || !inlineSearchWrap) return;
+      searchWidgetEl.classList.add('is-open');
+      if (searchTriggerBtn) searchTriggerBtn.hidden = true;
+      inlineSearchWrap.hidden = false;
+      if (inlineSearchEl) {
+        inlineSearchEl.focus();
+        inlineSearchEl.select();
+        if (inlineSearchEl.value.trim()) {
+          runInArticleSearch(inlineSearchEl.value, { autoScroll: false });
         }
-      } else {
-        if (inlineSearchWrap.classList.contains('is-floating')) {
-          inlineSearchWrap.classList.remove('is-floating');
-        }
-      }
-
-      // Плавающая кнопка вызова поиска видна при скролле только когда поиск закрыт
-      if (floatingSearchTrigger) {
-        var showTrigger = isScrolledPastToolbar && !shouldFloat;
-        floatingSearchTrigger.hidden = !showTrigger;
       }
     }
 
-    function onDetailScroll() {
-      if (scrollRaf) return;
-      scrollRaf = requestAnimationFrame(function () {
-        scrollRaf = null;
-        updateFloatingSearchPosition();
-      });
+    function closeInArticleSearch() {
+      clearInArticleSearch();
+      if (!searchWidgetEl || !inlineSearchWrap) return;
+      searchWidgetEl.classList.remove('is-open');
+      inlineSearchWrap.hidden = true;
+      if (searchTriggerBtn) searchTriggerBtn.hidden = false;
+      if (inlineSearchEl) inlineSearchEl.blur();
+    }
+
+    function onArticleSearchOutsideClick(e) {
+      if (!searchWidgetEl || !searchWidgetEl.classList.contains('is-open')) return;
+      if (searchWidgetEl.contains(e.target)) return;
+      var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
+      if (!inputEl || !inputEl.value.trim()) {
+        closeInArticleSearch();
+      }
     }
 
     function updateSearchCount() {
@@ -1365,7 +1360,7 @@
       var showNav = hasQuery && searchHits.length > 0;
       if (prevBtn) prevBtn.hidden = !showNav;
       if (nextBtn) nextBtn.hidden = !showNav;
-      if (clearBtn) clearBtn.hidden = !hasQuery;
+      if (clearBtn) clearBtn.hidden = false;
     }
 
     function clearSearchHighlights() {
@@ -1385,11 +1380,8 @@
     function clearInArticleSearch() {
       var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
       if (inputEl) inputEl.value = '';
-      isSearchExplicitlyOpen = false;
-      isSearchFocused = false;
       clearSearchHighlights();
       updateSearchCount();
-      updateFloatingSearchPosition();
     }
 
     function gotoSearchHit(dir) {
@@ -1420,7 +1412,6 @@
       var content = currentContentEl || (detail && detail.querySelector('.public-article-content'));
       if (!q || !content) {
         updateSearchCount();
-        updateFloatingSearchPosition();
         return;
       }
 
@@ -1463,7 +1454,6 @@
       searchHits = Array.from(content.querySelectorAll('mark.search-hit, mark.antropedia-search-hit'));
       searchIndex = -1;
       updateSearchCount();
-      updateFloatingSearchPosition();
 
       var opts = options || {};
       if (searchHits.length) {
@@ -1693,12 +1683,9 @@
       detail.replaceChildren();
       updateAdminLinks(article.slug);
 
-      window.removeEventListener('scroll', onDetailScroll);
       clearTimeout(inlineSearchDebounce);
       searchHits = [];
       searchIndex = -1;
-      isSearchFocused = false;
-      isSearchExplicitlyOpen = false;
 
       var back = document.createElement('a');
       back.className = 'public-article-back';
@@ -1709,75 +1696,10 @@
       back.append(backIcon, document.createTextNode(' Все статьи'));
       var toolbar = makeEl('div', 'public-article-detail-toolbar');
       toolbar.appendChild(back);
-      currentToolbarEl = toolbar;
       var listReturn = readListReturn();
       if (listReturn && listReturn.currentSlug === article.slug) {
         back.href = listReturn.url + ARTICLE_LIST_RETURN_HASH;
       }
-
-      inlineSearchWrap = makeEl('div', 'antropedia-inline-search');
-      inlineSearchWrap.innerHTML =
-        '<i class="fas fa-search"></i>' +
-        '<input type="text" id="antropediaInlineSearch" class="antropedia-inline-search-input" placeholder="Поиск по статье…">' +
-        '<span id="antropediaInlineSearchCount" class="antropedia-inline-search-count" hidden></span>' +
-        '<button type="button" id="antropediaInlineSearchPrev" class="antropedia-inline-search-nav" title="Предыдущее совпадение" hidden><i class="fas fa-chevron-up"></i></button>' +
-        '<button type="button" id="antropediaInlineSearchNext" class="antropedia-inline-search-nav" title="Следующее совпадение" hidden><i class="fas fa-chevron-down"></i></button>' +
-        '<button type="button" id="antropediaInlineSearchClear" class="antropedia-inline-search-nav" title="Очистить" hidden><i class="fas fa-times"></i></button>';
-
-      inlineSearchEl = inlineSearchWrap.querySelector('#antropediaInlineSearch');
-      inlineSearchCountEl = inlineSearchWrap.querySelector('#antropediaInlineSearchCount');
-      inlineSearchPrevBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchPrev');
-      inlineSearchNextBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchNext');
-      inlineSearchClearBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchClear');
-
-      inlineSearchEl.addEventListener('input', function () {
-        clearTimeout(inlineSearchDebounce);
-        inlineSearchDebounce = setTimeout(function () {
-          runInArticleSearch(inlineSearchEl.value, { autoScroll: false });
-        }, 250);
-      });
-      inlineSearchEl.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          clearInArticleSearch();
-          inlineSearchEl.blur();
-          return;
-        }
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-        if (!searchHits.length && inlineSearchEl.value.trim()) {
-          runInArticleSearch(inlineSearchEl.value, { autoScroll: true });
-        } else {
-          gotoSearchHit(e.shiftKey ? -1 : 1);
-        }
-      });
-      inlineSearchEl.addEventListener('focus', function () {
-        isSearchFocused = true;
-        updateFloatingSearchPosition();
-      });
-      inlineSearchEl.addEventListener('blur', function () {
-        isSearchFocused = false;
-        setTimeout(function () {
-          updateFloatingSearchPosition();
-        }, 150);
-      });
-      inlineSearchPrevBtn.addEventListener('click', function () {
-        gotoSearchHit(-1);
-      });
-      inlineSearchNextBtn.addEventListener('click', function () {
-        gotoSearchHit(1);
-      });
-      inlineSearchClearBtn.addEventListener('click', function () {
-        var wasFloating = inlineSearchWrap.classList.contains('is-floating');
-        clearInArticleSearch();
-        if (wasFloating) {
-          inlineSearchEl.blur();
-        } else {
-          inlineSearchEl.focus();
-        }
-      });
-
-      toolbar.appendChild(inlineSearchWrap);
       if (article.can_edit) {
         var editBtn = makeEl('button', 'btn btn-secondary btn-sm public-article-edit-btn');
         editBtn.type = 'button';
@@ -1812,6 +1734,75 @@
         sidebarToggleBtn.setAttribute('aria-expanded', String(Boolean(open)));
       });
       toolbar.appendChild(sidebarToggleBtn);
+
+      // Виджет поиска в правом верхнем углу (кнопка-лупа, раскрывающаяся в плавающий тулбар)
+      searchWidgetEl = makeEl('div', 'antropedia-article-search-widget');
+      searchWidgetEl.id = 'antropediaSearchWidget';
+
+      searchTriggerBtn = makeEl('button', 'antropedia-search-trigger-btn');
+      searchTriggerBtn.type = 'button';
+      searchTriggerBtn.id = 'antropediaSearchTriggerBtn';
+      searchTriggerBtn.title = 'Поиск по статье (Ctrl+F или /)';
+      searchTriggerBtn.setAttribute('aria-label', 'Поиск по статье');
+      searchTriggerBtn.innerHTML = '<i class="fas fa-search"></i>';
+      searchTriggerBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openInArticleSearch();
+      });
+
+      inlineSearchWrap = makeEl('div', 'antropedia-inline-search');
+      inlineSearchWrap.id = 'antropediaInlineSearchWrap';
+      inlineSearchWrap.hidden = true;
+      inlineSearchWrap.innerHTML =
+        '<i class="fas fa-search"></i>' +
+        '<input type="text" id="antropediaInlineSearch" class="antropedia-inline-search-input" placeholder="Поиск по статье…" autocomplete="off">' +
+        '<span id="antropediaInlineSearchCount" class="antropedia-inline-search-count" hidden></span>' +
+        '<button type="button" id="antropediaInlineSearchPrev" class="antropedia-inline-search-nav" title="Предыдущее совпадение" hidden><i class="fas fa-chevron-up"></i></button>' +
+        '<button type="button" id="antropediaInlineSearchNext" class="antropedia-inline-search-nav" title="Следующее совпадение" hidden><i class="fas fa-chevron-down"></i></button>' +
+        '<button type="button" id="antropediaInlineSearchClear" class="antropedia-inline-search-nav" title="Закрыть поиск (Esc)"><i class="fas fa-times"></i></button>';
+
+      inlineSearchEl = inlineSearchWrap.querySelector('#antropediaInlineSearch');
+      inlineSearchCountEl = inlineSearchWrap.querySelector('#antropediaInlineSearchCount');
+      inlineSearchPrevBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchPrev');
+      inlineSearchNextBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchNext');
+      inlineSearchClearBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchClear');
+
+      inlineSearchEl.addEventListener('input', function () {
+        clearTimeout(inlineSearchDebounce);
+        inlineSearchDebounce = setTimeout(function () {
+          runInArticleSearch(inlineSearchEl.value, { autoScroll: false });
+        }, 200);
+      });
+      inlineSearchEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeInArticleSearch();
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!searchHits.length && inlineSearchEl.value.trim()) {
+          runInArticleSearch(inlineSearchEl.value, { autoScroll: true });
+        } else {
+          gotoSearchHit(e.shiftKey ? -1 : 1);
+        }
+      });
+      inlineSearchPrevBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        gotoSearchHit(-1);
+      });
+      inlineSearchNextBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        gotoSearchHit(1);
+      });
+      inlineSearchClearBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeInArticleSearch();
+      });
+
+      searchWidgetEl.append(searchTriggerBtn, inlineSearchWrap);
+      detail.appendChild(searchWidgetEl);
+      document.addEventListener('click', onArticleSearchOutsideClick);
 
       if (Array.isArray(article.pending_collab_requests) && article.pending_collab_requests.length > 0) {
         var collabBanner = makeEl('div', 'article-collab-banner');
@@ -1919,24 +1910,7 @@
         detail.appendChild(collabBanner);
       }
 
-      floatingSearchTrigger = makeEl('button', 'antropedia-floating-search-btn');
-      floatingSearchTrigger.type = 'button';
-      floatingSearchTrigger.title = 'Поиск по статье (/)';
-      floatingSearchTrigger.setAttribute('aria-label', 'Поиск по статье');
-      floatingSearchTrigger.hidden = true;
-      floatingSearchTrigger.innerHTML = '<i class="fas fa-search"></i>';
-      floatingSearchTrigger.addEventListener('click', function () {
-        isSearchExplicitlyOpen = true;
-        updateFloatingSearchPosition();
-        if (inlineSearchEl) {
-          inlineSearchEl.focus();
-          inlineSearchEl.select();
-        }
-      });
-      detail.appendChild(floatingSearchTrigger);
 
-      window.addEventListener('scroll', onDetailScroll, { passive: true });
-      updateFloatingSearchPosition();
 
       var coverUrl = safePublicImageUrl(article.image);
       if (coverUrl) {
@@ -2737,20 +2711,24 @@
       clearTimeout(searchDebounce);
       applyFilters();
     });
-    // «/» фокусирует поиск, если фокус не в поле ввода.
+    // Поиск по статье (Ctrl+F, Cmd+F или «/»)
     function onSearchShortcut(event) {
-      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
-      var tag = document.activeElement && document.activeElement.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      event.preventDefault();
-      var inlineInput = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
-      if (state.slug && inlineInput) {
-        isSearchExplicitlyOpen = true;
-        updateFloatingSearchPosition();
-        inlineInput.focus();
-        inlineInput.select();
-      } else {
-        input.focus();
+      var isCtrlF = (event.key === 'f' || event.key === 'а' || event.code === 'KeyF') && (event.ctrlKey || event.metaKey);
+      if (isCtrlF && state.slug) {
+        event.preventDefault();
+        openInArticleSearch();
+        return;
+      }
+
+      if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        var tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        event.preventDefault();
+        if (state.slug) {
+          openInArticleSearch();
+        } else {
+          input.focus();
+        }
       }
     }
     document.addEventListener('keydown', onSearchShortcut);
@@ -2769,13 +2747,11 @@
       var detailLoad = loadDetail();
       var detailCleanup = function cleanup() {
         state.disposed = true;
-        window.removeEventListener('scroll', onDetailScroll);
         clearTimeout(inlineSearchDebounce);
-        clearInArticleSearch();
+        closeInArticleSearch();
+        document.removeEventListener('click', onArticleSearchOutsideClick);
         currentContentEl = null;
-        currentToolbarEl = null;
-        if (inlineSearchWrap) inlineSearchWrap.classList.remove('is-floating');
-        if (floatingSearchTrigger) floatingSearchTrigger.hidden = true;
+        if (searchWidgetEl) searchWidgetEl.remove();
         if (tocCleanup) {
           tocCleanup();
           tocCleanup = null;
@@ -2841,13 +2817,11 @@
 
     var listCleanup = function cleanup() {
       state.disposed = true;
-      window.removeEventListener('scroll', onDetailScroll);
       clearTimeout(inlineSearchDebounce);
-      clearInArticleSearch();
+      closeInArticleSearch();
+      document.removeEventListener('click', onArticleSearchOutsideClick);
       currentContentEl = null;
-      currentToolbarEl = null;
-      if (inlineSearchWrap) inlineSearchWrap.classList.remove('is-floating');
-      if (floatingSearchTrigger) floatingSearchTrigger.hidden = true;
+      if (searchWidgetEl) searchWidgetEl.remove();
       if (state.controller) state.controller.abort();
       if (state.observer) state.observer.disconnect();
       clearTimeout(searchDebounce);
