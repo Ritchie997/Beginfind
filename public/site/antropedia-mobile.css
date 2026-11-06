@@ -959,6 +959,26 @@
     height: 34px !important;
   }
 
+  .antropedia-detail-view .antropedia-inline-search.is-floating {
+    top: calc(var(--site-header-h, 56px) + 8px) !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+    padding: 0 12px !important;
+    z-index: 550 !important;
+  }
+
+  .antropedia-floating-search-btn {
+    bottom: 18px !important;
+    right: 16px !important;
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 14px !important;
+  }
+
   .antropedia-detail-view .public-article-cover {
     margin: 0 0 14px !important;
     border-radius: 10px !important;

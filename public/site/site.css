@@ -9925,6 +9925,77 @@ a.site-profile-media-row:hover {
     background: rgba(255, 255, 255, 0.04);
 }
 
+/* Режим следования за пользователем (Floating / Sticky) */
+.antropedia-inline-search.is-floating {
+    position: fixed;
+    top: calc(var(--site-header-h, 60px) + 14px);
+    right: 24px;
+    z-index: 490;
+    width: 360px;
+    max-width: min(380px, calc(100vw - 32px));
+    height: 42px;
+    padding: 0 14px;
+    background: rgba(24, 25, 28, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.25);
+    animation: antropediaSearchFloatIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes antropediaSearchFloatIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Плавающая кнопка вызова поиска при скролле */
+.antropedia-floating-search-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 480;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--background-secondary, #2f3136);
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.12));
+    color: var(--header-secondary);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    animation: antropediaSearchBtnIn 0.2s ease;
+}
+
+.antropedia-floating-search-btn:hover {
+    color: #ffffff;
+    background: var(--blurple, #5865f2);
+    border-color: var(--blurple, #5865f2);
+    transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
+}
+
+@keyframes antropediaSearchBtnIn {
+    from {
+        opacity: 0;
+        transform: scale(0.85);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .antropedia-inline-search > i.fa-search {
     color: var(--text-muted);
     font-size: 13px;
