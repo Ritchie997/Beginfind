@@ -1312,8 +1312,10 @@
     function openMobileSearch() {
       var bar = document.getElementById('antropediaMobileSearchBar');
       var input = document.getElementById('antropediaMobileSearchInput');
+      var toggleBtn = document.getElementById('antropediaMobileSearchToggleBtn');
       if (!bar) return;
       bar.hidden = false;
+      if (toggleBtn) toggleBtn.classList.add('active');
       if (!input) input = bar.querySelector('input');
       if (inlineSearchEl && inlineSearchEl.value.trim() && input) {
         input.value = inlineSearchEl.value;
@@ -1332,6 +1334,8 @@
     function closeMobileSearch() {
       var bar = document.getElementById('antropediaMobileSearchBar');
       if (bar) bar.hidden = true;
+      var toggleBtn = document.getElementById('antropediaMobileSearchToggleBtn');
+      if (toggleBtn) toggleBtn.classList.remove('active');
       var input = document.getElementById('antropediaMobileSearchInput');
       if (input) input.value = '';
       closeInArticleSearch();
@@ -3160,7 +3164,12 @@
       mobileSearchToggleBtn.innerHTML = '<i class="fas fa-search" aria-hidden="true"></i>';
       mobileSearchToggleBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        openMobileSearch();
+        var bar = document.getElementById('antropediaMobileSearchBar');
+        if (bar && !bar.hidden) {
+          closeMobileSearch();
+        } else {
+          openMobileSearch();
+        }
       });
       actions.appendChild(mobileSearchToggleBtn);
 

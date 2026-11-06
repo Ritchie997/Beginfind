@@ -3332,6 +3332,9 @@ initEngagement() {
       }
       if (!this.mobileSearchBarEl) return;
       this.mobileSearchBarEl.hidden = false;
+      if (this.mobileSearchToggleBtn) {
+        this.mobileSearchToggleBtn.classList.add('active');
+      }
       if (!this.mobileSearchInputEl) {
         this.mobileSearchInputEl = document.getElementById('antropediaMobileSearchInput');
       }
@@ -3354,6 +3357,9 @@ initEngagement() {
         this.mobileSearchBarEl = document.getElementById('antropediaMobileSearchBar');
       }
       if (this.mobileSearchBarEl) this.mobileSearchBarEl.hidden = true;
+      if (this.mobileSearchToggleBtn) {
+        this.mobileSearchToggleBtn.classList.remove('active');
+      }
       if (this.mobileSearchInputEl) this.mobileSearchInputEl.value = '';
       this.closeInArticleSearch();
     }
@@ -3369,7 +3375,11 @@ initEngagement() {
 
       this.mobileSearchToggleBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.openMobileSearch();
+        if (this.mobileSearchBarEl && !this.mobileSearchBarEl.hidden) {
+          this.closeMobileSearch();
+        } else {
+          this.openMobileSearch();
+        }
       });
 
       this.mobileSearchInputEl?.addEventListener('input', () => {

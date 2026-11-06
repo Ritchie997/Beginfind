@@ -933,15 +933,39 @@
   /* --------------------------------------------------------------------------
      8. Детальный просмотр статьи на мобильных
      -------------------------------------------------------------------------- */
+  .antropedia-detail-container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
   .antropedia-detail-view {
+    margin: 0 auto !important;
+    max-width: 960px !important;
+    width: 100% !important;
     padding: 12px 10px 24px !important;
     border-radius: 12px !important;
+    box-sizing: border-box !important;
   }
 
   .antropedia-detail-view .public-article-detail-toolbar {
-    margin-bottom: 12px !important;
-    padding-bottom: 10px !important;
+    margin: 0 auto 16px auto !important;
+    padding: 0 12px !important;
     gap: 8px !important;
+    width: 100% !important;
+    max-width: 960px !important;
+    box-sizing: border-box !important;
+  }
+
+  .public-article-content.preview-pane {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .antropedia-detail-view .public-article-back,
@@ -962,7 +986,9 @@
   }
 
   .antropedia-detail-view .public-article-cover {
-    margin: 0 0 14px !important;
+    display: flex !important;
+    justify-content: center !important;
+    margin: 0 auto 14px auto !important;
     border-radius: 10px !important;
   }
 
@@ -971,12 +997,21 @@
   }
 
   .antropedia-detail-view .public-article-title {
+    text-align: center !important;
     font-size: 20px !important;
     line-height: 1.25 !important;
     margin-bottom: 10px !important;
   }
 
+  .antropedia-title-layer-pill {
+    margin: 4px auto 14px auto !important;
+    display: flex !important;
+    width: fit-content !important;
+  }
+
   .antropedia-detail-view .public-article-meta {
+    justify-content: center !important;
+    text-align: center !important;
     gap: 8px !important;
     margin-bottom: 12px !important;
     padding-bottom: 12px !important;
@@ -984,6 +1019,7 @@
   }
 
   .antropedia-detail-view .public-article-excerpt {
+    text-align: center !important;
     font-size: 13px !important;
     line-height: 1.5 !important;
     padding: 10px 12px !important;
