@@ -742,7 +742,7 @@ function reactionsBarInnerHtml(reactions) {
           this.moreActionsMenu.hidden = true;
           this.moreActionsBtn?.setAttribute('aria-expanded', 'false');
         }
-        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.antropedia-bm-toggle, .antropedia-bm-tab')) {
+        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.antropedia-bm-toggle, .antropedia-bm-tab, #antropediaSelectionTooltip, #antropediaMobileBookmarkBar, .antropedia-selection-tooltip')) {
           this.closeBookmarkPopover();
         }
         // Пикеры стикеров (форма комментария/ответа И полоска реакций — один
@@ -4060,23 +4060,28 @@ initEngagement() {
 
       const selBtn = document.getElementById('antropediaSelectionBookmarkBtn');
       if (selBtn) {
-        selBtn.addEventListener('mousedown', (e) => e.preventDefault());
-        selBtn.addEventListener('click', () => {
+        selBtn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        selBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           if (!this._currentSelectedRangeInfo) return;
           const info = this._currentSelectedRangeInfo;
           this.hideSelectionUI();
-          this.openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+          this.openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
         });
       }
 
       const mobileAddBtn = document.getElementById('antropediaMobileBmAddBtn');
       if (mobileAddBtn) {
         mobileAddBtn.addEventListener('touchstart', (e) => e.stopPropagation());
-        mobileAddBtn.addEventListener('click', () => {
+        mobileAddBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           if (!this._currentSelectedRangeInfo) return;
           const info = this._currentSelectedRangeInfo;
           this.hideSelectionUI();
-          this.openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+          this.openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
         });
       }
 
@@ -4325,11 +4330,31 @@ initEngagement() {
       this.renderBookmarkColorSwatches();
       if (this.bookmarkPopoverDeleteBtn) this.bookmarkPopoverDeleteBtn.hidden = !existing;
 
+      if (!this.bookmarkPopoverEl) {
+        this.bookmarkPopoverEl = document.getElementById('antropediaBookmarkPopover');
+      }
+      if (!this.bookmarkPopoverNameEl) {
+        this.bookmarkPopoverNameEl = document.getElementById('antropediaBookmarkPopoverName');
+      }
+      if (!this.bookmarkPopoverColorsEl) {
+        this.bookmarkPopoverColorsEl = document.getElementById('antropediaBookmarkPopoverColors');
+      }
+      if (!this.bookmarkPopoverDeleteBtn) {
+        this.bookmarkPopoverDeleteBtn = document.getElementById('antropediaBookmarkPopoverDelete');
+      }
+      if (!this.bookmarkModalBackdropEl) {
+        this.bookmarkModalBackdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
+      }
+
       if (this.bookmarkPopoverEl) {
         this.bookmarkPopoverEl.hidden = false;
         if (this._bmHoverCapable && anchorEl) {
-          const rect = anchorEl.getBoundingClientRect();
-          this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
+          const rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+          if (rect) {
+            this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
+          } else {
+            this.positionFloating(this.bookmarkPopoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+          }
         } else {
           this.bookmarkPopoverEl.style.removeProperty('left');
           this.bookmarkPopoverEl.style.removeProperty('top');
@@ -4344,7 +4369,11 @@ initEngagement() {
       if (!el) return;
       const margin = 8;
       const left = Math.min(Math.max(margin, cx - width / 2), window.innerWidth - width - margin);
-      const top = Math.min(Math.max(margin, cy), window.innerHeight - height - margin);
+      let top = cy;
+      if (top + height > window.innerHeight - margin) {
+        top = Math.max(margin, cy - height - 16);
+      }
+      top = Math.min(Math.max(margin, top), window.innerHeight - height - margin);
       el.style.left = `${Math.round(left)}px`;
       el.style.top = `${Math.round(top)}px`;
     }

@@ -10219,7 +10219,7 @@ a.site-profile-media-row:hover {
 
 .antropedia-bookmark-popover {
     position: fixed;
-    z-index: 1050;
+    z-index: 2100;
     width: 280px;
     display: flex;
     flex-direction: column;
@@ -10309,7 +10309,7 @@ a.site-profile-media-row:hover {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.55);
-    z-index: 1040;
+    z-index: 2095;
 }
 
 .antropedia-bookmark-modal-backdrop[hidden] {

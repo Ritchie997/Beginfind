@@ -2040,7 +2040,11 @@
       if (!el) return;
       var margin = 8;
       var left = Math.min(Math.max(margin, cx - width / 2), window.innerWidth - width - margin);
-      var top = Math.min(Math.max(margin, cy), window.innerHeight - height - margin);
+      var top = cy;
+      if (top + height > window.innerHeight - margin) {
+        top = Math.max(margin, cy - height - 16);
+      }
+      top = Math.min(Math.max(margin, top), window.innerHeight - height - margin);
       el.style.left = Math.round(left) + 'px';
       el.style.top = Math.round(top) + 'px';
     }
@@ -2080,8 +2084,12 @@
       if (popoverEl) {
         popoverEl.hidden = false;
         if (bmHoverCapable && anchorEl) {
-          var rect = anchorEl.getBoundingClientRect();
-          positionFloating(popoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
+          var rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+          if (rect) {
+            positionFloating(popoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
+          } else {
+            positionFloating(popoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+          }
         } else {
           popoverEl.style.removeProperty('left');
           popoverEl.style.removeProperty('top');
@@ -2597,12 +2605,14 @@
       if (selBtn) {
         selBtn.addEventListener('mousedown', function (e) {
           e.preventDefault();
+          e.stopPropagation();
         });
-        selBtn.addEventListener('click', function () {
+        selBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
           if (!currentSelectedRangeInfo) return;
           var info = currentSelectedRangeInfo;
           hideSelectionUI();
-          openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+          openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
         });
       }
 
@@ -2611,11 +2621,12 @@
         mobileAddBtn.addEventListener('touchstart', function (e) {
           e.stopPropagation();
         });
-        mobileAddBtn.addEventListener('click', function () {
+        mobileAddBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
           if (!currentSelectedRangeInfo) return;
           var info = currentSelectedRangeInfo;
           hideSelectionUI();
-          openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+          openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
         });
       }
 

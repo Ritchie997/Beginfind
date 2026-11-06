@@ -1976,7 +1976,7 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    см. antropediaBookmarkModalBackdrop/handleContentDblClick в antropedia.js. === */
 .antropedia-bookmark-popover {
   position: fixed;
-  z-index: 30;
+  z-index: 2100;
   width: 280px;
   display: flex;
   flex-direction: column;
@@ -2059,7 +2059,7 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
-  z-index: 29;
+  z-index: 2095;
 }
 
 /* === Тач-устройство — у попапа закладки нет хвостика/курсора, рядом с
