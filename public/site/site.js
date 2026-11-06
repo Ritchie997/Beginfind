@@ -1659,6 +1659,599 @@
     }
     initLayerDropdownListeners();
 
+    // ========================================
+    // Закладки на блоках статьи и желоб закладок (bookmark-gutter)
+    // ========================================
+    var BOOKMARK_COLORS = ['#5865f2', '#3ba55d', '#ed4245', '#faa81a', '#9b59b6', '#eb459e', '#00b0f4', '#f0791f'];
+    var BOOKMARK_TAB_MIN_SPACE = 190;
+    var currentArticleBookmarks = [];
+    var currentArticleSlug = null;
+    var currentArticleTitle = null;
+    var pendingBookmark = null;
+    var selectedBookmarkColor = BOOKMARK_COLORS[0];
+    var bmHoverCapable = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+    var bmWideMode = false;
+    var bmBlocks = [];
+    var bmLastHoverY = 0;
+    var bmHoverMoveScheduled = false;
+    var bmGutterResizeDebounce = null;
+    var bookmarkGhostEl = null;
+    var bookmarkGutterHoverEl = null;
+    var bookmarkCompactHoverEl = null;
+
+    function hasWideGutterSpace() {
+      var art = detail || document.getElementById('publicArticleDetail');
+      if (!art) return false;
+      return art.getBoundingClientRect().left >= BOOKMARK_TAB_MIN_SPACE;
+    }
+
+    function scrollToBlock(blockId) {
+      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (!contentEl) return;
+      var target = null;
+      try {
+        target = contentEl.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(blockId) : blockId) + '"]');
+      } catch (_) {
+        target = null;
+      }
+      if (!target) target = document.getElementById(blockId);
+      if (!target) return;
+
+      var headerOffset = 88;
+      var targetRect = target.getBoundingClientRect();
+      var currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+      var targetTop = targetRect.top + currentScroll - headerOffset;
+      window.scrollTo({
+        top: Math.max(0, Math.round(targetTop)),
+        behavior: 'smooth'
+      });
+
+      target.classList.remove('antropedia-block-flash');
+      void target.offsetWidth;
+      target.classList.add('antropedia-block-flash');
+      setTimeout(function () {
+        target.classList.remove('antropedia-block-flash');
+      }, 1600);
+
+      var sb = document.getElementById('antropediaViewSidebar');
+      if (sb && window.innerWidth <= 1024) {
+        sb.classList.remove('is-open');
+        var btn = document.getElementById('antropediaSidebarToggleBtn');
+        if (btn) {
+          btn.classList.remove('is-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    }
+
+    function renderBookmarkColorSwatches() {
+      var colorsEl = document.getElementById('antropediaBookmarkPopoverColors');
+      if (!colorsEl) return;
+      colorsEl.innerHTML = BOOKMARK_COLORS.map(function (c) {
+        var activeClass = c === selectedBookmarkColor ? ' active' : '';
+        return '<button type="button" class="antropedia-bookmark-swatch' + activeClass + '" data-color="' + c + '" style="background:' + c + '" title="' + c + '"></button>';
+      }).join('');
+      colorsEl.querySelectorAll('.antropedia-bookmark-swatch').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          selectedBookmarkColor = btn.getAttribute('data-color');
+          colorsEl.querySelectorAll('.antropedia-bookmark-swatch').forEach(function (b) {
+            b.classList.toggle('active', b === btn);
+          });
+        });
+      });
+    }
+
+    function positionFloating(el, cx, cy, width, height) {
+      if (!el) return;
+      var margin = 8;
+      var left = Math.min(Math.max(margin, cx - width / 2), window.innerWidth - width - margin);
+      var top = Math.min(Math.max(margin, cy), window.innerHeight - height - margin);
+      el.style.left = Math.round(left) + 'px';
+      el.style.top = Math.round(top) + 'px';
+    }
+
+    function openBookmarkPopover(blockId, anchorEl) {
+      var token = getAuthToken();
+      if (!token) {
+        openLogin();
+        return;
+      }
+
+      var existing = currentArticleBookmarks.find(function (b) { return b.blockId === blockId; });
+      pendingBookmark = { blockId: blockId, id: existing ? existing.id : null };
+
+      var nameEl = document.getElementById('antropediaBookmarkPopoverName');
+      var delBtn = document.getElementById('antropediaBookmarkPopoverDelete');
+      var popoverEl = document.getElementById('antropediaBookmarkPopover');
+      var backdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
+
+      if (nameEl) nameEl.value = existing ? existing.name : '';
+      selectedBookmarkColor = existing ? existing.color : BOOKMARK_COLORS[0];
+      renderBookmarkColorSwatches();
+      if (delBtn) delBtn.hidden = !existing;
+
+      if (popoverEl) {
+        popoverEl.hidden = false;
+        if (bmHoverCapable && anchorEl) {
+          var rect = anchorEl.getBoundingClientRect();
+          positionFloating(popoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
+        } else {
+          popoverEl.style.removeProperty('left');
+          popoverEl.style.removeProperty('top');
+          if (backdropEl) backdropEl.hidden = false;
+        }
+      }
+      if (nameEl) {
+        nameEl.focus();
+        nameEl.select();
+      }
+    }
+
+    function closeBookmarkPopover() {
+      var popoverEl = document.getElementById('antropediaBookmarkPopover');
+      var backdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
+      if (popoverEl) popoverEl.hidden = true;
+      if (backdropEl) backdropEl.hidden = true;
+      pendingBookmark = null;
+    }
+
+    async function saveBookmarkFromPopover() {
+      if (!pendingBookmark || !currentArticleSlug) return;
+      var nameEl = document.getElementById('antropediaBookmarkPopoverName');
+      var name = (nameEl ? nameEl.value : '').trim();
+      if (!name) {
+        if (nameEl) nameEl.focus();
+        return;
+      }
+      var color = selectedBookmarkColor || BOOKMARK_COLORS[0];
+      var token = getAuthToken();
+      if (!token) {
+        openLogin();
+        return;
+      }
+
+      try {
+        if (pendingBookmark.id) {
+          var res = await fetch('/api/bookmarks/' + encodeURIComponent(pendingBookmark.id), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ name: name, color: color })
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+        } else {
+          var blockEl = null;
+          try {
+            var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+            blockEl = contentEl?.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(pendingBookmark.blockId) : pendingBookmark.blockId) + '"]');
+          } catch (_) {
+            blockEl = null;
+          }
+          var quote = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
+          var res = await fetch('/api/bookmarks', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+              slug: currentArticleSlug,
+              title: currentArticleTitle || currentArticleSlug,
+              blockId: pendingBookmark.blockId,
+              quote: quote,
+              name: name,
+              color: color
+            })
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+        }
+        closeBookmarkPopover();
+        await loadArticleBookmarks();
+      } catch (e) {
+        console.error('Не удалось сохранить закладку:', e);
+      }
+    }
+
+    async function renameBookmark(id, name) {
+      try {
+        var token = getAuthToken();
+        var res = await fetch('/api/bookmarks/' + encodeURIComponent(id), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ name: name })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        currentArticleBookmarks = currentArticleBookmarks.map(function (b) {
+          return String(b.id) === String(id) ? Object.assign({}, b, { name: name }) : b;
+        });
+        renderBookmarksPanel();
+        renderBookmarkGutter();
+      } catch (e) {
+        console.error('Не удалось переименовать закладку:', e);
+      }
+    }
+
+    async function deleteBookmarkById(id) {
+      try {
+        var token = getAuthToken();
+        var res = await fetch('/api/bookmarks/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        currentArticleBookmarks = currentArticleBookmarks.filter(function (b) {
+          return String(b.id) !== String(id);
+        });
+        renderBookmarksPanel();
+        renderBookmarkGutter();
+      } catch (e) {
+        console.error('Не удалось удалить закладку:', e);
+      }
+    }
+
+    async function loadArticleBookmarks() {
+      var slug = currentArticleSlug;
+      if (!slug) return;
+      var token = getAuthToken();
+      if (!token) {
+        currentArticleBookmarks = [];
+        renderBookmarksPanel();
+        renderBookmarkGutter();
+        return;
+      }
+      try {
+        var res = await fetch('/api/bookmarks?slug=' + encodeURIComponent(slug), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          var data = await res.json();
+          currentArticleBookmarks = Array.isArray(data) ? data : [];
+        } else {
+          currentArticleBookmarks = [];
+        }
+      } catch (_) {
+        currentArticleBookmarks = [];
+      }
+      renderBookmarksPanel();
+      renderBookmarkGutter();
+    }
+
+    function renderBookmarksPanel() {
+      var panel = document.getElementById('antropediaBookmarksPanel');
+      if (!panel) return;
+      if (!currentArticleBookmarks.length) {
+        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — нажмите на хвостик закладки слева от нужного абзаца, чтобы добавить.</div>';
+        return;
+      }
+      panel.innerHTML = currentArticleBookmarks.map(function (b) {
+        return '<div class="antropedia-bookmark-item" data-id="' + escapeHtml(b.id) + '" data-block-id="' + escapeHtml(b.blockId || '') + '">' +
+          '<span class="antropedia-bookmark-dot" style="background:' + escapeHtml(b.color || '#5865f2') + '"></span>' +
+          '<div class="antropedia-bookmark-item-body">' +
+            '<div class="antropedia-bookmark-item-name">' + escapeHtml(b.name || 'Закладка') + '</div>' +
+            (b.quote ? '<div class="antropedia-bookmark-item-quote">' + escapeHtml(b.quote) + '</div>' : '') +
+          '</div>' +
+          '<button type="button" class="antropedia-bookmark-item-del" data-action="delete-bookmark" title="Удалить закладку"><i class="fas fa-trash"></i></button>' +
+        '</div>';
+      }).join('');
+    }
+
+    function createBookmarkTab(blockEl, blockId, bookmark, layoutRect) {
+      var blockRect = blockEl.getBoundingClientRect();
+      var tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'antropedia-bm-tab';
+      tab.style.top = (blockRect.top - layoutRect.top) + 'px';
+      tab.style.setProperty('--bm-color', bookmark.color);
+      tab.setAttribute('data-block-id', blockId);
+      tab.title = bookmark.name;
+      tab.textContent = bookmark.name;
+      return tab;
+    }
+
+    function createCompactToggle(blockEl, blockId, bookmark, contentRect) {
+      var blockRect = blockEl.getBoundingClientRect();
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'antropedia-bm-toggle' + (bookmark ? ' is-active' : '');
+      toggle.style.top = (blockRect.top - contentRect.top) + 'px';
+      toggle.setAttribute('data-block-id', blockId);
+      toggle.title = bookmark ? bookmark.name : 'Добавить закладку';
+      if (bookmark) toggle.style.setProperty('--bm-color', bookmark.color);
+      toggle.innerHTML = '<i class="fas fa-bookmark"></i>';
+      return toggle;
+    }
+
+    function createHoverZone(className) {
+      var zone = document.createElement('div');
+      zone.className = className;
+      zone.addEventListener('mousemove', function (e) {
+        handleGutterHoverMove(e, zone);
+      });
+      zone.addEventListener('mouseleave', function (e) {
+        var toEl = e.relatedTarget;
+        if (toEl && bookmarkGhostEl && bookmarkGhostEl.contains(toEl)) return;
+        hideBookmarkGhost();
+      });
+      return zone;
+    }
+
+    function handleGutterHoverMove(e, zoneEl) {
+      bmLastHoverY = e.clientY;
+      if (bmHoverMoveScheduled) return;
+      bmHoverMoveScheduled = true;
+      requestAnimationFrame(function () {
+        bmHoverMoveScheduled = false;
+        if (!zoneEl.isConnected) return;
+        var gutterEl = document.getElementById('antropediaBookmarkGutter');
+        var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+        var originEl = (bmWideMode && gutterEl && gutterEl.parentElement) ? gutterEl.parentElement : contentEl;
+        if (!originEl) return;
+        var localY = bmLastHoverY - originEl.getBoundingClientRect().top;
+        var block = findNearestBlock(localY);
+        if (!block || currentArticleBookmarks.some(function (b) { return b.blockId === block.blockId; })) {
+          hideBookmarkGhost();
+          return;
+        }
+        if (bookmarkGhostEl && !bookmarkGhostEl.hidden && bookmarkGhostEl.getAttribute('data-block-id') === block.blockId) return;
+        showBookmarkGhost(block.el, block.blockId);
+      });
+    }
+
+    function findNearestBlock(localY) {
+      if (!bmBlocks || !bmBlocks.length) return null;
+      var best = null;
+      var bestDist = Infinity;
+      for (var i = 0; i < bmBlocks.length; i++) {
+        var b = bmBlocks[i];
+        if (localY >= b.top && localY <= b.bottom) return b;
+        var dist = localY < b.top ? b.top - localY : localY - b.bottom;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = b;
+        }
+      }
+      return best;
+    }
+
+    function showBookmarkGhost(blockEl, blockId) {
+      if (!bookmarkGhostEl) return;
+      bookmarkGhostEl.setAttribute('data-block-id', blockId);
+      var blockRect = blockEl.getBoundingClientRect();
+      var gutterEl = document.getElementById('antropediaBookmarkGutter');
+      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+
+      if (bmWideMode && gutterEl && gutterEl.parentElement) {
+        bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
+        bookmarkGhostEl.style.removeProperty('--bm-color');
+        bookmarkGhostEl.title = '';
+        bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i> Добавить';
+        var layoutRect = gutterEl.parentElement.getBoundingClientRect();
+        bookmarkGhostEl.style.top = (blockRect.top - layoutRect.top) + 'px';
+        gutterEl.appendChild(bookmarkGhostEl);
+      } else if (contentEl) {
+        bookmarkGhostEl.className = 'antropedia-bm-toggle is-ghost';
+        bookmarkGhostEl.title = 'Добавить закладку';
+        bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i>';
+        var contentRect = contentEl.getBoundingClientRect();
+        bookmarkGhostEl.style.top = (blockRect.top - contentRect.top) + 'px';
+        contentEl.appendChild(bookmarkGhostEl);
+      }
+      bookmarkGhostEl.hidden = false;
+    }
+
+    function hideBookmarkGhost() {
+      if (!bookmarkGhostEl || bookmarkGhostEl.hidden) return;
+      bookmarkGhostEl.hidden = true;
+      bookmarkGhostEl.remove();
+    }
+
+    function toggleBookmarkPopover(toggleEl) {
+      var blockId = toggleEl.getAttribute('data-block-id');
+      var popoverEl = document.getElementById('antropediaBookmarkPopover');
+      if (pendingBookmark && pendingBookmark.blockId === blockId && popoverEl && !popoverEl.hidden) {
+        closeBookmarkPopover();
+        return;
+      }
+      openBookmarkPopover(blockId, toggleEl);
+    }
+
+    function handleContentDblClick(e) {
+      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle')) return;
+      var blockEl = e.target.closest('[data-block-id]');
+      if (!blockEl) return;
+      e.preventDefault();
+      openBookmarkPopover(blockEl.getAttribute('data-block-id'), blockEl);
+    }
+
+    function renderBookmarkGutter() {
+      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (!contentEl) return;
+      hideBookmarkGhost();
+      contentEl.querySelectorAll('.antropedia-bm-toggle, .antropedia-bm-hover-zone').forEach(function (el) { el.remove(); });
+      var gutterEl = document.getElementById('antropediaBookmarkGutter');
+      if (gutterEl) gutterEl.innerHTML = '';
+      bookmarkGutterHoverEl = null;
+      bookmarkCompactHoverEl = null;
+
+      var blocks = Array.from(contentEl.querySelectorAll('[data-block-id]'));
+      if (!blocks.length) {
+        bmBlocks = [];
+        return;
+      }
+
+      bmWideMode = hasWideGutterSpace();
+      var byBlock = new Map();
+      currentArticleBookmarks.forEach(function (b) {
+        if (b.blockId) byBlock.set(b.blockId, b);
+      });
+
+      var articleEl = detail || document.getElementById('publicArticleDetail');
+      var containerEl = document.getElementById('publicArticleContainer');
+      if (gutterEl && articleEl && containerEl) {
+        var artRect = articleEl.getBoundingClientRect();
+        var contRect = containerEl.getBoundingClientRect();
+        gutterEl.style.left = Math.round(artRect.left - contRect.left) + 'px';
+      }
+
+      var contentRect = contentEl.getBoundingClientRect();
+      var layoutRect = (bmWideMode && gutterEl && gutterEl.parentElement)
+        ? gutterEl.parentElement.getBoundingClientRect()
+        : null;
+
+      if (bmHoverCapable) {
+        var originTop = bmWideMode && layoutRect ? layoutRect.top : contentRect.top;
+        bmBlocks = blocks.map(function (blockEl) {
+          var bRect = blockEl.getBoundingClientRect();
+          return {
+            blockId: blockEl.getAttribute('data-block-id'),
+            el: blockEl,
+            top: bRect.top - originTop,
+            bottom: bRect.bottom - originTop
+          };
+        });
+
+        if (bmWideMode && gutterEl) {
+          bookmarkGutterHoverEl = createHoverZone('antropedia-bm-hover-zone');
+          bookmarkGutterHoverEl.style.top = bmBlocks[0].top + 'px';
+          var maxBottom = Math.max.apply(Math, bmBlocks.map(function (b) { return b.bottom; }));
+          bookmarkGutterHoverEl.style.height = (maxBottom - bmBlocks[0].top) + 'px';
+          gutterEl.appendChild(bookmarkGutterHoverEl);
+        } else {
+          bookmarkCompactHoverEl = createHoverZone('antropedia-bm-hover-zone antropedia-bm-hover-zone-compact');
+          contentEl.appendChild(bookmarkCompactHoverEl);
+        }
+      }
+
+      blocks.forEach(function (blockEl) {
+        var blockId = blockEl.getAttribute('data-block-id');
+        var bookmark = byBlock.get(blockId);
+        if (!bookmark) return;
+
+        if (bmWideMode && gutterEl && layoutRect) {
+          gutterEl.appendChild(createBookmarkTab(blockEl, blockId, bookmark, layoutRect));
+        } else {
+          contentEl.appendChild(createCompactToggle(blockEl, blockId, bookmark, contentRect));
+        }
+      });
+    }
+
+    function initBookmarkGutter() {
+      bookmarkGhostEl = document.createElement('button');
+      bookmarkGhostEl.type = 'button';
+      bookmarkGhostEl.hidden = true;
+
+      var gutterEl = document.getElementById('antropediaBookmarkGutter');
+      if (gutterEl) {
+        gutterEl.addEventListener('click', function (e) {
+          var tab = e.target.closest('.antropedia-bm-tab');
+          if (!tab) return;
+          e.preventDefault();
+          e.stopPropagation();
+          toggleBookmarkPopover(tab);
+        });
+      }
+
+      if (bmHoverCapable) {
+        bookmarkGhostEl.addEventListener('mouseleave', function (e) {
+          var toEl = e.relatedTarget;
+          if (toEl && (bookmarkGutterHoverEl?.contains(toEl) || bookmarkCompactHoverEl?.contains(toEl))) return;
+          hideBookmarkGhost();
+        });
+      }
+
+      var cancelBtn = document.getElementById('antropediaBookmarkPopoverCancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', closeBookmarkPopover);
+
+      var saveBtn = document.getElementById('antropediaBookmarkPopoverSave');
+      if (saveBtn) saveBtn.addEventListener('click', saveBookmarkFromPopover);
+
+      var delBtn = document.getElementById('antropediaBookmarkPopoverDelete');
+      if (delBtn) delBtn.addEventListener('click', function () {
+        if (!pendingBookmark?.id) return;
+        deleteBookmarkById(pendingBookmark.id);
+        closeBookmarkPopover();
+      });
+
+      var closeBtn = document.getElementById('antropediaBookmarkPopoverClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeBookmarkPopover);
+
+      var nameInput = document.getElementById('antropediaBookmarkPopoverName');
+      if (nameInput) {
+        nameInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            saveBookmarkFromPopover();
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeBookmarkPopover();
+          }
+        });
+      }
+
+      window.addEventListener('resize', function () {
+        clearTimeout(bmGutterResizeDebounce);
+        bmGutterResizeDebounce = setTimeout(renderBookmarkGutter, 150);
+      });
+    }
+    initBookmarkGutter();
+
+    function initSidebarTabs() {
+      document.querySelectorAll('.antropedia-sidebar-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          switchSidebarTab(btn.getAttribute('data-sidebar-tab'));
+        });
+      });
+
+      var bookmarksPanel = document.getElementById('antropediaBookmarksPanel');
+      if (bookmarksPanel) {
+        bookmarksPanel.addEventListener('click', function (e) {
+          var delBtn = e.target.closest('[data-action="delete-bookmark"]');
+          var item = e.target.closest('.antropedia-bookmark-item');
+          if (!item) return;
+          var id = item.getAttribute('data-id');
+          if (delBtn) {
+            e.stopPropagation();
+            deleteBookmarkById(id);
+            return;
+          }
+          var blockId = item.getAttribute('data-block-id');
+          if (blockId) scrollToBlock(blockId);
+        });
+
+        bookmarksPanel.addEventListener('dblclick', function (e) {
+          var nameEl = e.target.closest('.antropedia-bookmark-item-name');
+          if (!nameEl) return;
+          var item = nameEl.closest('.antropedia-bookmark-item');
+          var id = item?.getAttribute('data-id');
+          var bookmark = currentArticleBookmarks.find(function (b) { return String(b.id) === String(id); });
+          if (!bookmark) return;
+          var newName = prompt('Новое название закладки:', bookmark.name);
+          if (newName == null) return;
+          var trimmed = newName.trim();
+          if (!trimmed || trimmed === bookmark.name) return;
+          renameBookmark(id, trimmed);
+        });
+      }
+    }
+    initSidebarTabs();
+
+    function switchSidebarTab(tab) {
+      document.querySelectorAll('.antropedia-sidebar-tab').forEach(function (btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-sidebar-tab') === tab);
+      });
+      var tocPanel = document.getElementById('antropediaTocPanel');
+      var bmPanel = document.getElementById('antropediaBookmarksPanel');
+      if (tocPanel) tocPanel.hidden = tab !== 'toc';
+      if (bmPanel) bmPanel.hidden = tab !== 'bookmarks';
+    }
+
+
 
     var tocObserver = null;
     var tocCleanup = null;
@@ -1863,6 +2456,11 @@
     });
 
     function renderDetail(article) {
+      currentArticleSlug = article.slug || state.slug;
+      currentArticleTitle = article.title || article.slug;
+      switchSidebarTab('toc');
+      closeBookmarkPopover();
+      loadArticleBookmarks();
       listView.hidden = true;
       if (detailContainer) detailContainer.hidden = false;
       detail.hidden = false;
@@ -2269,7 +2867,15 @@
       detail.appendChild(content);
       currentContentEl = content;
 
+      content.addEventListener('dblclick', handleContentDblClick);
       content.addEventListener('click', function (event) {
+        var bmToggle = event.target.closest('.antropedia-bm-toggle');
+        if (bmToggle) {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleBookmarkPopover(bmToggle);
+          return;
+        }
         var wikiLink = event.target.closest('a[data-slug]');
         if (wikiLink) return;
         var tagLink = event.target.closest('[data-tag]');
@@ -2319,6 +2925,7 @@
             link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
           });
           renderToc(content);
+          renderBookmarkGutter();
           if (inlineSearchEl && inlineSearchEl.value.trim()) {
             runInArticleSearch(inlineSearchEl.value);
           }

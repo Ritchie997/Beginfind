@@ -10092,6 +10092,317 @@ a.site-profile-media-row:hover {
     box-shadow: 0 2px 8px rgba(88, 101, 242, 0.35);
 }
 
+/* === Закладки на блоках статьи и желоб закладок === */
+.public-article-content.preview-pane {
+    position: relative;
+    padding-left: 44px;
+}
+
+.antropedia-bookmark-gutter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.antropedia-bookmark-gutter > * {
+    pointer-events: auto;
+}
+
+.antropedia-bm-tab {
+    position: absolute;
+    right: -16px;
+    max-width: 170px;
+    padding: 7px 16px 7px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bm-color, var(--blurple, #5865f2));
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.antropedia-bm-tab:hover {
+    transform: translateX(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.38);
+}
+
+.antropedia-bm-tab.is-ghost {
+    background: var(--background-secondary, #2f3136);
+    color: var(--text-muted, #72767d);
+    border: 1px dashed var(--background-accent, rgba(255, 255, 255, 0.15));
+    box-shadow: none;
+}
+
+.antropedia-bm-tab.is-ghost:hover {
+    color: var(--blurple, #5865f2);
+    border-color: var(--blurple, #5865f2);
+}
+
+.antropedia-bm-hover-zone {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+}
+
+.antropedia-bm-toggle {
+    position: absolute;
+    left: 10px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-muted, #72767d);
+    opacity: 0.35;
+    cursor: pointer;
+    font-size: 13px;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    z-index: 4;
+}
+
+.antropedia-bm-toggle:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.antropedia-bm-toggle.is-active {
+    opacity: 1;
+    color: var(--bm-color, var(--blurple, #5865f2));
+}
+
+.antropedia-bm-toggle.is-active:hover {
+    background: none;
+}
+
+.antropedia-bm-toggle.is-ghost {
+    opacity: 1;
+}
+
+.antropedia-bm-hover-zone-compact {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 44px;
+    height: 100%;
+    z-index: 3;
+}
+
+@media (max-width: 640px) {
+    .antropedia-bookmark-gutter {
+        display: none;
+    }
+}
+
+.antropedia-bookmark-popover {
+    position: fixed;
+    z-index: 1050;
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--background-floating, #18191c);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    box-sizing: border-box;
+}
+
+.antropedia-bookmark-popover[hidden] {
+    display: none !important;
+}
+
+.antropedia-bookmark-popover-close {
+    display: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-muted, #72767d);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.antropedia-bookmark-popover-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-normal, #dcddde);
+}
+
+.antropedia-bookmark-popover-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--header-secondary, #b9bbbe);
+}
+
+.antropedia-bookmark-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.antropedia-bookmark-swatch {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.antropedia-bookmark-swatch:hover {
+    transform: scale(1.15);
+}
+
+.antropedia-bookmark-swatch.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.antropedia-bookmark-popover-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.antropedia-bookmark-popover-actions-right {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.antropedia-bookmark-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1040;
+}
+
+.antropedia-bookmark-modal-backdrop[hidden] {
+    display: none !important;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .antropedia-bookmark-popover {
+        top: 50%;
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        transform: translate(-50%, -50%);
+        width: min(300px, 88vw);
+        z-index: 1055;
+    }
+
+    .antropedia-bookmark-popover-close {
+        display: flex;
+    }
+}
+
+.antropedia-bookmark-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.antropedia-bookmark-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.antropedia-bookmark-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    margin-top: 5px;
+    border-radius: 50%;
+}
+
+.antropedia-bookmark-item-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.antropedia-bookmark-item-name {
+    color: var(--text-normal, #dcddde);
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.antropedia-bookmark-item-quote {
+    color: var(--text-muted, #72767d);
+    font-size: 12px;
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.antropedia-bookmark-item-del {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted, #72767d);
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.antropedia-bookmark-item-del:hover {
+    background: rgba(237, 66, 69, 0.2);
+    color: #ed4245;
+}
+
+.antropedia-bookmark-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
 /* === Виджет инлайн-поиска по тексту статьи (в боковой панели оглавления) === */
 .antropedia-toc-search-widget {
     position: relative;

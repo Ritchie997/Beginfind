@@ -224,6 +224,7 @@
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
     <div class="antropedia-detail-container" id="publicArticleContainer" hidden>
+      <div id="antropediaBookmarkGutter" class="antropedia-bookmark-gutter" aria-hidden="true"></div>
       <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail"></article>
       <aside id="antropediaViewSidebar" class="antropedia-view-sidebar" hidden>
         <div id="antropediaTocSearch" class="antropedia-toc-search-widget">
@@ -250,9 +251,26 @@
         </div>
         <div class="antropedia-sidebar-tabs">
           <button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button>
+          <button type="button" class="antropedia-sidebar-tab" data-sidebar-tab="bookmarks"><i class="fas fa-bookmark"></i> Закладки</button>
         </div>
         <div id="antropediaTocPanel" class="antropedia-sidebar-panel antropedia-toc-panel"></div>
+        <div id="antropediaBookmarksPanel" class="antropedia-sidebar-panel antropedia-bookmarks-panel" hidden></div>
       </aside>
+
+      <div id="antropediaBookmarkModalBackdrop" class="antropedia-bookmark-modal-backdrop" hidden></div>
+      <div id="antropediaBookmarkPopover" class="antropedia-bookmark-popover" hidden>
+        <button type="button" id="antropediaBookmarkPopoverClose" class="antropedia-bookmark-popover-close" title="Закрыть"><i class="fas fa-times"></i></button>
+        <label class="antropedia-bookmark-popover-label" for="antropediaBookmarkPopoverName">Название закладки</label>
+        <input type="text" id="antropediaBookmarkPopoverName" class="form-input" placeholder="Например: Важный момент" maxlength="100">
+        <div id="antropediaBookmarkPopoverColors" class="antropedia-bookmark-swatches"></div>
+        <div class="antropedia-bookmark-popover-actions">
+          <button type="button" id="antropediaBookmarkPopoverDelete" class="btn btn-danger btn-sm" title="Удалить закладку" hidden><i class="fas fa-trash"></i></button>
+          <div class="antropedia-bookmark-popover-actions-right">
+            <button type="button" id="antropediaBookmarkPopoverCancel" class="btn btn-secondary btn-sm">Отмена</button>
+            <button type="button" id="antropediaBookmarkPopoverSave" class="btn btn-primary btn-sm">Сохранить</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ===== Редактор статьи (заполняет antropedia-editor-client.js) ===== -->
