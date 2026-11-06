@@ -563,6 +563,9 @@
         tocObserver.disconnect();
         tocObserver = null;
       }
+      clearTimeout(inlineSearchDebounce);
+      clearInArticleSearch();
+      currentContentEl = null;
       listView.hidden = false;
       if (detailContainer) detailContainer.hidden = true;
       detail.hidden = true;
@@ -593,8 +596,14 @@
       showEditorView: showEditorView,
       showListView: showListView,
       showDetailView: showDetailView,
-      openEditor: showEditorView
+      openEditor: showEditorView,
+      runInArticleSearch: runInArticleSearch,
+      gotoSearchHit: gotoSearchHit,
+      clearInArticleSearch: clearInArticleSearch
     };
+    window.runInArticleSearch = runInArticleSearch;
+    window.gotoSearchHit = gotoSearchHit;
+    window.clearInArticleSearch = clearInArticleSearch;
 
     function onWriteClick(e) {
       if (e) e.preventDefault();
@@ -1279,6 +1288,134 @@
       });
     }
 
+    // ========================================
+    // Поиск по тексту открытой статьи (инлайн-поиск)
+    // ========================================
+    var inlineSearchEl = null;
+    var inlineSearchCountEl = null;
+    var inlineSearchPrevBtn = null;
+    var inlineSearchNextBtn = null;
+    var inlineSearchClearBtn = null;
+    var currentContentEl = null;
+    var searchHits = [];
+    var searchIndex = -1;
+    var inlineSearchDebounce = null;
+
+    function updateSearchCount() {
+      var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
+      var countEl = inlineSearchCountEl || (detail && detail.querySelector('#antropediaInlineSearchCount'));
+      var prevBtn = inlineSearchPrevBtn || (detail && detail.querySelector('#antropediaInlineSearchPrev'));
+      var nextBtn = inlineSearchNextBtn || (detail && detail.querySelector('#antropediaInlineSearchNext'));
+      var clearBtn = inlineSearchClearBtn || (detail && detail.querySelector('#antropediaInlineSearchClear'));
+
+      var query = inputEl ? inputEl.value.trim() : '';
+      var hasQuery = !!query;
+      if (countEl) {
+        countEl.hidden = !hasQuery;
+        countEl.textContent = searchHits.length
+          ? (searchIndex + 1) + '/' + searchHits.length
+          : (hasQuery ? '0/0' : '');
+      }
+      var showNav = hasQuery && searchHits.length > 0;
+      if (prevBtn) prevBtn.hidden = !showNav;
+      if (nextBtn) nextBtn.hidden = !showNav;
+      if (clearBtn) clearBtn.hidden = !hasQuery;
+    }
+
+    function clearSearchHighlights() {
+      var content = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (content) {
+        content.querySelectorAll('mark.search-hit, mark.antropedia-search-hit').forEach(function (mark) {
+          var parent = mark.parentNode;
+          if (!parent) return;
+          parent.replaceChild(document.createTextNode(mark.textContent), mark);
+          parent.normalize();
+        });
+      }
+      searchHits = [];
+      searchIndex = -1;
+    }
+
+    function clearInArticleSearch() {
+      var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
+      if (inputEl) inputEl.value = '';
+      clearSearchHighlights();
+      updateSearchCount();
+    }
+
+    function gotoSearchHit(dir) {
+      if (!searchHits.length) return;
+      if (searchIndex >= 0 && searchHits[searchIndex]) {
+        searchHits[searchIndex].classList.remove('search-hit-active', 'antropedia-search-hit-current');
+      }
+      searchIndex = (searchIndex + dir + searchHits.length) % searchHits.length;
+      var hit = searchHits[searchIndex];
+      if (!hit) return;
+      var infobox = hit.closest('.blk-infobox.is-collapsed');
+      if (infobox) {
+        var moreBtn = infobox.querySelector('.blk-infobox-more');
+        if (moreBtn) moreBtn.click();
+      }
+      hit.classList.add('search-hit-active', 'antropedia-search-hit-current');
+      hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      updateSearchCount();
+    }
+
+    function runInArticleSearch(query) {
+      clearSearchHighlights();
+      var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
+      var q = (query != null ? String(query) : (inputEl ? inputEl.value : '')).trim();
+      if (inputEl && query != null && inputEl.value !== query) {
+        inputEl.value = query;
+      }
+      var content = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (!q || !content) {
+        updateSearchCount();
+        return;
+      }
+
+      var qLower = q.toLowerCase();
+      var walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (node) {
+          if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
+          var tag = node.parentElement.tagName;
+          if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
+          return node.nodeValue.toLowerCase().indexOf(qLower) !== -1 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      var nodes = [];
+      var n;
+      while ((n = walker.nextNode())) nodes.push(n);
+
+      nodes.forEach(function (node) {
+        var text = node.nodeValue;
+        var lower = text.toLowerCase();
+        var frag = document.createDocumentFragment();
+        var lastIndex = 0;
+        var idx = lower.indexOf(qLower);
+        while (idx !== -1) {
+          if (idx > lastIndex) {
+            frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+          }
+          var mark = document.createElement('mark');
+          mark.className = 'search-hit antropedia-search-hit';
+          mark.textContent = text.slice(idx, idx + q.length);
+          frag.appendChild(mark);
+          lastIndex = idx + q.length;
+          idx = lower.indexOf(qLower, lastIndex);
+        }
+        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+        if (node.parentNode) {
+          node.parentNode.replaceChild(frag, node);
+        }
+      });
+
+      searchHits = Array.from(content.querySelectorAll('mark.search-hit, mark.antropedia-search-hit'));
+      searchIndex = -1;
+      updateSearchCount();
+      if (searchHits.length) gotoSearchHit(1);
+    }
+
     var tocObserver = null;
     var tocCleanup = null;
 
@@ -1488,6 +1625,10 @@
       detail.replaceChildren();
       updateAdminLinks(article.slug);
 
+      clearTimeout(inlineSearchDebounce);
+      searchHits = [];
+      searchIndex = -1;
+
       var back = document.createElement('a');
       back.className = 'public-article-back';
       back.href = '/antropedia';
@@ -1501,6 +1642,45 @@
       if (listReturn && listReturn.currentSlug === article.slug) {
         back.href = listReturn.url + ARTICLE_LIST_RETURN_HASH;
       }
+
+      var inlineSearchWrap = makeEl('div', 'antropedia-inline-search');
+      inlineSearchWrap.innerHTML =
+        '<i class="fas fa-search"></i>' +
+        '<input type="text" id="antropediaInlineSearch" class="antropedia-inline-search-input" placeholder="Поиск по статье…">' +
+        '<span id="antropediaInlineSearchCount" class="antropedia-inline-search-count" hidden></span>' +
+        '<button type="button" id="antropediaInlineSearchPrev" class="antropedia-inline-search-nav" title="Предыдущее совпадение" hidden><i class="fas fa-chevron-up"></i></button>' +
+        '<button type="button" id="antropediaInlineSearchNext" class="antropedia-inline-search-nav" title="Следующее совпадение" hidden><i class="fas fa-chevron-down"></i></button>' +
+        '<button type="button" id="antropediaInlineSearchClear" class="antropedia-inline-search-nav" title="Очистить" hidden><i class="fas fa-times"></i></button>';
+
+      inlineSearchEl = inlineSearchWrap.querySelector('#antropediaInlineSearch');
+      inlineSearchCountEl = inlineSearchWrap.querySelector('#antropediaInlineSearchCount');
+      inlineSearchPrevBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchPrev');
+      inlineSearchNextBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchNext');
+      inlineSearchClearBtn = inlineSearchWrap.querySelector('#antropediaInlineSearchClear');
+
+      inlineSearchEl.addEventListener('input', function () {
+        clearTimeout(inlineSearchDebounce);
+        inlineSearchDebounce = setTimeout(function () {
+          runInArticleSearch(inlineSearchEl.value);
+        }, 250);
+      });
+      inlineSearchEl.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        gotoSearchHit(e.shiftKey ? -1 : 1);
+      });
+      inlineSearchPrevBtn.addEventListener('click', function () {
+        gotoSearchHit(-1);
+      });
+      inlineSearchNextBtn.addEventListener('click', function () {
+        gotoSearchHit(1);
+      });
+      inlineSearchClearBtn.addEventListener('click', function () {
+        clearInArticleSearch();
+        inlineSearchEl.focus();
+      });
+
+      toolbar.appendChild(inlineSearchWrap);
       if (article.can_edit) {
         var editBtn = makeEl('button', 'btn btn-secondary btn-sm public-article-edit-btn');
         editBtn.type = 'button';
@@ -1759,6 +1939,7 @@
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';
       detail.appendChild(content);
+      currentContentEl = content;
 
       // Индекс открытых статей — по нему рендерер узнаёт цели вики-ссылок.
       // Без него каждая ссылка на другую статью выглядела как «создать».
@@ -1776,6 +1957,9 @@
           link.href = '/antropedia/' + encodeURIComponent(link.dataset.slug);
         });
         renderToc(content);
+        if (inlineSearchEl && inlineSearchEl.value.trim()) {
+          runInArticleSearch(inlineSearchEl.value);
+        }
         content.addEventListener('click', function (event) {
           var wikiLink = event.target.closest('a[data-slug]');
           if (wikiLink) return;
@@ -2443,7 +2627,13 @@
       var tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       event.preventDefault();
-      input.focus();
+      var inlineInput = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
+      if (state.slug && inlineInput && !inlineInput.hidden && inlineInput.offsetParent !== null) {
+        inlineInput.focus();
+        inlineInput.select();
+      } else {
+        input.focus();
+      }
     }
     document.addEventListener('keydown', onSearchShortcut);
 
@@ -2461,6 +2651,9 @@
       var detailLoad = loadDetail();
       var detailCleanup = function cleanup() {
         state.disposed = true;
+        clearTimeout(inlineSearchDebounce);
+        clearInArticleSearch();
+        currentContentEl = null;
         if (tocCleanup) {
           tocCleanup();
           tocCleanup = null;
@@ -2526,6 +2719,9 @@
 
     var listCleanup = function cleanup() {
       state.disposed = true;
+      clearTimeout(inlineSearchDebounce);
+      clearInArticleSearch();
+      currentContentEl = null;
       if (state.controller) state.controller.abort();
       if (state.observer) state.observer.disconnect();
       clearTimeout(searchDebounce);

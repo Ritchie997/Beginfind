@@ -9903,6 +9903,97 @@ a.site-profile-media-row:hover {
     box-shadow: 0 4px 14px rgba(88, 101, 242, 0.5);
 }
 
+/* === Поиск по тексту открытой статьи (Inline search) === */
+.antropedia-inline-search {
+    flex: 1 1 240px;
+    min-width: 160px;
+    max-width: 380px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-accent);
+    border-radius: 999px;
+    height: 38px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.antropedia-inline-search:focus-within {
+    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.antropedia-inline-search > i.fa-search {
+    color: var(--text-muted);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.antropedia-inline-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-normal);
+    font-size: 13px;
+}
+
+.antropedia-inline-search-input:focus {
+    outline: none;
+}
+
+.antropedia-inline-search-count {
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+
+.antropedia-inline-search-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--header-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.antropedia-inline-search-nav:hover {
+    background: var(--background-accent);
+    color: var(--text-normal);
+}
+
+/* === Подсветка результатов поиска по тексту открытой статьи === */
+mark.search-hit,
+mark.antropedia-search-hit,
+.search-hit {
+    background: var(--yellow, #faa81a);
+    color: #1a1a1a;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+mark.search-hit-active,
+mark.search-hit.active,
+mark.search-hit.search-hit-active,
+mark.antropedia-search-hit.antropedia-search-hit-current,
+.search-hit-active,
+.search-hit.active {
+    background: var(--blurple, #5865f2);
+    color: #ffffff;
+}
+
 .antropedia-detail-view .public-article-cover {
     margin: 0 0 28px;
     overflow: hidden;
