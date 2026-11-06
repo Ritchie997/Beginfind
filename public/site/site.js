@@ -555,6 +555,10 @@
         return;
       }
 
+      if (tocCleanup) {
+        tocCleanup();
+        tocCleanup = null;
+      }
       if (tocObserver) {
         tocObserver.disconnect();
         tocObserver = null;
@@ -1276,8 +1280,13 @@
     }
 
     var tocObserver = null;
+    var tocCleanup = null;
 
     function renderToc(contentEl) {
+      if (tocCleanup) {
+        tocCleanup();
+        tocCleanup = null;
+      }
       if (tocObserver) {
         tocObserver.disconnect();
         tocObserver = null;
@@ -1314,6 +1323,21 @@
           escapeHtml(h.textContent.trim()) + '</a></li>';
       }).join('') + '</ul>';
 
+      function setActiveHeading(blockId) {
+        if (!panel) return;
+        panel.querySelectorAll('a[data-block-id]').forEach(function (a) {
+          var match = a.getAttribute('data-block-id') === blockId;
+          a.classList.toggle('active', match);
+          if (match && a.scrollIntoView) {
+            a.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        });
+      }
+
+      var isClickLocked = false;
+      var lockedBlockId = null;
+      var clickLockTimer = null;
+
       panel.querySelectorAll('a[data-block-id]').forEach(function (link) {
         link.addEventListener('click', function (e) {
           e.preventDefault();
@@ -1327,7 +1351,24 @@
           if (!target) target = document.getElementById(blockId);
           if (!target) return;
 
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Мгновенная подсветка выбранного пункта в блоке оглавления с безусловным приоритетом над скроллом
+          setActiveHeading(blockId);
+          isClickLocked = true;
+          lockedBlockId = blockId;
+          clearTimeout(clickLockTimer);
+          clickLockTimer = setTimeout(function () {
+            isClickLocked = false;
+          }, 1500);
+
+          var headerOffset = 88;
+          var targetRect = target.getBoundingClientRect();
+          var currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+          var targetTop = targetRect.top + currentScroll - headerOffset;
+          window.scrollTo({
+            top: Math.max(0, Math.round(targetTop)),
+            behavior: 'smooth'
+          });
+
           target.classList.remove('antropedia-block-flash');
           void target.offsetWidth;
           target.classList.add('antropedia-block-flash');
@@ -1347,21 +1388,82 @@
         });
       });
 
-      if ('IntersectionObserver' in window && headings.length) {
-        tocObserver = new IntersectionObserver(function (entries) {
-          entries.forEach(function (entry) {
-            if (!entry.isIntersecting) return;
-            var blockId = entry.target.getAttribute('data-block-id') || entry.target.id;
-            panel.querySelectorAll('a[data-block-id]').forEach(function (a) {
-              a.classList.toggle('active', a.getAttribute('data-block-id') === blockId);
-            });
-          });
-        }, { rootMargin: '-10% 0px -75% 0px' });
+      function updateScrollSpy() {
+        if (isClickLocked) return;
+        if (!headings.length) return;
 
-        headings.forEach(function (h) {
-          tocObserver.observe(h);
-        });
+        var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var windowHeight = window.innerHeight || document.documentElement.clientHeight;
+        var docHeight = document.documentElement.scrollHeight;
+
+        if (scrollY + windowHeight >= docHeight - 40) {
+          var lastH = headings[headings.length - 1];
+          var lastId = lastH.getAttribute('data-block-id') || lastH.id;
+          setActiveHeading(lastId);
+          return;
+        }
+
+        var topThreshold = 100;
+        var activeId = null;
+
+        for (var i = 0; i < headings.length; i++) {
+          var rect = headings[i].getBoundingClientRect();
+          if (rect.top <= topThreshold) {
+            activeId = headings[i].getAttribute('data-block-id') || headings[i].id;
+          } else {
+            break;
+          }
+        }
+
+        if (!activeId && headings.length) {
+          var firstRect = headings[0].getBoundingClientRect();
+          if (firstRect.top < windowHeight * 0.7) {
+            activeId = headings[0].getAttribute('data-block-id') || headings[0].id;
+          }
+        }
+
+        if (activeId) {
+          setActiveHeading(activeId);
+        }
       }
+
+      var ticking = false;
+      function onScroll() {
+        if (isClickLocked) return;
+        if (!ticking) {
+          window.requestAnimationFrame(function () {
+            updateScrollSpy();
+            ticking = false;
+          });
+          ticking = true;
+        }
+      }
+
+      function onUserScroll(e) {
+        if (e.type === 'keydown') {
+          var keys = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '];
+          if (keys.indexOf(e.key) === -1) return;
+        }
+        if (isClickLocked) {
+          isClickLocked = false;
+          clearTimeout(clickLockTimer);
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('wheel', onUserScroll, { passive: true });
+      window.addEventListener('touchmove', onUserScroll, { passive: true });
+      window.addEventListener('keydown', onUserScroll, { passive: true });
+
+      tocCleanup = function () {
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('wheel', onUserScroll);
+        window.removeEventListener('touchmove', onUserScroll);
+        window.removeEventListener('keydown', onUserScroll);
+        clearTimeout(clickLockTimer);
+      };
+
+      updateScrollSpy();
     }
     window.renderToc = renderToc;
 
@@ -2359,6 +2461,10 @@
       var detailLoad = loadDetail();
       var detailCleanup = function cleanup() {
         state.disposed = true;
+        if (tocCleanup) {
+          tocCleanup();
+          tocCleanup = null;
+        }
         if (tocObserver) {
           tocObserver.disconnect();
           tocObserver = null;

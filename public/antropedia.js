@@ -410,6 +410,10 @@ function reactionsBarInnerHtml(reactions) {
       this.currentArticleBookmarks = [];
       this._tocHeadings = [];
       this._tocObserver = null;
+      this._tocCleanup = null;
+      this._isTocClickLocked = false;
+      this._lockedTocBlockId = null;
+      this._tocClickLockTimer = null;
       this._searchHits = [];
       this._searchIndex = -1;
       this._inlineSearchDebounce = null;
@@ -537,6 +541,7 @@ function reactionsBarInnerHtml(reactions) {
     // меню") и IntersectionObserver сами не исчезают, если их не снять явно.
     cleanup() {
       if (this._observer) { this._observer.disconnect(); this._observer = null; }
+      if (this._tocCleanup) { this._tocCleanup(); this._tocCleanup = null; }
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
       if (this._keydownHandler) { document.removeEventListener('keydown', this._keydownHandler); this._keydownHandler = null; }
       if (this._docClickHandler) { document.removeEventListener('click', this._docClickHandler); this._docClickHandler = null; }
@@ -2830,6 +2835,7 @@ initEngagement() {
       this.resetEngagementUI();
       this.closeBookmarkPopover();
       this.resetInlineSearchUI();
+      if (this._tocCleanup) { this._tocCleanup(); this._tocCleanup = null; }
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
       if (this.viewEl) this.viewEl.hidden = true;
       if (this.browseEl) this.browseEl.hidden = false;
@@ -2857,7 +2863,8 @@ initEngagement() {
 
       if (!headings.length) {
         panel.innerHTML = '<div class="antropedia-sidebar-empty">В этой статье нет заголовков.</div>';
-        if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
+        if (this._tocCleanup) { this._tocCleanup(); this._tocCleanup = null; }
+      if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
         return;
       }
 
@@ -2870,24 +2877,101 @@ initEngagement() {
       this.setupTocScrollSpy();
     }
 
-    // Подсвечивает в оглавлении заголовок раздела, который сейчас виден в
-    // верхней части экрана — тот же приём, что и "активный пункт" в
-    // Навигации Word при скролле по документу.
+    setActiveTocHeading(blockId) {
+      if (!this.tocPanelEl) return;
+      this.tocPanelEl.querySelectorAll('a[data-block-id]').forEach((a) => {
+        const match = a.getAttribute('data-block-id') === blockId;
+        a.classList.toggle('active', match);
+        if (match && a.scrollIntoView) {
+          a.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+    }
+
+    // Подсвечивает в оглавлении заголовок раздела с приоритетом клика
+    // над положением скролла, предотвращая сбивание подсветки при близких заголовках.
     setupTocScrollSpy() {
+      if (this._tocCleanup) { this._tocCleanup(); this._tocCleanup = null; }
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
-      if (!('IntersectionObserver' in window) || !this._tocHeadings.length) return;
+      if (!this._tocHeadings || !this._tocHeadings.length) return;
 
-      this._tocObserver = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const blockId = entry.target.getAttribute('data-block-id');
-          this.tocPanelEl?.querySelectorAll('a[data-block-id]').forEach((a) => {
-            a.classList.toggle('active', a.getAttribute('data-block-id') === blockId);
+      const headings = this._tocHeadings;
+      const updateScrollSpy = () => {
+        if (this._isTocClickLocked) return;
+        if (!headings.length) return;
+
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+        const docHeight = document.documentElement.scrollHeight;
+
+        if (scrollY + windowHeight >= docHeight - 40) {
+          const lastH = headings[headings.length - 1];
+          const lastId = lastH.getAttribute('data-block-id') || lastH.id;
+          this.setActiveTocHeading(lastId);
+          return;
+        }
+
+        const topThreshold = 100;
+        let activeId = null;
+
+        for (let i = 0; i < headings.length; i++) {
+          const rect = headings[i].getBoundingClientRect();
+          if (rect.top <= topThreshold) {
+            activeId = headings[i].getAttribute('data-block-id') || headings[i].id;
+          } else {
+            break;
+          }
+        }
+
+        if (!activeId && headings.length) {
+          const firstRect = headings[0].getBoundingClientRect();
+          if (firstRect.top < windowHeight * 0.7) {
+            activeId = headings[0].getAttribute('data-block-id') || headings[0].id;
+          }
+        }
+
+        if (activeId) {
+          this.setActiveTocHeading(activeId);
+        }
+      };
+
+      let ticking = false;
+      const onScroll = () => {
+        if (this._isTocClickLocked) return;
+        if (!ticking) {
+          window.requestAnimationFrame(() => {
+            updateScrollSpy();
+            ticking = false;
           });
-        });
-      }, { rootMargin: '-10% 0px -75% 0px' });
+          ticking = true;
+        }
+      };
 
-      this._tocHeadings.forEach((h) => this._tocObserver.observe(h));
+      const onUserScroll = (e) => {
+        if (e.type === 'keydown') {
+          const keys = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '];
+          if (!keys.includes(e.key)) return;
+        }
+        if (this._isTocClickLocked) {
+          this._isTocClickLocked = false;
+          clearTimeout(this._tocClickLockTimer);
+        }
+      };
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('wheel', onUserScroll, { passive: true });
+      window.addEventListener('touchmove', onUserScroll, { passive: true });
+      window.addEventListener('keydown', onUserScroll, { passive: true });
+
+      this._tocCleanup = () => {
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('wheel', onUserScroll);
+        window.removeEventListener('touchmove', onUserScroll);
+        window.removeEventListener('keydown', onUserScroll);
+        clearTimeout(this._tocClickLockTimer);
+      };
+
+      updateScrollSpy();
     }
 
     scrollToBlock(blockId) {
@@ -2895,7 +2979,25 @@ initEngagement() {
       let el;
       try { el = this.contentEl.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`); } catch (e) { el = null; }
       if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Мгновенная подсветка выбранного пункта в блоке оглавления с безусловным приоритетом над скроллом
+      this.setActiveTocHeading(blockId);
+      this._isTocClickLocked = true;
+      this._lockedTocBlockId = blockId;
+      clearTimeout(this._tocClickLockTimer);
+      this._tocClickLockTimer = setTimeout(() => {
+        this._isTocClickLocked = false;
+      }, 1500);
+
+      const headerOffset = 80;
+      const targetRect = el.getBoundingClientRect();
+      const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+      const targetTop = targetRect.top + currentScroll - headerOffset;
+      window.scrollTo({
+        top: Math.max(0, Math.round(targetTop)),
+        behavior: 'smooth'
+      });
+
       el.classList.remove('antropedia-block-flash');
       // reflow — чтобы анимация переиграла, если кликнули по тому же блоку второй раз подряд
       void el.offsetWidth;

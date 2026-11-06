@@ -1742,6 +1742,13 @@ body[data-page="antropedia"] .site-main {
     color: var(--text-muted, #72767d);
 }
 
+.public-article-content [data-block-id],
+.public-article-content h1,
+.public-article-content h2,
+.public-article-content h3 {
+    scroll-margin-top: 88px;
+}
+
 .antropedia-block-flash {
     animation: antropediaBlockFlash 1.6s ease-out;
 }

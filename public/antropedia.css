@@ -1929,8 +1929,11 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   100% { background: transparent; }
 }
 
-.antropedia-view-content [data-block-id] {
-  scroll-margin-top: 16px;
+.antropedia-view-content [data-block-id],
+.antropedia-view-content h1,
+.antropedia-view-content h2,
+.antropedia-view-content h3 {
+  scroll-margin-top: 80px;
 }
 
 /* === Подсветка результатов поиска по статье === */
