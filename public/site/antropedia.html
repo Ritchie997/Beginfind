@@ -224,9 +224,12 @@
 
     <!-- ===== Просмотр одной статьи (заполняет site.js) ===== -->
     <div class="antropedia-detail-container" id="publicArticleContainer" hidden>
+      <div id="antropediaSidebarBackdrop" class="antropedia-sheet-backdrop" hidden></div>
       <div id="antropediaBookmarkGutter" class="antropedia-bookmark-gutter" aria-hidden="true"></div>
       <article class="public-article-detail antropedia-detail-view" id="publicArticleDetail"></article>
       <aside id="antropediaViewSidebar" class="antropedia-view-sidebar" hidden>
+        <!-- Ручка для свайпа шторки (Bottom Sheet) -->
+        <div class="antropedia-sheet-handle-bar"><span class="antropedia-sheet-handle"></span></div>
         <div id="antropediaTocSearch" class="antropedia-toc-search-widget">
           <div class="antropedia-toc-search-inner">
             <button type="button" class="antropedia-toc-search-icon-btn" id="antropediaTocSearchIconBtn" title="Поиск по статье (Ctrl+F или /)" aria-label="Поиск по статье">
@@ -288,6 +291,19 @@
         <div class="antropedia-mobile-bm-actions">
           <button type="button" id="antropediaMobileBmAddBtn" class="btn btn-primary btn-sm">В закладки</button>
           <button type="button" id="antropediaMobileBmCloseBtn" class="antropedia-mobile-bm-close" aria-label="Закрыть"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+
+      <!-- Модальное окно/Action Sheet выбора слоя лора (на мобилках и десктопе) -->
+      <div id="antropediaLayerPickerModal" class="antropedia-layer-sheet-modal" hidden>
+        <div class="antropedia-sheet-backdrop" id="antropediaLayerPickerBackdrop"></div>
+        <div class="antropedia-layer-sheet-box">
+          <div class="antropedia-sheet-handle-bar"><span class="antropedia-sheet-handle"></span></div>
+          <div class="antropedia-layer-sheet-header">
+            <i class="fas fa-layer-group"></i> <span>Выберите слой лора</span>
+            <button type="button" id="antropediaLayerPickerClose" class="antropedia-layer-sheet-close" title="Закрыть"><i class="fas fa-times"></i></button>
+          </div>
+          <div id="antropediaLayerPickerList" class="antropedia-layer-sheet-list"></div>
         </div>
       </div>
     </div>

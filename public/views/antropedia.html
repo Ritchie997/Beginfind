@@ -112,23 +112,61 @@
 
   <!-- ===== Просмотр одной статьи ===== -->
   <section id="antropediaView" class="antropedia-view" hidden>
-    <div class="antropedia-view-topbar">
+    <div id="antropediaViewTopbar" class="antropedia-view-topbar">
       <button type="button" id="antropediaBackBtn" class="btn btn-secondary btn-sm antropedia-back-btn" title="К списку статей">
         <i class="fas fa-arrow-left"></i> <span class="antropedia-btn-label">К списку статей</span>
       </button>
 
-      <button type="button" id="antropediaShareBtn" class="btn btn-secondary btn-sm" title="Скопировать ссылку на статью">
-        <i class="fas fa-link"></i> <span class="antropedia-btn-label">Поделиться</span>
-      </button>
+      <div class="antropedia-topbar-actions">
+        <!-- Кнопка поиска на мобильных -->
+        <button type="button" id="antropediaMobileSearchToggleBtn" class="btn btn-secondary btn-sm antropedia-topbar-btn antropedia-mobile-search-btn" title="Поиск по статье" aria-label="Поиск по статье">
+          <i class="fas fa-search" aria-hidden="true"></i>
+        </button>
 
-      <!-- Только на телефоне/планшете (см. @media в antropedia.css) —
-           разворачивает боковую панель "Оглавление/Закладки" под текстом. -->
-      <button type="button" id="antropediaSidebarToggleBtn" class="antropedia-filters-toggle antropedia-sidebar-toggle" title="Оглавление и закладки" aria-expanded="false" aria-controls="antropediaViewSidebar">
-        <i class="fas fa-list-ul"></i> <span class="antropedia-btn-label">Оглавление и закладки</span>
-        <i class="fas fa-chevron-down antropedia-filters-chev"></i>
-      </button>
+        <!-- Кнопка Оглавление и закладки -->
+        <button type="button" id="antropediaSidebarToggleBtn" class="btn btn-secondary btn-sm antropedia-topbar-btn antropedia-sidebar-toggle" title="Оглавление и закладки" aria-expanded="false" aria-controls="antropediaViewSidebar">
+          <i class="fas fa-list-ul"></i> <span class="antropedia-btn-label">Оглавление</span>
+        </button>
+
+        <!-- Меню Ещё -->
+        <div class="antropedia-more-menu-wrapper">
+          <button type="button" id="antropediaMoreActionsBtn" class="btn btn-secondary btn-sm antropedia-topbar-btn antropedia-more-btn" title="Ещё действия" aria-label="Ещё действия" aria-haspopup="true" aria-expanded="false">
+            <i class="fas fa-ellipsis-vertical"></i>
+          </button>
+          <div id="antropediaMoreActionsMenu" class="antropedia-more-dropdown-menu" hidden>
+            <button type="button" class="antropedia-more-item" id="antropediaMoreLayerItem" data-action="layer" hidden>
+              <i class="fas fa-layer-group"></i> <span>Слой: <strong id="antropediaMoreLayerName">Общий</strong></span>
+            </button>
+            <button type="button" class="antropedia-more-item" id="antropediaMoreEditItem" data-action="edit">
+              <i class="fas fa-pen"></i> <span>Редактировать</span>
+            </button>
+            <button type="button" class="antropedia-more-item" id="antropediaMoreShareItem" data-action="share">
+              <i class="fas fa-link"></i> <span>Поделиться</span>
+            </button>
+            <button type="button" class="antropedia-more-item" id="antropediaMoreReportItem" data-action="report">
+              <i class="fas fa-flag"></i> <span>Пожаловаться</span>
+            </button>
+            <button type="button" class="antropedia-more-item antropedia-more-item-danger" id="antropediaMoreDeleteItem" data-action="delete">
+              <i class="fas fa-trash"></i> <span>Удалить</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Мобильный выдвижной бар поиска -->
+      <div id="antropediaMobileSearchBar" class="antropedia-mobile-search-bar" hidden>
+        <div class="antropedia-mobile-search-inner">
+          <i class="fas fa-search antropedia-mobile-search-icon"></i>
+          <input type="text" id="antropediaMobileSearchInput" class="antropedia-mobile-search-input" placeholder="Поиск по статье…" autocomplete="off" spellcheck="false">
+          <span id="antropediaMobileSearchCount" class="antropedia-mobile-search-count" hidden></span>
+          <button type="button" id="antropediaMobileSearchPrev" class="antropedia-mobile-search-nav" title="Предыдущее" hidden><i class="fas fa-chevron-up"></i></button>
+          <button type="button" id="antropediaMobileSearchNext" class="antropedia-mobile-search-nav" title="Следующее" hidden><i class="fas fa-chevron-down"></i></button>
+          <button type="button" id="antropediaMobileSearchClose" class="antropedia-mobile-search-close" title="Закрыть поиск"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
     </div>
 
+    <div id="antropediaSidebarBackdrop" class="antropedia-sheet-backdrop" hidden></div>
     <div class="antropedia-view-layout">
       <!-- Стикеры закладок, когда слева от карточки статьи достаточно места
            (см. .antropedia-bookmark-gutter/hasWideGutterSpace в antropedia.js) —
@@ -144,6 +182,12 @@
 
         <h1 id="antropediaViewTitle" class="antropedia-view-title"></h1>
         <div id="antropediaViewMeta" class="antropedia-view-meta"></div>
+        <!-- Пилюля слоя статьи под заголовком (Вариант А) -->
+        <button type="button" id="antropediaTitleLayerPill" class="antropedia-title-layer-pill" hidden aria-haspopup="listbox" aria-expanded="false" title="Выбор слоя статьи">
+          <i class="fas fa-layer-group" aria-hidden="true"></i>
+          <span>Слой: <strong id="antropediaTitleLayerName">Общий</strong></span>
+          <i class="fas fa-chevron-down antropedia-pill-arrow" aria-hidden="true"></i>
+        </button>
         <div id="antropediaViewBadges" class="antropedia-view-badges"></div>
 
 
@@ -182,6 +226,8 @@
            закладки текущей статьи — см. renderToc()/renderBookmarksPanel()
            в antropedia.js. -->
       <aside id="antropediaViewSidebar" class="antropedia-view-sidebar">
+        <!-- Ручка для свайпа шторки (Bottom Sheet) -->
+        <div class="antropedia-sheet-handle-bar"><span class="antropedia-sheet-handle"></span></div>
         <div id="antropediaTocSearch" class="antropedia-toc-search-widget">
           <div class="antropedia-toc-search-inner">
             <button type="button" class="antropedia-toc-search-icon-btn" id="antropediaTocSearchIconBtn" title="Поиск по статье (Ctrl+F или /)" aria-label="Поиск по статье">
@@ -300,6 +346,19 @@
       <div class="antropedia-mobile-bm-actions">
         <button type="button" id="antropediaMobileBmAddBtn" class="btn btn-primary btn-sm">В закладки</button>
         <button type="button" id="antropediaMobileBmCloseBtn" class="antropedia-mobile-bm-close" aria-label="Закрыть"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+
+    <!-- Модальное окно/Action Sheet выбора слоя лора (на мобилках и десктопе) -->
+    <div id="antropediaLayerPickerModal" class="antropedia-layer-sheet-modal" hidden>
+      <div class="antropedia-sheet-backdrop" id="antropediaLayerPickerBackdrop"></div>
+      <div class="antropedia-layer-sheet-box">
+        <div class="antropedia-sheet-handle-bar"><span class="antropedia-sheet-handle"></span></div>
+        <div class="antropedia-layer-sheet-header">
+          <i class="fas fa-layer-group"></i> <span>Выберите слой лора</span>
+          <button type="button" id="antropediaLayerPickerClose" class="antropedia-layer-sheet-close" title="Закрыть"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="antropediaLayerPickerList" class="antropedia-layer-sheet-list"></div>
       </div>
     </div>
   </section>
