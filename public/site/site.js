@@ -565,6 +565,7 @@
       }
       clearTimeout(inlineSearchDebounce);
       closeInArticleSearch();
+      hideSelectionUI();
       currentContentEl = null;
       listView.hidden = false;
       if (detailContainer) detailContainer.hidden = true;
@@ -1678,11 +1679,190 @@
     var bookmarkGhostEl = null;
     var bookmarkGutterHoverEl = null;
     var bookmarkCompactHoverEl = null;
+    var currentSelectedRangeInfo = null;
+    var selectionDebounce = null;
 
     function hasWideGutterSpace() {
       var art = detail || document.getElementById('publicArticleDetail');
       if (!art) return false;
       return art.getBoundingClientRect().left >= BOOKMARK_TAB_MIN_SPACE;
+    }
+
+    function updateBookmarksBadge(count) {
+      var btn = document.querySelector('.antropedia-sidebar-tab[data-sidebar-tab="bookmarks"]');
+      if (!btn) return;
+      var badge = btn.querySelector('.antropedia-tab-badge');
+      if (count > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'antropedia-tab-badge';
+          btn.appendChild(badge);
+        }
+        badge.textContent = count;
+      } else if (badge) {
+        badge.remove();
+      }
+    }
+
+    function findQuoteRange(containerEl, quote) {
+      if (!containerEl || !quote || typeof quote !== 'string') return null;
+      var targetText = quote.trim();
+      if (!targetText) return null;
+
+      var walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null, false);
+      var textNodes = [];
+      var fullText = '';
+      var nodeOffsets = [];
+      var node;
+      while ((node = walker.nextNode())) {
+        textNodes.push(node);
+        nodeOffsets.push(fullText.length);
+        fullText += node.nodeValue;
+      }
+
+      var matchIdx = fullText.indexOf(targetText);
+      var matchLen = targetText.length;
+
+      if (matchIdx === -1) {
+        var rxStr = targetText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        try {
+          var match = new RegExp(rxStr, 'i').exec(fullText);
+          if (match) {
+            matchIdx = match.index;
+            matchLen = match[0].length;
+          } else if (targetText.length > 25) {
+            var shortRx = targetText.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            var shortMatch = new RegExp(shortRx, 'i').exec(fullText);
+            if (shortMatch) {
+              matchIdx = shortMatch.index;
+              matchLen = shortMatch[0].length;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (matchIdx === -1) return null;
+
+      var endIdx = matchIdx + matchLen;
+      var startNode = null;
+      var startOffset = 0;
+      var endNode = null;
+      var endOffset = 0;
+
+      for (var i = 0; i < textNodes.length; i++) {
+        var nStart = nodeOffsets[i];
+        var nEnd = nStart + textNodes[i].nodeValue.length;
+        if (!startNode && matchIdx >= nStart && (matchIdx < nEnd || (i === textNodes.length - 1 && matchIdx === nEnd))) {
+          startNode = textNodes[i];
+          startOffset = matchIdx - nStart;
+        }
+        if (endIdx >= nStart && endIdx <= nEnd) {
+          endNode = textNodes[i];
+          endOffset = endIdx - nStart;
+          break;
+        }
+      }
+
+      if (startNode && endNode) {
+        try {
+          var range = document.createRange();
+          range.setStart(startNode, startOffset);
+          range.setEnd(endNode, endOffset);
+          return range;
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    function highlightRange(range, color) {
+      if (!range) return false;
+      var flashColor = color || '#5865f2';
+      var mark = document.createElement('mark');
+      mark.className = 'antropedia-line-flash';
+      mark.style.setProperty('--bm-color', flashColor);
+
+      try {
+        if (range.startContainer === range.endContainer && range.startContainer.nodeType === 3) {
+          range.surroundContents(mark);
+        } else {
+          var contents = range.extractContents();
+          mark.appendChild(contents);
+          range.insertNode(mark);
+        }
+
+        setTimeout(function () {
+          if (mark.parentNode) {
+            var parent = mark.parentNode;
+            while (mark.firstChild) {
+              parent.insertBefore(mark.firstChild, mark);
+            }
+            mark.remove();
+            parent.normalize();
+          }
+        }, 1900);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function jumpToBookmark(bookmark) {
+      if (!bookmark) return;
+      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (!contentEl) return;
+
+      var blockEl = null;
+      if (bookmark.blockId) {
+        try {
+          blockEl = contentEl.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(bookmark.blockId) : bookmark.blockId) + '"]');
+        } catch (_) {}
+        if (!blockEl) blockEl = document.getElementById(bookmark.blockId);
+      }
+
+      var range = (blockEl && bookmark.quote) ? findQuoteRange(blockEl, bookmark.quote) : null;
+      var headerOffset = 90;
+      var currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+      var targetTop = 0;
+
+      if (range) {
+        var rangeRect = range.getBoundingClientRect();
+        if (rangeRect && rangeRect.height > 0) {
+          targetTop = rangeRect.top + currentScroll - headerOffset;
+        }
+      }
+      if (!targetTop && blockEl) {
+        var blockRect = blockEl.getBoundingClientRect();
+        targetTop = blockRect.top + currentScroll - headerOffset;
+      }
+
+      if (targetTop) {
+        window.scrollTo({
+          top: Math.max(0, Math.round(targetTop)),
+          behavior: 'smooth'
+        });
+      }
+
+      var flashed = highlightRange(range, bookmark.color);
+      if (!flashed && blockEl) {
+        blockEl.classList.remove('antropedia-block-flash');
+        void blockEl.offsetWidth;
+        blockEl.classList.add('antropedia-block-flash');
+        setTimeout(function () {
+          blockEl.classList.remove('antropedia-block-flash');
+        }, 1600);
+      }
+
+      var sb = document.getElementById('antropediaViewSidebar');
+      if (sb && window.innerWidth <= 1024) {
+        sb.classList.remove('is-open');
+        var btn = document.getElementById('antropediaSidebarToggleBtn');
+        if (btn) {
+          btn.classList.remove('is-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      }
     }
 
     function scrollToBlock(blockId) {
@@ -1750,7 +1930,7 @@
       el.style.top = Math.round(top) + 'px';
     }
 
-    function openBookmarkPopover(blockId, anchorEl) {
+    function openBookmarkPopover(blockId, anchorEl, selectedQuote) {
       var token = getAuthToken();
       if (!token) {
         openLogin();
@@ -1758,14 +1938,26 @@
       }
 
       var existing = currentArticleBookmarks.find(function (b) { return b.blockId === blockId; });
-      pendingBookmark = { blockId: blockId, id: existing ? existing.id : null };
+      pendingBookmark = {
+        blockId: blockId,
+        id: existing ? existing.id : null,
+        quote: selectedQuote || (existing ? existing.quote : null)
+      };
 
       var nameEl = document.getElementById('antropediaBookmarkPopoverName');
       var delBtn = document.getElementById('antropediaBookmarkPopoverDelete');
       var popoverEl = document.getElementById('antropediaBookmarkPopover');
       var backdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
 
-      if (nameEl) nameEl.value = existing ? existing.name : '';
+      if (nameEl) {
+        if (existing) {
+          nameEl.value = existing.name;
+        } else if (selectedQuote) {
+          nameEl.value = selectedQuote.slice(0, 35).trim();
+        } else {
+          nameEl.value = '';
+        }
+      }
       selectedBookmarkColor = existing ? existing.color : BOOKMARK_COLORS[0];
       renderBookmarkColorSwatches();
       if (delBtn) delBtn.hidden = !existing;
@@ -1793,6 +1985,7 @@
       if (popoverEl) popoverEl.hidden = true;
       if (backdropEl) backdropEl.hidden = true;
       pendingBookmark = null;
+      hideSelectionUI();
     }
 
     async function saveBookmarkFromPopover() {
@@ -1822,14 +2015,17 @@
           });
           if (!res.ok) throw new Error('HTTP ' + res.status);
         } else {
-          var blockEl = null;
-          try {
-            var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
-            blockEl = contentEl?.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(pendingBookmark.blockId) : pendingBookmark.blockId) + '"]');
-          } catch (_) {
-            blockEl = null;
+          var quoteText = pendingBookmark.quote || '';
+          if (!quoteText) {
+            var blockEl = null;
+            try {
+              var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+              blockEl = contentEl?.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(pendingBookmark.blockId) : pendingBookmark.blockId) + '"]');
+            } catch (_) {
+              blockEl = null;
+            }
+            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
           }
-          var quote = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
           var res = await fetch('/api/bookmarks', {
             method: 'POST',
             headers: {
@@ -1840,7 +2036,7 @@
               slug: currentArticleSlug,
               title: currentArticleTitle || currentArticleSlug,
               blockId: pendingBookmark.blockId,
-              quote: quote,
+              quote: quoteText,
               name: name,
               color: color
             })
@@ -1869,6 +2065,7 @@
         currentArticleBookmarks = currentArticleBookmarks.map(function (b) {
           return String(b.id) === String(id) ? Object.assign({}, b, { name: name }) : b;
         });
+        updateBookmarksBadge(currentArticleBookmarks.length);
         renderBookmarksPanel();
         renderBookmarkGutter();
       } catch (e) {
@@ -1887,6 +2084,7 @@
         currentArticleBookmarks = currentArticleBookmarks.filter(function (b) {
           return String(b.id) !== String(id);
         });
+        updateBookmarksBadge(currentArticleBookmarks.length);
         renderBookmarksPanel();
         renderBookmarkGutter();
       } catch (e) {
@@ -1900,6 +2098,7 @@
       var token = getAuthToken();
       if (!token) {
         currentArticleBookmarks = [];
+        updateBookmarksBadge(0);
         renderBookmarksPanel();
         renderBookmarkGutter();
         return;
@@ -1917,6 +2116,7 @@
       } catch (_) {
         currentArticleBookmarks = [];
       }
+      updateBookmarksBadge(currentArticleBookmarks.length);
       renderBookmarksPanel();
       renderBookmarkGutter();
     }
@@ -1925,7 +2125,7 @@
       var panel = document.getElementById('antropediaBookmarksPanel');
       if (!panel) return;
       if (!currentArticleBookmarks.length) {
-        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — нажмите на хвостик закладки слева от нужного абзаца, чтобы добавить.</div>';
+        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — выделите текст или нажмите на хвостик закладки, чтобы добавить.</div>';
         return;
       }
       panel.innerHTML = currentArticleBookmarks.map(function (b) {
@@ -1940,12 +2140,12 @@
       }).join('');
     }
 
-    function createBookmarkTab(blockEl, blockId, bookmark, layoutRect) {
-      var blockRect = blockEl.getBoundingClientRect();
+    function createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop) {
+      var topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
       var tab = document.createElement('button');
       tab.type = 'button';
       tab.className = 'antropedia-bm-tab';
-      tab.style.top = (blockRect.top - layoutRect.top) + 'px';
+      tab.style.top = Math.round(topPos - layoutRect.top) + 'px';
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
       tab.title = bookmark.name;
@@ -1953,12 +2153,12 @@
       return tab;
     }
 
-    function createCompactToggle(blockEl, blockId, bookmark, contentRect) {
-      var blockRect = blockEl.getBoundingClientRect();
+    function createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop) {
+      var topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
       var toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'antropedia-bm-toggle' + (bookmark ? ' is-active' : '');
-      toggle.style.top = (blockRect.top - contentRect.top) + 'px';
+      toggle.style.top = Math.round(topPos - contentRect.top) + 'px';
       toggle.setAttribute('data-block-id', blockId);
       toggle.title = bookmark ? bookmark.name : 'Добавить закладку';
       if (bookmark) toggle.style.setProperty('--bm-color', bookmark.color);
@@ -2068,6 +2268,93 @@
       openBookmarkPopover(blockEl.getAttribute('data-block-id'), blockEl);
     }
 
+    function processTextSelection() {
+      var sel = window.getSelection();
+      var tooltipEl = document.getElementById('antropediaSelectionTooltip');
+      var mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+      var mobileQuoteEl = document.getElementById('antropediaMobileBmQuote');
+
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        currentSelectedRangeInfo = null;
+        return;
+      }
+
+      var text = sel.toString().trim();
+      if (!text || text.length < 2) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        currentSelectedRangeInfo = null;
+        return;
+      }
+
+      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      if (!contentEl) return;
+
+      var range = sel.getRangeAt(0);
+      var startParent = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+      if (!startParent || !contentEl.contains(startParent)) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        currentSelectedRangeInfo = null;
+        return;
+      }
+
+      var blockEl = startParent.closest('[data-block-id]');
+      if (!blockEl) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        currentSelectedRangeInfo = null;
+        return;
+      }
+
+      var blockId = blockEl.getAttribute('data-block-id');
+      currentSelectedRangeInfo = {
+        blockId: blockId,
+        blockEl: blockEl,
+        quote: text.slice(0, 140),
+        range: range.cloneRange()
+      };
+
+      var isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+
+      if (isMobile) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl && mobileQuoteEl) {
+          mobileQuoteEl.textContent = '«' + (text.length > 50 ? text.slice(0, 50) + '…' : text) + '»';
+          mobileBarEl.hidden = false;
+        }
+      } else {
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        if (tooltipEl) {
+          var rect = range.getBoundingClientRect();
+          if (rect && rect.width > 0) {
+            tooltipEl.hidden = false;
+            var cx = rect.left + rect.width / 2;
+            var cy = rect.top - 8;
+            cx = Math.max(70, Math.min(window.innerWidth - 70, cx));
+            cy = Math.max(30, cy);
+            tooltipEl.style.left = Math.round(cx) + 'px';
+            tooltipEl.style.top = Math.round(cy) + 'px';
+          }
+        }
+      }
+    }
+
+    function checkSelection() {
+      clearTimeout(selectionDebounce);
+      selectionDebounce = setTimeout(processTextSelection, 80);
+    }
+
+    function hideSelectionUI() {
+      var tooltipEl = document.getElementById('antropediaSelectionTooltip');
+      var mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+      if (tooltipEl) tooltipEl.hidden = true;
+      if (mobileBarEl) mobileBarEl.hidden = true;
+      currentSelectedRangeInfo = null;
+    }
+
     function renderBookmarkGutter() {
       var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
       if (!contentEl) return;
@@ -2132,10 +2419,24 @@
         var bookmark = byBlock.get(blockId);
         if (!bookmark) return;
 
+        var targetTop = null;
+        if (bookmark.quote) {
+          var range = findQuoteRange(blockEl, bookmark.quote);
+          if (range) {
+            var rRect = range.getBoundingClientRect();
+            if (rRect && rRect.height > 0) {
+              targetTop = rRect.top;
+            }
+          }
+        }
+        if (targetTop === null) {
+          targetTop = blockEl.getBoundingClientRect().top;
+        }
+
         if (bmWideMode && gutterEl && layoutRect) {
-          gutterEl.appendChild(createBookmarkTab(blockEl, blockId, bookmark, layoutRect));
+          gutterEl.appendChild(createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop));
         } else {
-          contentEl.appendChild(createCompactToggle(blockEl, blockId, bookmark, contentRect));
+          contentEl.appendChild(createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop));
         }
       });
     }
@@ -2162,7 +2463,61 @@
           if (toEl && (bookmarkGutterHoverEl?.contains(toEl) || bookmarkCompactHoverEl?.contains(toEl))) return;
           hideBookmarkGhost();
         });
+      } else {
+        var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+        if (contentEl) {
+          contentEl.addEventListener('dblclick', handleContentDblClick);
+        }
       }
+
+      // Selection listeners
+      document.addEventListener('selectionchange', checkSelection);
+      document.addEventListener('mouseup', checkSelection);
+      document.addEventListener('touchend', checkSelection);
+
+      var selBtn = document.getElementById('antropediaSelectionBookmarkBtn');
+      if (selBtn) {
+        selBtn.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+        });
+        selBtn.addEventListener('click', function () {
+          if (!currentSelectedRangeInfo) return;
+          var info = currentSelectedRangeInfo;
+          hideSelectionUI();
+          openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+        });
+      }
+
+      var mobileAddBtn = document.getElementById('antropediaMobileBmAddBtn');
+      if (mobileAddBtn) {
+        mobileAddBtn.addEventListener('touchstart', function (e) {
+          e.stopPropagation();
+        });
+        mobileAddBtn.addEventListener('click', function () {
+          if (!currentSelectedRangeInfo) return;
+          var info = currentSelectedRangeInfo;
+          hideSelectionUI();
+          openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+        });
+      }
+
+      var mobileCloseBtn = document.getElementById('antropediaMobileBmCloseBtn');
+      if (mobileCloseBtn) {
+        mobileCloseBtn.addEventListener('click', function () {
+          hideSelectionUI();
+        });
+      }
+
+      document.addEventListener('mousedown', function (e) {
+        var tooltipEl = document.getElementById('antropediaSelectionTooltip');
+        var mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+        if (tooltipEl && !tooltipEl.hidden && !tooltipEl.contains(e.target)) {
+          var cEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+          if (!cEl || !cEl.contains(e.target)) {
+            hideSelectionUI();
+          }
+        }
+      });
 
       var cancelBtn = document.getElementById('antropediaBookmarkPopoverCancel');
       if (cancelBtn) cancelBtn.addEventListener('click', closeBookmarkPopover);
@@ -2220,8 +2575,13 @@
             deleteBookmarkById(id);
             return;
           }
-          var blockId = item.getAttribute('data-block-id');
-          if (blockId) scrollToBlock(blockId);
+          var bookmark = currentArticleBookmarks.find(function (b) { return String(b.id) === String(id); });
+          if (bookmark) {
+            jumpToBookmark(bookmark);
+          } else {
+            var blockId = item.getAttribute('data-block-id');
+            if (blockId) scrollToBlock(blockId);
+          }
         });
 
         bookmarksPanel.addEventListener('dblclick', function (e) {
@@ -2250,8 +2610,6 @@
       if (tocPanel) tocPanel.hidden = tab !== 'toc';
       if (bmPanel) bmPanel.hidden = tab !== 'bookmarks';
     }
-
-
 
     var tocObserver = null;
     var tocCleanup = null;
@@ -2460,6 +2818,7 @@
       currentArticleTitle = article.title || article.slug;
       switchSidebarTab('toc');
       closeBookmarkPopover();
+      hideSelectionUI();
       loadArticleBookmarks();
       listView.hidden = true;
       if (detailContainer) detailContainer.hidden = false;

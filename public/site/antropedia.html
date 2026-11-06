@@ -271,6 +271,25 @@
           </div>
         </div>
       </div>
+
+      <!-- Всплывающая кнопка добавления закладки по выделению текста (ПК) -->
+      <div id="antropediaSelectionTooltip" class="antropedia-selection-tooltip" hidden>
+        <button type="button" id="antropediaSelectionBookmarkBtn" class="antropedia-selection-btn">
+          <i class="fas fa-bookmark" aria-hidden="true"></i> <span>В закладки</span>
+        </button>
+      </div>
+
+      <!-- Мобильная плашка добавления закладки по выделению (Смартфоны) -->
+      <div id="antropediaMobileBookmarkBar" class="antropedia-mobile-bm-bar" hidden>
+        <div class="antropedia-mobile-bm-info">
+          <i class="fas fa-bookmark" aria-hidden="true"></i>
+          <span id="antropediaMobileBmQuote" class="antropedia-mobile-bm-quote"></span>
+        </div>
+        <div class="antropedia-mobile-bm-actions">
+          <button type="button" id="antropediaMobileBmAddBtn" class="btn btn-primary btn-sm">В закладки</button>
+          <button type="button" id="antropediaMobileBmCloseBtn" class="antropedia-mobile-bm-close" aria-label="Закрыть"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
     </div>
 
     <!-- ===== Редактор статьи (заполняет antropedia-editor-client.js) ===== -->

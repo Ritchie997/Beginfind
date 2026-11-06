@@ -107,6 +107,7 @@
       <button type="button" data-select-act="delete" class="antropedia-select-bar-danger"><i class="fas fa-trash"></i> Удалить</button>
       <button type="button" data-select-act="cancel" title="Отмена (Esc)"><i class="fas fa-xmark"></i></button>
     </div>
+
   </section>
 
   <!-- ===== Просмотр одной статьи ===== -->
@@ -280,6 +281,25 @@
           <button type="button" id="antropediaBookmarkPopoverCancel" class="btn btn-secondary btn-sm">Отмена</button>
           <button type="button" id="antropediaBookmarkPopoverSave" class="btn btn-primary btn-sm">Сохранить</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Всплывающая кнопка добавления закладки по выделению текста (ПК) -->
+    <div id="antropediaSelectionTooltip" class="antropedia-selection-tooltip" hidden>
+      <button type="button" id="antropediaSelectionBookmarkBtn" class="antropedia-selection-btn">
+        <i class="fas fa-bookmark" aria-hidden="true"></i> <span>В закладки</span>
+      </button>
+    </div>
+
+    <!-- Мобильная плашка добавления закладки по выделению (Смартфоны) -->
+    <div id="antropediaMobileBookmarkBar" class="antropedia-mobile-bm-bar" hidden>
+      <div class="antropedia-mobile-bm-info">
+        <i class="fas fa-bookmark" aria-hidden="true"></i>
+        <span id="antropediaMobileBmQuote" class="antropedia-mobile-bm-quote"></span>
+      </div>
+      <div class="antropedia-mobile-bm-actions">
+        <button type="button" id="antropediaMobileBmAddBtn" class="btn btn-primary btn-sm">В закладки</button>
+        <button type="button" id="antropediaMobileBmCloseBtn" class="antropedia-mobile-bm-close" aria-label="Закрыть"><i class="fas fa-times"></i></button>
       </div>
     </div>
   </section>

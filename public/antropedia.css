@@ -1739,6 +1739,11 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 /* Оглавление — как панель "Навигация" в Word: список заголовков статьи
    с отступом по уровню, клик — плавный скролл к заголовку. Закладки (ниже)
    используют тот же список — тот же принцип "элемент списка -> телепорт". */
+.antropedia-toc-panel[hidden],
+.antropedia-sidebar-panel[hidden] {
+    display: none !important;
+}
+
 .antropedia-toc-list {
   list-style: none;
   margin: 0;
@@ -2640,4 +2645,169 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
 @keyframes commentFocus {
   0%, 40% { background: rgba(88, 101, 242, 0.28); box-shadow: 0 0 0 2px var(--blurple); }
   100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+
+
+.antropedia-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 9px;
+    background: var(--blurple, #5865f2);
+    color: #ffffff;
+    margin-left: 5px;
+}
+
+/* Всплывающая кнопка закладки по выделению текста на ПК */
+.antropedia-selection-tooltip {
+    position: fixed;
+    z-index: 1060;
+    transform: translate(-50%, -100%);
+    pointer-events: auto;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45));
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.antropedia-selection-tooltip[hidden] {
+    display: none !important;
+}
+
+.antropedia-selection-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #18191c;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.antropedia-selection-btn:hover {
+    background: var(--blurple, #5865f2);
+    border-color: var(--blurple, #5865f2);
+    transform: scale(1.04);
+}
+
+.antropedia-selection-btn > i {
+    color: var(--blurple, #5865f2);
+}
+
+.antropedia-selection-btn:hover > i {
+    color: #ffffff;
+}
+
+/* Мобильная плашка добавления закладки по выделению текста */
+.antropedia-mobile-bm-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+    z-index: 1060;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(24, 25, 28, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    animation: antropediaSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.antropedia-mobile-bm-bar[hidden] {
+    display: none !important;
+}
+
+.antropedia-mobile-bm-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+    color: var(--text-normal, #dcddde);
+    font-size: 13px;
+}
+
+.antropedia-mobile-bm-info > i {
+    color: var(--blurple, #5865f2);
+    flex-shrink: 0;
+}
+
+.antropedia-mobile-bm-quote {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-style: italic;
+    color: var(--text-muted, #949ba4);
+}
+
+.antropedia-mobile-bm-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.antropedia-mobile-bm-close {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-muted, #949ba4);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+@keyframes antropediaSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Мягкая вспышка конкретной строки/цитаты закладки */
+.antropedia-line-flash {
+    background-color: var(--bm-color, var(--blurple, #5865f2)) !important;
+    color: #ffffff !important;
+    border-radius: 3px;
+    padding: 1px 3px;
+    animation: antropediaLineFlashAnim 1.8s ease-out forwards;
+}
+
+@keyframes antropediaLineFlashAnim {
+    0% {
+        background-color: var(--bm-color, var(--blurple, #5865f2));
+        box-shadow: 0 0 14px var(--bm-color, var(--blurple, #5865f2));
+        color: #ffffff;
+    }
+    70% {
+        background-color: rgba(88, 101, 242, 0.25);
+        box-shadow: none;
+    }
+    100% {
+        background-color: transparent;
+    }
 }

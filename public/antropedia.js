@@ -2876,6 +2876,7 @@ initEngagement() {
       this.currentArticleBookmarks = [];
       this.resetEngagementUI();
       this.closeBookmarkPopover();
+      this.hideSelectionUI();
       this.resetInlineSearchUI();
       if (this._tocCleanup) { this._tocCleanup(); this._tocCleanup = null; }
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
@@ -3348,22 +3349,257 @@ initEngagement() {
     // где торчать, не наезжая на сайдбар/край окна — см. hasWideGutterSpace.
     static get BOOKMARK_TAB_MIN_SPACE() { return 190; }
 
+    updateBookmarksBadge(count) {
+      const btn = document.querySelector('.antropedia-sidebar-tab[data-sidebar-tab="bookmarks"]');
+      if (!btn) return;
+      let badge = btn.querySelector('.antropedia-tab-badge');
+      if (count > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'antropedia-tab-badge';
+          btn.appendChild(badge);
+        }
+        badge.textContent = count;
+      } else if (badge) {
+        badge.remove();
+      }
+    }
+
+    findQuoteRange(containerEl, quote) {
+      if (!containerEl || !quote || typeof quote !== 'string') return null;
+      const targetText = quote.trim();
+      if (!targetText) return null;
+
+      const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null, false);
+      const textNodes = [];
+      let fullText = '';
+      const nodeOffsets = [];
+      let node;
+      while ((node = walker.nextNode())) {
+        textNodes.push(node);
+        nodeOffsets.push(fullText.length);
+        fullText += node.nodeValue;
+      }
+
+      let matchIdx = fullText.indexOf(targetText);
+      let matchLen = targetText.length;
+
+      if (matchIdx === -1) {
+        const rxStr = targetText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        try {
+          const match = new RegExp(rxStr, 'i').exec(fullText);
+          if (match) {
+            matchIdx = match.index;
+            matchLen = match[0].length;
+          } else if (targetText.length > 25) {
+            const shortRx = targetText.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            const shortMatch = new RegExp(shortRx, 'i').exec(fullText);
+            if (shortMatch) {
+              matchIdx = shortMatch.index;
+              matchLen = shortMatch[0].length;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (matchIdx === -1) return null;
+
+      const endIdx = matchIdx + matchLen;
+      let startNode = null;
+      let startOffset = 0;
+      let endNode = null;
+      let endOffset = 0;
+
+      for (let i = 0; i < textNodes.length; i++) {
+        const nStart = nodeOffsets[i];
+        const nEnd = nStart + textNodes[i].nodeValue.length;
+        if (!startNode && matchIdx >= nStart && (matchIdx < nEnd || (i === textNodes.length - 1 && matchIdx === nEnd))) {
+          startNode = textNodes[i];
+          startOffset = matchIdx - nStart;
+        }
+        if (endIdx >= nStart && endIdx <= nEnd) {
+          endNode = textNodes[i];
+          endOffset = endIdx - nStart;
+          break;
+        }
+      }
+
+      if (startNode && endNode) {
+        try {
+          const range = document.createRange();
+          range.setStart(startNode, startOffset);
+          range.setEnd(endNode, endOffset);
+          return range;
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    highlightRange(range, color) {
+      if (!range) return false;
+      const flashColor = color || '#5865f2';
+      const mark = document.createElement('mark');
+      mark.className = 'antropedia-line-flash';
+      mark.style.setProperty('--bm-color', flashColor);
+
+      try {
+        if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+          range.surroundContents(mark);
+        } else {
+          const contents = range.extractContents();
+          mark.appendChild(contents);
+          range.insertNode(mark);
+        }
+
+        setTimeout(() => {
+          if (mark.parentNode) {
+            const parent = mark.parentNode;
+            while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+            mark.remove();
+            parent.normalize();
+          }
+        }, 1900);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    jumpToBookmark(bookmark) {
+      if (!bookmark || !this.contentEl) return;
+      let blockEl = null;
+      if (bookmark.blockId) {
+        try { blockEl = this.contentEl.querySelector(`[data-block-id="${CSS.escape(bookmark.blockId)}"]`); } catch (e) { blockEl = null; }
+        if (!blockEl) blockEl = document.getElementById(bookmark.blockId);
+      }
+
+      const range = (blockEl && bookmark.quote) ? this.findQuoteRange(blockEl, bookmark.quote) : null;
+      const headerOffset = 80;
+      const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+      let targetTop = 0;
+
+      if (range) {
+        const rangeRect = range.getBoundingClientRect();
+        if (rangeRect && rangeRect.height > 0) {
+          targetTop = rangeRect.top + currentScroll - headerOffset;
+        }
+      }
+      if (!targetTop && blockEl) {
+        const blockRect = blockEl.getBoundingClientRect();
+        targetTop = blockRect.top + currentScroll - headerOffset;
+      }
+
+      if (targetTop) {
+        window.scrollTo({
+          top: Math.max(0, Math.round(targetTop)),
+          behavior: 'smooth'
+        });
+      }
+
+      const flashed = this.highlightRange(range, bookmark.color);
+      if (!flashed && blockEl) {
+        blockEl.classList.remove('antropedia-block-flash');
+        void blockEl.offsetWidth;
+        blockEl.classList.add('antropedia-block-flash');
+        setTimeout(() => blockEl.classList.remove('antropedia-block-flash'), 1600);
+      }
+
+      if (window.innerWidth <= 1024) {
+        this.closeSidebarOnMobile();
+      }
+    }
+
+    processTextSelection() {
+      const sel = window.getSelection();
+      const tooltipEl = document.getElementById('antropediaSelectionTooltip');
+      const mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+      const mobileQuoteEl = document.getElementById('antropediaMobileBmQuote');
+
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        this._currentSelectedRangeInfo = null;
+        return;
+      }
+
+      const text = sel.toString().trim();
+      if (!text || text.length < 2) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        this._currentSelectedRangeInfo = null;
+        return;
+      }
+
+      if (!this.contentEl) return;
+
+      const range = sel.getRangeAt(0);
+      const startParent = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+      if (!startParent || !this.contentEl.contains(startParent)) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        this._currentSelectedRangeInfo = null;
+        return;
+      }
+
+      const blockEl = startParent.closest('[data-block-id]');
+      if (!blockEl) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        this._currentSelectedRangeInfo = null;
+        return;
+      }
+
+      const blockId = blockEl.getAttribute('data-block-id');
+      this._currentSelectedRangeInfo = {
+        blockId,
+        blockEl,
+        quote: text.slice(0, 140),
+        range: range.cloneRange()
+      };
+
+      const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+
+      if (isMobile) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        if (mobileBarEl && mobileQuoteEl) {
+          mobileQuoteEl.textContent = '«' + (text.length > 50 ? text.slice(0, 50) + '…' : text) + '»';
+          mobileBarEl.hidden = false;
+        }
+      } else {
+        if (mobileBarEl) mobileBarEl.hidden = true;
+        if (tooltipEl) {
+          const rect = range.getBoundingClientRect();
+          if (rect && rect.width > 0) {
+            tooltipEl.hidden = false;
+            let cx = rect.left + rect.width / 2;
+            let cy = rect.top - 8;
+            cx = Math.max(70, Math.min(window.innerWidth - 70, cx));
+            cy = Math.max(30, cy);
+            tooltipEl.style.left = `${Math.round(cx)}px`;
+            tooltipEl.style.top = `${Math.round(cy)}px`;
+          }
+        }
+      }
+    }
+
+    checkSelection() {
+      clearTimeout(this._selectionDebounce);
+      this._selectionDebounce = setTimeout(() => this.processTextSelection(), 80);
+    }
+
+    hideSelectionUI() {
+      const tooltipEl = document.getElementById('antropediaSelectionTooltip');
+      const mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+      if (tooltipEl) tooltipEl.hidden = true;
+      if (mobileBarEl) mobileBarEl.hidden = true;
+      this._currentSelectedRangeInfo = null;
+    }
+
     initBookmarkGutter() {
-      // (hover: hover) — у мыши/трекпада, в отличие от пальца, наведение
-      // без клика в принципе существует: только там приглашение "поставить
-      // закладку" показываем ПО НАВЕДЕНИЮ (см. showBookmarkGhost), не
-      // захламляя статью значком на каждом абзаце. На тач-экранах наведения
-      // не бывает вообще — там вместо него двойной тап по абзацу (см.
-      // handleContentDblClick), открывающий попап как модальное окно
-      // (см. openBookmarkPopover/antropedia.css). Постоянного значка-
-      // приглашения на неотмеченных блоках там больше нет — только
-      // цветной значок у уже поставленных закладок.
       this._bmHoverCapable = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
 
-      // Один переиспользуемый элемент-"призрак" вместо кнопки на каждом
-      // абзаце — показывается/переносится под курсор наведения (см.
-      // showBookmarkGhost/hideBookmarkGhost), а не создаётся заново на
-      // каждый ховер.
       this.bookmarkGhostEl = document.createElement('button');
       this.bookmarkGhostEl.type = 'button';
       this.bookmarkGhostEl.hidden = true;
@@ -3384,21 +3620,56 @@ initEngagement() {
       });
 
       if (this._bmHoverCapable) {
-        // Призрак прячем, когда курсор ушёл и из зоны наведения, и с самого
-        // призрака (например, при переходе с зоны прямо на него) — иначе
-        // мигал бы в момент, когда мышь движется от текста к самому
-        // стикеру, чтобы на него нажать.
         this.bookmarkGhostEl.addEventListener('mouseleave', (e) => {
           const toEl = e.relatedTarget;
           if (toEl && (this.bookmarkGutterHoverEl?.contains(toEl) || this.bookmarkCompactHoverEl?.contains(toEl))) return;
           this.hideBookmarkGhost();
         });
       } else {
-        // Тач-устройство — двойной тап по абзацу открывает попап (как
-        // модальное окно, см. antropedia.css) сразу на редактирование, если
-        // на блоке уже есть закладка, или на создание новой.
         this.contentEl?.addEventListener('dblclick', (e) => this.handleContentDblClick(e));
       }
+
+      // Selection listeners
+      document.addEventListener('selectionchange', () => this.checkSelection());
+      document.addEventListener('mouseup', () => this.checkSelection());
+      document.addEventListener('touchend', () => this.checkSelection());
+
+      const selBtn = document.getElementById('antropediaSelectionBookmarkBtn');
+      if (selBtn) {
+        selBtn.addEventListener('mousedown', (e) => e.preventDefault());
+        selBtn.addEventListener('click', () => {
+          if (!this._currentSelectedRangeInfo) return;
+          const info = this._currentSelectedRangeInfo;
+          this.hideSelectionUI();
+          this.openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+        });
+      }
+
+      const mobileAddBtn = document.getElementById('antropediaMobileBmAddBtn');
+      if (mobileAddBtn) {
+        mobileAddBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+        mobileAddBtn.addEventListener('click', () => {
+          if (!this._currentSelectedRangeInfo) return;
+          const info = this._currentSelectedRangeInfo;
+          this.hideSelectionUI();
+          this.openBookmarkPopover(info.blockId, info.blockEl, info.quote);
+        });
+      }
+
+      const mobileCloseBtn = document.getElementById('antropediaMobileBmCloseBtn');
+      if (mobileCloseBtn) {
+        mobileCloseBtn.addEventListener('click', () => this.hideSelectionUI());
+      }
+
+      document.addEventListener('mousedown', (e) => {
+        const tooltipEl = document.getElementById('antropediaSelectionTooltip');
+        const mobileBarEl = document.getElementById('antropediaMobileBookmarkBar');
+        if (tooltipEl && !tooltipEl.hidden && !tooltipEl.contains(e.target)) {
+          if (!this.contentEl || !this.contentEl.contains(e.target)) {
+            this.hideSelectionUI();
+          }
+        }
+      });
 
       document.getElementById('antropediaBookmarkPopoverCancel')?.addEventListener('click', () => this.closeBookmarkPopover());
       document.getElementById('antropediaBookmarkPopoverSave')?.addEventListener('click', () => this.saveBookmarkFromPopover());
@@ -3409,11 +3680,6 @@ initEngagement() {
         if (e.key === 'Escape') { e.preventDefault(); this.closeBookmarkPopover(); }
       });
 
-      // Стикеры позиционируются в пикселях (см. renderBookmarkGutter) — при
-      // изменении ширины окна текст переносится по-другому, блоки меняют
-      // высоту, а поле слева от карточки может стать шире/уже (переключение
-      // между "торчит за краем" и компактным режимом) — координаты и режим
-      // нужно пересчитать.
       this._bmGutterResizeHandler = () => this.scheduleBookmarkGutterRefresh();
       window.addEventListener('resize', this._bmGutterResizeHandler);
     }
@@ -3423,22 +3689,11 @@ initEngagement() {
       this._bmGutterResizeDebounce = setTimeout(() => this.renderBookmarkGutter(), 150);
     }
 
-    // Есть ли слева от карточки статьи достаточно места для стикера,
-    // торчащего ЗА её краем (см. .antropedia-bm-tab в antropedia.css) — само
-    // поле уже учитывает сайдбар приложения слева и центрирование карточки,
-    // т.к. измеряется её реальное положение на экране, а не ширина окна.
     hasWideGutterSpace() {
       if (!this.viewArticleEl) return false;
       return this.viewArticleEl.getBoundingClientRect().left >= AntropediaManager.BOOKMARK_TAB_MIN_SPACE;
     }
 
-    // Стикеры закладок: у каждого отмеченного блока — свой (всегда виден,
-    // в любом режиме). Приглашение на ещё не отмеченный блок — БЕЗ
-    // постоянного значка: на устройствах с мышью по наведению на пустое
-    // поле слева от статьи, НЕ на сам текст (иначе всплывало бы при обычном
-    // чтении) — см. createHoverZone/handleGutterHoverMove; на
-    // тач-устройствах — двойной тап прямо по абзацу (см.
-    // handleContentDblClick в initBookmarkGutter).
     renderBookmarkGutter() {
       if (!this.contentEl) return;
       this.hideBookmarkGhost();
@@ -3455,15 +3710,7 @@ initEngagement() {
       const contentRect = this.contentEl.getBoundingClientRect();
       const layoutRect = (this._bmWideMode && this.bookmarkGutterEl) ? this.bookmarkGutterEl.parentElement.getBoundingClientRect() : null;
 
-      // Кэш координат блоков + зона наведения нужны только на устройствах с
-      // мышью (см. handleGutterHoverMove) — на тач-устройствах приглашение
-      // открывается двойным тапом прямо по блоку (см. handleContentDblClick),
-      // без наведения, мерить тут нечего.
       if (this._bmHoverCapable) {
-        // Координаты блоков в той же системе отсчёта, что и зона наведения
-        // (layoutRect в широком режиме, contentRect в компактном) — кэш для
-        // handleGutterHoverMove, чтобы не мерить весь DOM на каждое движение
-        // мыши.
         this._bmBlocks = blocks.map((blockEl) => {
           const blockRect = blockEl.getBoundingClientRect();
           const originTop = this._bmWideMode ? layoutRect.top : contentRect.top;
@@ -3475,8 +3722,6 @@ initEngagement() {
           };
         });
 
-        // Зона наведения — ДО стикеров/значков в DOM, чтобы те красились
-        // поверх неё и оставались кликабельными там, где перекрываются с ней.
         if (this._bmWideMode && this.bookmarkGutterEl) {
           this.bookmarkGutterHoverEl = this.createHoverZone('antropedia-bm-hover-zone');
           this.bookmarkGutterHoverEl.style.top = `${this._bmBlocks[0].top}px`;
@@ -3491,52 +3736,49 @@ initEngagement() {
       blocks.forEach((blockEl) => {
         const blockId = blockEl.getAttribute('data-block-id');
         const bookmark = byBlock.get(blockId);
-
-        // Стикер только у уже поставленной закладки — постоянного значка-
-        // приглашения на неотмеченных блоках больше нет ни в одном режиме:
-        // на устройствах с мышью это зона наведения (см. выше), на
-        // тач-устройствах — двойной тап прямо по абзацу (см.
-        // handleContentDblClick в initBookmarkGutter).
         if (!bookmark) return;
-        if (this._bmWideMode) {
-          this.bookmarkGutterEl.appendChild(this.createBookmarkTab(blockEl, blockId, bookmark, layoutRect));
+
+        let targetTop = null;
+        if (bookmark.quote) {
+          const range = this.findQuoteRange(blockEl, bookmark.quote);
+          if (range) {
+            const rRect = range.getBoundingClientRect();
+            if (rRect && rRect.height > 0) {
+              targetTop = rRect.top;
+            }
+          }
+        }
+        if (targetTop === null) {
+          targetTop = blockEl.getBoundingClientRect().top;
+        }
+
+        if (this._bmWideMode && layoutRect) {
+          this.bookmarkGutterEl.appendChild(this.createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop));
         } else {
-          this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmark, contentRect));
+          this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop));
         }
       });
     }
 
-    // Прозрачная область для наведения — пустое поле слева от карточки
-    // (широкий режим) или зарезервированная под значки полоса внутри
-    // самого начала карточки (компактный режим), НЕ сам текст статьи. Сама
-    // ничего не рисует — только ловит mousemove/mouseleave.
     createHoverZone(className) {
       const zone = document.createElement('div');
       zone.className = className;
       zone.addEventListener('mousemove', (e) => this.handleGutterHoverMove(e, zone));
       zone.addEventListener('mouseleave', (e) => {
         const toEl = e.relatedTarget;
-        if (toEl && this.bookmarkGhostEl?.contains(toEl)) return; // ушли на сам призрак, чтобы на него нажать
+        if (toEl && this.bookmarkGhostEl?.contains(toEl)) return;
         this.hideBookmarkGhost();
       });
       return zone;
     }
 
-    // Курсор двигается внутри зоны наведения — показываем призрак напротив
-    // ближайшего ещё не отмеченного блока. Троттлинг через rAF — mousemove
-    // стреляет очень часто, а тут на каждый вызов пересчёт геометрии.
     handleGutterHoverMove(e, zoneEl) {
       this._bmLastHoverY = e.clientY;
       if (this._bmHoverMoveScheduled) return;
       this._bmHoverMoveScheduled = true;
       requestAnimationFrame(() => {
         this._bmHoverMoveScheduled = false;
-        if (!zoneEl.isConnected) return; // зону успели перестроить (resize/новая статья) — событие устарело
-        // Точка отсчёта та же, что и у координат в this._bmBlocks (см.
-        // renderBookmarkGutter) — НЕ сама зона: у неё в широком режиме есть
-        // свой сдвиг (top: this._bmBlocks[0].top), а не 0. Мерим заново
-        // (не берём готовый layoutRect/contentRect из рендера) — страница
-        // могла проскроллиться с момента построения кэша.
+        if (!zoneEl.isConnected) return;
         const originEl = this._bmWideMode ? this.bookmarkGutterEl?.parentElement : this.contentEl;
         if (!originEl) return;
         const localY = this._bmLastHoverY - originEl.getBoundingClientRect().top;
@@ -3550,9 +3792,6 @@ initEngagement() {
       });
     }
 
-    // Ближайший к localY блок среди закэшированных в renderBookmarkGutter
-    // (this._bmBlocks) — точное попадание в диапазон [top, bottom], а между
-    // абзацами — тот, что ближе по вертикали.
     findNearestBlock(localY) {
       if (!this._bmBlocks || !this._bmBlocks.length) return null;
       let best = null;
@@ -3565,14 +3804,12 @@ initEngagement() {
       return best;
     }
 
-    // Флажок за левым краем карточки, с именем закладки текстом (см.
-    // .antropedia-bm-tab в antropedia.css) — широкий режим.
-    createBookmarkTab(blockEl, blockId, bookmark, layoutRect) {
-      const blockRect = blockEl.getBoundingClientRect();
+    createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop) {
+      const topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
       const tab = document.createElement('button');
       tab.type = 'button';
       tab.className = 'antropedia-bm-tab';
-      tab.style.top = `${blockRect.top - layoutRect.top}px`;
+      tab.style.top = `${Math.round(topPos - layoutRect.top)}px`;
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
       tab.title = bookmark.name;
@@ -3580,15 +3817,12 @@ initEngagement() {
       return tab;
     }
 
-    // Компактный значок внутри поля статьи (см. .antropedia-bm-toggle в
-    // antropedia.css) — узкий экран/нет места справа ИЛИ приглашение на
-    // тач-устройстве, где показать флажок только по ховеру нельзя.
-    createCompactToggle(blockEl, blockId, bookmark, contentRect) {
-      const blockRect = blockEl.getBoundingClientRect();
+    createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop) {
+      const topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'antropedia-bm-toggle' + (bookmark ? ' is-active' : '');
-      toggle.style.top = `${blockRect.top - contentRect.top}px`;
+      toggle.style.top = `${Math.round(topPos - contentRect.top)}px`;
       toggle.setAttribute('data-block-id', blockId);
       toggle.title = bookmark ? bookmark.name : 'Добавить закладку';
       if (bookmark) toggle.style.setProperty('--bm-color', bookmark.color);
@@ -3596,9 +3830,6 @@ initEngagement() {
       return toggle;
     }
 
-    // Показывает переиспользуемый "призрак" (см. initBookmarkGutter) на
-    // месте блока — вызывается из handleGutterHoverMove, когда курсор в
-    // зоне наведения оказался напротив ещё не отмеченного блока.
     showBookmarkGhost(blockEl, blockId) {
       if (!this.bookmarkGhostEl) return;
       this.bookmarkGhostEl.setAttribute('data-block-id', blockId);
@@ -3631,7 +3862,6 @@ initEngagement() {
 
     toggleBookmarkPopover(toggleEl) {
       const blockId = toggleEl.getAttribute('data-block-id');
-      // Повторный клик по тому же хвостику, пока попап на него уже открыт — закрыть.
       if (this._pendingBookmark && this._pendingBookmark.blockId === blockId && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden) {
         this.closeBookmarkPopover();
         return;
@@ -3639,9 +3869,6 @@ initEngagement() {
       this.openBookmarkPopover(blockId, toggleEl);
     }
 
-    // Тач-устройство, двойной тап по абзацу (см. initBookmarkGutter) —
-    // пропускаем ссылки/хэштеги/значок закладки: у них своя реакция на тап,
-    // не нужно, чтобы двойной тап по ним ЕЩЁ и открывал попап закладки.
     handleContentDblClick(e) {
       if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle')) return;
       const blockEl = e.target.closest('[data-block-id]');
@@ -3650,11 +3877,23 @@ initEngagement() {
       this.openBookmarkPopover(blockEl.getAttribute('data-block-id'), blockEl);
     }
 
-    openBookmarkPopover(blockId, anchorEl) {
+    openBookmarkPopover(blockId, anchorEl, selectedQuote) {
       const existing = this.currentArticleBookmarks.find((b) => b.blockId === blockId);
-      this._pendingBookmark = { blockId, id: existing ? existing.id : null };
+      this._pendingBookmark = {
+        blockId,
+        id: existing ? existing.id : null,
+        quote: selectedQuote || (existing ? existing.quote : null)
+      };
 
-      if (this.bookmarkPopoverNameEl) this.bookmarkPopoverNameEl.value = existing ? existing.name : '';
+      if (this.bookmarkPopoverNameEl) {
+        if (existing) {
+          this.bookmarkPopoverNameEl.value = existing.name;
+        } else if (selectedQuote) {
+          this.bookmarkPopoverNameEl.value = selectedQuote.slice(0, 35).trim();
+        } else {
+          this.bookmarkPopoverNameEl.value = '';
+        }
+      }
       this.selectedBookmarkColor = existing ? existing.color : BOOKMARK_COLORS[0];
       this.renderBookmarkColorSwatches();
       if (this.bookmarkPopoverDeleteBtn) this.bookmarkPopoverDeleteBtn.hidden = !existing;
@@ -3662,14 +3901,9 @@ initEngagement() {
       if (this.bookmarkPopoverEl) {
         this.bookmarkPopoverEl.hidden = false;
         if (this._bmHoverCapable && anchorEl) {
-          // Устройство с мышью — обычная всплывающая панель у хвостика.
           const rect = anchorEl.getBoundingClientRect();
           this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
         } else {
-          // Тач-устройство — модальное окно по центру экрана (см. @media
-          // (hover:none) в antropedia.css) — свои inline-координаты только
-          // мешали бы, а подложка явно показывает, что это модалка, а не
-          // всплывающая панель, которая пропадёт от любого тапа мимо.
           this.bookmarkPopoverEl.style.removeProperty('left');
           this.bookmarkPopoverEl.style.removeProperty('top');
           if (this.bookmarkModalBackdropEl) this.bookmarkModalBackdropEl.hidden = false;
@@ -3679,8 +3913,6 @@ initEngagement() {
       this.bookmarkPopoverNameEl?.select();
     }
 
-    // Ставит попап в фиксированных координатах рядом с точкой (cx, cy), не
-    // давая ему вылезти за края экрана.
     positionFloating(el, cx, cy, width, height) {
       if (!el) return;
       const margin = 8;
@@ -3707,6 +3939,7 @@ initEngagement() {
       if (this.bookmarkPopoverEl) this.bookmarkPopoverEl.hidden = true;
       if (this.bookmarkModalBackdropEl) this.bookmarkModalBackdropEl.hidden = true;
       this._pendingBookmark = null;
+      this.hideSelectionUI();
     }
 
     async saveBookmarkFromPopover() {
@@ -3725,13 +3958,17 @@ initEngagement() {
           result = await window.apiClient.updateBookmark(this._pendingBookmark.id, { name, color });
         } else {
           const titleEl = document.getElementById('antropediaViewTitle');
-          let blockEl;
-          try { blockEl = this.contentEl?.querySelector(`[data-block-id="${CSS.escape(this._pendingBookmark.blockId)}"]`); } catch (e) { blockEl = null; }
+          let quoteText = this._pendingBookmark.quote || '';
+          if (!quoteText) {
+            let blockEl;
+            try { blockEl = this.contentEl?.querySelector(`[data-block-id="${CSS.escape(this._pendingBookmark.blockId)}"]`); } catch (e) { blockEl = null; }
+            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
+          }
           result = await window.apiClient.createBookmark({
             slug: this.currentSlug,
             title: titleEl ? titleEl.textContent : '',
             blockId: this._pendingBookmark.blockId,
-            quote: blockEl ? blockEl.textContent.trim().slice(0, 140) : '',
+            quote: quoteText,
             name,
             color
           });
@@ -3766,6 +4003,7 @@ initEngagement() {
       } catch (e) {
         this.currentArticleBookmarks = [];
       }
+      this.updateBookmarksBadge(this.currentArticleBookmarks.length);
       this.renderBookmarksPanel();
       this.renderBookmarkGutter();
     }
@@ -3775,7 +4013,7 @@ initEngagement() {
       if (!panel) return;
 
       if (!this.currentArticleBookmarks.length) {
-        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — нажмите на хвостик закладки слева от нужного абзаца, чтобы добавить.</div>';
+        panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — выделите текст или нажмите на хвостик закладки, чтобы добавить.</div>';
         return;
       }
 
@@ -3803,12 +4041,13 @@ initEngagement() {
         return;
       }
 
-      // Прыжок к блоку закладки + подсветка строки — тот же scrollToBlock,
-      // что и у пунктов оглавления (см. initSidebarTabs), поэтому подсветка
-      // при переходе по закладке выглядит и работает одинаково с прыжком по
-      // заголовку.
-      const blockId = item.getAttribute('data-block-id');
-      if (blockId) this.scrollToBlock(blockId);
+      const bookmark = this.currentArticleBookmarks.find((b) => String(b.id) === String(id));
+      if (bookmark) {
+        this.jumpToBookmark(bookmark);
+      } else {
+        const blockId = item.getAttribute('data-block-id');
+        if (blockId) this.scrollToBlock(blockId);
+      }
     }
 
     handleBookmarksPanelDblClick(e) {
@@ -3831,6 +4070,7 @@ initEngagement() {
         const result = await window.apiClient.updateBookmark(id, { name });
         if (!result.success) { showMessage('Не удалось переименовать закладку', 'error'); return; }
         this.currentArticleBookmarks = this.currentArticleBookmarks.map((b) => (String(b.id) === String(id) ? { ...b, name } : b));
+        this.updateBookmarksBadge(this.currentArticleBookmarks.length);
         this.renderBookmarksPanel();
         this.renderBookmarkGutter();
       } catch (e) {
@@ -3843,6 +4083,7 @@ initEngagement() {
         const result = await window.apiClient.deleteBookmark(id);
         if (!result.success) { showMessage('Не удалось удалить закладку', 'error'); return; }
         this.currentArticleBookmarks = this.currentArticleBookmarks.filter((b) => String(b.id) !== String(id));
+        this.updateBookmarksBadge(this.currentArticleBookmarks.length);
         this.renderBookmarksPanel();
         this.renderBookmarkGutter();
       } catch (e) {
