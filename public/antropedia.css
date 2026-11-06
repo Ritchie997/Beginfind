@@ -1384,32 +1384,109 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   margin-bottom: 0;
 }
 
-/* === Поиск по тексту открытой статьи === */
-.antropedia-inline-search {
-  flex: 1 1 240px;
-  min-width: 160px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  background: var(--background-tertiary);
-  border: 1px solid var(--background-accent);
-  border-radius: 6px;
+/* === Виджет инлайн-поиска по тексту статьи (в боковой панели оглавления) === */
+.antropedia-toc-search-widget {
+  position: relative;
+  width: 100%;
+  margin: 0 0 10px 0;
+  box-sizing: border-box;
 }
 
-.antropedia-inline-search > i.fa-search {
-  color: var(--text-muted);
-  font-size: 13px;
+.antropedia-toc-search-inner {
+  position: relative;
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.antropedia-toc-search-widget.is-open .antropedia-toc-search-inner {
+  background: var(--background-floating, rgba(18, 19, 22, 0.95));
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25);
+}
+
+/* Лупа по центру блока в свёрнутом состоянии */
+.antropedia-toc-search-icon-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--header-secondary, #b9bbbe);
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 2;
+  transition: left 0.3s cubic-bezier(0.2, 0.9, 0.3, 1),
+              transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1),
+              color 0.2s ease,
+              background 0.2s ease;
+}
+
+.antropedia-toc-search-icon-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* При раскрытии: лупа плавно отъезжает влево до края блока */
+.antropedia-toc-search-widget.is-open .antropedia-toc-search-icon-btn {
+  left: 6px;
+  transform: translate(0, -50%);
+  color: var(--blurple);
+  cursor: pointer;
+}
+
+/* Текстовое поле и навигация: выезжают вправо строго в границах блока */
+.antropedia-toc-search-body {
+  position: absolute;
+  left: 36px;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(12px) scaleX(0.95);
+  transform-origin: left center;
+  transition: opacity 0.25s ease,
+              transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1),
+              visibility 0.25s ease;
+}
+
+.antropedia-toc-search-widget.is-open .antropedia-toc-search-body {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scaleX(1);
 }
 
 .antropedia-inline-search-input {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
-  padding: 8px 0;
+  height: 100%;
+  padding: 0 4px;
   border: none;
   background: transparent;
   color: var(--text-normal);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .antropedia-inline-search-input:focus {
@@ -1418,27 +1495,43 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
 
 .antropedia-inline-search-count {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  padding: 0 2px;
+  flex-shrink: 0;
 }
 
 .antropedia-inline-search-nav {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
   border: none;
   border-radius: 4px;
   color: var(--header-secondary);
+  font-size: 10px;
   cursor: pointer;
-  font-size: 12px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .antropedia-inline-search-nav:hover {
   background: var(--background-accent);
   color: var(--text-normal);
+}
+
+.antropedia-inline-search-nav[hidden],
+.antropedia-inline-search-count[hidden] {
+  display: none !important;
+}
+
+.antropedia-inline-search-close:hover {
+  background: rgba(237, 66, 69, 0.2);
+  color: #ed4245;
 }
 
 /* === Раскладка: статья + боковая панель === */
@@ -2072,7 +2165,6 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
     flex-direction: column;
     align-items: stretch;
   }
-  .antropedia-inline-search,
   .antropedia-sidebar-toggle {
     flex-basis: auto;
     width: 100%;
@@ -2203,13 +2295,6 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
     padding: 0;
     margin: 0;
     justify-content: center;
-  }
-  .antropedia-inline-search {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    height: 38px;
-    justify-content: flex-start;
   }
 
   /* Шапка карточки — сетка: "Редактировать"/"Удалить" — иконки справа от
