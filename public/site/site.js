@@ -1704,6 +1704,10 @@
       }
     }
 
+    function escapeRegExp(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     function findQuoteRange(containerEl, quote) {
       if (!containerEl || !quote || typeof quote !== 'string') return null;
       var targetText = quote.trim();
@@ -1724,21 +1728,30 @@
       var matchLen = targetText.length;
 
       if (matchIdx === -1) {
-        var rxStr = targetText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        try {
-          var match = new RegExp(rxStr, 'i').exec(fullText);
-          if (match) {
-            matchIdx = match.index;
-            matchLen = match[0].length;
-          } else if (targetText.length > 25) {
-            var shortRx = targetText.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-            var shortMatch = new RegExp(shortRx, 'i').exec(fullText);
-            if (shortMatch) {
-              matchIdx = shortMatch.index;
-              matchLen = shortMatch[0].length;
+        var cleanTarget = targetText.replace(/[\s\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]+/g, ' ').trim();
+        var words = cleanTarget.split(' ').filter(Boolean);
+        if (words.length > 0) {
+          var wsPattern = '[\\s\\u00A0\\u1680\\u180e\\u2000-\\u200b\\u202f\\u205f\\u3000\\ufeff]+';
+          var rxPattern = words.map(escapeRegExp).join(wsPattern);
+          try {
+            var rx = new RegExp(rxPattern, 'i');
+            var match = rx.exec(fullText);
+            if (match) {
+              matchIdx = match.index;
+              matchLen = match[0].length;
+            } else if (words.length > 2) {
+              for (var wCount = words.length - 1; wCount >= Math.max(2, words.length - 3); wCount--) {
+                var subPattern = words.slice(0, wCount).map(escapeRegExp).join(wsPattern);
+                var subMatch = new RegExp(subPattern, 'i').exec(fullText);
+                if (subMatch) {
+                  matchIdx = subMatch.index;
+                  matchLen = subMatch[0].length;
+                  break;
+                }
+              }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
 
       if (matchIdx === -1) return null;
@@ -1779,30 +1792,99 @@
     function highlightRange(range, color) {
       if (!range) return false;
       var flashColor = color || '#5865f2';
-      var mark = document.createElement('mark');
-      mark.className = 'antropedia-line-flash';
-      mark.style.setProperty('--bm-color', flashColor);
+      var marks = [];
 
       try {
-        if (range.startContainer === range.endContainer && range.startContainer.nodeType === 3) {
-          range.surroundContents(mark);
-        } else {
-          var contents = range.extractContents();
-          mark.appendChild(contents);
-          range.insertNode(mark);
+        var startNode = range.startContainer;
+        var startOffset = range.startOffset;
+        var endNode = range.endContainer;
+        var endOffset = range.endOffset;
+
+        if (startNode === endNode && startNode.nodeType === 3) {
+          var textVal = startNode.nodeValue;
+          var beforeText = textVal.slice(0, startOffset);
+          var highlightText = textVal.slice(startOffset, endOffset);
+          var afterText = textVal.slice(endOffset);
+
+          var parent = startNode.parentNode;
+          if (!parent) return false;
+
+          var frag = document.createDocumentFragment();
+          if (beforeText) frag.appendChild(document.createTextNode(beforeText));
+          var mark = document.createElement('mark');
+          mark.className = 'antropedia-line-flash';
+          mark.style.setProperty('--bm-color', flashColor);
+          mark.textContent = highlightText;
+          marks.push(mark);
+          frag.appendChild(mark);
+          if (afterText) frag.appendChild(document.createTextNode(afterText));
+
+          parent.replaceChild(frag, startNode);
+
+          setTimeout(function () {
+            if (mark.parentNode) {
+              var p = mark.parentNode;
+              while (mark.firstChild) p.insertBefore(mark.firstChild, mark);
+              mark.remove();
+              p.normalize();
+            }
+          }, 1900);
+          return true;
+        }
+
+        var common = range.commonAncestorContainer;
+        var rootEl = common.nodeType === 3 ? common.parentNode : common;
+        var walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false);
+        var textNodes = [];
+        var inRange = false;
+        var currNode;
+        while ((currNode = walker.nextNode())) {
+          if (currNode === startNode) inRange = true;
+          if (inRange) textNodes.push(currNode);
+          if (currNode === endNode) break;
+        }
+
+        if (!textNodes.length) return false;
+
+        for (var i = textNodes.length - 1; i >= 0; i--) {
+          var node = textNodes[i];
+          var s = (node === startNode) ? startOffset : 0;
+          var e = (node === endNode) ? endOffset : node.nodeValue.length;
+          if (s >= e) continue;
+
+          var t = node.nodeValue;
+          var b = t.slice(0, s);
+          var h = t.slice(s, e);
+          var a = t.slice(e);
+
+          var pNode = node.parentNode;
+          if (!pNode) continue;
+
+          var f = document.createDocumentFragment();
+          if (b) f.appendChild(document.createTextNode(b));
+          var m = document.createElement('mark');
+          m.className = 'antropedia-line-flash';
+          m.style.setProperty('--bm-color', flashColor);
+          m.textContent = h;
+          marks.push(m);
+          f.appendChild(m);
+          if (a) f.appendChild(document.createTextNode(a));
+
+          pNode.replaceChild(f, node);
         }
 
         setTimeout(function () {
-          if (mark.parentNode) {
-            var parent = mark.parentNode;
-            while (mark.firstChild) {
-              parent.insertBefore(mark.firstChild, mark);
+          marks.forEach(function (m) {
+            if (m.parentNode) {
+              var p = m.parentNode;
+              while (m.firstChild) p.insertBefore(m.firstChild, m);
+              m.remove();
+              p.normalize();
             }
-            mark.remove();
-            parent.normalize();
-          }
+          });
         }, 1900);
-        return true;
+
+        return marks.length > 0;
       } catch (_) {
         return false;
       }
@@ -1822,6 +1904,9 @@
       }
 
       var range = (blockEl && bookmark.quote) ? findQuoteRange(blockEl, bookmark.quote) : null;
+      if (!range && bookmark.quote && contentEl) {
+        range = findQuoteRange(contentEl, bookmark.quote);
+      }
       var headerOffset = 90;
       var currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
       var targetTop = 0;
@@ -2024,7 +2109,7 @@
             } catch (_) {
               blockEl = null;
             }
-            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
+            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 2000) : '';
           }
           var res = await fetch('/api/bookmarks', {
             method: 'POST',
@@ -2313,7 +2398,7 @@
       currentSelectedRangeInfo = {
         blockId: blockId,
         blockEl: blockEl,
-        quote: text.slice(0, 140),
+        quote: text.slice(0, 2000),
         range: range.cloneRange()
       };
 
@@ -2422,6 +2507,9 @@
         var targetTop = null;
         if (bookmark.quote) {
           var range = findQuoteRange(blockEl, bookmark.quote);
+          if (!range && contentEl) {
+            range = findQuoteRange(contentEl, bookmark.quote);
+          }
           if (range) {
             var rRect = range.getBoundingClientRect();
             if (rRect && rRect.height > 0) {

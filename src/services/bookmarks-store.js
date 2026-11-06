@@ -15,7 +15,7 @@
 const { bookmarksDb } = require('../db/connections');
 
 const NAME_MAX_LEN = 100;
-const QUOTE_MAX_LEN = 500;
+const QUOTE_MAX_LEN = 2000;
 const TITLE_MAX_LEN = 200;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_COLOR = '#5865f2';

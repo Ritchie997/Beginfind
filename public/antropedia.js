@@ -3365,6 +3365,10 @@ initEngagement() {
       }
     }
 
+    escapeRegExp(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     findQuoteRange(containerEl, quote) {
       if (!containerEl || !quote || typeof quote !== 'string') return null;
       const targetText = quote.trim();
@@ -3385,21 +3389,30 @@ initEngagement() {
       let matchLen = targetText.length;
 
       if (matchIdx === -1) {
-        const rxStr = targetText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        try {
-          const match = new RegExp(rxStr, 'i').exec(fullText);
-          if (match) {
-            matchIdx = match.index;
-            matchLen = match[0].length;
-          } else if (targetText.length > 25) {
-            const shortRx = targetText.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-            const shortMatch = new RegExp(shortRx, 'i').exec(fullText);
-            if (shortMatch) {
-              matchIdx = shortMatch.index;
-              matchLen = shortMatch[0].length;
+        const cleanTarget = targetText.replace(/[\s\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\ufeff]+/g, ' ').trim();
+        const words = cleanTarget.split(' ').filter(Boolean);
+        if (words.length > 0) {
+          const wsPattern = '[\\s\\u00A0\\u1680\\u180e\\u2000-\\u200b\\u202f\\u205f\\u3000\\ufeff]+';
+          const rxPattern = words.map((w) => this.escapeRegExp(w)).join(wsPattern);
+          try {
+            const rx = new RegExp(rxPattern, 'i');
+            const match = rx.exec(fullText);
+            if (match) {
+              matchIdx = match.index;
+              matchLen = match[0].length;
+            } else if (words.length > 2) {
+              for (let wCount = words.length - 1; wCount >= Math.max(2, words.length - 3); wCount--) {
+                const subPattern = words.slice(0, wCount).map((w) => this.escapeRegExp(w)).join(wsPattern);
+                const subMatch = new RegExp(subPattern, 'i').exec(fullText);
+                if (subMatch) {
+                  matchIdx = subMatch.index;
+                  matchLen = subMatch[0].length;
+                  break;
+                }
+              }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
 
       if (matchIdx === -1) return null;
@@ -3440,28 +3453,99 @@ initEngagement() {
     highlightRange(range, color) {
       if (!range) return false;
       const flashColor = color || '#5865f2';
-      const mark = document.createElement('mark');
-      mark.className = 'antropedia-line-flash';
-      mark.style.setProperty('--bm-color', flashColor);
+      const marks = [];
 
       try {
-        if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-          range.surroundContents(mark);
-        } else {
-          const contents = range.extractContents();
-          mark.appendChild(contents);
-          range.insertNode(mark);
+        const startNode = range.startContainer;
+        const startOffset = range.startOffset;
+        const endNode = range.endContainer;
+        const endOffset = range.endOffset;
+
+        if (startNode === endNode && startNode.nodeType === 3) {
+          const textVal = startNode.nodeValue;
+          const beforeText = textVal.slice(0, startOffset);
+          const highlightText = textVal.slice(startOffset, endOffset);
+          const afterText = textVal.slice(endOffset);
+
+          const parent = startNode.parentNode;
+          if (!parent) return false;
+
+          const frag = document.createDocumentFragment();
+          if (beforeText) frag.appendChild(document.createTextNode(beforeText));
+          const mark = document.createElement('mark');
+          mark.className = 'antropedia-line-flash';
+          mark.style.setProperty('--bm-color', flashColor);
+          mark.textContent = highlightText;
+          marks.push(mark);
+          frag.appendChild(mark);
+          if (afterText) frag.appendChild(document.createTextNode(afterText));
+
+          parent.replaceChild(frag, startNode);
+
+          setTimeout(() => {
+            if (mark.parentNode) {
+              const p = mark.parentNode;
+              while (mark.firstChild) p.insertBefore(mark.firstChild, mark);
+              mark.remove();
+              p.normalize();
+            }
+          }, 1900);
+          return true;
+        }
+
+        const common = range.commonAncestorContainer;
+        const rootEl = common.nodeType === 3 ? common.parentNode : common;
+        const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let inRange = false;
+        let currNode;
+        while ((currNode = walker.nextNode())) {
+          if (currNode === startNode) inRange = true;
+          if (inRange) textNodes.push(currNode);
+          if (currNode === endNode) break;
+        }
+
+        if (!textNodes.length) return false;
+
+        for (let i = textNodes.length - 1; i >= 0; i--) {
+          const node = textNodes[i];
+          const s = (node === startNode) ? startOffset : 0;
+          const e = (node === endNode) ? endOffset : node.nodeValue.length;
+          if (s >= e) continue;
+
+          const t = node.nodeValue;
+          const b = t.slice(0, s);
+          const h = t.slice(s, e);
+          const a = t.slice(e);
+
+          const pNode = node.parentNode;
+          if (!pNode) continue;
+
+          const f = document.createDocumentFragment();
+          if (b) f.appendChild(document.createTextNode(b));
+          const m = document.createElement('mark');
+          m.className = 'antropedia-line-flash';
+          m.style.setProperty('--bm-color', flashColor);
+          m.textContent = h;
+          marks.push(m);
+          f.appendChild(m);
+          if (a) f.appendChild(document.createTextNode(a));
+
+          pNode.replaceChild(f, node);
         }
 
         setTimeout(() => {
-          if (mark.parentNode) {
-            const parent = mark.parentNode;
-            while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
-            mark.remove();
-            parent.normalize();
-          }
+          marks.forEach((m) => {
+            if (m.parentNode) {
+              const p = m.parentNode;
+              while (m.firstChild) p.insertBefore(m.firstChild, m);
+              m.remove();
+              p.normalize();
+            }
+          });
         }, 1900);
-        return true;
+
+        return marks.length > 0;
       } catch (_) {
         return false;
       }
@@ -3475,7 +3559,10 @@ initEngagement() {
         if (!blockEl) blockEl = document.getElementById(bookmark.blockId);
       }
 
-      const range = (blockEl && bookmark.quote) ? this.findQuoteRange(blockEl, bookmark.quote) : null;
+      let range = (blockEl && bookmark.quote) ? this.findQuoteRange(blockEl, bookmark.quote) : null;
+      if (!range && bookmark.quote && this.contentEl) {
+        range = this.findQuoteRange(this.contentEl, bookmark.quote);
+      }
       const headerOffset = 80;
       const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
       let targetTop = 0;
@@ -3555,7 +3642,7 @@ initEngagement() {
       this._currentSelectedRangeInfo = {
         blockId,
         blockEl,
-        quote: text.slice(0, 140),
+        quote: text.slice(0, 2000),
         range: range.cloneRange()
       };
 
@@ -3740,7 +3827,10 @@ initEngagement() {
 
         let targetTop = null;
         if (bookmark.quote) {
-          const range = this.findQuoteRange(blockEl, bookmark.quote);
+          let range = this.findQuoteRange(blockEl, bookmark.quote);
+          if (!range && this.contentEl) {
+            range = this.findQuoteRange(this.contentEl, bookmark.quote);
+          }
           if (range) {
             const rRect = range.getBoundingClientRect();
             if (rRect && rRect.height > 0) {
@@ -3962,7 +4052,7 @@ initEngagement() {
           if (!quoteText) {
             let blockEl;
             try { blockEl = this.contentEl?.querySelector(`[data-block-id="${CSS.escape(this._pendingBookmark.blockId)}"]`); } catch (e) { blockEl = null; }
-            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 140) : '';
+            quoteText = blockEl ? blockEl.textContent.trim().slice(0, 2000) : '';
           }
           result = await window.apiClient.createBookmark({
             slug: this.currentSlug,
