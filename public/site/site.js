@@ -3191,7 +3191,7 @@
       actions.appendChild(sidebarToggleBtn);
 
       // 3. Меню дополнительных действий [ ⋯ ]
-      var moreContainer = makeEl('div', 'antropedia-more-dropdown-container');
+      var moreContainer = makeEl('div', 'antropedia-more-menu-wrapper antropedia-more-dropdown-container');
       var moreBtn = makeEl('button', 'btn btn-secondary btn-sm antropedia-topbar-btn antropedia-more-btn');
       moreBtn.type = 'button';
       moreBtn.id = 'antropediaMoreActionsBtn';
@@ -3218,7 +3218,8 @@
       moreLayerBtn.id = 'antropediaMoreLayerItem';
       moreLayerBtn.setAttribute('data-action', 'layer');
       moreLayerBtn.innerHTML = '<i class="fas fa-layer-group"></i> <span>Сменить слой лора</span>';
-      moreLayerBtn.hidden = !Array.isArray(article.layerOptions) || article.layerOptions.length < 2;
+      var hasMultiLayers = Array.isArray(article.layerOptions) && article.layerOptions.length >= 2;
+      moreLayerBtn.hidden = !hasMultiLayers || (window.innerWidth > 1024);
       moreLayerBtn.addEventListener('click', function () {
         moreMenu.hidden = true;
         moreBtn.setAttribute('aria-expanded', 'false');
@@ -3242,8 +3243,12 @@
 
         var moreAdminLink = makeEl('a', 'antropedia-more-item');
         moreAdminLink.id = 'antropediaMoreAdminItem';
-        moreAdminLink.href = '/admin-panel/antropedia/' + encodeURIComponent(article.slug);
-        moreAdminLink.innerHTML = '<i class="fas fa-arrow-up-right-from-square"></i> <span>Открыть в админке</span>';
+        moreAdminLink.href = '/admin-panel?editArticle=' + encodeURIComponent(article.slug);
+        moreAdminLink.innerHTML = '<i class="fas fa-arrow-up-right-from-square"></i> <span>Открыть в админ панели</span>';
+        moreAdminLink.addEventListener('click', function () {
+          moreMenu.hidden = true;
+          moreBtn.setAttribute('aria-expanded', 'false');
+        });
         moreMenu.appendChild(moreAdminLink);
       }
 
@@ -3600,6 +3605,46 @@
       var userPromise = loadCurrentUser();
       initArticleEngagement(article, detail, userPromise);
 
+      userPromise.then(function (currentUser) {
+        if (!currentUser) return;
+        var isAuthor = article.author && (article.author.id === currentUser.id || article.author.id == currentUser.id);
+        var canEdit = article.can_edit || currentUser.is_root || currentUser.is_admin || currentUser.role === 'admin' || isAuthor;
+        if (canEdit && !document.getElementById('antropediaMoreEditItem')) {
+          var menu = document.getElementById('antropediaMoreActionsMenu');
+          var mBtn = document.getElementById('antropediaMoreActionsBtn');
+          if (menu) {
+            var editBtn = makeEl('button', 'antropedia-more-item');
+            editBtn.type = 'button';
+            editBtn.id = 'antropediaMoreEditItem';
+            editBtn.setAttribute('data-action', 'edit');
+            editBtn.innerHTML = '<i class="fas fa-pen-to-square"></i> <span>Редактировать</span>';
+            editBtn.addEventListener('click', function () {
+              menu.hidden = true;
+              if (mBtn) mBtn.setAttribute('aria-expanded', 'false');
+              showEditorView({ articleSlug: article.slug });
+            });
+
+            var adminLink = makeEl('a', 'antropedia-more-item');
+            adminLink.id = 'antropediaMoreAdminItem';
+            adminLink.href = '/admin-panel?editArticle=' + encodeURIComponent(article.slug);
+            adminLink.innerHTML = '<i class="fas fa-arrow-up-right-from-square"></i> <span>Открыть в админ панели</span>';
+            adminLink.addEventListener('click', function () {
+              menu.hidden = true;
+              if (mBtn) mBtn.setAttribute('aria-expanded', 'false');
+            });
+
+            var shareItem = document.getElementById('antropediaMoreShareItem');
+            if (shareItem) {
+              menu.insertBefore(editBtn, shareItem);
+              menu.insertBefore(adminLink, shareItem);
+            } else {
+              menu.appendChild(editBtn);
+              menu.appendChild(adminLink);
+            }
+          }
+        }
+      }).catch(function () {});
+
       function renderLayerSwitcher() {
         var els = getLayerSwitcherElements();
         var options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
@@ -3642,7 +3687,7 @@
         // Пункт в меню [ ⋯ ]
         var moreLayerItem = document.getElementById('antropediaMoreLayerItem');
         if (moreLayerItem) {
-          moreLayerItem.hidden = !hasMulti;
+          moreLayerItem.hidden = !hasMulti || (window.innerWidth > 1024);
         }
 
         // Список в Bottom Sheet модалке
@@ -3955,7 +4000,7 @@
     }
 
     function getAuthToken() {
-      try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (error) { return ''; }
+      try { return localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem('token') || localStorage.getItem('authToken') || ''; } catch (error) { return ''; }
     }
 
     // Возвращает пользователя или null (нет токена / токен просрочен / не одобрен).

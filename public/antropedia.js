@@ -1502,7 +1502,7 @@ function reactionsBarInnerHtml(reactions) {
       }
 
       if (moreLayerItem) {
-        moreLayerItem.hidden = false;
+        moreLayerItem.hidden = window.innerWidth > 1024;
       }
 
       const pickerList = document.getElementById('antropediaLayerPickerList');
