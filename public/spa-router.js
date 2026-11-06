@@ -98,6 +98,8 @@ class SPARouter {
     this.loading = false;
     this.templateCache = new Map(); // Cache for fetched templates
     this.currentDraftId = null; // Track the currently loaded draft ID
+    this._editingArticleId = null;
+    this._pendingEditArticleId = null;
     this.currentDraftRev = null; // Серверная rev открытого черновика (null — на сервере его ещё нет)
     // Догружаем офлайн-копии черновиков, оставшиеся с прошлого раза (см.
     // flushPendingDrafts) — не дожидаясь захода в редактор. setTimeout —
@@ -161,6 +163,10 @@ class SPARouter {
 
     // Load current route, then continue a public article's edit request.
     const requestedEditSlug = new URLSearchParams(window.location.search).get('editArticle');
+    if (requestedEditSlug && /^[a-zA-Z0-9_-]{1,100}$/.test(requestedEditSlug)) {
+      this._pendingEditArticleId = requestedEditSlug;
+      this._editingArticleId = requestedEditSlug;
+    }
     this.navigateTo(window.location.pathname).then(async () => {
       if (!requestedEditSlug || !/^[a-zA-Z0-9_-]{1,100}$/.test(requestedEditSlug)) return;
       await this.navigateTo('/articles');
@@ -880,8 +886,12 @@ class SPARouter {
     this.setupArticleFormEvents();
     this.startDraftAutosave();
 
-    // Check for and offer to load draft
-    this.checkAndOfferDraft();
+    // Check for and offer to load draft only if NOT editing an article
+    const searchParams = new URLSearchParams(window.location.search);
+    const hasEditParam = !!(searchParams.get('editArticle') || searchParams.get('edit'));
+    if (!this._editingArticleId && !this._pendingEditArticleId && !hasEditParam) {
+      this.checkAndOfferDraft();
+    }
   }
 
   // Создаёт экземпляры ChipField для Доступа/Тегов заново — вызывается
@@ -2689,6 +2699,15 @@ class SPARouter {
   // свежая правка на этом устройстве) важнее серверной версии; нет
   // копии — берём с сервера.
   async loadDraft(draftId, { silent = false } = {}) {
+    if (this._editingArticleId || this._pendingEditArticleId) {
+      console.warn('[Draft] loadDraft skipped because article edit is in progress');
+      return false;
+    }
+    const currentEditing = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
+    if (currentEditing) {
+      console.warn('[Draft] loadDraft skipped because an existing article is open for editing');
+      return false;
+    }
     try {
       let draft = null;
       let rev = null;
@@ -2716,6 +2735,10 @@ class SPARouter {
       }
       // Форма могла исчезнуть, пока шёл запрос (ушли на другую страницу).
       if (!document.getElementById('articleTitle')) return false;
+      if (this._editingArticleId || this._pendingEditArticleId || !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id')) {
+        console.warn('[Draft] loadDraft aborted after fetch because article edit is active');
+        return false;
+      }
 
       if (draft) {
         // Из окна черновиков можно переключаться с одного черновика на
@@ -2856,6 +2879,15 @@ class SPARouter {
 
   // Check for and load draft if form is empty
   async checkAndOfferDraft() {
+    if (this._editingArticleId || this._pendingEditArticleId) {
+      this.flushPendingDrafts();
+      return;
+    }
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('editArticle') || searchParams.get('edit')) {
+      this.flushPendingDrafts();
+      return;
+    }
     // Пользователь недавно нажал "Сбросить" — это осознанный выбор начать с
     // чистого листа, а не просто "форма сейчас пустая" (см. requirement
     // "если пользователь нажал сбросить статью... черновик не откроется,
@@ -2872,7 +2904,7 @@ class SPARouter {
       const titleEl = document.getElementById('articleTitle');
       const contentEl = document.getElementById('articleContent');
       if (!titleEl || !contentEl) return false;
-      const editingExisting = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
+      const editingExisting = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id') || !!this._editingArticleId || !!this._pendingEditArticleId;
       return !editingExisting && !titleEl.value.trim() && this.isDraftContentEmpty(contentEl.innerHTML);
     };
     if (!isFormEmpty()) {
@@ -2882,10 +2914,12 @@ class SPARouter {
 
     try {
       await this.flushPendingDrafts();
+      if (this._editingArticleId || this._pendingEditArticleId) return;
       const { items } = await this.fetchDraftList();
+      if (this._editingArticleId || this._pendingEditArticleId) return;
       // Пока шли запросы, пользователь мог начать писать или открыть
       // статью — тогда ничего не подставляем.
-      if (items.length && isFormEmpty() && !this.isDraftAutoLoadSuppressed()) {
+      if (items.length && isFormEmpty() && !this.isDraftAutoLoadSuppressed() && !this._editingArticleId && !this._pendingEditArticleId) {
         await this.loadDraft(items[0].id); // Most recent draft
       }
     } catch (error) {
@@ -4016,9 +4050,37 @@ class SPARouter {
 
   // Edit article functionality
   async editArticle(articleId, { fallbackToView = false } = {}) {
+    if (!articleId) return;
+    this._editingArticleId = articleId;
+    this._pendingEditArticleId = articleId;
+    this.currentDraftId = null;
+    this.currentDraftRev = null;
+
+    // If editor form is not in the DOM, navigate to /articles first
+    if (!document.getElementById('articleTitle') || !document.getElementById('saveArticleBtn')) {
+      await this.navigateTo('/articles');
+    }
+
+    const saveBtn = document.getElementById('saveArticleBtn');
+    const formTitle = document.getElementById('article-form-title');
+    if (saveBtn) {
+      saveBtn.setAttribute('data-article-id', articleId);
+      saveBtn.textContent = 'Обновление...';
+    }
+    if (formTitle) {
+      formTitle.textContent = 'Загрузка статьи…';
+    }
+
     try {
       const result = await apiClient.getArticle(articleId);
       if (!result.success) {
+        if (saveBtn) {
+          saveBtn.removeAttribute('data-article-id');
+          saveBtn.textContent = 'Опубликовать';
+        }
+        if (formTitle) formTitle.textContent = 'Создать новую статью';
+        this._editingArticleId = null;
+        this._pendingEditArticleId = null;
         showMessage(`Ошибка загрузки статьи: ${result.error}`, 'error');
         return;
       }
@@ -4027,6 +4089,13 @@ class SPARouter {
       // Иерархия: нижестоящий не правит статьи вышестоящих (сервер всё равно
       // вернёт 403 на сохранение — см. canEditArticle в articles.routes.js).
       if (article.can_edit === false) {
+        if (saveBtn) {
+          saveBtn.removeAttribute('data-article-id');
+          saveBtn.textContent = 'Опубликовать';
+        }
+        if (formTitle) formTitle.textContent = 'Создать новую статью';
+        this._editingArticleId = null;
+        this._pendingEditArticleId = null;
         if (fallbackToView) return this.openAntropediaArticle(article.slug || articleId);
         showMessage('Недостаточно прав для редактирования этой статьи: автор выше вас по иерархии', 'error');
         return;
@@ -4161,6 +4230,8 @@ class SPARouter {
       this.closeDraftsModal();
       this.currentDraftId = null; // Clear current draft ID when editing existing article
       this.currentDraftRev = null;
+      this._editingArticleId = null;
+      this._pendingEditArticleId = null;
 
       // Scroll to form
       const formContainer = document.querySelector('.form-container');
@@ -4168,6 +4239,15 @@ class SPARouter {
         formContainer.scrollIntoView({ behavior: 'smooth' });
       }
     } catch (error) {
+      const sBtn = document.getElementById('saveArticleBtn');
+      const fTitle = document.getElementById('article-form-title');
+      if (sBtn && sBtn.getAttribute('data-article-id') === String(articleId)) {
+        sBtn.removeAttribute('data-article-id');
+        sBtn.textContent = 'Опубликовать';
+      }
+      if (fTitle) fTitle.textContent = 'Создать новую статью';
+      this._editingArticleId = null;
+      this._pendingEditArticleId = null;
       console.error('Error editing article:', error);
       showMessage('Ошибка при загрузке статьи для редактирования', 'error');
     }

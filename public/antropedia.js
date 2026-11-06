@@ -1107,8 +1107,12 @@ function reactionsBarInnerHtml(reactions) {
 
     async editArticleBySlug(slug) {
       if (!slug) return;
+      if (window.spaRouter) {
+        window.spaRouter._pendingEditArticleId = slug;
+        window.spaRouter._editingArticleId = slug;
+      }
       await window.spaRouter?.navigateTo('/articles');
-      window.spaRouter?.editArticle(slug);
+      await window.spaRouter?.editArticle(slug);
     }
 
     // Открывает редактор с уже вписанным заголовком — для "создать статью"

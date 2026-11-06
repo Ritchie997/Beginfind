@@ -1060,6 +1060,9 @@
     }
 
     async saveDraft(manual = true) {
+      if (!manual && document.getElementById('saveArticleBtn')?.getAttribute('data-article-id')) {
+        return; // Не перезаписывать черновик при редактировании опубликованной статьи
+      }
       const data = this.collectFormData();
       const title = data.title.trim();
       let hasContent = false;
@@ -1179,6 +1182,7 @@
     }
 
     async checkAndOfferDraft() {
+      if (document.getElementById('saveArticleBtn')?.getAttribute('data-article-id') || this.loadedArticleSlug) return;
       const pending = this.getPendingDrafts();
       if (!pending.length) return;
       const latest = pending[0];
@@ -1309,8 +1313,15 @@
         if (!res.ok) throw new Error(article.error || 'Статья не найдена');
 
         this.clearForm();
+        this.currentDraftId = null;
+        this.currentDraftRev = null;
+        this._lastLoadedDraftData = null;
+
         const saveBtn = document.getElementById('saveArticleBtn');
-        if (saveBtn) saveBtn.setAttribute('data-article-id', article.id);
+        if (saveBtn) {
+          saveBtn.setAttribute('data-article-id', article.id);
+          saveBtn.innerHTML = '<i class="fas fa-check"></i> <span>Обновить статью</span>';
+        }
         const formTitle = document.getElementById('article-form-title');
         if (formTitle) formTitle.textContent = 'Редактирование: ' + (article.title || article.slug);
 
@@ -1380,6 +1391,7 @@
           this.editorManager.renderAll();
           this.editorManager.scheduleRenderPreview(true);
         }
+        this._lastLoadedDraftData = this.collectFormData();
       } catch (err) {
         showMessage('Не удалось загрузить статью: ' + err.message, 'error');
       }
