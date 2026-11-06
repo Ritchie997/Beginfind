@@ -4217,10 +4217,31 @@ initEngagement() {
         }
 
         if (this._bmWideMode && layoutRect) {
-          const isStacked = bookmarks.length > 1;
-          bookmarks.forEach((bm, idx) => {
-            this.bookmarkGutterEl.appendChild(this.createBookmarkTab(blockEl, blockId, bm, layoutRect, targetTop, isStacked, idx));
+          const groupEl = document.createElement('div');
+          groupEl.className = 'antropedia-bm-group' + (bookmarks.length > 1 ? ' is-stacked' : '');
+          groupEl.style.top = `${Math.round(targetTop - layoutRect.top)}px`;
+          groupEl.setAttribute('data-block-id', blockId);
+
+          bookmarks.forEach((bm) => {
+            groupEl.appendChild(this.createBookmarkTab(blockEl, blockId, bm));
           });
+
+          if (bookmarks.length < 3) {
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'antropedia-bm-tab is-add-btn';
+            addBtn.setAttribute('data-block-id', blockId);
+            addBtn.title = 'Добавить ещё закладку';
+            addBtn.innerHTML = '<i class="fas fa-plus"></i>';
+            addBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              this.openBookmarkPopover(blockId, addBtn);
+            });
+            groupEl.appendChild(addBtn);
+          }
+
+          this.bookmarkGutterEl.appendChild(groupEl);
         } else {
           this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmarks[0], contentRect, targetTop));
         }
@@ -4255,7 +4276,7 @@ initEngagement() {
           return;
         }
         const count = this.currentArticleBookmarks.filter((b) => b.blockId === block.blockId).length;
-        if (count >= 3) {
+        if (count > 0) {
           this.hideBookmarkGhost();
           return;
         }
@@ -4276,19 +4297,19 @@ initEngagement() {
       return best;
     }
 
-    createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop, isStacked, stackIndex) {
-      const topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
-      const stackOffset = isStacked ? ((stackIndex || 0) * 12) : 0;
+    createBookmarkTab(blockEl, blockId, bookmark) {
       const tab = document.createElement('button');
       tab.type = 'button';
-      tab.className = 'antropedia-bm-tab' + (isStacked ? ' is-stacked' : '');
-      tab.style.top = `${Math.round(topPos - layoutRect.top + stackOffset)}px`;
-      tab.style.zIndex = 10 + (stackIndex || 0);
+      tab.className = 'antropedia-bm-tab';
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
       tab.setAttribute('data-id', bookmark.id);
       tab.title = bookmark.name;
       tab.innerHTML = `<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">${escapeHtml(bookmark.name)}</span>`;
+
+      tab.addEventListener('mouseenter', () => this.setBookmarkHighlight(bookmark));
+      tab.addEventListener('mouseleave', () => this.clearBookmarkHighlight());
+
       return tab;
     }
 
@@ -4315,11 +4336,10 @@ initEngagement() {
       if (this._bmWideMode && this.bookmarkGutterEl) {
         this.bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         this.bookmarkGhostEl.style.removeProperty('--bm-color');
-        this.bookmarkGhostEl.title = count > 0 ? 'Добавить ещё закладку' : 'Добавить закладку';
-        this.bookmarkGhostEl.innerHTML = '<i class="fas ' + (count > 0 ? 'fa-plus' : 'fa-bookmark') + '"></i> <span class="antropedia-bm-tab-title">' + (count > 0 ? 'Ещё' : 'Добавить') + '</span>';
+        this.bookmarkGhostEl.title = 'Добавить закладку';
+        this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">Добавить</span>';
         const layoutRect = this.bookmarkGutterEl.parentElement.getBoundingClientRect();
-        const ghostOffset = count > 0 ? (count * 12 + 20) : 0;
-        this.bookmarkGhostEl.style.top = `${Math.round(blockRect.top - layoutRect.top + ghostOffset)}px`;
+        this.bookmarkGhostEl.style.top = `${Math.round(blockRect.top - layoutRect.top)}px`;
         this.bookmarkGhostEl.style.zIndex = 5;
         this.bookmarkGutterEl.appendChild(this.bookmarkGhostEl);
       } else if (this.contentEl) {
@@ -4536,9 +4556,65 @@ initEngagement() {
       this.renderBookmarkGutter();
     }
 
+    setBookmarkHighlight(bookmark) {
+      this.clearBookmarkHighlight();
+      if (!bookmark) return;
+      if (!this.contentEl) return;
+      let blockEl = null;
+      if (bookmark.blockId) {
+        try {
+          blockEl = this.contentEl.querySelector(`[data-block-id="${CSS && CSS.escape ? CSS.escape(bookmark.blockId) : bookmark.blockId}"]`);
+        } catch (_) {}
+        if (!blockEl) blockEl = document.getElementById(bookmark.blockId);
+      }
+      if (!blockEl) return;
+
+      const color = bookmark.color || '#5865f2';
+      blockEl.classList.add('antropedia-bm-block-hover');
+      blockEl.style.setProperty('--bm-hover-color', color);
+
+      if (bookmark.quote && typeof Highlight !== 'undefined' && CSS.highlights) {
+        try {
+          let range = this.findQuoteRange(blockEl, bookmark.quote);
+          if (!range) range = this.findQuoteRange(this.contentEl, bookmark.quote);
+          if (range) {
+            const h = new Highlight(range);
+            CSS.highlights.set('antropedia-bm-hover', h);
+            document.documentElement.style.setProperty('--bm-hover-color', color);
+          }
+        } catch (_) {}
+      }
+    }
+
+    clearBookmarkHighlight() {
+      if (typeof Highlight !== 'undefined' && CSS.highlights) {
+        try { CSS.highlights.delete('antropedia-bm-hover'); } catch (_) {}
+      }
+      if (this.contentEl) {
+        this.contentEl.querySelectorAll('.antropedia-bm-block-hover').forEach((el) => {
+          el.classList.remove('antropedia-bm-block-hover');
+          el.style.removeProperty('--bm-hover-color');
+        });
+      }
+    }
+
     renderBookmarksPanel() {
       const panel = this.bookmarksPanelEl;
       if (!panel) return;
+      if (!panel._hoverInit) {
+        panel._hoverInit = true;
+        panel.addEventListener('mouseover', (e) => {
+          const item = e.target.closest('.antropedia-bookmark-item');
+          if (!item) return;
+          const id = item.getAttribute('data-id');
+          const bm = this.currentArticleBookmarks.find((b) => String(b.id) === String(id));
+          if (bm) this.setBookmarkHighlight(bm);
+        });
+        panel.addEventListener('mouseout', (e) => {
+          const item = e.target.closest('.antropedia-bookmark-item');
+          if (item) this.clearBookmarkHighlight();
+        });
+      }
 
       if (!this.currentArticleBookmarks.length) {
         panel.innerHTML = '<div class="antropedia-sidebar-empty">Закладок пока нет — выделите текст или нажмите на хвостик закладки, чтобы добавить.</div>';
