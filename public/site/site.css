@@ -10302,11 +10302,36 @@ a.site-profile-media-row:hover {
 /* Крайняя правая кнопка (прилегающая к карточке статьи) имеет скошенный хвостик */
 .antropedia-bm-group > .antropedia-bm-tab:first-child {
     border-radius: 6px 0 0 6px;
-    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
     width: 32px;
     min-width: 32px;
     max-width: 32px;
     padding-right: 4px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.antropedia-bm-group > .antropedia-bm-tab:first-child::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bm-color, var(--blurple, #5865f2));
+    border-radius: 6px 0 0 6px;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    z-index: 1;
+    pointer-events: none;
+    transition: filter 0.15s ease;
+}
+
+.antropedia-bm-group > .antropedia-bm-tab:first-child:hover,
+.antropedia-bm-group > .antropedia-bm-tab:first-child:focus-visible {
+    background: transparent;
+    box-shadow: none;
+}
+
+.antropedia-bm-group > .antropedia-bm-tab:first-child:hover::before,
+.antropedia-bm-group > .antropedia-bm-tab:first-child:focus-visible::before {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
 }
 
 /* При наведении кнопка мягко приподнимается, оставаясь ровно под курсором */
@@ -10320,6 +10345,8 @@ a.site-profile-media-row:hover {
 .antropedia-bm-tab-icon {
     font-size: 11px;
     pointer-events: none;
+    position: relative;
+    z-index: 2;
 }
 
 /* Всплывающий тултип с названием закладки слева от кнопки — оверлей не сдвигает разметку */
