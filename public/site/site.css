@@ -9992,25 +9992,30 @@ a.site-profile-media-row:hover {
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.antropedia-detail-view .public-article-back {
+.antropedia-detail-view .public-article-back,
+.public-article-back {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
-    border-radius: 999px;
-    background: var(--background-primary);
-    border: 1px solid var(--background-accent);
-    color: var(--header-secondary);
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--header-secondary, #949ba4);
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
 }
 
-.antropedia-detail-view .public-article-back:hover {
-    color: var(--header-primary);
-    border-color: rgba(99, 102, 241, 0.4);
-    background: rgba(255, 255, 255, 0.06);
+.antropedia-detail-view .public-article-back:hover,
+.public-article-back:hover {
+    color: var(--header-primary, #ffffff);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    text-decoration: none;
 }
 
 .antropedia-detail-view .public-article-admin-link {
@@ -13453,6 +13458,7 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
         right: 0 !important;
         z-index: 490 !important;
         display: flex !important;
+        flex-wrap: nowrap !important;
         align-items: center !important;
         justify-content: space-between !important;
         height: 52px !important;
@@ -13466,6 +13472,31 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
         transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, background 0.2s ease !important;
+        box-sizing: border-box !important;
+    }
+
+    /* На мобильных скрываем текстовые метки кнопок, оставляя лаконичные аккуратные иконки */
+    .public-article-detail-toolbar .antropedia-btn-label,
+    .antropedia-view-topbar .antropedia-btn-label {
+        display: none !important;
+    }
+
+    /* Все кнопки в шапке приводятся к единому стилю и размеру (36x36) */
+    .public-article-detail-toolbar .antropedia-topbar-btn,
+    .public-article-detail-toolbar .public-article-back,
+    .public-article-detail-toolbar .antropedia-back-btn,
+    .antropedia-view-topbar .antropedia-topbar-btn,
+    .antropedia-view-topbar .antropedia-back-btn {
+        width: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        border-radius: 8px !important;
         box-sizing: border-box !important;
     }
 

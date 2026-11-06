@@ -952,13 +952,40 @@
     box-sizing: border-box !important;
   }
 
+  .public-article-detail-toolbar,
   .antropedia-detail-view .public-article-detail-toolbar {
-    margin: 0 auto 16px auto !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    height: 52px !important;
     padding: 0 12px !important;
+    margin: 0 auto 16px auto !important;
     gap: 8px !important;
     width: 100% !important;
     max-width: 960px !important;
     box-sizing: border-box !important;
+  }
+
+  /* Все кнопки в шапке приводятся к единому стилю и размеру (36x36, border-radius: 8px) */
+  .public-article-detail-toolbar .antropedia-topbar-btn,
+  .public-article-detail-toolbar .public-article-back,
+  .public-article-detail-toolbar .antropedia-back-btn {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .public-article-detail-toolbar .antropedia-btn-label {
+    display: none !important;
   }
 
   .public-article-content.preview-pane {
@@ -966,13 +993,6 @@
     padding-right: 0 !important;
     width: 100% !important;
     box-sizing: border-box !important;
-  }
-
-  .antropedia-detail-view .public-article-back,
-  .antropedia-detail-view .public-article-admin-link {
-    padding: 5px 12px !important;
-    font-size: 12px !important;
-    height: 32px !important;
   }
 
   .antropedia-toc-search-widget {

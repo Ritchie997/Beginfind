@@ -3136,12 +3136,15 @@
       toolbar.id = 'publicArticleDetailToolbar';
 
       var back = document.createElement('a');
-      back.className = 'public-article-back';
+      back.className = 'btn btn-secondary btn-sm antropedia-topbar-btn antropedia-back-btn public-article-back';
       back.href = '/antropedia';
+      back.title = 'Все статьи';
+      back.setAttribute('aria-label', 'Все статьи');
       var backIcon = document.createElement('i');
       backIcon.className = 'fas fa-arrow-left';
       backIcon.setAttribute('aria-hidden', 'true');
-      back.append(backIcon, document.createTextNode(' Все статьи'));
+      var backLabel = makeEl('span', 'antropedia-btn-label', ' Все статьи');
+      back.append(backIcon, backLabel);
       var listReturn = readListReturn();
       if (listReturn && listReturn.currentSlug === article.slug) {
         back.href = listReturn.url + ARTICLE_LIST_RETURN_HASH;

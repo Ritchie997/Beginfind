@@ -3235,6 +3235,7 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
         right: 0 !important;
         z-index: 1020 !important;
         display: flex !important;
+        flex-wrap: nowrap !important;
         align-items: center !important;
         justify-content: space-between !important;
         height: 52px !important;
@@ -3248,6 +3249,29 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
         transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, background 0.2s ease !important;
+        box-sizing: border-box !important;
+    }
+
+    /* На мобильных скрываем текстовые метки кнопок, оставляя лаконичные аккуратные иконки */
+    .public-article-detail-toolbar .antropedia-btn-label,
+    .antropedia-view-topbar .antropedia-btn-label {
+        display: none !important;
+    }
+
+    /* Все кнопки в шапке приводятся к единому стилю и размеру (36x36) */
+    .public-article-detail-toolbar .antropedia-topbar-btn,
+    .antropedia-view-topbar .antropedia-topbar-btn,
+    .antropedia-view-topbar .antropedia-back-btn {
+        width: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        border-radius: 8px !important;
         box-sizing: border-box !important;
     }
 
