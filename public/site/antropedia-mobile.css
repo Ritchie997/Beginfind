@@ -951,29 +951,8 @@
     height: 32px !important;
   }
 
-  .antropedia-article-search-widget {
-    top: calc(var(--site-header-h, 56px) + 8px) !important;
-    right: 12px !important;
-  }
-
-  .antropedia-article-search-widget.is-open {
-    left: 10px !important;
-    right: 10px !important;
-    width: auto !important;
-  }
-
-  .antropedia-search-trigger-btn {
-    width: 38px !important;
-    height: 38px !important;
-    font-size: 14px !important;
-  }
-
-  .antropedia-article-search-widget .antropedia-inline-search {
-    width: 100% !important;
-    max-width: none !important;
-    height: 38px !important;
-    border-radius: 12px !important;
-    padding: 0 10px !important;
+  .antropedia-toc-search-widget {
+    margin: 4px 0 8px !important;
   }
 
   .antropedia-detail-view .public-article-cover {
