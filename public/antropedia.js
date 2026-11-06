@@ -742,7 +742,7 @@ function reactionsBarInnerHtml(reactions) {
           this.moreActionsMenu.hidden = true;
           this.moreActionsBtn?.setAttribute('aria-expanded', 'false');
         }
-        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.antropedia-bm-toggle, .antropedia-bm-tab, #antropediaSelectionTooltip, #antropediaMobileBookmarkBar, .antropedia-selection-tooltip')) {
+        if (this._bmHoverCapable && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden && !this.bookmarkPopoverEl.contains(e.target) && !e.target.closest('.antropedia-bm-toggle, .antropedia-bm-tab, #antropediaSelectionTooltip, #antropediaMobileBookmarkBar, .antropedia-selection-tooltip, #antropediaSelectionBookmarkBtn')) {
           this.closeBookmarkPopover();
         }
         // Пикеры стикеров (форма комментария/ответа И полоска реакций — один
@@ -4082,8 +4082,14 @@ initEngagement() {
           e.stopPropagation();
           if (!this._currentSelectedRangeInfo) return;
           const info = this._currentSelectedRangeInfo;
+          const countForBlock = this.currentArticleBookmarks.filter((b) => b.blockId === info.blockId).length;
+          if (countForBlock >= 3) {
+            this.hideSelectionUI();
+            showMessage('Достигнут лимит: не более 3 закладок на один абзац', 'error');
+            return;
+          }
           this.hideSelectionUI();
-          this.openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
+          this.openBookmarkPopover(info.blockId, info.blockEl || info.range, info.quote);
         });
       }
 
@@ -4094,8 +4100,14 @@ initEngagement() {
           e.stopPropagation();
           if (!this._currentSelectedRangeInfo) return;
           const info = this._currentSelectedRangeInfo;
+          const countForBlock = this.currentArticleBookmarks.filter((b) => b.blockId === info.blockId).length;
+          if (countForBlock >= 3) {
+            this.hideSelectionUI();
+            showMessage('Достигнут лимит: не более 3 закладок на один абзац', 'error');
+            return;
+          }
           this.hideSelectionUI();
-          this.openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
+          this.openBookmarkPopover(info.blockId, info.blockEl || info.range, info.quote);
         });
       }
 
@@ -4149,7 +4161,12 @@ initEngagement() {
       if (!blocks.length) { this._bmBlocks = []; return; }
 
       this._bmWideMode = this.hasWideGutterSpace();
-      const byBlock = new Map(this.currentArticleBookmarks.filter((b) => b.blockId).map((b) => [b.blockId, b]));
+      const byBlock = new Map();
+      this.currentArticleBookmarks.forEach((b) => {
+        if (!b.blockId) return;
+        if (!byBlock.has(b.blockId)) byBlock.set(b.blockId, []);
+        byBlock.get(b.blockId).push(b);
+      });
       const contentRect = this.contentEl.getBoundingClientRect();
       const layoutRect = (this._bmWideMode && this.bookmarkGutterEl) ? this.bookmarkGutterEl.parentElement.getBoundingClientRect() : null;
 
@@ -4178,14 +4195,15 @@ initEngagement() {
 
       blocks.forEach((blockEl) => {
         const blockId = blockEl.getAttribute('data-block-id');
-        const bookmark = byBlock.get(blockId);
-        if (!bookmark) return;
+        const bookmarks = byBlock.get(blockId);
+        if (!bookmarks || !bookmarks.length) return;
 
         let targetTop = null;
-        if (bookmark.quote) {
-          let range = this.findQuoteRange(blockEl, bookmark.quote);
+        const firstWithQuote = bookmarks.find((b) => !!b.quote);
+        if (firstWithQuote && firstWithQuote.quote) {
+          let range = this.findQuoteRange(blockEl, firstWithQuote.quote);
           if (!range && this.contentEl) {
-            range = this.findQuoteRange(this.contentEl, bookmark.quote);
+            range = this.findQuoteRange(this.contentEl, firstWithQuote.quote);
           }
           if (range) {
             const rRect = range.getBoundingClientRect();
@@ -4199,9 +4217,12 @@ initEngagement() {
         }
 
         if (this._bmWideMode && layoutRect) {
-          this.bookmarkGutterEl.appendChild(this.createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop));
+          const isStacked = bookmarks.length > 1;
+          bookmarks.forEach((bm, idx) => {
+            this.bookmarkGutterEl.appendChild(this.createBookmarkTab(blockEl, blockId, bm, layoutRect, targetTop, isStacked, idx));
+          });
         } else {
-          this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop));
+          this.contentEl.appendChild(this.createCompactToggle(blockEl, blockId, bookmarks[0], contentRect, targetTop));
         }
       });
     }
@@ -4229,7 +4250,12 @@ initEngagement() {
         if (!originEl) return;
         const localY = this._bmLastHoverY - originEl.getBoundingClientRect().top;
         const block = this.findNearestBlock(localY);
-        if (!block || this.currentArticleBookmarks.some((b) => b.blockId === block.blockId)) {
+        if (!block) {
+          this.hideBookmarkGhost();
+          return;
+        }
+        const count = this.currentArticleBookmarks.filter((b) => b.blockId === block.blockId).length;
+        if (count >= 3) {
           this.hideBookmarkGhost();
           return;
         }
@@ -4250,16 +4276,19 @@ initEngagement() {
       return best;
     }
 
-    createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop) {
+    createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop, isStacked, stackIndex) {
       const topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
+      const stackOffset = isStacked ? ((stackIndex || 0) * 12) : 0;
       const tab = document.createElement('button');
       tab.type = 'button';
-      tab.className = 'antropedia-bm-tab';
-      tab.style.top = `${Math.round(topPos - layoutRect.top)}px`;
+      tab.className = 'antropedia-bm-tab' + (isStacked ? ' is-stacked' : '');
+      tab.style.top = `${Math.round(topPos - layoutRect.top + stackOffset)}px`;
+      tab.style.zIndex = 10 + (stackIndex || 0);
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
+      tab.setAttribute('data-id', bookmark.id);
       tab.title = bookmark.name;
-      tab.textContent = bookmark.name;
+      tab.innerHTML = `<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">${escapeHtml(bookmark.name)}</span>`;
       return tab;
     }
 
@@ -4279,22 +4308,26 @@ initEngagement() {
     showBookmarkGhost(blockEl, blockId) {
       if (!this.bookmarkGhostEl) return;
       this.bookmarkGhostEl.setAttribute('data-block-id', blockId);
+      this.bookmarkGhostEl.removeAttribute('data-id');
       const blockRect = blockEl.getBoundingClientRect();
+      const count = this.currentArticleBookmarks.filter((b) => b.blockId === blockId).length;
 
       if (this._bmWideMode && this.bookmarkGutterEl) {
         this.bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         this.bookmarkGhostEl.style.removeProperty('--bm-color');
-        this.bookmarkGhostEl.title = '';
-        this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i> Добавить';
+        this.bookmarkGhostEl.title = count > 0 ? 'Добавить ещё закладку' : 'Добавить закладку';
+        this.bookmarkGhostEl.innerHTML = '<i class="fas ' + (count > 0 ? 'fa-plus' : 'fa-bookmark') + '"></i> <span class="antropedia-bm-tab-title">' + (count > 0 ? 'Ещё' : 'Добавить') + '</span>';
         const layoutRect = this.bookmarkGutterEl.parentElement.getBoundingClientRect();
-        this.bookmarkGhostEl.style.top = `${blockRect.top - layoutRect.top}px`;
+        const ghostOffset = count > 0 ? (count * 12 + 20) : 0;
+        this.bookmarkGhostEl.style.top = `${Math.round(blockRect.top - layoutRect.top + ghostOffset)}px`;
+        this.bookmarkGhostEl.style.zIndex = 5;
         this.bookmarkGutterEl.appendChild(this.bookmarkGhostEl);
       } else if (this.contentEl) {
         this.bookmarkGhostEl.className = 'antropedia-bm-toggle is-ghost';
         this.bookmarkGhostEl.title = 'Добавить закладку';
         this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i>';
         const contentRect = this.contentEl.getBoundingClientRect();
-        this.bookmarkGhostEl.style.top = `${blockRect.top - contentRect.top}px`;
+        this.bookmarkGhostEl.style.top = `${Math.round(blockRect.top - contentRect.top)}px`;
         this.contentEl.appendChild(this.bookmarkGhostEl);
       }
       this.bookmarkGhostEl.hidden = false;
@@ -4308,41 +4341,44 @@ initEngagement() {
 
     toggleBookmarkPopover(toggleEl) {
       const blockId = toggleEl.getAttribute('data-block-id');
-      if (this._pendingBookmark && this._pendingBookmark.blockId === blockId && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden) {
+      const bmId = toggleEl.getAttribute('data-id');
+      if (this._pendingBookmark && this._pendingBookmark.blockId === blockId && (bmId ? String(this._pendingBookmark.id) === String(bmId) : !this._pendingBookmark.id) && this.bookmarkPopoverEl && !this.bookmarkPopoverEl.hidden) {
         this.closeBookmarkPopover();
         return;
       }
-      this.openBookmarkPopover(blockId, toggleEl);
+      this.openBookmarkPopover(blockId, toggleEl, null, bmId || null);
     }
 
     handleContentDblClick(e) {
-      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle')) return;
+      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle, .antropedia-bm-tab')) return;
       const blockEl = e.target.closest('[data-block-id]');
       if (!blockEl) return;
+      const blockId = blockEl.getAttribute('data-block-id');
+      const count = this.currentArticleBookmarks.filter((b) => b.blockId === blockId).length;
+      if (count >= 3) {
+        showMessage('Достигнут лимит: не более 3 закладок на один абзац', 'error');
+        return;
+      }
       e.preventDefault();
-      this.openBookmarkPopover(blockEl.getAttribute('data-block-id'), blockEl);
+      this.openBookmarkPopover(blockId, blockEl);
     }
 
-    openBookmarkPopover(blockId, anchorEl, selectedQuote) {
-      const existing = this.currentArticleBookmarks.find((b) => b.blockId === blockId);
+    openBookmarkPopover(blockId, anchorEl, selectedQuote, existingBookmarkId) {
+      const existing = existingBookmarkId ? this.currentArticleBookmarks.find((b) => String(b.id) === String(existingBookmarkId)) : null;
+
+      if (!existing) {
+        const countForBlock = this.currentArticleBookmarks.filter((b) => b.blockId === blockId).length;
+        if (countForBlock >= 3) {
+          showMessage('Достигнут лимит: не более 3 закладок на один абзац', 'error');
+          return;
+        }
+      }
+
       this._pendingBookmark = {
         blockId,
         id: existing ? existing.id : null,
         quote: selectedQuote || (existing ? existing.quote : null)
       };
-
-      if (this.bookmarkPopoverNameEl) {
-        if (existing) {
-          this.bookmarkPopoverNameEl.value = existing.name;
-        } else if (selectedQuote) {
-          this.bookmarkPopoverNameEl.value = selectedQuote.slice(0, 35).trim();
-        } else {
-          this.bookmarkPopoverNameEl.value = '';
-        }
-      }
-      this.selectedBookmarkColor = existing ? existing.color : BOOKMARK_COLORS[0];
-      this.renderBookmarkColorSwatches();
-      if (this.bookmarkPopoverDeleteBtn) this.bookmarkPopoverDeleteBtn.hidden = !existing;
 
       if (!this.bookmarkPopoverEl) {
         this.bookmarkPopoverEl = document.getElementById('antropediaBookmarkPopover');
@@ -4360,14 +4396,36 @@ initEngagement() {
         this.bookmarkModalBackdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
       }
 
+      if (this.bookmarkPopoverNameEl) {
+        if (existing) {
+          this.bookmarkPopoverNameEl.value = existing.name;
+        } else if (selectedQuote) {
+          this.bookmarkPopoverNameEl.value = selectedQuote.slice(0, 35).trim();
+        } else {
+          this.bookmarkPopoverNameEl.value = '';
+        }
+      }
+      this.selectedBookmarkColor = existing ? existing.color : BOOKMARK_COLORS[0];
+      this.renderBookmarkColorSwatches();
+      if (this.bookmarkPopoverDeleteBtn) this.bookmarkPopoverDeleteBtn.hidden = !existing;
+
       if (this.bookmarkPopoverEl) {
         this.bookmarkPopoverEl.hidden = false;
         if (this._bmHoverCapable && anchorEl) {
           const rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
-          if (rect) {
+          if (rect && (rect.width > 0 || rect.height > 0)) {
             this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
           } else {
-            this.positionFloating(this.bookmarkPopoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+            let blockEl = null;
+            try {
+              blockEl = this.contentEl ? this.contentEl.querySelector(`[data-block-id="${CSS && CSS.escape ? CSS.escape(blockId) : blockId}"]`) : null;
+            } catch (_) {}
+            const bRect = blockEl ? blockEl.getBoundingClientRect() : null;
+            if (bRect && (bRect.width > 0 || bRect.height > 0)) {
+              this.positionFloating(this.bookmarkPopoverEl, bRect.left + 40, bRect.top + 8, 280, 220);
+            } else {
+              this.positionFloating(this.bookmarkPopoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+            }
           }
         } else {
           this.bookmarkPopoverEl.style.removeProperty('left');

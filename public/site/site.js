@@ -2053,14 +2053,30 @@
       el.style.top = Math.round(top) + 'px';
     }
 
-    function openBookmarkPopover(blockId, anchorEl, selectedQuote) {
+    function openBookmarkPopover(blockId, anchorEl, selectedQuote, existingBookmarkId) {
       var token = getAuthToken();
       if (!token) {
         openLogin();
         return;
       }
 
-      var existing = currentArticleBookmarks.find(function (b) { return b.blockId === blockId; });
+      var existing = null;
+      if (existingBookmarkId) {
+        existing = currentArticleBookmarks.find(function (b) { return String(b.id) === String(existingBookmarkId); });
+      }
+
+      if (!existing) {
+        var countForBlock = currentArticleBookmarks.filter(function (b) { return b.blockId === blockId; }).length;
+        if (countForBlock >= 3) {
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Лимит закладок', message: 'На один абзац можно добавить не более 3 закладок.' });
+          } else {
+            alert('На один абзац можно добавить не более 3 закладок.');
+          }
+          return;
+        }
+      }
+
       pendingBookmark = {
         blockId: blockId,
         id: existing ? existing.id : null,
@@ -2089,10 +2105,20 @@
         popoverEl.hidden = false;
         if (bmHoverCapable && anchorEl) {
           var rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
-          if (rect) {
+          if (rect && (rect.width > 0 || rect.height > 0)) {
             positionFloating(popoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
           } else {
-            positionFloating(popoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+            var blockEl = null;
+            try {
+              var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+              blockEl = contentEl ? contentEl.querySelector('[data-block-id="' + (CSS && CSS.escape ? CSS.escape(blockId) : blockId) + '"]') : null;
+            } catch (_) {}
+            var bRect = blockEl ? blockEl.getBoundingClientRect() : null;
+            if (bRect && (bRect.width > 0 || bRect.height > 0)) {
+              positionFloating(popoverEl, bRect.left + 40, bRect.top + 8, 280, 220);
+            } else {
+              positionFloating(popoverEl, window.innerWidth / 2, window.innerHeight / 2 - 110, 280, 220);
+            }
           }
         } else {
           popoverEl.style.removeProperty('left');
@@ -2168,12 +2194,21 @@
               color: color
             })
           });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (!res.ok) {
+            var errData = {};
+            try { errData = await res.json(); } catch (_) {}
+            throw new Error(errData.error || ('HTTP ' + res.status));
+          }
         }
         closeBookmarkPopover();
         await loadArticleBookmarks();
       } catch (e) {
         console.error('Не удалось сохранить закладку:', e);
+        if (window.confirmDialog) {
+          window.confirmDialog.alert({ title: 'Ошибка', message: e.message || 'Не удалось сохранить закладку' });
+        } else {
+          alert(e.message || 'Не удалось сохранить закладку');
+        }
       }
     }
 
@@ -2267,16 +2302,20 @@
       }).join('');
     }
 
-    function createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop) {
+    function createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop, isStacked, stackIndex) {
       var topPos = (typeof targetTop === 'number') ? targetTop : blockEl.getBoundingClientRect().top;
+      var stackOffset = isStacked ? ((stackIndex || 0) * 12) : 0;
       var tab = document.createElement('button');
       tab.type = 'button';
-      tab.className = 'antropedia-bm-tab';
-      tab.style.top = Math.round(topPos - layoutRect.top) + 'px';
+      tab.className = 'antropedia-bm-tab' + (isStacked ? ' is-stacked' : '');
+      tab.style.top = Math.round(topPos - layoutRect.top + stackOffset) + 'px';
+      tab.style.zIndex = 10 + (stackIndex || 0);
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
+      tab.setAttribute('data-id', bookmark.id);
       tab.title = bookmark.name;
-      tab.textContent = bookmark.name;
+      tab.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i>' +
+        '<span class="antropedia-bm-tab-title">' + escapeHtml(bookmark.name) + '</span>';
       return tab;
     }
 
@@ -2320,7 +2359,12 @@
         if (!originEl) return;
         var localY = bmLastHoverY - originEl.getBoundingClientRect().top;
         var block = findNearestBlock(localY);
-        if (!block || currentArticleBookmarks.some(function (b) { return b.blockId === block.blockId; })) {
+        if (!block) {
+          hideBookmarkGhost();
+          return;
+        }
+        var count = currentArticleBookmarks.filter(function (b) { return b.blockId === block.blockId; }).length;
+        if (count >= 3) {
           hideBookmarkGhost();
           return;
         }
@@ -2348,24 +2392,28 @@
     function showBookmarkGhost(blockEl, blockId) {
       if (!bookmarkGhostEl) return;
       bookmarkGhostEl.setAttribute('data-block-id', blockId);
+      bookmarkGhostEl.removeAttribute('data-id');
       var blockRect = blockEl.getBoundingClientRect();
       var gutterEl = document.getElementById('antropediaBookmarkGutter');
       var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
+      var count = currentArticleBookmarks.filter(function (b) { return b.blockId === blockId; }).length;
 
       if (bmWideMode && gutterEl && gutterEl.parentElement) {
         bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         bookmarkGhostEl.style.removeProperty('--bm-color');
-        bookmarkGhostEl.title = '';
-        bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i> Добавить';
+        bookmarkGhostEl.title = count > 0 ? 'Добавить ещё закладку' : 'Добавить закладку';
+        bookmarkGhostEl.innerHTML = '<i class="fas ' + (count > 0 ? 'fa-plus' : 'fa-bookmark') + '"></i> <span class="antropedia-bm-tab-title">' + (count > 0 ? 'Ещё' : 'Добавить') + '</span>';
         var layoutRect = gutterEl.parentElement.getBoundingClientRect();
-        bookmarkGhostEl.style.top = (blockRect.top - layoutRect.top) + 'px';
+        var ghostOffset = count > 0 ? (count * 12 + 20) : 0;
+        bookmarkGhostEl.style.top = Math.round(blockRect.top - layoutRect.top + ghostOffset) + 'px';
+        bookmarkGhostEl.style.zIndex = 5;
         gutterEl.appendChild(bookmarkGhostEl);
       } else if (contentEl) {
         bookmarkGhostEl.className = 'antropedia-bm-toggle is-ghost';
         bookmarkGhostEl.title = 'Добавить закладку';
         bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark"></i>';
         var contentRect = contentEl.getBoundingClientRect();
-        bookmarkGhostEl.style.top = (blockRect.top - contentRect.top) + 'px';
+        bookmarkGhostEl.style.top = Math.round(blockRect.top - contentRect.top) + 'px';
         contentEl.appendChild(bookmarkGhostEl);
       }
       bookmarkGhostEl.hidden = false;
@@ -2379,20 +2427,31 @@
 
     function toggleBookmarkPopover(toggleEl) {
       var blockId = toggleEl.getAttribute('data-block-id');
+      var bmId = toggleEl.getAttribute('data-id');
       var popoverEl = document.getElementById('antropediaBookmarkPopover');
-      if (pendingBookmark && pendingBookmark.blockId === blockId && popoverEl && !popoverEl.hidden) {
+      if (pendingBookmark && pendingBookmark.blockId === blockId && (bmId ? String(pendingBookmark.id) === String(bmId) : !pendingBookmark.id) && popoverEl && !popoverEl.hidden) {
         closeBookmarkPopover();
         return;
       }
-      openBookmarkPopover(blockId, toggleEl);
+      openBookmarkPopover(blockId, toggleEl, null, bmId || null);
     }
 
     function handleContentDblClick(e) {
-      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle')) return;
+      if (e.target.closest('a, .wiki-link, .wiki-link-missing, .wiki-link-restricted, .hashtag, .antropedia-bm-toggle, .antropedia-bm-tab')) return;
       var blockEl = e.target.closest('[data-block-id]');
       if (!blockEl) return;
+      var blockId = blockEl.getAttribute('data-block-id');
+      var count = currentArticleBookmarks.filter(function (b) { return b.blockId === blockId; }).length;
+      if (count >= 3) {
+        if (window.confirmDialog) {
+          window.confirmDialog.alert({ title: 'Лимит закладок', message: 'На один абзац можно добавить не более 3 закладок.' });
+        } else {
+          alert('На один абзац можно добавить не более 3 закладок.');
+        }
+        return;
+      }
       e.preventDefault();
-      openBookmarkPopover(blockEl.getAttribute('data-block-id'), blockEl);
+      openBookmarkPopover(blockId, blockEl);
     }
 
     function processTextSelection() {
@@ -2501,7 +2560,9 @@
       bmWideMode = hasWideGutterSpace();
       var byBlock = new Map();
       currentArticleBookmarks.forEach(function (b) {
-        if (b.blockId) byBlock.set(b.blockId, b);
+        if (!b.blockId) return;
+        if (!byBlock.has(b.blockId)) byBlock.set(b.blockId, []);
+        byBlock.get(b.blockId).push(b);
       });
 
       var articleEl = detail || document.getElementById('publicArticleDetail');
@@ -2543,14 +2604,15 @@
 
       blocks.forEach(function (blockEl) {
         var blockId = blockEl.getAttribute('data-block-id');
-        var bookmark = byBlock.get(blockId);
-        if (!bookmark) return;
+        var bookmarks = byBlock.get(blockId);
+        if (!bookmarks || !bookmarks.length) return;
 
         var targetTop = null;
-        if (bookmark.quote) {
-          var range = findQuoteRange(blockEl, bookmark.quote);
+        var firstWithQuote = bookmarks.find(function (b) { return !!b.quote; });
+        if (firstWithQuote && firstWithQuote.quote) {
+          var range = findQuoteRange(blockEl, firstWithQuote.quote);
           if (!range && contentEl) {
-            range = findQuoteRange(contentEl, bookmark.quote);
+            range = findQuoteRange(contentEl, firstWithQuote.quote);
           }
           if (range) {
             var rRect = range.getBoundingClientRect();
@@ -2564,9 +2626,12 @@
         }
 
         if (bmWideMode && gutterEl && layoutRect) {
-          gutterEl.appendChild(createBookmarkTab(blockEl, blockId, bookmark, layoutRect, targetTop));
+          var isStacked = bookmarks.length > 1;
+          bookmarks.forEach(function (bm, idx) {
+            gutterEl.appendChild(createBookmarkTab(blockEl, blockId, bm, layoutRect, targetTop, isStacked, idx));
+          });
         } else {
-          contentEl.appendChild(createCompactToggle(blockEl, blockId, bookmark, contentRect, targetTop));
+          contentEl.appendChild(createCompactToggle(blockEl, blockId, bookmarks[0], contentRect, targetTop));
         }
       });
     }
@@ -2615,8 +2680,18 @@
           e.stopPropagation();
           if (!currentSelectedRangeInfo) return;
           var info = currentSelectedRangeInfo;
+          var countForBlock = currentArticleBookmarks.filter(function (b) { return b.blockId === info.blockId; }).length;
+          if (countForBlock >= 3) {
+            hideSelectionUI();
+            if (window.confirmDialog) {
+              window.confirmDialog.alert({ title: 'Лимит закладок', message: 'На один абзац можно добавить не более 3 закладок.' });
+            } else {
+              alert('На один абзац можно добавить не более 3 закладок.');
+            }
+            return;
+          }
           hideSelectionUI();
-          openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
+          openBookmarkPopover(info.blockId, info.blockEl || info.range, info.quote);
         });
       }
 
@@ -2629,8 +2704,18 @@
           e.stopPropagation();
           if (!currentSelectedRangeInfo) return;
           var info = currentSelectedRangeInfo;
+          var countForBlock = currentArticleBookmarks.filter(function (b) { return b.blockId === info.blockId; }).length;
+          if (countForBlock >= 3) {
+            hideSelectionUI();
+            if (window.confirmDialog) {
+              window.confirmDialog.alert({ title: 'Лимит закладок', message: 'На один абзац можно добавить не более 3 закладок.' });
+            } else {
+              alert('На один абзац можно добавить не более 3 закладок.');
+            }
+            return;
+          }
           hideSelectionUI();
-          openBookmarkPopover(info.blockId, info.range || info.blockEl, info.quote);
+          openBookmarkPopover(info.blockId, info.blockEl || info.range, info.quote);
         });
       }
 

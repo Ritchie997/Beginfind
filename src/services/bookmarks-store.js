@@ -19,6 +19,7 @@ const QUOTE_MAX_LEN = 2000;
 const TITLE_MAX_LEN = 200;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_COLOR = '#5865f2';
+const MAX_BOOKMARKS_PER_BLOCK = 3;
 
 function normalizeColor(color) {
   return HEX_COLOR_RE.test(String(color || '')) ? color : DEFAULT_COLOR;
@@ -71,24 +72,40 @@ function createBookmark(userId, fields) {
   const color = normalizeColor(fields.color);
 
   return new Promise((resolve, reject) => {
-    bookmarksDb.run(
-      `INSERT INTO bookmarks (user_id, article_slug, article_title, block_id, quote, name, color)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, slug, title, blockId, quote, name, color],
-      function (err) {
-        if (err) { reject(err); return; }
-        bookmarksDb.get('SELECT * FROM bookmarks WHERE id = ?', [this.lastID], (err2, row) => {
-          if (err2 || !row) { reject(err2 || new Error('Не удалось создать закладку')); return; }
-          resolve(rowToBookmark(row));
-        });
-      }
-    );
+    if (blockId) {
+      bookmarksDb.get(
+        'SELECT COUNT(*) as count FROM bookmarks WHERE user_id = ? AND article_slug = ? AND block_id = ?',
+        [userId, slug, blockId],
+        (countErr, row) => {
+          if (countErr) { reject(countErr); return; }
+          if (row && row.count >= MAX_BOOKMARKS_PER_BLOCK) {
+            reject(new Error('Достигнут лимит: не более ' + MAX_BOOKMARKS_PER_BLOCK + ' закладок на один абзац'));
+            return;
+          }
+          doInsert();
+        }
+      );
+    } else {
+      doInsert();
+    }
+
+    function doInsert() {
+      bookmarksDb.run(
+        `INSERT INTO bookmarks (user_id, article_slug, article_title, block_id, quote, name, color)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [userId, slug, title, blockId, quote, name, color],
+        function (err) {
+          if (err) { reject(err); return; }
+          bookmarksDb.get('SELECT * FROM bookmarks WHERE id = ?', [this.lastID], (err2, row) => {
+            if (err2 || !row) { reject(err2 || new Error('Не удалось создать закладку')); return; }
+            resolve(rowToBookmark(row));
+          });
+        }
+      );
+    }
   });
 }
 
-/**
- * Переименовать закладку и/или сменить цвет — только своя (WHERE user_id).
- */
 function updateBookmark(userId, id, fields) {
   return new Promise((resolve, reject) => {
     bookmarksDb.get('SELECT * FROM bookmarks WHERE id = ? AND user_id = ?', [id, userId], (err, row) => {

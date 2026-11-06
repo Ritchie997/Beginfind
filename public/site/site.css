@@ -10253,7 +10253,7 @@ a.site-profile-media-row:hover {
     right: -16px;
     max-width: 170px;
     padding: 7px 16px 7px 10px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
     background: var(--bm-color, var(--blurple, #5865f2));
@@ -10268,12 +10268,61 @@ a.site-profile-media-row:hover {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: max-width 0.22s cubic-bezier(0.2, 0, 0, 1), width 0.22s cubic-bezier(0.2, 0, 0, 1), transform 0.18s ease, box-shadow 0.18s ease;
+    z-index: 10;
+}
+
+.antropedia-bm-tab-icon {
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.antropedia-bm-tab-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .antropedia-bm-tab:hover {
     transform: translateX(-4px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.38);
+}
+
+/* Сложенное / укороченное состояние при 2 или 3 закладках на абзаце */
+.antropedia-bm-tab.is-stacked {
+    width: 36px;
+    max-width: 36px;
+    padding: 6px 12px 6px 8px;
+    justify-content: flex-start;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.antropedia-bm-tab.is-stacked .antropedia-bm-tab-title {
+    opacity: 0;
+    max-width: 0;
+    margin-left: 0;
+    transform: translateX(8px);
+    transition: opacity 0.18s ease, max-width 0.22s ease, transform 0.18s ease, margin-left 0.18s ease;
+    pointer-events: none;
+}
+
+/* При наведении закладка выдвигается и разворачивается с полным названием */
+.antropedia-bm-tab.is-stacked:hover,
+.antropedia-bm-tab.is-stacked:focus-visible {
+    width: auto;
+    max-width: 220px;
+    padding-right: 16px;
+    transform: translateX(-8px);
+    z-index: 50 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.antropedia-bm-tab.is-stacked:hover .antropedia-bm-tab-title,
+.antropedia-bm-tab.is-stacked:focus-visible .antropedia-bm-tab-title {
+    opacity: 1;
+    max-width: 170px;
+    margin-left: 2px;
+    transform: translateX(0);
 }
 
 .antropedia-bm-tab.is-ghost {
