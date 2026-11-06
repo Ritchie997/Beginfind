@@ -5,6 +5,19 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-06 — обратные ссылки (Backlinks) под статьёй в Antropedia
+
+- Antropedia — блок обратных ссылок под статьёй (`src/routes/articles.routes.js`, `src/routes/public-articles.routes.js`, `public/site/site.js`, `public/site/site.css`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Серверный маршрут обратных ссылок с поддержкой гостей (`optionalAuth`):**
+    - Маршрут `GET /api/articles/:id/backlinks` (`src/routes/articles.routes.js`) переведён на `optionalAuth`: авторизованные пользователи видят обратные ссылки с учётом доступных им ролей и слоёв, а гостевые читатели получают только публично доступные ссылающиеся статьи без требования авторизации.
+    - Добавлен публичный маршрут-алиас `GET /public/articles/:slug/backlinks` (`src/routes/public-articles.routes.js`), резолвящий входящие ссылки исключительно по публичным слоям.
+  - **Блок «На эту статью ссылаются...» на клиенте (`public/site/site.js`, `public/site/site.css`):**
+    - В конец просмотра статьи (`detail.appendChild`) добавлен блок `#publicArticleBacklinks.backlinks-panel` перед секцией комментариев.
+    - Асинхронная загрузка с защитой от гонки запросов (`currentArticleSlug !== slug`).
+    - Отрисовка адаптивной сетки карточек-ссылок (`.backlinks-grid`, `.backlink-card`) с иконкой статьи, названием и стрелкой перехода. Клик поддерживает SPA-навигацию через `PublicSite.navigateTo` и открытие в новой вкладке при Ctrl/Cmd-клике.
+    - При отсутствии ссылок отображается информативное состояние `.backlinks-empty`, которое на смартфонах автоматически скрывается (`display: none`), не занимая экран.
+    - Пункт чеклиста паритета в `docs/TASKS_PARITY_CHECKLIST.md` закрыт.
+
 ## 2026-11-06 — ремастер мобильного интерфейса чтения статей Antropedia (Smart Sticky Header, Kebab menu, Bottom Sheet и поиск)
 
 - Antropedia — мобильный интерфейс чтения статей (`public/site/antropedia.html`, `public/site/site.js`, `public/site/site.css`, `public/site/antropedia-mobile.css`, `public/views/antropedia.html`, `public/antropedia.js`, `public/antropedia.css`):

@@ -3807,8 +3807,91 @@
       }
 
       renderContentBlocks(article.content);
+
+      var backlinksPanel = makeEl('div', 'backlinks-panel');
+      backlinksPanel.id = 'publicArticleBacklinks';
+      backlinksPanel.hidden = true;
+      detail.appendChild(backlinksPanel);
+      initBacklinks(article.slug, backlinksPanel);
+
       initComments(article, detail, userPromise).catch(function () { /* комментарии не критичны для чтения статьи */ });
       updateArticleMetadata(article);
+    }
+
+    async function initBacklinks(slug, panel) {
+      if (!panel || !slug) return;
+      panel.hidden = true;
+      panel.replaceChildren();
+
+      try {
+        var token = getAuthToken();
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        var res = await fetch('/api/articles/' + encodeURIComponent(slug) + '/backlinks', {
+          credentials: 'omit',
+          headers: headers
+        });
+        if (currentArticleSlug !== slug) return;
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 403) {
+            panel.hidden = true;
+            return;
+          }
+          throw new Error('HTTP ' + res.status);
+        }
+        var backlinks = await res.json();
+        if (currentArticleSlug !== slug) return;
+        if (!Array.isArray(backlinks)) backlinks = [];
+
+        panel.hidden = false;
+        var header = makeEl('h3', 'backlinks-title');
+        var linkIcon = document.createElement('i');
+        linkIcon.className = 'fas fa-link';
+        linkIcon.setAttribute('aria-hidden', 'true');
+        header.append(linkIcon, document.createTextNode(' На эту статью ссылаются:'));
+        panel.appendChild(header);
+
+        if (!backlinks.length) {
+          panel.classList.add('is-empty');
+          var empty = makeEl('div', 'backlinks-empty', 'Пока никто не сослался на эту статью через wiki-ссылку.');
+          panel.appendChild(empty);
+          return;
+        }
+
+        panel.classList.remove('is-empty');
+        var list = makeEl('div', 'backlinks-grid');
+        backlinks.forEach(function (b) {
+          if (!b || !b.slug) return;
+          var card = makeEl('a', 'backlink-card');
+          card.href = '/antropedia/' + encodeURIComponent(b.slug);
+          card.setAttribute('data-slug', b.slug);
+
+          var icon = document.createElement('i');
+          icon.className = 'fas fa-file-lines backlink-card-icon';
+          icon.setAttribute('aria-hidden', 'true');
+
+          var titleSpan = makeEl('span', 'backlink-card-title', b.title || b.slug);
+
+          var arrow = document.createElement('i');
+          arrow.className = 'fas fa-arrow-right backlink-card-arrow';
+          arrow.setAttribute('aria-hidden', 'true');
+
+          card.append(icon, titleSpan, arrow);
+
+          card.addEventListener('click', function (e) {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            window.PublicSite?.navigateTo('/antropedia/' + encodeURIComponent(b.slug));
+          });
+
+          list.appendChild(card);
+        });
+
+        panel.appendChild(list);
+      } catch (err) {
+        console.warn('Не удалось загрузить обратные ссылки:', err);
+        panel.hidden = true;
+      }
     }
 
     // ---------- Комментарии ----------

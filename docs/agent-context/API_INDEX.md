@@ -243,6 +243,7 @@
 - `GET /public/articles-index`
 - `GET /public/articles/:slug`
 - `GET /public/articles/:slug/comments`
+- `GET /public/articles/:slug/backlinks`
 
 ## `servers.routes.js`
 

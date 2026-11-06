@@ -1897,6 +1897,131 @@ body[data-page="antropedia"] .site-main {
 }
 
 /* ============================================================
+   Обратные ссылки (Backlinks) под статьёй
+   ============================================================ */
+
+.backlinks-panel {
+    margin-top: 32px;
+    margin-bottom: 24px;
+    padding: 18px 20px;
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--site-radius-md, 12px);
+    box-sizing: border-box;
+}
+
+.backlinks-panel[hidden] {
+    display: none !important;
+}
+
+.backlinks-panel h3,
+.backlinks-title {
+    margin: 0 0 14px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--header-primary, #f2f3f5);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.01em;
+}
+
+.backlinks-title i {
+    color: var(--blurple, #5865f2);
+    font-size: 14px;
+}
+
+.backlinks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.backlink-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    color: var(--text-normal, #f2f3f5);
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    box-sizing: border-box;
+}
+
+.backlink-card:hover {
+    background: rgba(88, 101, 242, 0.12);
+    border-color: rgba(88, 101, 242, 0.35);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.backlink-card:active {
+    transform: translateY(0);
+}
+
+.backlink-card-icon {
+    color: var(--blurple, #5865f2);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.backlink-card-title {
+    flex: 1 1 auto;
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--text-normal, #f2f3f5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backlink-card:hover .backlink-card-title {
+    color: #ffffff;
+}
+
+.backlink-card-arrow {
+    color: var(--text-muted, #949ba4);
+    font-size: 11px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.backlink-card:hover .backlink-card-arrow {
+    opacity: 1;
+    color: var(--blurple, #5865f2);
+    transform: translateX(2px);
+}
+
+.backlinks-empty {
+    color: var(--text-muted, #949ba4);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+    .backlinks-panel {
+        padding: 14px;
+        margin-top: 24px;
+        margin-bottom: 18px;
+    }
+
+    .backlinks-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .backlinks-panel.is-empty,
+    .backlinks-panel:has(.backlinks-empty) {
+        display: none !important;
+    }
+}
+
+/* ============================================================
    Комментарии публичной статьи
    ============================================================ */
 

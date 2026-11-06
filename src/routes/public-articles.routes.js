@@ -5,6 +5,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const store = require('../services/articles-store');
 const publicArticles = require('../services/public-articles');
+const articleLayers = require('../services/article-layers');
 const blocks = require('../services/blocks');
 const { slugify } = require('../services/slugify');
 const tagColors = require('../services/tag-colors');
@@ -270,6 +271,27 @@ function createPublicArticlesRouter(
     } catch (err) {
       console.error('[public-articles] Failed to load public comments:', err);
       res.status(500).json({ error: 'Не удалось загрузить комментарии' });
+    }
+  });
+
+  // Обратные ссылки (Backlinks) открытой статьи — только чтение, без авторизации.
+  router.get('/public/articles/:slug/backlinks', async (req, res) => {
+    try {
+      const article = articleStore.getArticle(req.params.slug);
+      if (!article || !articleLayers.resolvePublicArticleLayers(article)) {
+        return res.status(404).json({ error: 'Статья не найдена' });
+      }
+      const sources = articleStore.getBacklinks(req.params.slug);
+      const result = [];
+      for (const source of sources) {
+        const resolved = articleLayers.resolvePublicArticleLayers(source);
+        if (!resolved) continue;
+        result.push({ slug: source.slug, title: resolved.layer.title || source.title || source.slug });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('[public-articles] Failed to load backlinks:', err);
+      res.status(500).json({ error: 'Не удалось загрузить обратные ссылки' });
     }
   });
 

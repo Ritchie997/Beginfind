@@ -131,6 +131,26 @@ async function canAccessArticle(user, article) {
   return articleLayers.hasArticleAccess(article, user);
 }
 
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return next();
+  let continued = false;
+  const publicFallback = {
+    status() { return this; },
+    json() {
+      if (continued) return;
+      continued = true;
+      delete req.user;
+      next();
+    }
+  };
+  return auth.authenticateToken(req, publicFallback, () => auth.checkApproved(req, publicFallback, () => {
+    if (continued) return;
+    continued = true;
+    next();
+  }));
+}
+
 // "Закрытая" обычная (не многослойная) статья без единой роли — раньше
 // такая тихо сохранялась и становилась публичной (см. legacyLayers в
 // article-layers.js). Теперь сохранить её нельзя: это почти наверняка
@@ -962,19 +982,28 @@ router.get('/search-articles', auth.authenticateToken, auth.checkApproved, async
 // положено, мог засветиться в панели бэклинков; см. обсуждение "многослойные
 // статьи"), а заголовок каждого источника — с его резолвнутого для этого
 // читателя слоя, а не верхнеуровневый.
-router.get('/articles/:id/backlinks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+router.get('/articles/:id/backlinks', optionalAuth, async (req, res) => {
   try {
     const article = store.getArticle(req.params.id);
     if (!article) {
       return res.status(404).json({ error: 'Article not found' });
     }
-    if (!(await canAccessArticle(req.user, article))) {
-      return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+    if (req.user) {
+      if (!(await canAccessArticle(req.user, article))) {
+        return res.status(403).json({ error: 'Доступ к этой статье ограничен' });
+      }
+    } else {
+      const publicResolved = articleLayers.resolvePublicArticleLayers(article);
+      if (!publicResolved) {
+        return res.status(404).json({ error: 'Article not found' });
+      }
     }
     const sources = store.getBacklinks(req.params.id);
     const result = [];
     for (const source of sources) {
-      const resolved = await articleLayers.resolveArticleLayer(source, req.user);
+      const resolved = req.user
+        ? await articleLayers.resolveArticleLayer(source, req.user)
+        : articleLayers.resolvePublicArticleLayers(source);
       if (!resolved) continue;
       result.push({ slug: source.slug, title: resolved.layer.title || source.title || source.slug });
     }

@@ -75,7 +75,7 @@
     - Запросы отправлять на существующий API `/api/bookmarks` (`src/routes/bookmarks.routes.js`).
     - Стилизировать `.antropedia-bookmark-gutter` и `.antropedia-bookmark-tag` в `public/site/site.css`.
 
-- [ ] **Обратные ссылки (Backlinks) под статьёй**
+- [x] **Обратные ссылки (Backlinks) под статьёй**
   - **Что делать:** Выводить блок «На эту статью ссылаются...» со списком упоминающих статей.
   - **Где чинить:**
     - `public/site/site.js`: в конец рендера статьи (`detail.appendChild`) добавить блок `<div id="publicArticleBacklinks" class="backlinks-panel">`.
