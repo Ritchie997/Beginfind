@@ -181,7 +181,20 @@
   // Просмотр работы
   // ========================================================================
 
-  const BaseManager = window.AntropediaManager;
+  const FallbackBaseManager = class {
+    constructor() {}
+    initEngagement() {}
+    resetEngagementUI() {}
+    loadEngagement() {}
+    handleCommentsListClick() {}
+    closeAllStickerPickers() {}
+    wireComposer() { return null; }
+    initReportModal() {}
+    renderLikeSummary() {}
+    updateLikes() {}
+  };
+
+  const BaseManager = window.AntropediaManager || FallbackBaseManager;
 
   class GalleryViewer extends BaseManager {
     constructor() {

@@ -10,15 +10,25 @@
   }
 
   function publicGalleryPath(endpoint, method) {
-    if (method !== 'GET' || !/^\/api\/gallery\/(?:works(?:\/[^/?]+(?:\/(?:likes|reactions|comments))?)?|tags)(?:[/?]|$)/.test(endpoint)) {
-      return endpoint;
+    if (method === 'GET') {
+      if (/^\/api\/gallery\/(?:works(?:\/[^/?]+(?:\/(?:likes|reactions|comments))?)?|tags|folders)(?:[/?]|$)/.test(endpoint)) {
+        return endpoint.replace('/api/gallery/', '/api/public/gallery/');
+      }
+      if (/^\/api\/gallery\/by-article\/([^/?]+)(?:[/?]|$)/.test(endpoint)) {
+        const match = endpoint.match(/^\/api\/gallery\/by-article\/([^/?]+)/);
+        return match ? `/api/public/gallery/works?articleSlug=${match[1]}` : endpoint;
+      }
     }
-    return endpoint.replace('/api/gallery/', '/api/public/gallery/');
+    if (method === 'POST' && /^\/api\/gallery\/works\/[^/?]+\/view$/.test(endpoint)) {
+      return endpoint.replace('/api/gallery/', '/api/public/gallery/');
+    }
+    return endpoint;
   }
 
   async function request(endpoint, method, data, signal) {
     const accessToken = token();
-    const path = accessToken ? endpoint : publicGalleryPath(endpoint, method);
+    const publicPath = publicGalleryPath(endpoint, method);
+    const path = publicPath !== endpoint ? publicPath : endpoint;
     const isPublicRead = path.startsWith('/api/public/gallery/') || path === '/api/public/articles-index';
     if (!accessToken && !isPublicRead) {
       return { success: false, error: 'Для этого действия необходимо войти в аккаунт.' };
@@ -102,7 +112,7 @@
       return request('/api/gallery/works/move-to-folder', 'POST', { workIds, folderId });
     },
     getGalleryWorksForArticle(slug) {
-      return request(`/api/gallery/by-article/${encodeURIComponent(slug)}`, 'GET');
+      return request(`/api/public/gallery/works?articleSlug=${encodeURIComponent(slug)}`, 'GET');
     },
     async uploadGalleryImages(workId, pageId, files, signal) {
       const formData = new FormData();
@@ -249,6 +259,10 @@
       document.addEventListener('submit', onProtectedSubmit, true);
 
       const ready = manager.init();
+      const workParam = params.get('work');
+      if (workParam && window.galleryViewer && typeof window.galleryViewer.openWork === 'function') {
+        window.galleryViewer.openWork(workParam);
+      }
       const cleanup = function () {
         uploadButton?.removeEventListener('click', requireLogin, true);
         document.getElementById('galleryMineBtn')?.removeEventListener('click', requireLogin, true);

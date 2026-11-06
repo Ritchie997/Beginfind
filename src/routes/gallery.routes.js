@@ -297,13 +297,13 @@ async function fullWork(work, user) {
 
 // Папки и находящиеся в них работы публичны; остальные работы остаются
 // под обычными ограничениями доступа. Изменяющие действия защищены отдельно.
-async function loadPublicWork(req, res) {
+async function loadPublicWork(req, res, user = null) {
   const work = await gallery.getWorkRow(req.params.id);
   if (!work) {
     res.status(404).json({ error: 'Работа не найдена' });
     return null;
   }
-  const ctx = await gallery.getAccessContext(null, { publicFolderContents: !!work.folder_id });
+  const ctx = await gallery.getAccessContext(user, { publicFolderContents: !!work.folder_id });
   if (!gallery.canViewWork(work, ctx) || !(await gallery.getPagesForUser(work, ctx)).length) {
     res.status(404).json({ error: 'Работа не найдена' });
     return null;
@@ -311,18 +311,20 @@ async function loadPublicWork(req, res) {
   return work;
 }
 
-async function publicFullWork(work) {
-  const ctx = await gallery.getAccessContext(null, { publicFolderContents: !!work.folder_id });
+async function publicFullWork(work, user = null) {
+  const ctx = await gallery.getAccessContext(user, { publicFolderContents: !!work.folder_id });
   const [pages, associatedIds, counts, serverName] = await Promise.all([
     gallery.getPagesForUser(work, ctx),
     gallery.getAssociatedIds(work.id),
-    gallery.getCountsForWorks(null, [work.id]),
+    gallery.getCountsForWorks(user ? user.id : null, [work.id]),
     getServerName(work.server_id)
   ]);
   const associated = associatedIds.length
-    ? await cardsFor((await gallery.listWorks(null, { ids: associatedIds, limit: 100 })).items)
+    ? await cardsFor((await gallery.listWorks(user, { ids: associatedIds, limit: 100 })).items, {
+        userId: user ? user.id : null
+      })
     : [];
-  const count = counts.get(work.id);
+  const count = counts.get(work.id) || { likes: 0, liked: false, comments: 0, views: 0 };
   const usersMap = await getUsersByIds([work.author_id]);
   return {
     id: work.id,
@@ -332,7 +334,7 @@ async function publicFullWork(work) {
     scrollMode: work.scroll_mode,
     serverId: work.server_id,
     serverName,
-    restricted: false,
+    restricted: !!(work.roles && work.roles.length),
     author: authorInfo(work.author_id, usersMap),
     pages,
     associated,
@@ -403,33 +405,48 @@ router.get('/public/gallery/tags', async (req, res) => {
   }
 });
 
-router.get('/public/gallery/works/:id', async (req, res) => {
+router.get('/public/gallery/works/:id', optionalAuth, async (req, res) => {
   try {
-    const work = await loadPublicWork(req, res);
+    const work = await loadPublicWork(req, res, req.user);
     if (!work) return;
-    res.json(await publicFullWork(work));
+    res.json(await publicFullWork(work, req.user));
   } catch (err) {
     console.error('[gallery] public get:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/public/gallery/works/:id/likes', async (req, res) => {
+router.post('/public/gallery/works/:id/view', optionalAuth, async (req, res) => {
   try {
-    const work = await loadPublicWork(req, res);
+    const work = await gallery.getWorkRow(req.params.id);
+    if (!work) return res.status(404).json({ error: 'Работа не найдена' });
+    if (req.user && req.user.id) {
+      await gallery.recordView(req.user.id, work.id);
+    }
+    const viewsCount = await gallery.getViewCount(work.id);
+    res.json({ success: true, viewsCount });
+  } catch (err) {
+    console.error('[gallery] public record view:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/public/gallery/works/:id/likes', optionalAuth, async (req, res) => {
+  try {
+    const work = await loadPublicWork(req, res, req.user);
     if (!work) return;
-    res.json(await gallery.getLikeSummary(work.id, null));
+    res.json(await gallery.getLikeSummary(work.id, req.user ? req.user.id : null));
   } catch (err) {
     console.error('[gallery] public likes:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/public/gallery/works/:id/reactions', async (req, res) => {
+router.get('/public/gallery/works/:id/reactions', optionalAuth, async (req, res) => {
   try {
-    const work = await loadPublicWork(req, res);
+    const work = await loadPublicWork(req, res, req.user);
     if (!work) return;
-    const map = await social.getReactionsForTargets('gallery', [work.id], null);
+    const map = await social.getReactionsForTargets('gallery', [work.id], req.user ? req.user.id : null);
     res.json({ reactions: await resolveReactions(map.get(String(work.id)) || []) });
   } catch (err) {
     console.error('[gallery] public reactions:', err);
@@ -437,12 +454,12 @@ router.get('/public/gallery/works/:id/reactions', async (req, res) => {
   }
 });
 
-router.get('/public/gallery/works/:id/comments', async (req, res) => {
+router.get('/public/gallery/works/:id/comments', optionalAuth, async (req, res) => {
   try {
-    const work = await loadPublicWork(req, res);
+    const work = await loadPublicWork(req, res, req.user);
     if (!work) return;
     const withStickers = await stickers.attachStickersToItems(await gallery.listComments(work.id));
-    const comments = await attachCommentExtras(withStickers, null);
+    const comments = await attachCommentExtras(withStickers, req.user ? req.user.id : null);
     res.json(comments.map((comment) => ({
       id: comment.id,
       authorId: comment.userId,

@@ -4404,14 +4404,25 @@
           };
           document.body.appendChild(script);
         }
+        function loadAntropedia() {
+          if (window.AntropediaManager) {
+            loadGallery();
+            return;
+          }
+          var script = document.createElement('script');
+          script.src = '/antropedia.js';
+          script.onload = loadGallery;
+          script.onerror = loadGallery;
+          document.body.appendChild(script);
+        }
         if (!window.apiClient) {
           var clientScript = document.createElement('script');
           clientScript.src = '/site/gallery-client.js';
-          clientScript.onload = loadGallery;
-          clientScript.onerror = loadGallery;
+          clientScript.onload = loadAntropedia;
+          clientScript.onerror = loadAntropedia;
           document.body.appendChild(clientScript);
         } else {
-          loadGallery();
+          loadAntropedia();
         }
       });
     }
@@ -5400,7 +5411,7 @@
   function createHomeGalleryCard(work) {
     var card = document.createElement('a');
     card.className = 'pin-card home-gallery-card gallery-card';
-    card.href = '/site/gallery.html?sort=newest';
+    card.href = '/site/gallery.html?work=' + encodeURIComponent(work.id);
     card.setAttribute('aria-label', (work.title || 'Работа галереи') + ' — открыть галерею');
     card.style.setProperty('--pin-h', String(180 + (Number(work.id) % 3) * 35) + 'px');
 

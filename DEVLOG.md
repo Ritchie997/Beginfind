@@ -16,8 +16,13 @@
     - В конец рендера статьи перед блоком обратных ссылок добавлен блок `#publicArticleGallery.antropedia-view-gallery`.
     - Выполняется запрос `GET /api/public/gallery/works?articleSlug=` с защитой от race condition при переключении статей.
     - Карточки артов отображаются в горизонтально скроллируемой полосе `.gallery-strip` с соотношением 1:1, бейджами (мультистраничность, вариации, GIF) и названиями.
-    - По клику (и по Enter/Space) открывается модальный полноэкранный просмотрщик `window.galleryViewer.openWork(work.id)` с ленивой догрузкой `gallery-client.js` и `gallery.js` при необходимости.
-    - Подключены стили и клиент галереи в `public/site/antropedia.html` и `public/site/profile.html`.
+    - По клику (и по Enter/Space) открывается модальный полноэкранный просмотрщик `window.galleryViewer.openWork(work.id)` с ленивой догрузкой зависимостей при необходимости.
+    - Устранена ошибка открытия выбранного изображения (`galleryViewer`):
+      - В `public/gallery.js` добавлен `FallbackBaseManager` для безопасного наследования `GalleryViewer`, если `AntropediaManager` ещё не загружен.
+      - В `public/site/antropedia.html` и `public/site/profile.html` подключён `/antropedia.js` перед `/gallery.js`.
+      - В `public/site/site.js` в цепочку динамической загрузки `ensureGalleryViewerLoaded` добавлена последовательная подгрузка `/antropedia.js` перед `/gallery.js`.
+      - В `public/site/gallery-client.js` обеспечена прямая маршрутизация публичных запросов (`/api/public/gallery/works/:id`, `/view`, `/likes`, `/reactions`, `/comments`, `/by-article`) и сохранение Bearer-токена без блокировки 403 от `checkApproved` для читателей сайта; добавлена автоматическая обработка query-параметра `?work=` в `SiteGallery.init()`.
+      - В `src/routes/gallery.routes.js` в `GET /public/gallery/works/:id` и сопутствующие публичные эндпоинты добавлен `optionalAuth`, передача `req.user` в `loadPublicWork` и `publicFullWork`, а также добавлен маршрут `POST /public/gallery/works/:id/view`.
 
 ## 2026-11-06 — мультизакладки на абзац (до 3 штук) с каскадной стопкой и раскрытием по hover
 
