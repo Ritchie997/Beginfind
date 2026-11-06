@@ -1599,21 +1599,34 @@ body[data-page="antropedia"] .site-main {
 }
 
 .antropedia-detail-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 28px;
     width: 100%;
     position: relative;
+    box-sizing: border-box;
+}
+
+.antropedia-view-sidebar[hidden] {
+    display: none !important;
 }
 
 .public-article-detail {
+    flex: 1 1 0;
+    min-width: 0;
     max-width: 960px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
 }
 
 @media (min-width: 1025px) {
     .antropedia-view-sidebar {
-        position: fixed;
-        right: clamp(16px, 2.5vw, 36px);
-        top: 84px;
+        flex: 0 0 250px;
         width: 250px;
+        position: sticky;
+        top: 84px;
+        align-self: flex-start;
         max-height: calc(100vh - 104px);
         overflow-y: auto;
         background: rgba(32, 34, 37, 0.92);
@@ -9805,8 +9818,11 @@ a.site-profile-media-row:hover {
 
 /* Detail View */
 .antropedia-detail-view {
+    flex: 1 1 0;
+    min-width: 0;
     max-width: 960px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
     padding: clamp(24px, 4vw, 44px);
     border-radius: var(--site-radius-lg, 20px);
     background: rgba(32, 34, 37, 0.88);
@@ -9816,21 +9832,11 @@ a.site-profile-media-row:hover {
     box-sizing: border-box;
 }
 
-@media (min-width: 1520px) {
-    .antropedia-detail-view {
-        margin: 0 auto;
-    }
-}
-
-@media (min-width: 1025px) and (max-width: 1519px) {
-    .antropedia-detail-view {
-        max-width: min(960px, calc(100vw - 330px));
-        margin-left: max(20px, calc((100vw - 290px - 960px) / 2));
-        margin-right: auto;
-    }
-}
-
 @media (max-width: 1024px) {
+    .antropedia-detail-container {
+        display: block;
+    }
+
     .antropedia-detail-view {
         max-width: 100%;
         margin: 0 auto;
