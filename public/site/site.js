@@ -2298,17 +2298,23 @@
       if (!blockEl) return;
 
       var color = bookmark.color || '#5865f2';
-      blockEl.classList.add('antropedia-bm-block-hover');
-      blockEl.style.setProperty('--bm-hover-color', color);
+      var hoverColor = (color && color.length === 7 && color.charAt(0) === '#') ? (color + '55') : color;
 
-      if (bookmark.quote && typeof Highlight !== 'undefined' && CSS.highlights) {
+      if (typeof Highlight !== 'undefined' && CSS.highlights) {
         try {
-          var range = findQuoteRange(blockEl, bookmark.quote);
-          if (!range) range = findQuoteRange(contentEl, bookmark.quote);
+          var range = null;
+          if (bookmark.quote) {
+            range = findQuoteRange(blockEl, bookmark.quote);
+            if (!range) range = findQuoteRange(contentEl, bookmark.quote);
+          }
+          if (!range) {
+            range = document.createRange();
+            range.selectNodeContents(blockEl);
+          }
           if (range) {
             var h = new Highlight(range);
             CSS.highlights.set('antropedia-bm-hover', h);
-            document.documentElement.style.setProperty('--bm-hover-color', color);
+            document.documentElement.style.setProperty('--bm-hover-color', hoverColor);
           }
         } catch (_) {}
       }
@@ -2317,13 +2323,6 @@
     function clearBookmarkHighlight() {
       if (typeof Highlight !== 'undefined' && CSS.highlights) {
         try { CSS.highlights.delete('antropedia-bm-hover'); } catch (_) {}
-      }
-      var contentEl = currentContentEl || (detail && detail.querySelector('.public-article-content'));
-      if (contentEl) {
-        contentEl.querySelectorAll('.antropedia-bm-block-hover').forEach(function (el) {
-          el.classList.remove('antropedia-bm-block-hover');
-          el.style.removeProperty('--bm-hover-color');
-        });
       }
     }
 
@@ -2367,9 +2366,9 @@
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
       tab.setAttribute('data-id', bookmark.id);
-      tab.title = bookmark.name;
+      tab.setAttribute('aria-label', bookmark.name);
       tab.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i>' +
-        '<span class="antropedia-bm-tab-title">' + escapeHtml(bookmark.name) + '</span>';
+        '<span class="antropedia-bm-tooltip">' + escapeHtml(bookmark.name) + '</span>';
 
       tab.addEventListener('mouseenter', function () {
         setBookmarkHighlight(bookmark);
@@ -2464,7 +2463,7 @@
         bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         bookmarkGhostEl.style.removeProperty('--bm-color');
         bookmarkGhostEl.title = 'Добавить закладку';
-        bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">Добавить</span>';
+        bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i>';
         var layoutRect = gutterEl.parentElement.getBoundingClientRect();
         bookmarkGhostEl.style.top = Math.round(blockRect.top - layoutRect.top) + 'px';
         bookmarkGhostEl.style.zIndex = 5;

@@ -10249,25 +10249,20 @@ a.site-profile-media-row:hover {
 }
 
 /* Подсветка текста и абзаца при наведении на закладку */
+/* Подсветка ТОЛЬКО текста при наведении на закладку (без подсветки блока) */
 ::highlight(antropedia-bm-hover) {
     background-color: var(--bm-hover-color, rgba(88, 101, 242, 0.35));
     color: inherit;
 }
 
-[data-block-id].antropedia-bm-block-hover {
-    background: color-mix(in srgb, var(--bm-hover-color, #5865f2) 10%, transparent) !important;
-    border-left: 3px solid var(--bm-hover-color, #5865f2) !important;
-    border-radius: 4px;
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-/* Контейнер горизонтальной группы закладок на одном абзаце */
+/* Контейнер горизонтальной группы закладок на одном абзаце (Вариант А) */
 .antropedia-bm-group {
     position: absolute;
     right: -16px;
     display: inline-flex;
     flex-direction: row-reverse;
     align-items: center;
+    gap: 4px;
     pointer-events: auto;
     z-index: 10;
 }
@@ -10277,131 +10272,148 @@ a.site-profile-media-row:hover {
     z-index: 60;
 }
 
-/* Все закладки по умолчанию компактные и короткие */
+/* Все кнопки закладок фиксированного размера — никогда не меняют ширину и не сдвигаются */
 .antropedia-bm-tab {
     position: relative;
     right: 0;
     top: 0;
-    width: 34px;
-    max-width: 34px;
+    width: 28px;
     height: 28px;
-    padding: 0 12px 0 8px;
+    min-width: 28px;
+    max-width: 28px;
+    padding: 0;
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
+    justify-content: center;
     background: var(--bm-color, var(--blurple, #5865f2));
     color: #fff;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     border: none;
-    border-radius: 4px 0 0 4px;
+    border-radius: 6px;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
-    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
-    transition: max-width 0.22s cubic-bezier(0.2, 0, 0, 1),
-                width 0.22s cubic-bezier(0.2, 0, 0, 1),
-                margin 0.22s cubic-bezier(0.2, 0, 0, 1),
-                transform 0.18s ease,
-                box-shadow 0.18s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
     flex-shrink: 0;
     z-index: 10;
 }
 
-.antropedia-bm-tab-icon {
-    font-size: 11px;
-    flex-shrink: 0;
+/* Крайняя правая кнопка (прилегающая к карточке статьи) имеет скошенный хвостик */
+.antropedia-bm-group > .antropedia-bm-tab:first-child {
+    border-radius: 6px 0 0 6px;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    padding-right: 4px;
 }
 
-.antropedia-bm-tab-title {
-    opacity: 0;
-    max-width: 0;
-    margin-left: 0;
-    transform: translateX(8px);
-    transition: opacity 0.18s ease, max-width 0.22s ease, transform 0.18s ease, margin-left 0.18s ease;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* При наведении кнопка мягко приподнимается, оставаясь ровно под курсором */
+.antropedia-bm-tab:hover,
+.antropedia-bm-tab:focus-visible {
+    transform: translateY(-2px) scale(1.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    z-index: 50 !important;
+}
+
+.antropedia-bm-tab-icon {
+    font-size: 11px;
     pointer-events: none;
 }
 
-/* В покое горизонтальная стопка: вкладки накладываются друг на друга со сдвигом */
-.antropedia-bm-group.is-stacked:not(:hover) .antropedia-bm-tab:not(:first-child) {
-    margin-right: -22px;
-    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.35);
+/* Всплывающий тултип с названием закладки слева от кнопки — оверлей не сдвигает разметку */
+.antropedia-bm-tooltip {
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(6px);
+    background: var(--background-floating, #18191c);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.15));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 100;
 }
 
-/* При наведении на группу: ВЕЕР распахивается в аккуратный горизонтальный ряд */
-.antropedia-bm-group.is-stacked:hover .antropedia-bm-tab:not(:first-child),
-.antropedia-bm-group.is-stacked:focus-within .antropedia-bm-tab:not(:first-child) {
-    margin-right: 5px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
+.antropedia-bm-tooltip::after {
+    content: '';
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 5px 0 5px 5px;
+    border-style: solid;
+    border-color: transparent transparent transparent var(--background-floating, #18191c);
 }
 
-/* Выдвижение конкретной закладки при наведении — расширяется и показывает полное имя */
-.antropedia-bm-tab:hover,
-.antropedia-bm-tab:focus-visible {
-    width: auto;
-    max-width: 220px;
-    padding-right: 16px;
-    transform: translateX(-4px);
-    z-index: 70 !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-}
-
-.antropedia-bm-tab:hover .antropedia-bm-tab-title,
-.antropedia-bm-tab:focus-visible .antropedia-bm-tab-title {
+.antropedia-bm-tab:hover .antropedia-bm-tooltip {
     opacity: 1;
-    max-width: 170px;
-    margin-left: 2px;
-    transform: translateX(0);
+    transform: translateY(-50%) translateX(0);
 }
 
-/* Кнопка добавления новой закладки в распахивающемся веере */
+/* Кнопка добавления следующей закладки [ + ] в ряду */
 .antropedia-bm-group .is-add-btn {
-    width: 26px;
-    max-width: 26px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    max-width: 24px;
     padding: 0;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
     background: var(--background-secondary, #2f3136);
     color: var(--text-muted, #72767d);
     border: 1px dashed var(--background-accent, rgba(255, 255, 255, 0.2));
-    opacity: 0;
-    pointer-events: none;
+    border-radius: 6px;
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.45;
     clip-path: none;
-    border-radius: 4px;
-    margin-right: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    flex-shrink: 0;
 }
 
 .antropedia-bm-group:hover .is-add-btn {
     opacity: 0.85;
-    pointer-events: auto;
-    margin-right: 5px;
 }
 
 .antropedia-bm-group .is-add-btn:hover {
     opacity: 1;
     color: var(--blurple, #5865f2);
     border-color: var(--blurple, #5865f2);
+    transform: translateY(-1px);
 }
 
 /* Отдельный призрак на пустом абзаце (без закладок) */
 .antropedia-bm-tab.is-ghost {
     position: absolute;
     right: -16px;
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    height: 28px;
+    padding-right: 4px;
     background: var(--background-secondary, #2f3136);
     color: var(--text-muted, #72767d);
     border: 1px dashed var(--background-accent, rgba(255, 255, 255, 0.15));
+    border-radius: 6px 0 0 6px;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%);
     box-shadow: none;
 }
 
 .antropedia-bm-tab.is-ghost:hover {
     color: var(--blurple, #5865f2);
     border-color: var(--blurple, #5865f2);
+    transform: translateY(-2px);
 }
 
 .antropedia-bm-hover-zone {

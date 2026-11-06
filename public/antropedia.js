@@ -4304,8 +4304,8 @@ initEngagement() {
       tab.style.setProperty('--bm-color', bookmark.color);
       tab.setAttribute('data-block-id', blockId);
       tab.setAttribute('data-id', bookmark.id);
-      tab.title = bookmark.name;
-      tab.innerHTML = `<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">${escapeHtml(bookmark.name)}</span>`;
+      tab.setAttribute('aria-label', bookmark.name);
+      tab.innerHTML = `<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tooltip">${escapeHtml(bookmark.name)}</span>`;
 
       tab.addEventListener('mouseenter', () => this.setBookmarkHighlight(bookmark));
       tab.addEventListener('mouseleave', () => this.clearBookmarkHighlight());
@@ -4337,7 +4337,7 @@ initEngagement() {
         this.bookmarkGhostEl.className = 'antropedia-bm-tab is-ghost';
         this.bookmarkGhostEl.style.removeProperty('--bm-color');
         this.bookmarkGhostEl.title = 'Добавить закладку';
-        this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i><span class="antropedia-bm-tab-title">Добавить</span>';
+        this.bookmarkGhostEl.innerHTML = '<i class="fas fa-bookmark antropedia-bm-tab-icon" aria-hidden="true"></i>';
         const layoutRect = this.bookmarkGutterEl.parentElement.getBoundingClientRect();
         this.bookmarkGhostEl.style.top = `${Math.round(blockRect.top - layoutRect.top)}px`;
         this.bookmarkGhostEl.style.zIndex = 5;
@@ -4570,17 +4570,23 @@ initEngagement() {
       if (!blockEl) return;
 
       const color = bookmark.color || '#5865f2';
-      blockEl.classList.add('antropedia-bm-block-hover');
-      blockEl.style.setProperty('--bm-hover-color', color);
+      const hoverColor = (color && color.length === 7 && color.charAt(0) === '#') ? (color + '55') : color;
 
-      if (bookmark.quote && typeof Highlight !== 'undefined' && CSS.highlights) {
+      if (typeof Highlight !== 'undefined' && CSS.highlights) {
         try {
-          let range = this.findQuoteRange(blockEl, bookmark.quote);
-          if (!range) range = this.findQuoteRange(this.contentEl, bookmark.quote);
+          let range = null;
+          if (bookmark.quote) {
+            range = this.findQuoteRange(blockEl, bookmark.quote);
+            if (!range) range = this.findQuoteRange(this.contentEl, bookmark.quote);
+          }
+          if (!range) {
+            range = document.createRange();
+            range.selectNodeContents(blockEl);
+          }
           if (range) {
             const h = new Highlight(range);
             CSS.highlights.set('antropedia-bm-hover', h);
-            document.documentElement.style.setProperty('--bm-hover-color', color);
+            document.documentElement.style.setProperty('--bm-hover-color', hoverColor);
           }
         } catch (_) {}
       }
@@ -4589,12 +4595,6 @@ initEngagement() {
     clearBookmarkHighlight() {
       if (typeof Highlight !== 'undefined' && CSS.highlights) {
         try { CSS.highlights.delete('antropedia-bm-hover'); } catch (_) {}
-      }
-      if (this.contentEl) {
-        this.contentEl.querySelectorAll('.antropedia-bm-block-hover').forEach((el) => {
-          el.classList.remove('antropedia-bm-block-hover');
-          el.style.removeProperty('--bm-hover-color');
-        });
       }
     }
 
