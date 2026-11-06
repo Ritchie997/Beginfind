@@ -4220,9 +4220,21 @@
           return;
         }
         var galleryFig = event.target.closest('[data-gallery-work]');
-        if (galleryFig && window.galleryViewer && !event.target.closest('a:not([data-gallery-open])')) {
+        if (galleryFig && !event.target.closest('a:not([data-gallery-open])')) {
           event.preventDefault();
-          window.galleryViewer.openWork(galleryFig.dataset.galleryWork, { imageId: galleryFig.dataset.galleryImage || null });
+          var gwWorkId = galleryFig.dataset.galleryWork;
+          var gwImgId = galleryFig.dataset.galleryImage || null;
+          if (window.galleryViewer && typeof window.galleryViewer.openWork === 'function') {
+            window.galleryViewer.openWork(gwWorkId, { imageId: gwImgId });
+          } else {
+            ensureGalleryViewerLoaded().then(function (viewer) {
+              if (viewer && typeof viewer.openWork === 'function') {
+                viewer.openWork(gwWorkId, { imageId: gwImgId });
+              } else {
+                window.location.href = '/site/gallery.html?work=' + encodeURIComponent(gwWorkId);
+              }
+            });
+          }
           return;
         }
         var imgEl = event.target.closest('.blk-image:not(.blk-image-gallery-locked) img, .blk-infobox-art img');
@@ -4272,6 +4284,12 @@
       }
 
       renderContentBlocks(article.content);
+
+      var galleryPanel = makeEl('div', 'antropedia-view-gallery');
+      galleryPanel.id = 'publicArticleGallery';
+      galleryPanel.hidden = true;
+      detail.appendChild(galleryPanel);
+      initArticleGallery(article, galleryPanel);
 
       var backlinksPanel = makeEl('div', 'backlinks-panel');
       backlinksPanel.id = 'publicArticleBacklinks';
@@ -4355,6 +4373,145 @@
         panel.appendChild(list);
       } catch (err) {
         console.warn('Не удалось загрузить обратные ссылки:', err);
+        panel.hidden = true;
+      }
+    }
+
+    // ---------- Полоса связанных артов галереи под статьёй ----------
+
+    function ensureGalleryViewerLoaded() {
+      if (window.galleryViewer && typeof window.galleryViewer.openWork === 'function') {
+        return Promise.resolve(window.galleryViewer);
+      }
+      return new Promise(function (resolve) {
+        if (!document.querySelector('link[href*="gallery.css"]')) {
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = '/gallery.css';
+          document.head.appendChild(link);
+        }
+        function loadGallery() {
+          if (window.galleryViewer && typeof window.galleryViewer.openWork === 'function') {
+            return resolve(window.galleryViewer);
+          }
+          var script = document.createElement('script');
+          script.src = '/gallery.js';
+          script.onload = function () {
+            resolve(window.galleryViewer || null);
+          };
+          script.onerror = function () {
+            resolve(null);
+          };
+          document.body.appendChild(script);
+        }
+        if (!window.apiClient) {
+          var clientScript = document.createElement('script');
+          clientScript.src = '/site/gallery-client.js';
+          clientScript.onload = loadGallery;
+          clientScript.onerror = loadGallery;
+          document.body.appendChild(clientScript);
+        } else {
+          loadGallery();
+        }
+      });
+    }
+
+    function renderGalleryCardHtml(work) {
+      if (typeof window.galleryCardHtml === 'function') {
+        return window.galleryCardHtml(work, { compact: true });
+      }
+      var cover = work.cover;
+      var ratio = cover && cover.width && cover.height ? (cover.width + ' / ' + cover.height) : '1 / 1';
+      var badges = [];
+      if (work.restricted) badges.push('<span class="gallery-badge" title="Видна не всем — доступ по ролям"><i class="fas fa-lock"></i></span>');
+      if (cover && (cover.animated || (cover.url && /\.gif$/i.test(cover.url)))) badges.push('<span class="gallery-badge">GIF</span>');
+      if (work.pagesCount > 1) badges.push('<span class="gallery-badge" title="Страниц"><i class="far fa-images"></i> ' + work.pagesCount + '</span>');
+      if (work.hasVariations) badges.push('<span class="gallery-badge" title="У страниц есть вариации"><i class="fas fa-layer-group"></i></span>');
+      var badgesHtml = badges.length ? '<div class="gallery-card-badges">' + badges.join('') + '</div>' : '';
+      var media = cover
+        ? '<img src="' + escapeHtml(cover.thumb || cover.url) + '" alt="' + escapeHtml(work.title) + '" loading="lazy" decoding="async">'
+        : '<div class="gallery-card-empty"><i class="far fa-image"></i><span>Нет страниц</span></div>';
+      return '<article class="gallery-card gallery-card-compact" data-work-id="' + escapeHtml(work.id) + '" tabindex="0" title="' + escapeHtml(work.title) + '">' +
+        '<div class="gallery-card-media" style="aspect-ratio:' + ratio + '">' +
+          media +
+          badgesHtml +
+        '</div>' +
+        '<div class="gallery-card-caption">' +
+          '<div class="gallery-card-title">' + escapeHtml(work.title) + '</div>' +
+        '</div>' +
+      '</article>';
+    }
+
+    async function initArticleGallery(article, panel) {
+      if (!panel || !article || !article.slug) return;
+      panel.hidden = true;
+      panel.replaceChildren();
+
+      var slug = article.slug;
+      try {
+        var token = getAuthToken();
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        var res = await fetch('/api/public/gallery/works?articleSlug=' + encodeURIComponent(slug), {
+          credentials: 'omit',
+          headers: headers
+        });
+        if (currentArticleSlug !== slug) return;
+        if (!res.ok) {
+          panel.hidden = true;
+          return;
+        }
+        var payload = await res.json();
+        if (currentArticleSlug !== slug) return;
+        var list = Array.isArray(payload) ? payload : (Array.isArray(payload.data) ? payload.data : []);
+        var works = list.filter(function (w) { return w && w.id && (w.cover || w.pagesCount); });
+        if (!works.length) {
+          panel.hidden = true;
+          return;
+        }
+
+        panel.hidden = false;
+        var header = makeEl('h3', 'antropedia-gallery-title');
+        var icon = document.createElement('i');
+        icon.className = 'fas fa-images';
+        icon.setAttribute('aria-hidden', 'true');
+        header.append(icon, document.createTextNode(' Из галереи'));
+        panel.appendChild(header);
+
+        var strip = makeEl('div', 'gallery-strip');
+        strip.innerHTML = works.map(function (w) {
+          return renderGalleryCardHtml(w);
+        }).join('');
+        panel.appendChild(strip);
+
+        if (!panel._galleryBound) {
+          panel._galleryBound = true;
+          panel.addEventListener('click', async function (e) {
+            var card = e.target.closest('[data-work-id]');
+            if (!card) return;
+            var workId = card.dataset.workId;
+            if (!workId) return;
+            if (window.galleryViewer && typeof window.galleryViewer.openWork === 'function') {
+              window.galleryViewer.openWork(workId);
+            } else {
+              var viewer = await ensureGalleryViewerLoaded();
+              if (viewer && typeof viewer.openWork === 'function') {
+                viewer.openWork(workId);
+              } else {
+                window.location.href = '/site/gallery.html?work=' + encodeURIComponent(workId);
+              }
+            }
+          });
+          panel.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var card = e.target.closest('[data-work-id]');
+            if (!card) return;
+            e.preventDefault();
+            card.click();
+          });
+        }
+      } catch (err) {
+        console.warn('Не удалось загрузить связанные арты галереи:', err);
         panel.hidden = true;
       }
     }

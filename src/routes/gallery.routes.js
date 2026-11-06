@@ -27,6 +27,26 @@ const router = express.Router();
 // Своё соединение с users.db — как в articles.routes.js (общего usersDb нет).
 const usersDb = new sqlite3.Database(dbPath('users.db'));
 
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return next();
+  let continued = false;
+  const publicFallback = {
+    status() { return this; },
+    json() {
+      if (continued) return;
+      continued = true;
+      delete req.user;
+      next();
+    }
+  };
+  return auth.authenticateToken(req, publicFallback, () => auth.checkApproved(req, publicFallback, () => {
+    if (continued) return;
+    continued = true;
+    next();
+  }));
+}
+
 function getUsersByIds(ids) {
   const uniqueIds = [...new Set((ids || []).filter((id) => id != null))];
   if (!uniqueIds.length) return Promise.resolve(new Map());
@@ -339,8 +359,21 @@ router.get('/public/gallery/folders', async (req, res) => {
   }
 });
 
-router.get('/public/gallery/works', async (req, res) => {
+router.get('/public/gallery/works', optionalAuth, async (req, res) => {
   try {
+    const articleSlug = typeof req.query.articleSlug === 'string' ? req.query.articleSlug.trim() : null;
+    if (articleSlug) {
+      const article = articlesStore.getArticle(articleSlug);
+      const hasAccess = req.user
+        ? await articleLayers.hasArticleAccess(article, req.user)
+        : !!(article && articleLayers.resolvePublicArticleLayers(article));
+      if (!article || !hasAccess) {
+        return res.json({ data: [], total: 0 });
+      }
+      const items = await gallery.listWorksForArticle(req.user || null, article.slug || articleSlug);
+      const cards = await cardsFor(items, { userId: req.user ? req.user.id : undefined });
+      return res.json({ data: cards, total: cards.length });
+    }
     const folder = req.query.folder ? await gallery.getFolderById(req.query.folder) : null;
     if (req.query.folder && !folder) return res.status(404).json({ error: 'Папка не найдена' });
     const { items, total } = await gallery.listWorks(null, {

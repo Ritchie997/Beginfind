@@ -1897,6 +1897,67 @@ body[data-page="antropedia"] .site-main {
 }
 
 /* ============================================================
+   Полоса связанных артов галереи под статьёй
+   ============================================================ */
+
+.antropedia-view-gallery {
+    margin-top: 32px;
+    margin-bottom: 24px;
+    padding: 18px 20px;
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--site-radius-md, 12px);
+    box-sizing: border-box;
+}
+
+.antropedia-view-gallery[hidden] {
+    display: none !important;
+}
+
+.antropedia-view-gallery h3,
+.antropedia-gallery-title {
+    margin: 0 0 14px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--header-primary, #f2f3f5);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.01em;
+}
+
+.antropedia-gallery-title i {
+    color: var(--accent-magenta, #f47fff);
+    font-size: 14px;
+}
+
+.antropedia-view-gallery .gallery-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 160px;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+}
+
+.antropedia-view-gallery .gallery-strip .gallery-card-media {
+    aspect-ratio: 1 / 1 !important;
+}
+
+@media (max-width: 768px) {
+    .antropedia-view-gallery {
+        margin-top: 24px;
+        margin-bottom: 18px;
+        padding: 14px 16px;
+    }
+    .antropedia-view-gallery .gallery-strip {
+        grid-auto-columns: 130px;
+        gap: 10px;
+    }
+}
+
+/* ============================================================
    Обратные ссылки (Backlinks) под статьёй
    ============================================================ */
 

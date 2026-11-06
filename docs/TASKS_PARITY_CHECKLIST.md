@@ -81,7 +81,7 @@
     - `public/site/site.js`: в конец рендера статьи (`detail.appendChild`) добавить блок `<div id="publicArticleBacklinks" class="backlinks-panel">`.
     - Выполнять запрос `GET /api/articles/:slug/backlinks` (эндпоинт в `src/routes/articles.routes.js`) и рендерить карточки-ссылки.
 
-- [ ] **Полоса связанных артов галереи под статьёй**
+- [x] **Полоса связанных артов галереи под статьёй**
   - **Что делать:** Показывать прикреплённые к статье арты и концепты внизу страницы.
   - **Где чинить:**
     - `public/site/site.js`: вызывать `GET /api/public/gallery/works?articleSlug=` + `encodeURIComponent(article.slug)` (из `src/routes/gallery.routes.js`).

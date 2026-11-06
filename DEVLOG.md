@@ -5,6 +5,20 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-06 — полоса связанных артов галереи под статьёй в Antropedia
+
+- Antropedia и Галерея — полоса связанных артов под статьёй (`src/routes/gallery.routes.js`, `public/site/site.js`, `public/site/site.css`, `public/site/antropedia.html`, `public/site/profile.html`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Серверная поддержка параметра `articleSlug` в `GET /api/public/gallery/works`:**
+    - В маршрут `GET /api/public/gallery/works` (`src/routes/gallery.routes.js`) добавлен middleware `optionalAuth` и обработка запроса с фильтром `articleSlug`.
+    - Для гостей проверяется публичная доступность статьи (`articleLayers.resolvePublicArticleLayers`), для авторизованных пользователей — ролевой доступ (`articleLayers.hasArticleAccess`).
+    - Возвращаются карточки работ галереи, привязанных к статье (`gallery.listWorksForArticle`), с обложками, страницами, вариациями и счётчиками лайков/реакций.
+  - **Отрисовка полосы артов и интеграция с просмотрщиком (`public/site/site.js`, `public/site/site.css`):**
+    - В конец рендера статьи перед блоком обратных ссылок добавлен блок `#publicArticleGallery.antropedia-view-gallery`.
+    - Выполняется запрос `GET /api/public/gallery/works?articleSlug=` с защитой от race condition при переключении статей.
+    - Карточки артов отображаются в горизонтально скроллируемой полосе `.gallery-strip` с соотношением 1:1, бейджами (мультистраничность, вариации, GIF) и названиями.
+    - По клику (и по Enter/Space) открывается модальный полноэкранный просмотрщик `window.galleryViewer.openWork(work.id)` с ленивой догрузкой `gallery-client.js` и `gallery.js` при необходимости.
+    - Подключены стили и клиент галереи в `public/site/antropedia.html` и `public/site/profile.html`.
+
 ## 2026-11-06 — мультизакладки на абзац (до 3 штук) с каскадной стопкой и раскрытием по hover
 
 - Antropedia — система закладок на абзацах статьи (`src/services/bookmarks-store.js`, `public/site/site.js`, `public/site/site.css`, `public/antropedia.js`, `public/antropedia.css`):
