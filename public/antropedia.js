@@ -524,6 +524,7 @@ function reactionsBarInnerHtml(reactions) {
       this.setupInfiniteScroll();
       this.initSidebarTabs();
       this.initInlineSearch();
+      this.initLayerDropdown();
       this.initBookmarkGutter();
       this.initEngagement();
 
@@ -1422,15 +1423,36 @@ function reactionsBarInnerHtml(reactions) {
       const el = document.getElementById('antropediaViewLayerSwitcher');
       if (!el) return;
       const options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
-      if (options.length < 2) { el.hidden = true; el.innerHTML = ''; return; }
+      if (options.length < 2) {
+        el.hidden = true;
+        el.classList.remove('is-open');
+        const menu = document.getElementById('antropediaViewLayerMenu');
+        if (menu) menu.hidden = true;
+        const btn = document.getElementById('antropediaViewLayerBtn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        return;
+      }
 
       el.hidden = false;
-      el.innerHTML = `<i class="fas fa-layer-group" title="Слои статьи"></i>` + options.map((opt) => (
-        `<button type="button" class="antropedia-layer-btn${opt.index === article.layerIndex ? ' active' : ''}" data-layer-index="${opt.index}">${escapeHtml(opt.title)}</button>`
-      )).join('');
+      const currentOpt = options.find((opt) => opt.index === article.layerIndex) || options[0];
+      const label = document.getElementById('antropediaViewLayerLabel');
+      if (label) {
+        label.textContent = currentOpt ? currentOpt.title : 'Слой статьи';
+      }
+
+      const menu = document.getElementById('antropediaViewLayerMenu');
+      if (menu) {
+        menu.innerHTML = options.map((opt) => {
+          const isActive = opt.index === article.layerIndex;
+          return `<button type="button" class="antropedia-layer-dropdown-item${isActive ? ' active' : ''}" data-layer-index="${opt.index}">` +
+            `<span class="antropedia-layer-dropdown-item-title">${escapeHtml(opt.title)}</span>` +
+            `<i class="fas fa-check" aria-hidden="true"></i>` +
+            `</button>`;
+        }).join('');
+      }
     }
 
-    async switchArticleLayer(index) {
+        async switchArticleLayer(index) {
       if (!this.currentSlug) return;
       try {
         const result = await window.apiClient.getArticle(this.currentSlug, { layer: index });
@@ -3165,6 +3187,47 @@ initEngagement() {
         }
       };
       document.addEventListener('click', this._articleSearchOutsideHandler);
+    }
+
+    initLayerDropdown() {
+      const switcher = document.getElementById('antropediaViewLayerSwitcher');
+      const btn = document.getElementById('antropediaViewLayerBtn');
+      const menu = document.getElementById('antropediaViewLayerMenu');
+
+      btn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!switcher || !menu) return;
+        const isOpen = switcher.classList.toggle('is-open');
+        menu.hidden = !isOpen;
+        btn.setAttribute('aria-expanded', String(isOpen));
+      });
+
+      menu?.addEventListener('click', (e) => {
+        const item = e.target.closest('.antropedia-layer-dropdown-item');
+        if (!item) return;
+        e.preventDefault();
+        const targetIndex = parseInt(item.dataset.layerIndex, 10);
+        if (switcher) switcher.classList.remove('is-open');
+        if (menu) menu.hidden = true;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        this.switchArticleLayer(targetIndex);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!switcher || !switcher.classList.contains('is-open')) return;
+        if (switcher.contains(e.target)) return;
+        switcher.classList.remove('is-open');
+        if (menu) menu.hidden = true;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && switcher?.classList.contains('is-open')) {
+          switcher.classList.remove('is-open');
+          if (menu) menu.hidden = true;
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      });
     }
 
     resetInlineSearchUI() {

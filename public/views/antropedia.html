@@ -145,10 +145,6 @@
         <div id="antropediaViewMeta" class="antropedia-view-meta"></div>
         <div id="antropediaViewBadges" class="antropedia-view-badges"></div>
 
-        <!-- Переключатель слоя многослойной статьи (см. renderArticleView/
-             switchArticleLayer в antropedia.js) — показывается только когда
-             читателю доступно больше одного слоя (article.layerOptions). -->
-        <div id="antropediaViewLayerSwitcher" class="antropedia-layer-switcher" hidden></div>
 
         <div class="antropedia-view-actions">
           <button type="button" id="antropediaEditBtn" class="btn btn-primary" title="Редактировать"><i class="fas fa-pen"></i> <span class="antropedia-btn-label">Редактировать</span></button>
@@ -198,6 +194,14 @@
               <button type="button" id="antropediaInlineSearchClear" class="antropedia-inline-search-nav antropedia-inline-search-close" title="Закрыть поиск (Esc)" aria-label="Закрыть поиск"><i class="fas fa-times"></i></button>
             </div>
           </div>
+        </div>
+        <div id="antropediaViewLayerSwitcher" class="antropedia-layer-dropdown" hidden>
+          <button type="button" id="antropediaViewLayerBtn" class="antropedia-layer-dropdown-btn" aria-haspopup="listbox" aria-expanded="false" title="Выбор слоя статьи">
+            <i class="fas fa-layer-group" aria-hidden="true"></i>
+            <span id="antropediaViewLayerLabel" class="antropedia-layer-dropdown-label">Слой статьи</span>
+            <i class="fas fa-chevron-down antropedia-layer-dropdown-arrow" aria-hidden="true"></i>
+          </button>
+          <div id="antropediaViewLayerMenu" class="antropedia-layer-dropdown-menu" role="listbox" hidden></div>
         </div>
         <div class="antropedia-sidebar-tabs">
           <button type="button" class="antropedia-sidebar-tab active" data-sidebar-tab="toc"><i class="fas fa-list-ol"></i> Оглавление</button>

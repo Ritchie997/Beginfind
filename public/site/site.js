@@ -1577,6 +1577,88 @@
       document.addEventListener('click', onArticleSearchOutsideClick);
     }
     initArticleSearchListeners();
+    // ========================================
+    // Селектор слоёв открытой статьи
+    // ========================================
+    var layerSwitcherEl = document.getElementById('antropediaViewLayerSwitcher');
+    var layerBtnEl = document.getElementById('antropediaViewLayerBtn');
+    var layerLabelEl = document.getElementById('antropediaViewLayerLabel');
+    var layerMenuEl = document.getElementById('antropediaViewLayerMenu');
+    var currentArticleSwitcherHandler = null;
+
+    function getLayerSwitcherElements() {
+      if (!layerSwitcherEl) layerSwitcherEl = document.getElementById('antropediaViewLayerSwitcher');
+      if (!layerBtnEl) layerBtnEl = document.getElementById('antropediaViewLayerBtn');
+      if (!layerLabelEl) layerLabelEl = document.getElementById('antropediaViewLayerLabel');
+      if (!layerMenuEl) layerMenuEl = document.getElementById('antropediaViewLayerMenu');
+      return {
+        switcher: layerSwitcherEl,
+        btn: layerBtnEl,
+        label: layerLabelEl,
+        menu: layerMenuEl
+      };
+    }
+
+    function openLayerDropdown() {
+      var els = getLayerSwitcherElements();
+      if (!els.switcher || !els.menu) return;
+      els.switcher.classList.add('is-open');
+      els.menu.hidden = false;
+      if (els.btn) els.btn.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeLayerDropdown() {
+      var els = getLayerSwitcherElements();
+      if (!els.switcher || !els.menu) return;
+      els.switcher.classList.remove('is-open');
+      els.menu.hidden = true;
+      if (els.btn) els.btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleLayerDropdown(e) {
+      if (e) e.stopPropagation();
+      var els = getLayerSwitcherElements();
+      if (!els.switcher) return;
+      if (els.switcher.classList.contains('is-open')) {
+        closeLayerDropdown();
+      } else {
+        openLayerDropdown();
+      }
+    }
+
+    function onLayerDropdownOutsideClick(e) {
+      var els = getLayerSwitcherElements();
+      if (!els.switcher || !els.switcher.classList.contains('is-open')) return;
+      if (els.switcher.contains(e.target)) return;
+      closeLayerDropdown();
+    }
+
+    function initLayerDropdownListeners() {
+      var els = getLayerSwitcherElements();
+      if (els.btn) {
+        els.btn.addEventListener('click', toggleLayerDropdown);
+      }
+      if (els.menu) {
+        els.menu.addEventListener('click', function (e) {
+          var item = e.target.closest('.antropedia-layer-dropdown-item');
+          if (!item) return;
+          e.preventDefault();
+          var targetIndex = parseInt(item.dataset.layerIndex, 10);
+          closeLayerDropdown();
+          if (typeof currentArticleSwitcherHandler === 'function') {
+            currentArticleSwitcherHandler(targetIndex);
+          }
+        });
+      }
+      document.addEventListener('click', onLayerDropdownOutsideClick);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          closeLayerDropdown();
+        }
+      });
+    }
+    initLayerDropdownListeners();
+
 
     var tocObserver = null;
     var tocCleanup = null;
@@ -2053,11 +2135,7 @@
         if (!tagsContainer) {
           tagsContainer = document.createElement('div');
           tagsContainer.className = 'wiki-card-tags public-article-tags';
-          if (typeof layerSwitcher !== 'undefined' && layerSwitcher && layerSwitcher.parentNode) {
-            detail.insertBefore(tagsContainer, layerSwitcher);
-          } else {
-            detail.appendChild(tagsContainer);
-          }
+          detail.appendChild(tagsContainer);
         }
         tagsContainer.innerHTML = '';
         if (Array.isArray(tagList) && tagList.length) {
@@ -2083,23 +2161,29 @@
       var userPromise = loadCurrentUser();
       initArticleEngagement(article, detail, userPromise);
 
-      var layerSwitcher = makeEl('div', 'antropedia-layer-switcher');
-      layerSwitcher.id = 'antropediaLayerSwitcher';
-
       function renderLayerSwitcher() {
+        var els = getLayerSwitcherElements();
+        if (!els.switcher) return;
         var options = Array.isArray(article.layerOptions) ? article.layerOptions : [];
         if (options.length < 2) {
-          layerSwitcher.hidden = true;
-          layerSwitcher.innerHTML = '';
+          els.switcher.hidden = true;
+          closeLayerDropdown();
           return;
         }
-        layerSwitcher.hidden = false;
-        layerSwitcher.innerHTML = '<i class="fas fa-layer-group" title="Слои статьи" aria-hidden="true"></i>' +
-          options.map(function (opt) {
+        els.switcher.hidden = false;
+        var currentOpt = options.find(function (opt) { return opt.index === article.layerIndex; }) || options[0];
+        if (els.label) {
+          els.label.textContent = currentOpt ? currentOpt.title : 'Слой статьи';
+        }
+        if (els.menu) {
+          els.menu.innerHTML = options.map(function (opt) {
             var activeClass = opt.index === article.layerIndex ? ' active' : '';
-            return '<button type="button" class="antropedia-layer-btn' + activeClass + '" data-layer-index="' + opt.index + '">' +
-              escapeHtml(opt.title) + '</button>';
+            return '<button type="button" class="antropedia-layer-dropdown-item' + activeClass + '" data-layer-index="' + opt.index + '">' +
+              '<span class="antropedia-layer-dropdown-item-title">' + escapeHtml(opt.title) + '</span>' +
+              '<i class="fas fa-check" aria-hidden="true"></i>' +
+              '</button>';
           }).join('');
+        }
       }
 
       var isSwitchingLayer = false;
@@ -2156,7 +2240,7 @@
             if (!excerpt) {
               excerpt = document.createElement('p');
               excerpt.className = 'public-article-excerpt';
-              detail.insertBefore(excerpt, tagsContainer || layerSwitcher);
+              detail.insertBefore(excerpt, tagsContainer);
             }
             excerpt.textContent = updated.excerpt;
             excerpt.hidden = false;
@@ -2176,16 +2260,9 @@
         }
       }
 
-      layerSwitcher.addEventListener('click', function (e) {
-        var btn = e.target.closest('.antropedia-layer-btn');
-        if (!btn || btn.classList.contains('active')) return;
-        e.preventDefault();
-        var targetIndex = parseInt(btn.dataset.layerIndex, 10);
-        switchArticleLayer(targetIndex);
-      });
-
+      currentArticleSwitcherHandler = switchArticleLayer;
+      closeLayerDropdown();
       renderLayerSwitcher();
-      detail.appendChild(layerSwitcher);
 
       var content = document.createElement('div');
       content.className = 'preview-pane public-article-content';

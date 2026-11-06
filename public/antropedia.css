@@ -684,6 +684,142 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   gap: 8px;
 }
 
+/* === Селектор / выпадающий список слоёв в сайдбаре === */
+.antropedia-layer-dropdown {
+  position: relative;
+  width: 100%;
+  margin: 0 0 10px 0;
+  box-sizing: border-box;
+}
+
+.antropedia-layer-dropdown[hidden] {
+  display: none !important;
+}
+
+.antropedia-layer-dropdown-btn {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  color: var(--text-normal, #dcddde);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  text-align: left;
+}
+
+.antropedia-layer-dropdown-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.antropedia-layer-dropdown.is-open .antropedia-layer-dropdown-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--blurple, #5865f2);
+  color: #ffffff;
+}
+
+.antropedia-layer-dropdown-btn > i.fa-layer-group {
+  color: var(--blurple, #5865f2);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.antropedia-layer-dropdown-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.antropedia-layer-dropdown-arrow {
+  font-size: 11px;
+  color: var(--text-muted, #949ba4);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.antropedia-layer-dropdown.is-open .antropedia-layer-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.antropedia-layer-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  background: var(--background-secondary, #2f3136);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.antropedia-layer-dropdown-menu[hidden] {
+  display: none !important;
+}
+
+.antropedia-layer-dropdown-item {
+  width: 100%;
+  padding: 7px 10px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-normal, #dcddde);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.antropedia-layer-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.antropedia-layer-dropdown-item.active {
+  background: rgba(88, 101, 242, 0.2);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.antropedia-layer-dropdown-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.antropedia-layer-dropdown-item .fa-check {
+  font-size: 11px;
+  color: var(--blurple, #5865f2);
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.antropedia-layer-dropdown-item.active .fa-check {
+  opacity: 1;
+}
+
 /* Переключатель слоя многослойной статьи (renderLayerSwitcher в
    antropedia.js) — показывается только когда читателю доступно больше одного
    слоя; кнопки — доступные слои по порядку, активная подсвечена. */
