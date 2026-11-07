@@ -1730,6 +1730,7 @@
     var bookmarkGutterHoverEl = null;
     var bookmarkCompactHoverEl = null;
     var currentSelectedRangeInfo = null;
+    var lastSelectedRangeInfo = null;
     var selectionDebounce = null;
 
     function hasWideGutterSpace() {
@@ -2103,7 +2104,8 @@
 
       if (popoverEl) {
         popoverEl.hidden = false;
-        if (bmHoverCapable && anchorEl) {
+        var isMobile = window.innerWidth <= 768 || !bmHoverCapable;
+        if (!isMobile && anchorEl) {
           var rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
           if (rect && (rect.width > 0 || rect.height > 0)) {
             positionFloating(popoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);
@@ -2802,6 +2804,7 @@
         quote: text.slice(0, 2000),
         range: range.cloneRange()
       };
+      lastSelectedRangeInfo = currentSelectedRangeInfo;
 
       var isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 
@@ -2839,6 +2842,7 @@
       if (tooltipEl) tooltipEl.hidden = true;
       if (mobileBarEl) mobileBarEl.hidden = true;
       currentSelectedRangeInfo = null;
+      lastSelectedRangeInfo = null;
     }
 
     function renderBookmarkGutter() {
@@ -2984,8 +2988,8 @@
         });
         selBtn.addEventListener('click', function (e) {
           e.stopPropagation();
-          if (!currentSelectedRangeInfo) return;
-          var info = currentSelectedRangeInfo;
+          var info = currentSelectedRangeInfo || lastSelectedRangeInfo;
+          if (!info) return;
           var countForBlock = currentArticleBookmarks.filter(function (b) { return b.blockId === info.blockId; }).length;
           if (countForBlock >= 3) {
             hideSelectionUI();
@@ -3005,11 +3009,14 @@
       if (mobileAddBtn) {
         mobileAddBtn.addEventListener('touchstart', function (e) {
           e.stopPropagation();
-        });
+          if (currentSelectedRangeInfo) {
+            lastSelectedRangeInfo = currentSelectedRangeInfo;
+          }
+        }, { passive: true });
         mobileAddBtn.addEventListener('click', function (e) {
           e.stopPropagation();
-          if (!currentSelectedRangeInfo) return;
-          var info = currentSelectedRangeInfo;
+          var info = currentSelectedRangeInfo || lastSelectedRangeInfo;
+          if (!info) return;
           var countForBlock = currentArticleBookmarks.filter(function (b) { return b.blockId === info.blockId; }).length;
           if (countForBlock >= 3) {
             hideSelectionUI();
@@ -3058,6 +3065,9 @@
 
       var closeBtn = document.getElementById('antropediaBookmarkPopoverClose');
       if (closeBtn) closeBtn.addEventListener('click', closeBookmarkPopover);
+
+      var backdropEl = document.getElementById('antropediaBookmarkModalBackdrop');
+      if (backdropEl) backdropEl.addEventListener('click', closeBookmarkPopover);
 
       var nameInput = document.getElementById('antropediaBookmarkPopoverName');
       if (nameInput) {

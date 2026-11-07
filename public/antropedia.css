@@ -2253,6 +2253,7 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   z-index: 2095;
+  cursor: pointer;
 }
 
 /* === Тач-устройство — у попапа закладки нет хвостика/курсора, рядом с
@@ -2261,15 +2262,19 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
    в обычное модальное окно по центру экрана (небольшое, без inline-координат
    от positionFloating — см. openBookmarkPopover в antropedia.js) и не
    закрывается кликом за его пределами (см. _docClickHandler). === */
-@media (hover: none) and (pointer: coarse) {
+@media (hover: none) and (pointer: coarse), (max-width: 768px) {
   .antropedia-bookmark-popover {
+    position: fixed;
     top: 50%;
     left: 50%;
     right: auto;
     bottom: auto;
     transform: translate(-50%, -50%);
     width: min(300px, 88vw);
-    z-index: 31;
+    max-height: 90vh;
+    overflow-y: auto;
+    z-index: 2100;
+    pointer-events: auto;
   }
 
   .antropedia-bookmark-popover-close {

@@ -10699,21 +10699,26 @@ a.site-profile-media-row:hover {
     inset: 0;
     background: rgba(0, 0, 0, 0.55);
     z-index: 2095;
+    cursor: pointer;
 }
 
 .antropedia-bookmark-modal-backdrop[hidden] {
     display: none !important;
 }
 
-@media (hover: none) and (pointer: coarse) {
+@media (hover: none) and (pointer: coarse), (max-width: 768px) {
     .antropedia-bookmark-popover {
+        position: fixed;
         top: 50%;
         left: 50%;
         right: auto;
         bottom: auto;
         transform: translate(-50%, -50%);
         width: min(300px, 88vw);
-        z-index: 1055;
+        max-height: 90vh;
+        overflow-y: auto;
+        z-index: 2100;
+        pointer-events: auto;
     }
 
     .antropedia-bookmark-popover-close {

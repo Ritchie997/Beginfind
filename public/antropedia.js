@@ -4006,6 +4006,7 @@ initEngagement() {
         quote: text.slice(0, 2000),
         range: range.cloneRange()
       };
+      this._lastSelectedRangeInfo = this._currentSelectedRangeInfo;
 
       const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 
@@ -4043,6 +4044,7 @@ initEngagement() {
       if (tooltipEl) tooltipEl.hidden = true;
       if (mobileBarEl) mobileBarEl.hidden = true;
       this._currentSelectedRangeInfo = null;
+      this._lastSelectedRangeInfo = null;
     }
 
     initBookmarkGutter() {
@@ -4090,8 +4092,8 @@ initEngagement() {
         });
         selBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!this._currentSelectedRangeInfo) return;
-          const info = this._currentSelectedRangeInfo;
+          const info = this._currentSelectedRangeInfo || this._lastSelectedRangeInfo;
+          if (!info) return;
           const countForBlock = this.currentArticleBookmarks.filter((b) => b.blockId === info.blockId).length;
           if (countForBlock >= 3) {
             this.hideSelectionUI();
@@ -4105,11 +4107,16 @@ initEngagement() {
 
       const mobileAddBtn = document.getElementById('antropediaMobileBmAddBtn');
       if (mobileAddBtn) {
-        mobileAddBtn.addEventListener('touchstart', (e) => e.stopPropagation());
+        mobileAddBtn.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          if (this._currentSelectedRangeInfo) {
+            this._lastSelectedRangeInfo = this._currentSelectedRangeInfo;
+          }
+        }, { passive: true });
         mobileAddBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!this._currentSelectedRangeInfo) return;
-          const info = this._currentSelectedRangeInfo;
+          const info = this._currentSelectedRangeInfo || this._lastSelectedRangeInfo;
+          if (!info) return;
           const countForBlock = this.currentArticleBookmarks.filter((b) => b.blockId === info.blockId).length;
           if (countForBlock >= 3) {
             this.hideSelectionUI();
@@ -4140,6 +4147,7 @@ initEngagement() {
       document.getElementById('antropediaBookmarkPopoverSave')?.addEventListener('click', () => this.saveBookmarkFromPopover());
       this.bookmarkPopoverDeleteBtn?.addEventListener('click', () => this.deleteBookmarkFromPopover());
       this.bookmarkPopoverCloseBtn?.addEventListener('click', () => this.closeBookmarkPopover());
+      this.bookmarkModalBackdropEl?.addEventListener('click', () => this.closeBookmarkPopover());
       this.bookmarkPopoverNameEl?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); this.saveBookmarkFromPopover(); }
         if (e.key === 'Escape') { e.preventDefault(); this.closeBookmarkPopover(); }
@@ -4429,7 +4437,8 @@ initEngagement() {
 
       if (this.bookmarkPopoverEl) {
         this.bookmarkPopoverEl.hidden = false;
-        if (this._bmHoverCapable && anchorEl) {
+        const isMobile = window.innerWidth <= 768 || !this._bmHoverCapable;
+        if (!isMobile && anchorEl) {
           const rect = anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
           if (rect && (rect.width > 0 || rect.height > 0)) {
             this.positionFloating(this.bookmarkPopoverEl, rect.left + rect.width / 2, rect.bottom + 8, 280, 220);

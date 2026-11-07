@@ -5,6 +5,16 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-07 — исправление кликабельности мобильного окна создания закладок
+
+- Antropedia — мобильный интерфейс закладок (`public/site/site.css`, `public/antropedia.css`, `public/site/site.js`, `public/antropedia.js`):
+  - **Исправлен конфликт z-index между модальным окном и подложкой (backdrop):**
+    - В мобильном медиа-запросе `@media (hover: none) and (pointer: coarse), (max-width: 768px)` для `.antropedia-bookmark-popover` установлен `z-index: 2100` (ранее было `1055` в `site.css` и `31` в `antropedia.css`), что было меньше `z-index: 2095` подложки `.antropedia-bookmark-modal-backdrop`. Из-за этого подложка перекрывала само модальное окно и блокировала все клики/тапы.
+    - Включены `pointer-events: auto` и `max-height: 90vh` с `overflow-y: auto` для удобного ввода названия и выбора цвета даже при открытой экранной клавиатуре.
+    - На подложку `.antropedia-bookmark-modal-backdrop` добавлен `cursor: pointer` и обработчик клика для закрытия окна по тапу мимо модалки.
+  - **Устойчивость сохранения выделения цитаты на сенсорных устройствах:**
+    - Добавлено кэширование `lastSelectedRangeInfo` при касании кнопки «В закладки» на мобильной плашке (`#antropediaMobileBmAddBtn`), предотвращающее сброс данных цитаты при схлопывании выделения мобильным браузером перед событием `click`.
+
 ## 2026-11-06 — полоса связанных артов галереи под статьёй в Antropedia
 
 - Antropedia и Галерея — полоса связанных артов под статьёй (`src/routes/gallery.routes.js`, `public/site/site.js`, `public/site/site.css`, `public/site/antropedia.html`, `public/site/profile.html`, `docs/TASKS_PARITY_CHECKLIST.md`):
