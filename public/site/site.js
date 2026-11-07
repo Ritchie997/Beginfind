@@ -1205,11 +1205,157 @@
       return bar;
     }
 
+    function ensureArticleReportModal() {
+      var modal = document.getElementById('antropediaReportModal');
+      if (modal) {
+        modal.querySelectorAll('[data-close-report-modal]').forEach(function (btn) {
+          btn.onclick = function () { modal.hidden = true; };
+        });
+        modal.onclick = function (e) {
+          if (e.target === modal) modal.hidden = true;
+        };
+        return modal;
+      }
+      modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.id = 'antropediaReportModal';
+      modal.hidden = true;
+      modal.style.zIndex = '3000';
+      modal.innerHTML = 
+        '<div class="modal-box" style="max-width: 480px; width: 100%;">' +
+          '<div class="modal-header">' +
+            '<h3>Пожаловаться на статью</h3>' +
+            '<button type="button" class="modal-close" data-close-report-modal aria-label="Закрыть">&times;</button>' +
+          '</div>' +
+          '<div class="modal-body">' +
+            '<p class="modal-hint" style="margin-bottom: 12px; font-size: 13px; color: var(--text-muted, #72767d);">' +
+              '<i class="fas fa-circle-info"></i> <span>Жалоба на «<b id="antropediaReportArticleTitle"></b>» попадёт модераторам проекта.</span>' +
+            '</p>' +
+            '<div class="form-group" style="margin-bottom: 12px;">' +
+              '<label class="form-label" for="antropediaReportReason">Причина *</label>' +
+              '<select id="antropediaReportReason" class="form-select" style="width: 100%;">' +
+                '<option value="">— выберите —</option>' +
+                '<option value="inaccurate">Недостоверная информация</option>' +
+                '<option value="outdated">Устарело</option>' +
+                '<option value="offensive">Оскорбления / нарушение правил</option>' +
+                '<option value="plagiarism">Плагиат</option>' +
+                '<option value="spam">Спам / реклама</option>' +
+                '<option value="other">Другое</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="form-group" style="margin-bottom: 12px;">' +
+              '<label class="form-label" for="antropediaReportDescription">Что не так со статьёй *</label>' +
+              '<textarea id="antropediaReportDescription" class="form-textarea" maxlength="5000" placeholder="Какой фрагмент, что в нём неверно, как должно быть" rows="4" style="width: 100%; resize: vertical;"></textarea>' +
+            '</div>' +
+          '</div>' +
+          '<div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">' +
+            '<button type="button" class="btn btn-secondary" data-close-report-modal>Отмена</button>' +
+            '<button type="button" class="btn btn-primary" id="antropediaReportSubmitBtn">Отправить</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(modal);
+
+      modal.querySelectorAll('[data-close-report-modal]').forEach(function (btn) {
+        btn.onclick = function () { modal.hidden = true; };
+      });
+      modal.onclick = function (e) {
+        if (e.target === modal) modal.hidden = true;
+      };
+      return modal;
+    }
+
+    function openArticleReportModal(article) {
+      if (!article) return;
+      var token = getAuthToken();
+      if (!token) {
+        openLogin();
+        return;
+      }
+      var modal = ensureArticleReportModal();
+      var titleEl = modal.querySelector('#antropediaReportArticleTitle');
+      var reasonEl = modal.querySelector('#antropediaReportReason');
+      var descEl = modal.querySelector('#antropediaReportDescription');
+      var submitBtn = modal.querySelector('#antropediaReportSubmitBtn');
+
+      if (titleEl) titleEl.textContent = article.title || article.slug;
+      if (reasonEl) reasonEl.value = '';
+      if (descEl) descEl.value = '';
+      modal.hidden = false;
+      if (reasonEl) reasonEl.focus();
+
+      submitBtn.onclick = async function () {
+        var reason = reasonEl ? reasonEl.value : '';
+        var text = descEl ? descEl.value.trim() : '';
+        if (!reason) {
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Жалоба', message: 'Выберите причину жалобы' });
+          } else {
+            alert('Выберите причину жалобы');
+          }
+          if (reasonEl) reasonEl.focus();
+          return;
+        }
+        if (!text) {
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Жалоба', message: 'Опишите, что не так со статьёй' });
+          } else {
+            alert('Опишите, что не так со статьёй');
+          }
+          if (descEl) descEl.focus();
+          return;
+        }
+
+        submitBtn.disabled = true;
+        try {
+          var payload = {
+            category: 'complaint',
+            target_type: 'article',
+            target_slug: article.slug,
+            reason: reason,
+            text: text
+          };
+          var res = await authenticatedRequest('/api/feedback', 'POST', payload);
+          modal.hidden = true;
+          var msg = (res && res.id)
+            ? 'Жалоба #' + res.id + ' отправлена модераторам'
+            : 'Жалоба отправлена модераторам';
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Успешно', message: msg });
+          } else {
+            alert(msg);
+          }
+        } catch (err) {
+          console.error('Ошибка отправки жалобы:', err);
+          if (window.confirmDialog) {
+            window.confirmDialog.alert({ title: 'Ошибка', message: err.message || 'Не удалось отправить жалобу' });
+          } else {
+            alert(err.message || 'Не удалось отправить жалобу');
+          }
+        } finally {
+          submitBtn.disabled = false;
+        }
+      };
+    }
+
     function initArticleEngagement(article, container, userPromise) {
       var panel = makeEl('div', 'pub-article-engagement');
       var actions = makeEl('div', 'pub-article-engagement-actions');
       var like = makeEngageButton('far fa-heart', article.likesCount, 'Нравится', 'is-like');
       var comments = makeEngageButton('far fa-comment', article.commentsCount, 'Комментарии', 'is-comment');
+      var report = makeEl('button', 'engage-item is-report');
+      report.type = 'button';
+      report.id = 'publicArticleReportBtn';
+      report.title = 'Пожаловаться на статью';
+      report.setAttribute('aria-label', 'Пожаловаться на статью');
+      report.innerHTML = '<i class="far fa-flag" aria-hidden="true"></i>';
+
+      report.addEventListener('click', function () {
+        if (!currentUser && !getAuthToken()) {
+          openLogin();
+          return;
+        }
+        openArticleReportModal(article);
+      });
       var currentUser = null;
       var reactionBar;
 
@@ -1270,6 +1416,7 @@
       actions.appendChild(like);
       updateReactions([]);
       actions.appendChild(comments);
+      actions.appendChild(report);
       panel.appendChild(actions);
       container.appendChild(panel);
       userPromise.then(async function (user) {
@@ -3762,11 +3909,11 @@
       moreReportBtn.addEventListener('click', function () {
         moreMenu.hidden = true;
         moreBtn.setAttribute('aria-expanded', 'false');
-        if (window.confirmDialog) {
-          window.confirmDialog.alert({ title: 'Пожаловаться на статью', message: 'Для отправки жалобы на статью обратитесь к администрации или напишите в поддержку проекта.' });
-        } else {
-          alert('Для отправки жалобы на статью обратитесь к администрации проекта.');
+        if (!getAuthToken()) {
+          openLogin();
+          return;
         }
+        openArticleReportModal(article);
       });
       moreMenu.appendChild(moreReportBtn);
 

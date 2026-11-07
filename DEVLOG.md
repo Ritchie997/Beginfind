@@ -5,6 +5,19 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-07 — кнопка жалобы на статью (Report) и интеграция с системой обращений
+
+- Antropedia — отправка жалоб на статьи (`src/routes/feedback.routes.js`, `public/site/site.js`, `public/site/site.css`, `public/site/antropedia.html`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Серверный маршрут `POST /api/feedback`:**
+    - В `src/routes/feedback.routes.js` добавлен маршрут `POST /feedback` (доступный авторизованным пользователям через `authenticateToken` и `checkApproved`).
+    - Поддерживает отправку жалоб на статьи (`category: 'complaint'` или `target_type: 'article'`) с автоматическим маппингом полей `target_slug`, `reason` и `text` в обращение типа `article` сервиса `feedback-store.js` (`createReport`).
+    - Проверяет существование и доступность статьи, защищает от дубликатов и флуда (`assertNoPending`).
+  - **Интерфейс кнопки жалобы и модального окна:**
+    - В тулбар реакций под статьёй (`initArticleEngagement` в `public/site/site.js`) добавлена кнопка `#publicArticleReportBtn.engage-item.is-report` с иконкой флажка `⚑` (`far fa-flag`) рядом с лайком и комментариями.
+    - В меню действий шапки статьи (`#antropediaMoreReportItem`) обработчик также переключён на вызов модального окна жалобы вместо заглушки.
+    - В `public/site/antropedia.html` и динамически в `site.js` реализовано модальное окно `#antropediaReportModal` с выбором причины (недостоверная информация, устарело, оскорбления, плагиат, спам, другое) и полем описания проблемы.
+    - При отправке выполняется валидация, запрос `POST /api/feedback`, вывод уведомления с номером созданного обращения и закрытие модалки.
+
 ## 2026-11-07 — мобильный интерфейс закладок без визуального шума и постоянная подсветка цитат
 
 - Antropedia — система закладок на смартфонах и узких экранах (`public/site/site.js`, `public/antropedia.js`, `public/site/site.css`, `public/site/antropedia-mobile.css`, `public/antropedia.css`):

@@ -307,6 +307,41 @@
           <div id="antropediaLayerPickerList" class="antropedia-layer-sheet-list"></div>
         </div>
       </div>
+
+      <!-- ===== Жалоба на статью (Report) ===== -->
+      <div class="modal-overlay" id="antropediaReportModal" hidden style="z-index: 3000;">
+        <div class="modal-box" style="max-width: 480px; width: 100%;">
+          <div class="modal-header">
+            <h3>Пожаловаться на статью</h3>
+            <button type="button" class="modal-close" data-close-report-modal aria-label="Закрыть">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-hint" style="margin-bottom: 12px; font-size: 13px; color: var(--text-muted, #72767d);">
+              <i class="fas fa-circle-info"></i> <span>Жалоба на «<b id="antropediaReportArticleTitle"></b>» попадёт модераторам проекта.</span>
+            </p>
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label" for="antropediaReportReason">Причина *</label>
+              <select id="antropediaReportReason" class="form-select" style="width: 100%;">
+                <option value="">— выберите —</option>
+                <option value="inaccurate">Недостоверная информация</option>
+                <option value="outdated">Устарело</option>
+                <option value="offensive">Оскорбления / нарушение правил</option>
+                <option value="plagiarism">Плагиат</option>
+                <option value="spam">Спам / реклама</option>
+                <option value="other">Другое</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label" for="antropediaReportDescription">Что не так со статьёй *</label>
+              <textarea id="antropediaReportDescription" class="form-textarea" maxlength="5000" placeholder="Какой фрагмент, что в нём неверно, как должно быть" rows="4" style="width: 100%; resize: vertical;"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn btn-secondary" data-close-report-modal>Отмена</button>
+            <button type="button" class="btn btn-primary" id="antropediaReportSubmitBtn">Отправить</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ===== Редактор статьи (заполняет antropedia-editor-client.js) ===== -->

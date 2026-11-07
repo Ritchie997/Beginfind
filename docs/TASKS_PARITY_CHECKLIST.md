@@ -87,7 +87,7 @@
     - `public/site/site.js`: вызывать `GET /api/public/gallery/works?articleSlug=` + `encodeURIComponent(article.slug)` (из `src/routes/gallery.routes.js`).
     - Рендерить превью изображений с кликом, открывающим просмотрщик `window.galleryViewer.openWork(work.id)`.
 
-- [ ] **Кнопка жалобы на статью (Report)**
+- [x] **Кнопка жалобы на статью (Report)**
   - **Что делать:** Добавить флажок ⚑ в блок реакций под статьёй для отправки жалобы модераторам.
   - **Где чинить:**
     - `public/site/site.js`: в тулбар реакций (`initArticleEngagement`) добавить кнопку `#publicArticleReportBtn` рядом с лайком и комментариями.

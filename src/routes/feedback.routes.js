@@ -41,6 +41,37 @@ const caseViewers = [...base, checkAnyPermission('feedback_cases', 'feedback_dec
 
 router.post('/feedback/reports', ...base, handle((req) => store.createReport(req.user, req.body || {})));
 
+// Упрощённый эндпоинт отправки обращений и жалоб на статьи
+router.post('/feedback', ...base, handle(async (req) => {
+  const body = req.body || {};
+  const isArticle = body.target_type === 'article' || body.category === 'complaint' || body.type === 'article';
+  if (isArticle) {
+    const articleSlug = body.target_slug || body.articleSlug || body.slug;
+    if (!articleSlug) {
+      const err = new Error('Укажите slug статьи');
+      err.status = 400;
+      throw err;
+    }
+    const report = await store.createReport(req.user, {
+      type: 'article',
+      articleSlug,
+      articleReason: body.reason || body.articleReason || 'other',
+      description: body.text || body.description || 'Жалоба на статью',
+      comment: body.comment || ''
+    });
+    return { success: true, id: report.id, report };
+  }
+
+  const type = body.category === 'bug' ? 'bug' : 'idea';
+  const report = await store.createReport(req.user, {
+    type,
+    title: body.title || (body.text ? body.text.slice(0, 50) : 'Обращение'),
+    description: body.text || body.description || '',
+    attachments: body.attachments || []
+  });
+  return { success: true, id: report.id, report };
+}));
+
 router.get('/feedback/reports/mine', ...base, handle((req) => store.listMyReports(req.user.id)));
 
 router.get('/feedback/reports/:id/comments', ...base, handle((req) => store.listOwnReportComments(req.user, req.params.id)));
