@@ -1880,6 +1880,13 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
     z-index: 2;
 }
 
+.antropedia-bm-block-marked {
+    border-left: 3px solid var(--bm-block-color, var(--blurple, #5865f2)) !important;
+    padding-left: 10px !important;
+    border-radius: 0 4px 4px 0;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
 /* Заголовок панели закладок с переключателем подсветки */
 .antropedia-bookmarks-panel-header {
     display: flex;
@@ -2824,12 +2831,25 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
     width: 36px;
     height: 36px;
   }
-  /* Значок закладки — палец толще курсора: обратно увеличиваем размер
-     тач-цели поверх сужения из @media (max-width: 640px) выше. */
-  .antropedia-bm-toggle {
-    width: 30px;
-    height: 30px;
-    font-size: 15px;
+  /* На мобильных устройствах закладки отображаются постоянной подсветкой цитат,
+     плавающие кнопки над текстом скрываются */
+  .antropedia-bm-toggle,
+  .antropedia-bm-hover-zone,
+  .antropedia-bm-hover-zone-compact {
+    display: none !important;
+  }
+
+  .antropedia-bm-highlight-rect {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .antropedia-bm-block-marked {
+    border-left: 3px solid var(--bm-block-color, var(--blurple, #5865f2)) !important;
+    padding-left: 10px !important;
+    border-radius: 0 4px 4px 0;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
   }
 }
 
