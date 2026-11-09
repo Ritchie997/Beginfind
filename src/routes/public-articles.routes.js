@@ -166,6 +166,9 @@ function createPublicArticlesRouter(
         viewCounts,
         dateFrom: req.query.dateFrom,
         dateTo: req.query.dateTo,
+        serverId: req.query.serverId || req.query.server || '',
+        server: req.query.server || req.query.serverId || '',
+        locked: req.query.locked,
         limit,
         offset
       });

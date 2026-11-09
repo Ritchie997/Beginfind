@@ -156,8 +156,24 @@
             </div>
           </div>
 
-          <!-- Разворачиваемая панель расширенных фильтров (теги chip-field, даты) -->
+          <!-- Разворачиваемая панель расширенных фильтров (франшизы, статус, теги, даты) -->
           <div class="antropedia-filters-panel pub-toolbar-row-filters" id="pubFiltersPanel">
+            <div class="antropedia-filter pub-filter pub-filter-server">
+              <label for="pubServerFilter"><i class="fas fa-server" aria-hidden="true"></i> Франшиза</label>
+              <select id="pubServerFilter" class="form-select antropedia-filter-select" aria-label="Фильтр по франшизе">
+                <option value="">Все франшизы</option>
+              </select>
+            </div>
+
+            <div class="antropedia-filter pub-filter pub-filter-status">
+              <label for="pubStatusFilter"><i class="fas fa-lock" aria-hidden="true"></i> Статус</label>
+              <select id="pubStatusFilter" class="form-select antropedia-filter-select" aria-label="Фильтр по статусу">
+                <option value="">Все статусы</option>
+                <option value="false">🔓 Открытые статьи</option>
+                <option value="true">🔒 Закрытые по ролям</option>
+              </select>
+            </div>
+
             <div class="antropedia-filter antropedia-filter-tags pub-filter pub-filter-tags">
               <label><i class="fas fa-tags" aria-hidden="true"></i> Теги</label>
               <div id="pubTagField" class="chip-field antropedia-chip-field">

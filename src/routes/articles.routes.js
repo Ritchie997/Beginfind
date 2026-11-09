@@ -532,7 +532,8 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
     // Теги фильтруем здесь, а не в filterArticles: у каждого читателя свои
     // видимые теги (только с доступных ему слоёв, см. readerTagKeys).
-    const filtered = store.filterArticles({ q: textQuery, server, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    const targetServer = server || req.query.serverId || '';
+    const filtered = store.filterArticles({ q: textQuery, server: targetServer, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
     const tagKeys = tags.map((t) => store.tagKey(t));
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический

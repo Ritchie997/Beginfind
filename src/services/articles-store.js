@@ -677,7 +677,10 @@ function filterArticles(opts = {}) {
   }
 
   if (locked === true || locked === false) {
-    list = list.filter((a) => !!a.locked === locked);
+    list = list.filter((a) => {
+      const isLocked = !!a.locked || (Array.isArray(a.layers) && a.layers.some((l) => l && (l.lockedNoRoles || (Array.isArray(l.roles) && l.roles.length > 0))));
+      return isLocked === locked;
+    });
   }
 
   if (dateFrom) {

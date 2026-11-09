@@ -5,6 +5,21 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-09 — фильтры по серверам (франшизам) и статусу в публичном каталоге Antropedia
+
+- Antropedia — расширенная фильтрация в публичном каталоге (`src/services/public-articles.js`, `src/routes/public-articles.routes.js`, `src/routes/articles.routes.js`, `src/services/articles-store.js`, `public/site/antropedia.html`, `public/site/site.js`, `public/site/site.css`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Серверная фильтрация по франшизе и статусу доступа (`public-articles.js` и роуты):**
+    - В `listPublicArticles` добавлена поддержка параметров `serverId`/`server` и `locked` (`true`/`false`). Статьи фильтруются по серверу (`article.server`) и по закрытости ролями (учитываются как легаси `article.locked`, так и многослойные статьи с ролями на слоях через `isArticleRoleRestricted`).
+    - В `toPublicArticleSummary` включены поля `server` и `locked` для отображения статуса карточек.
+    - В `GET /api/public/articles` и `/api/articles/browse` обеспечена сквозная передача параметров `serverId`, `server` и `locked`.
+  - **Интерфейс фильтров в `#pubFiltersPanel` (`public/site/antropedia.html`):**
+    - В панель расширенных фильтров добавлены выпадающие списки `#pubServerFilter` («Франшиза») и `#pubStatusFilter` («Все статусы», «🔓 Открытые статьи», «🔒 Закрытые по ролям»).
+    - В карточках статей выводится аккуратный бэдж блокировки `.antropedia-card-lock` с иконкой замка при `article.locked`.
+  - **Клиентская синхронизация и динамическая загрузка (`public/site/site.js`):**
+    - Добавлена функция `loadServerOptions`, асинхронно заполняющая список франшиз из `/api/public/franchises` с сохранением выбранного значения из URL или состояния.
+    - Селекты привязаны к `applyFilters`, их состояние сохраняется в query-параметрах URL (`server`, `locked`), учитывается в счётчике активных фильтров на кнопке «Фильтры · N», очищается кнопкой «Сбросить фильтры» и учитывается при выборе случайной статьи («Мне повезёт»).
+
+
 ## 2026-11-07 — кнопка жалобы на статью (Report) и интеграция с системой обращений
 
 - Antropedia — отправка жалоб на статьи (`src/routes/feedback.routes.js`, `public/site/site.js`, `public/site/site.css`, `public/site/antropedia.html`, `docs/TASKS_PARITY_CHECKLIST.md`):

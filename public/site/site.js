@@ -268,6 +268,8 @@
     var loadingMoreEl = document.getElementById('pubLoadingMore');
     var sentinel = document.getElementById('pubSentinel');
     var sortEl = document.getElementById('pubSort');
+    var serverFilterEl = document.getElementById('pubServerFilter');
+    var statusFilterEl = document.getElementById('pubStatusFilter');
     var dateFromEl = document.getElementById('pubDateFrom');
     var dateToEl = document.getElementById('pubDateTo');
     var filtersToggle = document.getElementById('pubFiltersToggle');
@@ -358,6 +360,19 @@
     if (SORTS.indexOf(params.get('sort')) !== -1) sortEl.value = params.get('sort');
     dateFromEl.value = params.get('from') || '';
     dateToEl.value = params.get('to') || '';
+    var initialServer = params.get('server') || params.get('serverId') || '';
+    if (serverFilterEl && initialServer) {
+      var tempOpt = document.createElement('option');
+      tempOpt.value = initialServer;
+      tempOpt.textContent = 'Франшиза #' + initialServer;
+      tempOpt.selected = true;
+      serverFilterEl.appendChild(tempOpt);
+      serverFilterEl.value = initialServer;
+    }
+    var initialLocked = params.get('locked');
+    if (statusFilterEl && initialLocked !== null && initialLocked !== '') {
+      statusFilterEl.value = initialLocked;
+    }
 
     var pathMatch = window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
     if (pathMatch) {
@@ -438,6 +453,8 @@
         q: input.value.trim(),
         tags: state.tagField ? state.tagField.getValues() : [],
         sort: sortEl.value || 'newest',
+        server: serverFilterEl ? serverFilterEl.value : '',
+        locked: statusFilterEl ? statusFilterEl.value : '',
         from: dateFromEl.value,
         to: dateToEl.value
       };
@@ -445,7 +462,7 @@
 
     function hasActiveFilters() {
       var f = getFilters();
-      return !!(f.q || f.tags.length || f.from || f.to || f.sort !== 'newest');
+      return !!(f.q || f.tags.length || f.server || f.locked !== '' || f.from || f.to || f.sort !== 'newest');
     }
 
     function updateSearchUrl() {
@@ -458,6 +475,8 @@
       put('q', f.q);
       put('tag', f.tags.join(','));
       put('sort', f.sort !== 'newest' ? f.sort : '');
+      put('server', f.server);
+      put('locked', f.locked);
       put('from', f.from);
       put('to', f.to);
       window.history.replaceState(window.history.state || {}, '', next.pathname + next.search);
@@ -468,6 +487,8 @@
     function updateFiltersCount() {
       var f = getFilters();
       var n = 0;
+      if (f.server) n++;
+      if (f.locked !== '') n++;
       if (f.tags.length) n++;
       if (f.from || f.to) n++;
       filtersCountEl.hidden = n === 0;
@@ -479,7 +500,13 @@
       filtersToggle.classList.toggle('is-open', open);
       filtersToggle.setAttribute('aria-expanded', String(open));
     }
-    var hasActivePanelFilters = !!(dateFromEl.value || dateToEl.value || (params.get('tag') && params.get('tag').includes(',')));
+    var hasActivePanelFilters = !!(
+      (serverFilterEl && serverFilterEl.value) ||
+      (statusFilterEl && statusFilterEl.value) ||
+      dateFromEl.value ||
+      dateToEl.value ||
+      (params.get('tag') && params.get('tag').includes(','))
+    );
     setFiltersOpen(hasActivePanelFilters);
     filtersToggle.addEventListener('click', function () {
       setFiltersOpen(!filtersPanel.classList.contains('is-open'));
@@ -771,6 +798,15 @@
         cover.appendChild(icon);
       }
       coverWrap.appendChild(cover);
+      if (article.locked) {
+        var lockBadge = document.createElement('div');
+        lockBadge.className = 'antropedia-card-lock';
+        lockBadge.title = 'Доступ по ролям';
+        var lockIcon = document.createElement('i');
+        lockIcon.className = 'fas fa-lock';
+        lockBadge.appendChild(lockIcon);
+        coverWrap.appendChild(lockBadge);
+      }
       card.appendChild(coverWrap);
 
       var body = document.createElement('div');
@@ -968,6 +1004,13 @@
       if (f.tags.length) query.set('tag', f.tags.join(','));
       if (f.from) query.set('dateFrom', f.from);
       if (f.to) query.set('dateTo', f.to);
+      if (f.server) {
+        query.set('server', f.server);
+        query.set('serverId', f.server);
+      }
+      if (f.locked !== '') {
+        query.set('locked', f.locked);
+      }
       var token = getAuthToken();
       var authenticated = !!token;
       var endpoint = authenticated ? '/api/articles/browse?' : PUBLIC_ARTICLES_API + '?';
@@ -1042,6 +1085,8 @@
 
     function resetFilters() {
       if (state.tagField) state.tagField.setValues([]);
+      if (serverFilterEl) serverFilterEl.value = '';
+      if (statusFilterEl) statusFilterEl.value = '';
       dateFromEl.value = '';
       dateToEl.value = '';
       sortEl.value = 'newest';
@@ -1066,6 +1111,13 @@
         if (f.tags.length) query.set('tag', f.tags.join(','));
         if (f.from) query.set('dateFrom', f.from);
         if (f.to) query.set('dateTo', f.to);
+        if (f.server) {
+          query.set('server', f.server);
+          query.set('serverId', f.server);
+        }
+        if (f.locked !== '') {
+          query.set('locked', f.locked);
+        }
         var token = getAuthToken();
         var response = await fetch((token ? '/api/articles/browse?' : PUBLIC_ARTICLES_API + '?') + query.toString(), {
           credentials: 'omit',
@@ -1103,6 +1155,45 @@
         }
       } catch (error) {
         // Фильтр по тегам останется без подсказок — не критично.
+      }
+    }
+
+    async function loadServerOptions() {
+      if (!serverFilterEl) return;
+      try {
+        var token = getAuthToken();
+        var response = await fetch('/api/public/franchises', {
+          credentials: 'omit',
+          headers: token ? { Authorization: 'Bearer ' + token } : {}
+        });
+        if (!response.ok) return;
+        var franchises = await response.json();
+        if (Array.isArray(franchises)) {
+          var targetVal = params.get('server') || params.get('serverId') || serverFilterEl.value || '';
+          var firstOpt = serverFilterEl.options && serverFilterEl.options[0];
+          serverFilterEl.replaceChildren();
+          if (firstOpt) {
+            firstOpt.value = '';
+            firstOpt.textContent = 'Все франшизы';
+            serverFilterEl.appendChild(firstOpt);
+          } else {
+            var defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = 'Все франшизы';
+            serverFilterEl.appendChild(defaultOpt);
+          }
+          franchises.forEach(function (f) {
+            var opt = document.createElement('option');
+            opt.value = String(f.id);
+            opt.textContent = f.name;
+            serverFilterEl.appendChild(opt);
+          });
+          if (targetVal) {
+            serverFilterEl.value = targetVal;
+          }
+        }
+      } catch (error) {
+        console.warn('Не удалось загрузить список франшиз:', error);
       }
     }
 
@@ -5439,9 +5530,12 @@
       tagRoot.closest('.pub-filter').hidden = true;
     }
     loadTagOptions();
+    loadServerOptions();
     updateSearchClear();
 
     sortEl.addEventListener('change', applyFilters);
+    if (serverFilterEl) serverFilterEl.addEventListener('change', applyFilters);
+    if (statusFilterEl) statusFilterEl.addEventListener('change', applyFilters);
     dateFromEl.addEventListener('change', applyFilters);
     dateToEl.addEventListener('change', applyFilters);
     document.getElementById('pubResetFilters').addEventListener('click', resetFilters);

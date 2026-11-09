@@ -71,6 +71,14 @@ function excerptFromDocument(content) {
   return raw.slice(0, EXCERPT_MAX_LEN).replace(/\s+\S*$/, '') + '…';
 }
 
+function isArticleRoleRestricted(article) {
+  if (article && article.locked) return true;
+  if (article && Array.isArray(article.layers) && article.layers.length > 0) {
+    return article.layers.some((l) => l && (l.lockedNoRoles || (Array.isArray(l.roles) && l.roles.length > 0)));
+  }
+  return false;
+}
+
 function toPublicArticleSummary(article, resolved) {
   const layer = resolved.layer;
   const isLegacy = !Array.isArray(article.layers) || article.layers.length === 0;
@@ -80,6 +88,8 @@ function toPublicArticleSummary(article, resolved) {
     excerpt: layer.excerpt || (isLegacy ? article.excerpt : '') || excerptFromDocument(layer.content),
     image: layer.image || (isLegacy ? article.image : null),
     tags: Array.isArray(layer.tags) ? layer.tags : [],
+    server: article.server || null,
+    locked: isArticleRoleRestricted(article),
     created_at: article.created_at,
     updated_at: article.updated_at
   };
@@ -142,7 +152,8 @@ function parseDateBound(value, endOfDay) {
 const SORT_MODES = ['newest', 'oldest', 'updated', 'views', 'alpha', 'relevance'];
 
 function listPublicArticles(articles, {
-  q = '', tag = '', sort = '', viewCounts = null, dateFrom = '', dateTo = '', limit = 30, offset = 0
+  q = '', tag = '', sort = '', viewCounts = null, dateFrom = '', dateTo = '', limit = 30, offset = 0,
+  serverId = '', server = '', locked
 } = {}) {
   // «#слово» в строке поиска — это тег (совпадение по началу тега), остальное —
   // текстовый запрос; так же устроен поиск в админке.
@@ -152,6 +163,10 @@ function listPublicArticles(articles, {
   const tagKeys = String(tag).slice(0, 300).split(',').map(normalizeTagKey).filter(Boolean).slice(0, 20);
   const from = parseDateBound(dateFrom, false);
   const to = parseDateBound(dateTo, true);
+  const targetServer = String(serverId || server || '').trim();
+  const lockedFilter = locked === 'true' || locked === true
+    ? true
+    : (locked === 'false' || locked === false ? false : undefined);
   const requestedSort = SORT_MODES.includes(sort) ? sort : '';
   const effectiveSort = requestedSort || (query ? 'relevance' : 'newest');
   const createdAt = (item) => new Date(item.article.created_at || 0);
@@ -160,6 +175,9 @@ function listPublicArticles(articles, {
   for (const article of articles) {
     const resolved = articleLayers.resolvePublicArticleLayers(article);
     if (!resolved) continue;
+
+    if (targetServer && String(article.server || '').trim() !== targetServer) continue;
+    if (lockedFilter !== undefined && isArticleRoleRestricted(article) !== lockedFilter) continue;
 
     const tags = publicArticleTags(resolved);
     if (tagKeys.length && !tagKeys.some((key) => tags.has(key))) continue;

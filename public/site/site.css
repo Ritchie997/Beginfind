@@ -1435,6 +1435,17 @@
     font-size: 13px;
 }
 
+.pub-filter .form-select option {
+    background: #1e1f22;
+    color: #fff;
+}
+
+.pub-filter-server,
+.pub-filter-status {
+    min-width: 170px;
+    flex: 1 1 180px;
+}
+
 .pub-filter-tags {
     flex: 1 1 220px;
     max-width: 320px;
@@ -9558,6 +9569,24 @@ a.site-profile-media-row:hover {
     position: relative;
     width: 100%;
     overflow: hidden;
+}
+
+.antropedia-card-lock {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    color: #f6c445;
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
 }
 
 .public-wiki-card .wiki-card-cover {
