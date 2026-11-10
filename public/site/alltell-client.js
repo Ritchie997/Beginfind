@@ -575,7 +575,7 @@
               <div class="alltell-search-input-wrap">
                 <i class="fas fa-search alltell-search-icon" aria-hidden="true"></i>
                 <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
-                ${state.query ? `<button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск"><i class="fas fa-xmark"></i></button>` : ''}
+                <button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск" ${!state.query ? 'hidden' : ''}><i class="fas fa-xmark"></i></button>
               </div>
               <button class="btn btn-secondary alltell-search-btn" type="button" data-action="search-catalog">Найти</button>
             </form>
@@ -597,7 +597,7 @@
 
           <div class="alltell-catalog-controls">
             <div class="alltell-controls-selects">
-              <select class="alltell-select" data-action="change-hub-filter" aria-label="Фильтр по хабам">
+              <select class="alltell-select ${hubFilter !== 'all' ? 'active' : ''}" data-action="change-hub-filter" aria-label="Фильтр по хабам">
                 <option value="all" ${hubFilter === 'all' ? 'selected' : ''}>Все франшизы</option>
                 <option value="with" ${hubFilter === 'with' ? 'selected' : ''}>С хабами</option>
                 <option value="without" ${hubFilter === 'without' ? 'selected' : ''}>Без хабов</option>
@@ -605,7 +605,7 @@
                 <option value="paused" ${hubFilter === 'paused' ? 'selected' : ''}>Есть хабы на паузе</option>
                 <option value="finished" ${hubFilter === 'finished' ? 'selected' : ''}>Есть завершённые</option>
               </select>
-              <select class="alltell-select" data-action="change-sort" aria-label="Сортировка франшиз">
+              <select class="alltell-select ${sort !== 'created_desc' ? 'active' : ''}" data-action="change-sort" aria-label="Сортировка франшиз">
                 <option value="created_desc" ${sort === 'created_desc' ? 'selected' : ''}>Сначала новые</option>
                 <option value="created_asc" ${sort === 'created_asc' ? 'selected' : ''}>Сначала старые</option>
                 <option value="name_asc" ${sort === 'name_asc' ? 'selected' : ''}>По названию (А-Я)</option>
@@ -5747,10 +5747,18 @@
         state.catalogFilter = button.dataset.filter;
         renderCatalog(root, state);
       } else if (action === 'clear-search') {
+        var isInputClearBtn = button && button.classList && button.classList.contains('alltell-search-clear');
         state.query = '';
-        state.catalogFilter = 'all';
-        state.catalogHubFilter = 'all';
+        if (!isInputClearBtn) {
+          state.catalogFilter = 'all';
+          state.catalogHubFilter = 'all';
+        }
         renderCatalog(root, state);
+        var sInput = root.querySelector('#alltell-search-input');
+        if (sInput) {
+          sInput.value = '';
+          sInput.focus();
+        }
       } else if (action === 'toggle-post-like') {
         if (!token()) {
           if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
@@ -6098,6 +6106,10 @@
         event.target.style.height = Math.max(140, event.target.scrollHeight) + 'px';
       }
       if (event.target.matches('#alltell-search-input')) {
+        var clearBtn = root.querySelector('.alltell-search-clear');
+        if (clearBtn) {
+          clearBtn.hidden = !event.target.value.trim();
+        }
         if (event.target.value === '' && state.query !== '') {
           executeCatalogSearch('');
           return;

@@ -5,6 +5,19 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-10 — унификация стиля выпадающих списков каталога AllTell и исправление крестика поиска
+
+- AllTell — каталог франшиз (`public/site/site.css`, `public/site/alltell-mobile.css`, `public/site/alltell-client.js`):
+  - **Круглый стиль селектов каталога («Все франшизы», «Сначала новые»):**
+    - Для `.alltell-controls-selects .alltell-select` задан скругленный дизайн pill (`border-radius: 999px`), гармонирующий с соседними фильтр-чипами и бейджами статистики (`.alltell-filter-chip`, `.alltell-stat-chip-pill`).
+    - Установлена единообразная высота, отступы (`padding: 0 28px 0 14px`), фон `var(--background-secondary)`, кастомный SVG-шеврон со сменой цвета при ховере и акцентной подсветкой при активном фильтре (`.active`).
+    - На мобильных экранах селекты также обновлены со старого прямоугольного `border-radius: 10px` на плавный `border-radius: 999px`.
+  - **Исправление сдвига и двоения крестика отмены поиска:**
+    - Выяснена и устранена причина двоения и сдвига влево: браузеры на базе WebKit/Blink (Chrome, Edge) автоматически отрисовывали встроенный нативный `::-webkit-search-cancel-button` поверх кастомной кнопки `.alltell-search-clear`.
+    - Браузерные элементы очистки подавлены через `-webkit-appearance: none !important; display: none !important;`.
+    - Кастомная кнопка очистки `.alltell-search-clear` получила точное центрирование (`right: 12px; top: 50%; transform: translateY(-50%)`), круглый ховер-эффект и динамическое скрытие/появление при вводе текста без сброса фильтра каталога при клике.
+
+
 ## 2026-11-09 — фильтры по серверам (франшизам) и статусу в публичном каталоге Antropedia
 
 - Antropedia — расширенная фильтрация в публичном каталоге (`src/services/public-articles.js`, `src/routes/public-articles.routes.js`, `src/routes/articles.routes.js`, `src/services/articles-store.js`, `public/site/antropedia.html`, `public/site/site.js`, `public/site/site.css`, `docs/TASKS_PARITY_CHECKLIST.md`):

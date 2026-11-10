@@ -2617,6 +2617,7 @@ body[data-page="antropedia"] .site-main {
 .alltell-search-input-wrap input,
 .alltell-search-box input {
     width: 100%;
+    box-sizing: border-box;
     padding: 10px 38px 10px 38px;
     border-radius: 999px;
     background: var(--background-primary);
@@ -2625,6 +2626,23 @@ body[data-page="antropedia"] .site-main {
     font: inherit;
     font-size: 13.5px;
     transition: all 0.2s ease;
+}
+
+/* Скрываем встроенный браузерный крестик WebKit/Edge, чтобы он не дублировал и не сдвигал кастомную кнопку очистки */
+.alltell-search-input-wrap input[type="search"]::-webkit-search-cancel-button,
+.alltell-search-input-wrap input[type="search"]::-webkit-search-decoration,
+.alltell-search-input-wrap input[type="search"]::-webkit-search-results-button,
+.alltell-search-input-wrap input[type="search"]::-webkit-search-results-decoration,
+.alltell-search-box input[type="search"]::-webkit-search-cancel-button,
+.alltell-search-box input[type="search"]::-webkit-search-decoration,
+.alltell-search-input-wrap input::-ms-clear,
+.alltell-search-box input::-ms-clear,
+.antropedia-search-input::-webkit-search-cancel-button,
+.antropedia-search-input::-webkit-search-decoration {
+    -webkit-appearance: none !important;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .alltell-search-input-wrap input:focus,
@@ -2645,17 +2663,27 @@ body[data-page="antropedia"] .site-main {
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 14px;
-    padding: 4px;
+    font-size: 13px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1;
+    border-radius: 50%;
+    transition: color 0.15s ease, background 0.15s ease;
+    z-index: 2;
+}
+
+.alltell-search-input-wrap .alltell-search-clear[hidden],
+.alltell-search-clear[hidden] {
+    display: none !important;
 }
 
 .alltell-search-input-wrap .alltell-search-clear:hover,
 .alltell-search-clear:hover {
     color: var(--header-primary);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .alltell-search-btn {
@@ -6402,17 +6430,23 @@ body[data-page="antropedia"] .site-main {
     .alltell-controls-selects .alltell-select {
         width: 100%;
         min-width: 0;
-        padding: 7px 12px;
+        padding: 0 28px 0 14px;
         font-size: 12.5px;
-        font-weight: 500;
-        height: 38px;
-        border-radius: 10px;
-        background: var(--background-tertiary);
+        font-weight: 600;
+        height: 36px;
+        border-radius: 999px;
+        background-color: var(--background-secondary);
         border: 1px solid var(--background-accent);
         color: var(--text-normal);
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23949ba4' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: calc(100% - 11px) center;
         text-overflow: ellipsis;
         white-space: nowrap;
         overflow: hidden;
+        box-sizing: border-box;
     }
     .alltell-catalog-controls .alltell-stats-chips {
         display: none;
@@ -6989,20 +7023,61 @@ body[data-page="antropedia"] .site-main {
 }
 
 .alltell-select {
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: var(--background-tertiary, #1e1f22);
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 28px 6px 14px;
+    border-radius: 999px;
+    background-color: var(--background-secondary);
     border: 1px solid var(--background-accent);
-    color: var(--text-normal);
-    font-size: 0.86rem;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
     cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23949ba4' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: calc(100% - 11px) center;
+    transition: all 0.18s ease;
+    box-sizing: border-box;
+    line-height: 1.4;
+}
+
+.alltell-select:hover {
+    border-color: rgba(88, 101, 242, 0.4);
+    background-color: rgba(255, 255, 255, 0.04);
+    color: var(--header-primary);
 }
 
 .alltell-select:focus {
     outline: none;
     border-color: var(--blurple);
     box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25);
+    background-color: var(--background-secondary);
+    color: var(--header-primary);
+}
+
+.alltell-select.active {
+    background-color: rgba(88, 101, 242, 0.18);
+    border-color: var(--blurple);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(88, 101, 242, 0.25);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23ffffff' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+}
+
+.alltell-select option {
+    background-color: #1e1f22;
+    color: #dbdee1;
+    font-size: 13px;
+    font-weight: normal;
+}
+
+.alltell-controls-selects .alltell-select {
+    height: 31px;
+    padding: 0 28px 0 14px;
+    border-radius: 999px;
 }
 
 .alltell-stats-chips {
