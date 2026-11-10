@@ -2629,17 +2629,25 @@ body[data-page="antropedia"] .site-main {
 }
 
 /* Скрываем встроенный браузерный крестик WebKit/Edge, чтобы он не дублировал и не сдвигал кастомную кнопку очистки */
-.alltell-search-input-wrap input[type="search"]::-webkit-search-cancel-button,
-.alltell-search-input-wrap input[type="search"]::-webkit-search-decoration,
-.alltell-search-input-wrap input[type="search"]::-webkit-search-results-button,
-.alltell-search-input-wrap input[type="search"]::-webkit-search-results-decoration,
-.alltell-search-box input[type="search"]::-webkit-search-cancel-button,
-.alltell-search-box input[type="search"]::-webkit-search-decoration,
+.alltell-search-input-wrap input::-webkit-search-cancel-button,
+.alltell-search-input-wrap input::-webkit-search-decoration,
+.alltell-search-input-wrap input::-webkit-search-results-button,
+.alltell-search-input-wrap input::-webkit-search-results-decoration,
+.alltell-search-box input::-webkit-search-cancel-button,
+.alltell-search-box input::-webkit-search-decoration,
+.antropedia-search-input::-webkit-search-cancel-button,
+.antropedia-search-input::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none !important;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
 .alltell-search-input-wrap input::-ms-clear,
 .alltell-search-box input::-ms-clear,
-.antropedia-search-input::-webkit-search-cancel-button,
-.antropedia-search-input::-webkit-search-decoration {
-    -webkit-appearance: none !important;
+input::-ms-clear {
     display: none !important;
     width: 0 !important;
     height: 0 !important;

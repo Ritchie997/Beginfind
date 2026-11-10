@@ -574,8 +574,8 @@
             <form class="alltell-search-box" data-search-form role="search" onsubmit="return false;">
               <div class="alltell-search-input-wrap">
                 <i class="fas fa-search alltell-search-icon" aria-hidden="true"></i>
-                <input id="alltell-search-input" type="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
-                <button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск" ${!state.query ? 'hidden' : ''}><i class="fas fa-xmark"></i></button>
+                <input id="alltell-search-input" type="text" inputmode="search" name="q" value="${escapeHtml(state.query)}" placeholder="Поиск по названию или описанию…" autocomplete="off" aria-label="Поиск франшиз">
+                <button class="alltell-search-clear" type="button" data-action="clear-search" aria-label="Очистить поиск" title="Очистить поиск" style="display: ${state.query ? 'flex' : 'none'};"><i class="fas fa-xmark"></i></button>
               </div>
               <button class="btn btn-secondary alltell-search-btn" type="button" data-action="search-catalog">Найти</button>
             </form>
@@ -6108,7 +6108,7 @@
       if (event.target.matches('#alltell-search-input')) {
         var clearBtn = root.querySelector('.alltell-search-clear');
         if (clearBtn) {
-          clearBtn.hidden = !event.target.value.trim();
+          clearBtn.style.display = event.target.value.trim() ? 'flex' : 'none';
         }
         if (event.target.value === '' && state.query !== '') {
           executeCatalogSearch('');
@@ -6128,11 +6128,22 @@
     }
 
     function onKeyDown(event) {
-      if (event.target.matches('#alltell-search-input') && event.key === 'Enter') {
-        event.preventDefault();
-        event.stopPropagation();
-        executeCatalogSearch(event.target.value);
-        return;
+      if (event.target.matches('#alltell-search-input')) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          executeCatalogSearch(event.target.value);
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          event.target.value = '';
+          var clearBtn = root.querySelector('.alltell-search-clear');
+          if (clearBtn) clearBtn.style.display = 'none';
+          if (state.query) executeCatalogSearch('');
+          return;
+        }
       }
       if (event.key === 'Escape') {
         var openModals = root.querySelectorAll('.alltell-hub-desc-modal:not([hidden])');
