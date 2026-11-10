@@ -5,6 +5,15 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-10 — полоса быстрых тегов в админском каталоге Antropedia
+
+- Antropedia — админский каталог (`public/views/antropedia.html`, `public/antropedia.js`, `public/antropedia.css`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Полоса быстрых тегов в тулбаре (`#antropediaQuickTags`):**
+    - В `public/views/antropedia.html` под строкой поиска добавлен контейнер `<div id="antropediaQuickTags" class="antropedia-quick-tags"></div>`.
+    - В `public/antropedia.css` добавлены стили для `.antropedia-quick-tags` (горизонтальный скролл с поддержкой тач-прокрутки) и `.antropedia-tag-chip` (pill-дизайн с состояниями hover и подсветкой `.active`).
+    - В `public/antropedia.js` реализованы методы `loadQuickTags()`, `renderQuickTags(tags)` и `syncQuickTagsActive()`. При инициализации каталога запрашивается `/api/tags`, теги сортируются по популярности (топ-10) и рендерятся в тулбаре.
+    - Клик по тегу подставляет его в `antropediaTagField` (с поддержкой переключения/снятия) и автоматически перезагружает статьи каталога, синхронизируя активный статус чипов.
+
 ## 2026-11-10 — унификация стиля выпадающих списков каталога AllTell и исправление крестика поиска
 
 - AllTell — каталог франшиз (`public/site/site.css`, `public/site/alltell-mobile.css`, `public/site/alltell-client.js`):

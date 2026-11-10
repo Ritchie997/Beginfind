@@ -105,6 +105,64 @@
   box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
 }
 
+/* Полоса быстрых тегов в тулбаре каталога */
+.antropedia-quick-tags {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.antropedia-quick-tags:empty {
+  display: none;
+}
+
+.antropedia-quick-tags::-webkit-scrollbar {
+  height: 4px;
+}
+
+.antropedia-quick-tags::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+
+.antropedia-tag-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--background-accent);
+  background: var(--background-tertiary);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.antropedia-tag-chip:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--text-normal);
+  background: var(--background-accent);
+}
+
+.antropedia-tag-chip.active {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: var(--blurple);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.3);
+}
+
 .antropedia-toolbar-row-filters {
   align-items: flex-end;
   padding-top: 12px;

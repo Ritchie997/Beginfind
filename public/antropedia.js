@@ -451,6 +451,7 @@ function reactionsBarInnerHtml(reactions) {
       this.sentinelEl = document.getElementById('antropediaSentinel');
       this.countEl = document.getElementById('antropediaCount');
       this.searchEl = document.getElementById('antropediaSearch');
+      this.quickTagsEl = document.getElementById('antropediaQuickTags');
       this.serverFilterEl = document.getElementById('antropediaServerFilter');
       this.statusFilterEl = document.getElementById('antropediaStatusFilter');
       this.dateFromEl = document.getElementById('antropediaDateFrom');
@@ -569,6 +570,7 @@ function reactionsBarInnerHtml(reactions) {
       if (this._tocObserver) { this._tocObserver.disconnect(); this._tocObserver = null; }
       if (this._articleSearchOutsideHandler) { document.removeEventListener('click', this._articleSearchOutsideHandler); this._articleSearchOutsideHandler = null; }
       this.closeInArticleSearch?.();
+      this.quickTagsEl = null;
       if (this._keydownHandler) { document.removeEventListener('keydown', this._keydownHandler); this._keydownHandler = null; }
       if (this._docClickHandler) { document.removeEventListener('click', this._docClickHandler); this._docClickHandler = null; }
       if (this._bmGutterResizeHandler) { window.removeEventListener('resize', this._bmGutterResizeHandler); this._bmGutterResizeHandler = null; }
@@ -631,9 +633,68 @@ function reactionsBarInnerHtml(reactions) {
         const tagsResult = await window.apiClient.getTags();
         const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
         this.tagField?.setOptions(tags.map((t) => ({ value: t.tag, label: t.tag })));
+        this.renderQuickTags(tags);
       } catch (e) {
         // Фильтр по тегам просто останется без подсказок — не критично
       }
+    }
+
+    async loadQuickTags() {
+      try {
+        const tagsResult = await window.apiClient.getTags();
+        const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
+        this.renderQuickTags(tags);
+        return tags;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    renderQuickTags(tags) {
+      if (!this.quickTagsEl) return;
+      this.quickTagsEl.replaceChildren();
+      if (!Array.isArray(tags) || !tags.length) return;
+
+      // Топ-10 самых популярных тегов каталога
+      const sorted = [...tags]
+        .map((t) => (typeof t === 'string' ? { tag: t, count: 1 } : t))
+        .filter((t) => t && t.tag && String(t.tag).trim())
+        .sort((a, b) => (Number(b.count || 0) - Number(a.count || 0)) || a.tag.localeCompare(b.tag, 'ru'))
+        .slice(0, 10);
+
+      const activeTags = this.tagField ? this.tagField.getValues() : [];
+
+      sorted.forEach((tagItem) => {
+        const tagName = tagItem.tag;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'antropedia-tag-chip' + (activeTags.includes(tagName) ? ' active' : '');
+        btn.setAttribute('data-tag', tagName);
+        btn.textContent = '#' + tagName;
+        btn.title = `Фильтр по тегу «${tagName}»` + (tagItem.count != null ? ` (${tagItem.count})` : '');
+
+        btn.addEventListener('click', () => {
+          if (!this.tagField) return;
+          const currentValues = this.tagField.getValues();
+          if (currentValues.includes(tagName)) {
+            this.tagField.removeValue(tagName);
+          } else {
+            this.tagField.addValue(tagName);
+          }
+          this.syncQuickTagsActive();
+        });
+
+        this.quickTagsEl.appendChild(btn);
+      });
+    }
+
+    syncQuickTagsActive() {
+      if (!this.quickTagsEl) return;
+      const activeTags = this.tagField ? this.tagField.getValues() : [];
+      this.quickTagsEl.querySelectorAll('.antropedia-tag-chip').forEach((btn) => {
+        const name = btn.getAttribute('data-tag') || btn.textContent.replace(/^#/, '');
+        btn.classList.toggle('active', activeTags.includes(name));
+      });
     }
 
     bindEvents() {
@@ -865,6 +926,7 @@ function reactionsBarInnerHtml(reactions) {
     }
 
     async resetAndLoad() {
+      this.syncQuickTagsActive();
       this.updateFiltersCount();
       this.offset = 0;
       this.hasMore = true;

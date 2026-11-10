@@ -103,7 +103,7 @@
     - `public/site/antropedia.html`: в панель `#pubFiltersPanel` добавить селекты `#pubServerFilter` и `#pubStatusFilter`.
     - `public/site/site.js`: заполнять `#pubServerFilter` из `/api/public/franchises` и передавать `serverId` и `locked` параметрами в запрос `/api/public/articles`.
 
-- [ ] **Полоса быстрых тегов в админском каталоге**
+- [x] **Полоса быстрых тегов в админском каталоге**
   - **Что делать:** Добавить кликабельные теги в тулбар над сеткой админских статей.
   - **Где чинить:**
     - `public/views/antropedia.html`: под строкой поиска вставить контейнер `<div id="antropediaQuickTags" class="antropedia-quick-tags"></div>`.
