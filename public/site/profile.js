@@ -239,6 +239,55 @@
       }
     });
 
+    var pwdSection = el('publicProfilePasswordSection');
+    if (pwdSection) pwdSection.hidden = !isSelf;
+    if (isSelf) {
+      var pwdForm = el('publicProfilePasswordForm');
+      if (pwdForm && !pwdForm._hasHandler) {
+        pwdForm._hasHandler = true;
+        pwdForm.addEventListener('submit', async function (event) {
+          event.preventDefault();
+          var oldPassword = (el('publicProfileOldPassword').value || '').trim();
+          var newPassword = (el('publicProfileNewPassword').value || '').trim();
+          var confirmPassword = (el('publicProfileConfirmPassword').value || '').trim();
+
+          if (!oldPassword) {
+            showFeedback('Введите текущий пароль.', true);
+            return;
+          }
+          if (newPassword.length < 6) {
+            showFeedback('Новый пароль должен быть не короче 6 символов.', true);
+            return;
+          }
+          if (newPassword !== confirmPassword) {
+            showFeedback('Новые пароли не совпадают.', true);
+            return;
+          }
+
+          var submit = el('publicProfilePasswordSubmit');
+          if (submit) submit.disabled = true;
+
+          try {
+            await requestJson('/api/profile/change-password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ oldPassword: oldPassword, newPassword: newPassword, confirmPassword: confirmPassword })
+            });
+            if (generation !== profileLoadGeneration) return;
+            el('publicProfileOldPassword').value = '';
+            el('publicProfileNewPassword').value = '';
+            el('publicProfileConfirmPassword').value = '';
+            showFeedback('Пароль успешно обновлён.');
+          } catch (error) {
+            if (generation !== profileLoadGeneration) return;
+            showFeedback(error.message, true);
+          } finally {
+            if (generation === profileLoadGeneration && submit) submit.disabled = false;
+          }
+        });
+      }
+    }
+
     el('publicProfileAvatarUpload').addEventListener('click', function () { el('publicProfileAvatarInput').click(); });
     el('publicProfileAvatarInput').addEventListener('change', async function (event) {
       var file = event.target.files && event.target.files[0];

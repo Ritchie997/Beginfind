@@ -689,6 +689,228 @@ function updateAdminNote(actingUser, targetId, note) {
 }
 
 /**
+ * Сменить свой пароль (пользователь в своём профиле).
+ */
+async function changeOwnPassword(userId, oldPassword, newPassword, confirmPassword) {
+  if (!oldPassword || typeof oldPassword !== 'string') {
+    throw new Error('Укажите текущий пароль');
+  }
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    throw new Error('Новый пароль должен быть не короче 6 символов');
+  }
+  if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    throw new Error('Новые пароли не совпадают');
+  }
+
+  const row = await new Promise((resolve, reject) => {
+    db.get('SELECT id, password FROM users WHERE id = ?', [userId], (err, r) => {
+      if (err) reject(err); else resolve(r);
+    });
+  });
+
+  if (!row) {
+    throw new Error('Пользователь не найден');
+  }
+
+  const isValid = row.password ? await bcrypt.compare(oldPassword, row.password) : false;
+  if (!isValid) {
+    throw new Error('Неверный текущий пароль');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+  await new Promise((resolve, reject) => {
+    db.run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, userId], (err) => {
+      if (err) reject(err); else resolve();
+    });
+  });
+
+  return { success: true, message: 'Пароль успешно обновлён' };
+}
+
+/**
+ * Администратор меняет пароль пользователю из вкладки "Пользователи".
+ */
+async function changeUserPasswordByAdmin(actingUser, targetId, newPassword, confirmPassword) {
+  const allowed = !!(actingUser && (actingUser.is_root || (actingUser.permissions && (actingUser.permissions.manage_admin_roles || actingUser.permissions.rename_users))));
+  if (!allowed) {
+    throw new Error('Недостаточно прав для изменения пароля пользователя');
+  }
+
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    throw new Error('Пароль должен быть не короче 6 символов');
+  }
+  if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    throw new Error('Пароли не совпадают');
+  }
+
+  const target = await getUserFull(targetId);
+  if (!target) {
+    throw new Error('Пользователь не найден');
+  }
+
+  if (target.is_root && !actingUser.is_root) {
+    throw new Error('Только владелец может менять пароль владельца');
+  }
+
+  if (!actingUser.is_root && (target.admin_level || 0) >= (actingUser.admin_level || 0)) {
+    throw new Error('Нельзя менять пароль администратору того же или более высокого ранга');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+  await new Promise((resolve, reject) => {
+    db.run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, targetId], (err) => {
+      if (err) reject(err); else resolve();
+    });
+  });
+
+  return { success: true, message: `Пароль пользователя ${target.display_name} успешно изменён` };
+}
+
+/**
+ * Запрос на смену пароля от гостя (забыл пароль в окне входа).
+ */
+async function createPasswordResetRequest(username, proposedPassword, confirmPassword, reason) {
+  if (!username || typeof username !== 'string' || !username.trim()) {
+    throw new Error('Укажите имя профиля или логин');
+  }
+  if (!proposedPassword || typeof proposedPassword !== 'string' || proposedPassword.length < 6) {
+    throw new Error('Пароль должен быть не короче 6 символов');
+  }
+  if (confirmPassword !== undefined && proposedPassword !== confirmPassword) {
+    throw new Error('Пароли не совпадают');
+  }
+
+  const trimmedName = username.trim();
+  const row = await new Promise((resolve, reject) => {
+    db.get(
+      'SELECT id, username, display_name, status, is_root FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(display_name) = LOWER(?)',
+      [trimmedName, trimmedName],
+      (err, r) => {
+        if (err) reject(err); else resolve(r);
+      }
+    );
+  });
+
+  if (!row) {
+    throw new Error('Пользователь с таким именем или логином не найден');
+  }
+  if (row.status === 'blocked' || row.status === 'rejected') {
+    throw new Error('Аккаунт заблокирован или отклонён');
+  }
+
+  const hashedPassword = await bcrypt.hash(proposedPassword, 12);
+  const cleanReason = String(reason || '').trim().slice(0, 500);
+
+  // Если уже была активная заявка — обновляем её
+  const existingReq = await new Promise((resolve, reject) => {
+    db.get('SELECT id FROM password_reset_requests WHERE user_id = ? AND status = ?', [row.id, 'pending'], (err, r) => {
+      if (err) reject(err); else resolve(r);
+    });
+  });
+
+  if (existingReq) {
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE password_reset_requests SET proposed_password = ?, reason = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [hashedPassword, cleanReason, existingReq.id],
+        (err) => {
+          if (err) reject(err); else resolve();
+        }
+      );
+    });
+  } else {
+    await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO password_reset_requests (user_id, username, display_name, proposed_password, reason, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [row.id, row.username, row.display_name, hashedPassword, cleanReason, 'pending'],
+        (err) => {
+          if (err) reject(err); else resolve();
+        }
+      );
+    });
+  }
+
+  return { success: true, message: 'Заявка на смену пароля отправлена администраторам' };
+}
+
+/**
+ * Получить список активных запросов на смену пароля.
+ */
+function getPasswordResetRequests() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      'SELECT id, user_id, username, display_name, reason, status, created_at FROM password_reset_requests WHERE status = ? ORDER BY created_at DESC',
+      ['pending'],
+      (err, rows) => {
+        if (err) reject(err); else resolve(rows || []);
+      }
+    );
+  });
+}
+
+/**
+ * Одобрить запрос на смену пароля.
+ */
+async function approvePasswordResetRequest(actingUser, requestId) {
+  const allowed = !!(actingUser && (actingUser.is_root || (actingUser.permissions && actingUser.permissions.manage_pending_users)));
+  if (!allowed) {
+    throw new Error('Недостаточно прав для обработки заявок');
+  }
+
+  const reqRow = await new Promise((resolve, reject) => {
+    db.get('SELECT * FROM password_reset_requests WHERE id = ? AND status = ?', [requestId, 'pending'], (err, r) => {
+      if (err) reject(err); else resolve(r);
+    });
+  });
+
+  if (!reqRow) {
+    throw new Error('Заявка не найдена или уже была обработана');
+  }
+
+  await new Promise((resolve, reject) => {
+    db.run('UPDATE users SET password = ? WHERE id = ?', [reqRow.proposed_password, reqRow.user_id], (err) => {
+      if (err) reject(err); else resolve();
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE password_reset_requests SET status = ?, resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE id = ?',
+      ['approved', actingUser.id, requestId],
+      (err) => {
+        if (err) reject(err); else resolve();
+      }
+    );
+  });
+
+  return { success: true, message: `Пароль пользователя ${reqRow.display_name} успешно обновлён` };
+}
+
+/**
+ * Отклонить запрос на смену пароля.
+ */
+async function rejectPasswordResetRequest(actingUser, requestId, reason) {
+  const allowed = !!(actingUser && (actingUser.is_root || (actingUser.permissions && actingUser.permissions.manage_pending_users)));
+  if (!allowed) {
+    throw new Error('Недостаточно прав для обработки заявок');
+  }
+
+  const cleanReason = String(reason || '').trim().slice(0, 500);
+  return new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE password_reset_requests SET status = ?, reason = COALESCE(NULLIF(?, ""), reason), resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE id = ? AND status = ?',
+      ['rejected', cleanReason, actingUser.id, requestId, 'pending'],
+      function (err) {
+        if (err) reject(err);
+        else if (this.changes === 0) reject(new Error('Заявка не найдена или уже обработана'));
+        else resolve({ success: true, message: 'Заявка отклонена' });
+      }
+    );
+  });
+}
+
+
+/**
  * Получить всех пользователей со статусом pending
  */
 function getPendingUsers() {
@@ -1287,6 +1509,12 @@ module.exports = {
   muteUser,
   unmuteUser,
   rateLimitLimiter,
+  changeOwnPassword,
+  changeUserPasswordByAdmin,
+  createPasswordResetRequest,
+  getPasswordResetRequests,
+  approvePasswordResetRequest,
+  rejectPasswordResetRequest,
   assignObserverRoleIfNeeded,
   getUserFull,
   PERMISSION_KEYS,

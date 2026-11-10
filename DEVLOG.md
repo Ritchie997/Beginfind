@@ -5,6 +5,21 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-10 — смена пароля в профиле, админский сброс и заявки «Забыли пароль?»
+
+- Авторизация и профили (`src/routes/auth.routes.js`, `src/middleware/auth.js`, `src/db/migrate-users-schema.js`, `public/views/profile.html`, `public/site/profile.html`, `public/site/profile.js`, `public/site/site.css`, `public/views/users-list.html`, `public/views/pending-users.html`, `public/spa-router.js`, `public/auth-system.js`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Смена пароля пользователем в личном профиле:**
+    - В `src/routes/auth.routes.js` реализован защищённый эндпоинт `POST /api/profile/change-password` с валидацией текущего пароля через `bcrypt.compare`, хешированием нового пароля (`bcrypt.hash`, salt rounds 12) и обновлением в базе `users.db`.
+    - В админ-панели (`public/views/profile.html`, `public/spa-router.js`) под блоком «О себе» добавлена секция `#profile-password-section` для смены собственного пароля.
+    - На публичном сайте (`public/site/profile.html`, `public/site/profile.js`, `public/site/site.css`) добавлена карточка `#publicProfilePasswordSection` («Безопасность / Смена пароля»), отображаемая только владельцу профиля.
+  - **Смена пароля пользователя администратором:**
+    - В `src/routes/auth.routes.js` и `src/middleware/auth.js` добавлен маршрут `PUT /api/users/:id/password` (`changeUserPasswordByAdmin`) с проверкой прав доступа (`is_root` или `rename_users`, запрет изменения root не-рутом и запрет редактирования равных/старших рангов).
+    - В админке на вкладке «Пользователи» (`public/views/users-list.html`, `public/spa-router.js`) добавлена кнопка «Сменить пароль» и модальное окно `#change-password-modal`.
+  - **Заявки «Забыли пароль?» из окна авторизации:**
+    - В схему `users.db` (`src/db/migrate-users-schema.js`) добавлена таблица `password_reset_requests` для хранения запросов на смену пароля от гостей/пользователей, забывших пароль.
+    - В окне входа (`public/auth-system.js`) добавлена ссылка «Забыли пароль?», форма `#forgot-form` с указанием логина/имени профиля и предложенного нового пароля (отправка на `POST /api/password-reset-request` с защитой `loginLimiter`).
+    - Во вкладке «Заявки» (`public/views/pending-users.html`, `public/spa-router.js`) добавлен блок заявок на сброс пароля с возможностью одобрения (применение предложенного хеша пароля) или отклонения администратором.
+
 ## 2026-11-10 — полоса быстрых тегов в админском каталоге Antropedia
 
 - Antropedia — админский каталог (`public/views/antropedia.html`, `public/antropedia.js`, `public/antropedia.css`, `docs/TASKS_PARITY_CHECKLIST.md`):

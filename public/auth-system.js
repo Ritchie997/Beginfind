@@ -327,11 +327,77 @@ function showModalLogin(initialTab = 'login') {
           cursor:pointer; font-size:15px; font-weight:500; transition:background-color 0.2s;
         ">Войти</button>
       </form>
-      <button id="auth-register-link" type="button" style="
-        display: block; margin: 16px auto 0; padding: 4px 0;
+      <div id="auth-links-row" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 8px;">
+        <button id="auth-forgot-link" type="button" style="
+          background: transparent; border: none; color: #aeb5ff;
+          font-size: 13px; cursor: pointer; padding: 4px 0;
+        ">Забыли пароль?</button>
+        <button id="auth-register-link" type="button" style="
+          background: transparent; border: none; color: #aeb5ff;
+          font-size: 13px; cursor: pointer; padding: 4px 0;
+        ">Регистрация</button>
+      </div>
+
+      <!-- Форма сброса / смены забытого пароля -->
+      <form id="forgot-form" style="display:none; flex-direction:column;">
+        <div style="margin-bottom: 14px;">
+          <h3 style="color:var(--header-primary, #fff); margin:0 0 6px 0; font-size:17px; font-weight:600;">Сброс пароля</h3>
+          <p style="color:var(--text-muted, #b9bbbe); margin:0; font-size:12.5px; line-height:1.45;">Введите логин или имя вашего профиля и укажите новый желаемый пароль. Запрос будет направлен администраторам в раздел заявок.</p>
+        </div>
+        <div style="margin-bottom: 13px;">
+          <label for="forgot-username" style="display:block; margin-bottom:6px; color:var(--text-muted, #b9bbbe); font-weight:500;">Имя профиля или логин:</label>
+          <input type="text" id="forgot-username" autocomplete="username" required placeholder="Например: admin" style="
+            width:100%; padding:11px; box-sizing:border-box;
+            background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
+            border-radius:4px; color:var(--text-normal, #dcddde); font-size:14px;
+          ">
+        </div>
+        <div style="margin-bottom: 13px;">
+          <label for="forgot-password" style="display:block; margin-bottom:6px; color:var(--text-muted, #b9bbbe); font-weight:500;">Желаемый новый пароль:</label>
+          <input type="password" id="forgot-password" autocomplete="new-password" required minlength="6" placeholder="Минимум 6 символов" style="
+            width:100%; padding:11px; box-sizing:border-box;
+            background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
+            border-radius:4px; color:var(--text-normal, #dcddde); font-size:14px;
+          ">
+        </div>
+        <div style="margin-bottom: 13px;">
+          <label for="forgot-password-confirm" style="display:block; margin-bottom:6px; color:var(--text-muted, #b9bbbe); font-weight:500;">Повтор нового пароля:</label>
+          <input type="password" id="forgot-password-confirm" autocomplete="new-password" required minlength="6" placeholder="Повторите новый пароль" style="
+            width:100%; padding:11px; box-sizing:border-box;
+            background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
+            border-radius:4px; color:var(--text-normal, #dcddde); font-size:14px;
+          ">
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label for="forgot-reason" style="display:block; margin-bottom:6px; color:var(--text-muted, #b9bbbe); font-weight:500;">Причина / комментарий (необязательно):</label>
+          <input type="text" id="forgot-reason" maxlength="200" placeholder="Например: забыл пароль от старого аккаунта" style="
+            width:100%; padding:11px; box-sizing:border-box;
+            background:var(--background-tertiary, #36393f); border:1px solid var(--background-accent, #4f545c);
+            border-radius:4px; color:var(--text-normal, #dcddde); font-size:14px;
+          ">
+        </div>
+        <div id="forgot-message" style="display:none; margin-bottom:12px; padding:10px; border-radius:4px; font-size:14px;"></div>
+        <button type="submit" id="forgot-submit" style="
+          background:#5865f2; color:white; padding:12px; border:none; border-radius:4px;
+          cursor:pointer; font-size:15px; font-weight:500; transition:background-color 0.2s;
+        ">Отправить заявку на смену</button>
+      </form>
+      <button id="forgot-login-link" type="button" style="
+        display: none; margin: 16px auto 0; padding: 4px 0;
         background: transparent; border: none; color: #aeb5ff;
         font-size: 13px; cursor: pointer;
-      ">Нет профиля? Зарегистрируйтесь</button>
+      ">Вспомнили пароль? Войти</button>
+
+      <!-- Статус после отправки заявки на сброс -->
+      <div id="forgot-pending" style="display:none; text-align:center; padding:20px 0;">
+        <div style="font-size:40px; margin-bottom:12px;">🔑</div>
+        <h3 style="color:var(--header-primary, #fff); margin-bottom:8px;">Заявка на смену пароля отправлена</h3>
+        <p style="color:var(--text-muted, #b9bbbe); margin-bottom:20px; line-height:1.5;">Администратор проверит запрос в разделе заявок.<br>После одобрения новый пароль вступит в силу.</p>
+        <button id="forgot-pending-back" type="button" style="
+          background:#5865f2; color:white; padding:12px 24px; border:none; border-radius:4px;
+          cursor:pointer; font-size:15px; font-weight:500;
+        ">Вернуться ко входу</button>
+      </div>
 
       <!-- Форма регистрации (скрыта по умолчанию) -->
       <form id="register-form" style="display:none; flex-direction:column;">
@@ -396,30 +462,50 @@ function showModalLogin(initialTab = 'login') {
 
   document.body.appendChild(modal);
 
-  // Переключение между входом и регистрацией
+  // Переключение между входом, регистрацией и запросом сброса пароля
   const authForm = document.getElementById('auth-form');
   const registerForm = document.getElementById('register-form');
+  const forgotForm = document.getElementById('forgot-form');
+  const authLinksRow = document.getElementById('auth-links-row');
   const registerLink = document.getElementById('auth-register-link');
+  const forgotLink = document.getElementById('auth-forgot-link');
   const loginLink = document.getElementById('register-login-link');
+  const forgotLoginLink = document.getElementById('forgot-login-link');
   const regPending = document.getElementById('reg-pending');
+  const forgotPending = document.getElementById('forgot-pending');
 
   function showTab(tab) {
-    regPending.style.display = 'none';
+    if (regPending) regPending.style.display = 'none';
+    if (forgotPending) forgotPending.style.display = 'none';
     if (tab === 'login') {
       authForm.style.display = 'flex';
+      if (authLinksRow) authLinksRow.style.display = 'flex';
       registerForm.style.display = 'none';
-      registerLink.style.display = 'block';
+      forgotForm.style.display = 'none';
       loginLink.style.display = 'none';
-    } else {
+      forgotLoginLink.style.display = 'none';
+    } else if (tab === 'register') {
       authForm.style.display = 'none';
+      if (authLinksRow) authLinksRow.style.display = 'none';
       registerForm.style.display = 'flex';
-      registerLink.style.display = 'none';
+      forgotForm.style.display = 'none';
       loginLink.style.display = 'block';
+      forgotLoginLink.style.display = 'none';
+    } else if (tab === 'forgot') {
+      authForm.style.display = 'none';
+      if (authLinksRow) authLinksRow.style.display = 'none';
+      registerForm.style.display = 'none';
+      forgotForm.style.display = 'flex';
+      loginLink.style.display = 'none';
+      forgotLoginLink.style.display = 'block';
     }
   }
 
-  registerLink.addEventListener('click', () => showTab('register'));
-  loginLink.addEventListener('click', () => showTab('login'));
+  registerLink?.addEventListener('click', () => showTab('register'));
+  loginLink?.addEventListener('click', () => showTab('login'));
+  forgotLink?.addEventListener('click', () => showTab('forgot'));
+  forgotLoginLink?.addEventListener('click', () => showTab('login'));
+  document.getElementById('forgot-pending-back')?.addEventListener('click', () => showTab('login'));
 
   // ВХОД
   const loginForm = document.getElementById('auth-form');
@@ -512,11 +598,78 @@ function showModalLogin(initialTab = 'login') {
     }
   });
 
+  // ЗАПРОС СМЕНЫ / СБРОСА ПАРОЛЯ
+  const forgotUsername = document.getElementById('forgot-username');
+  const forgotPassword = document.getElementById('forgot-password');
+  const forgotPasswordConfirm = document.getElementById('forgot-password-confirm');
+  const forgotReason = document.getElementById('forgot-reason');
+  const forgotMessage = document.getElementById('forgot-message');
+  const forgotSubmit = document.getElementById('forgot-submit');
+
+  forgotForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    const username = (forgotUsername.value || '').trim();
+    const newPassword = forgotPassword.value || '';
+    const confirmPassword = forgotPasswordConfirm.value || '';
+    const reason = (forgotReason.value || '').trim();
+
+    if (!username) {
+      showFieldMessage(forgotMessage, 'Укажите логин или имя профиля', 'error');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      showFieldMessage(forgotMessage, 'Пароль должен быть не короче 6 символов', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showFieldMessage(forgotMessage, 'Пароли не совпадают', 'error');
+      return;
+    }
+
+    isSubmitting = true;
+    forgotSubmit.disabled = true;
+    forgotSubmit.textContent = 'Отправка...';
+    forgotMessage.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/password-reset-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          proposedPassword: newPassword,
+          confirmPassword,
+          reason
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showFieldMessage(forgotMessage, data.error || 'Ошибка при отправке заявки', 'error');
+      } else {
+        forgotForm.style.display = 'none';
+        forgotPending.style.display = 'block';
+        forgotUsername.value = '';
+        forgotPassword.value = '';
+        forgotPasswordConfirm.value = '';
+        forgotReason.value = '';
+      }
+    } catch (err) {
+      showFieldMessage(forgotMessage, err.message || 'Ошибка сети', 'error');
+    } finally {
+      isSubmitting = false;
+      forgotSubmit.disabled = false;
+      forgotSubmit.textContent = 'Отправить заявку на смену';
+    }
+  });
+
   document.getElementById('reg-pending-back').addEventListener('click', () => {
     showTab('login');
   });
 
   if (initialTab === 'register') showTab('register');
+  else if (initialTab === 'forgot') showTab('forgot');
 
   // Нет кнопки закрытия — модалка остаётся пока пользователь не войдёт
 }

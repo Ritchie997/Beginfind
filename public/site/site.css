@@ -8526,6 +8526,42 @@ textarea.alltell-hub-desc-textarea {
 #publicProfileNoteForm textarea { display: block; width: 100%; resize: vertical; box-sizing: border-box; }
 
 .site-profile-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.site-profile-password-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 360px;
+    margin-top: 10px;
+}
+
+.site-profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.site-profile-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.site-profile-field input {
+    padding: 10px 12px;
+    border: 1px solid var(--background-accent);
+    border-radius: 9px;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.18s ease;
+}
+
+.site-profile-field input:focus {
+    border-color: var(--blurple);
+}
+
 
 .site-profile-tabs {
     display: flex;

@@ -70,6 +70,29 @@
             </div>
         </div>
 
+        <!-- Смена пароля (только на своём профиле) -->
+        <div id="profile-password-section" style="display: none; margin-bottom: 24px; padding: 16px; background: var(--background-secondary, #2f3136); border: 1px solid var(--background-accent, #4f545c); border-radius: 8px;">
+            <h3 style="color: var(--header-primary, #fff); margin: 0 0 12px 0; font-size: 15px;"><i class="fas fa-key"></i> Смена пароля</h3>
+            <form id="profile-password-form" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 10px; max-width: 360px;">
+                <div>
+                    <label style="display: block; color: var(--text-muted, #b9bbbe); font-size: 12px; margin-bottom: 4px;">Текущий пароль</label>
+                    <input type="password" id="profile-old-password" class="form-input" placeholder="Введите текущий пароль" required autocomplete="current-password" style="width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c); border-radius: 4px; color: var(--text-normal, #dcddde);">
+                </div>
+                <div>
+                    <label style="display: block; color: var(--text-muted, #b9bbbe); font-size: 12px; margin-bottom: 4px;">Новый пароль</label>
+                    <input type="password" id="profile-new-password" class="form-input" placeholder="Минимум 6 символов" required minlength="6" autocomplete="new-password" style="width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c); border-radius: 4px; color: var(--text-normal, #dcddde);">
+                </div>
+                <div>
+                    <label style="display: block; color: var(--text-muted, #b9bbbe); font-size: 12px; margin-bottom: 4px;">Подтверждение нового пароля</label>
+                    <input type="password" id="profile-confirm-password" class="form-input" placeholder="Повторите новый пароль" required minlength="6" autocomplete="new-password" style="width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--background-tertiary, #36393f); border: 1px solid var(--background-accent, #4f545c); border-radius: 4px; color: var(--text-normal, #dcddde);">
+                </div>
+                <div id="profile-password-msg" style="display: none; font-size: 13px; line-height: 1.4;"></div>
+                <div>
+                    <button type="submit" id="profile-password-submit-btn" class="btn btn-primary" style="padding: 7px 16px; font-size: 13px;">Обновить пароль</button>
+                </div>
+            </form>
+        </div>
+
         <!-- Приватная заметка админ-панели (видна только тем, у кого есть право view_users_tab) -->
         <!-- Цвет — существующий токен var(--yellow), а не свой одноразовый
              #f5b642 (см. пункт "хардкод-цвета → переменные" в разборе

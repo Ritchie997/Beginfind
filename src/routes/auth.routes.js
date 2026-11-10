@@ -138,6 +138,20 @@ router.put('/profile', auth.authenticateToken, auth.checkApproved, async (req, r
   }
 });
 
+// POST /api/profile/change-password — сменить свой пароль
+router.post('/profile/change-password', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword, old_password, new_password, password_confirm } = req.body || {};
+    const oldPass = oldPassword || old_password;
+    const newPass = newPassword || new_password;
+    const confPass = confirmPassword || password_confirm;
+    const result = await auth.changeOwnPassword(req.user.id, oldPass, newPass, confPass);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // POST /api/profile/avatar — загрузить/заменить свою аватарку. Файл
 // сохраняется как public/uploads/avatar/<id пользователя>.<ext> (см.
 // src/services/avatars.js); ответ — новый URL (с ?v= против кэша).
@@ -240,6 +254,50 @@ router.put('/pending-users/:id/reject', auth.authenticateToken, auth.checkApprov
     const { reason } = req.body;
     const result = await auth.rejectUser(id, reason, req.user.username);
     res.json({ message: 'Заявка отклонена', ...result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// POST /api/password-reset-request — запрос на смену пароля (гость/забыл пароль)
+router.post('/password-reset-request', auth.rateLimitLimiter('login'), async (req, res) => {
+  try {
+    const { username, proposedPassword, confirmPassword, reason, password, password_confirm } = req.body || {};
+    const userField = username;
+    const propPass = proposedPassword || password;
+    const confPass = confirmPassword || password_confirm;
+    const result = await auth.createPasswordResetRequest(userField, propPass, confPass, reason);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// GET /api/password-reset-requests — список активных запросов на смену пароля (админ)
+router.get('/password-reset-requests', auth.authenticateToken, auth.checkApproved, auth.checkPermission('manage_pending_users'), async (req, res) => {
+  try {
+    const requests = await auth.getPasswordResetRequests();
+    res.json({ requests });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/password-reset-requests/:id/approve — одобрить смену пароля (админ)
+router.put('/password-reset-requests/:id/approve', auth.authenticateToken, auth.checkApproved, auth.checkPermission('manage_pending_users'), async (req, res) => {
+  try {
+    const result = await auth.approvePasswordResetRequest(req.user, req.params.id);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/password-reset-requests/:id/reject — отклонить запрос на смену пароля (админ)
+router.put('/password-reset-requests/:id/reject', auth.authenticateToken, auth.checkApproved, auth.checkPermission('manage_pending_users'), async (req, res) => {
+  try {
+    const result = await auth.rejectPasswordResetRequest(req.user, req.params.id, req.body?.reason);
+    res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -429,6 +487,20 @@ router.put('/users/:id/rename', auth.authenticateToken, auth.checkApproved, auth
     const { display_name, username } = req.body;
     const result = await auth.renameUser(req.user, id, { display_name, username });
     res.json({ message: 'Пользователь переименован', ...result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/users/:id/password — сменить пароль пользователю (админ)
+router.put('/users/:id/password', auth.authenticateToken, auth.checkApproved, auth.checkPermission('rename_users'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword, confirmPassword, password, password_confirm } = req.body || {};
+    const newPass = newPassword || password;
+    const confPass = confirmPassword || password_confirm;
+    const result = await auth.changeUserPasswordByAdmin(req.user, id, newPass, confPass);
+    res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

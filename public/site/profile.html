@@ -120,6 +120,33 @@
       </form>
     </section>
 
+    <!-- Смена пароля (только в собственном профиле) -->
+    <section id="publicProfilePasswordSection" class="site-profile-card site-profile-section" hidden>
+      <div class="site-profile-section-heading">
+        <div>
+          <span class="site-profile-eyebrow">Безопасность</span>
+          <h2>Смена пароля</h2>
+        </div>
+      </div>
+      <form id="publicProfilePasswordForm" class="site-profile-password-form" onsubmit="return false;">
+        <div class="site-profile-field">
+          <label for="publicProfileOldPassword">Текущий пароль</label>
+          <input type="password" id="publicProfileOldPassword" class="site-profile-input" required autocomplete="current-password" placeholder="Введите текущий пароль">
+        </div>
+        <div class="site-profile-field">
+          <label for="publicProfileNewPassword">Новый пароль</label>
+          <input type="password" id="publicProfileNewPassword" class="site-profile-input" required minlength="6" autocomplete="new-password" placeholder="Минимум 6 символов">
+        </div>
+        <div class="site-profile-field">
+          <label for="publicProfileConfirmPassword">Подтверждение нового пароля</label>
+          <input type="password" id="publicProfileConfirmPassword" class="site-profile-input" required minlength="6" autocomplete="new-password" placeholder="Повторите новый пароль">
+        </div>
+        <div class="site-profile-form-actions">
+          <button type="submit" class="site-profile-button is-primary" id="publicProfilePasswordSubmit">Обновить пароль</button>
+        </div>
+      </form>
+    </section>
+
     <section class="site-profile-card site-profile-section">
       <div class="site-profile-section-heading">
         <div>

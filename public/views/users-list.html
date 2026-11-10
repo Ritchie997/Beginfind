@@ -224,6 +224,33 @@
   </div>
 </div>
 
+<!-- Модальное окно: сменить пароль -->
+<div id="change-password-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Сменить пароль пользователя</h3>
+      <button type="button" class="modal-close" id="change-password-close-btn" title="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 12px 0;">
+        Установка нового пароля для пользователя <strong id="change-password-target-name" style="color: var(--text-normal);"></strong>.
+      </p>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label" for="change-password-new-input">Новый пароль</label>
+        <input type="password" id="change-password-new-input" class="form-input" placeholder="Минимум 6 символов" minlength="6">
+      </div>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label" for="change-password-confirm-input">Подтверждение пароля</label>
+        <input type="password" id="change-password-confirm-input" class="form-input" placeholder="Повторите новый пароль" minlength="6">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" id="change-password-cancel-btn">Отмена</button>
+      <button type="button" class="btn btn-primary" id="change-password-confirm-btn">Сохранить пароль</button>
+    </div>
+  </div>
+</div>
+
 <!-- Модальное окно: создать/редактировать роль -->
 <div id="role-editor-modal" class="modal-overlay" style="display: none;">
   <div class="modal-box">

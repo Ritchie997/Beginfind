@@ -6515,9 +6515,112 @@ SPARouter.prototype.renderPendingUsers = async function() {
         btn.addEventListener('click', () => this.showRejectModal(btn.dataset.id, btn.dataset.name));
       });
     }
+
+    // Загрузка запросов на смену пароля
+    const pwdBlock = document.getElementById('pending-pwd-resets-block');
+    const pwdCountEl = document.getElementById('pending-pwd-count');
+    const pwdTbodyEl = document.getElementById('pending-pwd-tbody');
+    try {
+      const pRes = await fetch('/api/password-reset-requests');
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const pwdRequests = pData.requests || [];
+        if (pwdBlock && pwdCountEl && pwdTbodyEl) {
+          if (pwdRequests.length > 0) {
+            pwdBlock.style.display = 'block';
+            pwdCountEl.textContent = pwdRequests.length;
+            pwdTbodyEl.innerHTML = '';
+            pwdRequests.forEach(req => {
+              const tr = document.createElement('tr');
+              const date = req.created_at ? new Date(req.created_at).toLocaleString('ru-RU') : '—';
+              const name = this.escapeHtml(req.display_name || req.username);
+              const username = this.escapeHtml(req.username);
+              const reason = this.escapeHtml(req.reason || '—');
+
+              tr.innerHTML = `
+                <td class="cell-primary" data-label="Имя">${name}</td>
+                <td data-label="Логин" style="font-family: monospace; color: var(--text-muted);">${username}</td>
+                <td data-label="Пояснение" style="color: var(--text-normal);">${reason}</td>
+                <td data-label="Дата запроса" style="color: var(--text-muted);">${date}</td>
+                <td class="cell-actions">
+                  <button class="btn btn-success btn-sm btn-approve-pwd" data-id="${req.id}" data-name="${name}"><i class="fas fa-check"></i> Одобрить</button>
+                  <button class="btn btn-danger btn-sm btn-reject-pwd" data-id="${req.id}" data-name="${name}"><i class="fas fa-xmark"></i> Отклонить</button>
+                </td>
+              `;
+              pwdTbodyEl.appendChild(tr);
+            });
+
+            pwdTbodyEl.querySelectorAll('.btn-approve-pwd').forEach(btn => {
+              btn.addEventListener('click', () => this.showApprovePwdModal(btn.dataset.id, btn.dataset.name));
+            });
+            pwdTbodyEl.querySelectorAll('.btn-reject-pwd').forEach(btn => {
+              btn.addEventListener('click', () => this.rejectPwdRequest(btn.dataset.id, btn.dataset.name));
+            });
+          } else {
+            pwdBlock.style.display = 'none';
+          }
+        }
+      }
+    } catch (pErr) {
+      console.error('Error loading password reset requests:', pErr);
+    }
   } catch (error) {
     if (loadingEl) loadingEl.style.display = 'none';
     showMessage(error.message || 'Ошибка загрузки заявок', 'error');
+  }
+};
+
+SPARouter.prototype.showApprovePwdModal = function(requestId, userName) {
+  const modal = document.getElementById('approve-pwd-modal');
+  const textEl = document.getElementById('approve-pwd-modal-text');
+  if (textEl) textEl.textContent = `Одобрить смену пароля для пользователя «${userName}»? Новый предложенный пароль будет активирован.`;
+  if (modal) modal.style.display = 'flex';
+
+  const cancelBtn = document.getElementById('approve-pwd-cancel-btn');
+  const confirmBtn = document.getElementById('approve-pwd-confirm-btn');
+
+  const closeModal = () => { if (modal) modal.style.display = 'none'; };
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Сохранение...';
+      try {
+        const res = await fetch(`/api/password-reset-requests/${requestId}/approve`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ошибка одобрения');
+        closeModal();
+        showMessage(data.message || 'Пароль успешно обновлён', 'success');
+        await this.renderPendingUsers();
+      } catch (err) {
+        showMessage(err.message, 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Подтвердить';
+      }
+    };
+  }
+};
+
+SPARouter.prototype.rejectPwdRequest = async function(requestId, userName) {
+  const ok = confirm(`Отклонить заявку на смену пароля для пользователя «${userName}»?`);
+  if (!ok) return;
+
+  try {
+    const res = await fetch(`/api/password-reset-requests/${requestId}/reject`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка отклонения заявки');
+    showMessage(data.message || 'Заявка отклонена', 'info');
+    await this.renderPendingUsers();
+  } catch (err) {
+    showMessage(err.message, 'error');
   }
 };
 
@@ -6791,6 +6894,9 @@ SPARouter.prototype.renderUsersList = async function() {
         }
         if (can('rename_users')) {
           buttons.push(`<button class="btn btn-secondary btn-sm btn-rename-user" data-id="${user.id}" data-name="${displayName}" data-username="${username}">Переименовать</button>`);
+        if (can('rename_users') || me.is_root) {
+          buttons.push(`<button class="btn btn-secondary btn-sm btn-change-password-user" data-id="${user.id}" data-name="${displayName}" data-username="${username}">Сменить пароль</button>`);
+        }
         }
         if (can('mute_users')) {
           buttons.push(muted
@@ -6838,6 +6944,9 @@ SPARouter.prototype.renderUsersList = async function() {
     });
     tbodyEl.querySelectorAll('.btn-remove-blocked-role').forEach(btn => {
       btn.addEventListener('click', () => this.removeBlockedUserRole(btn.dataset.id, btn.dataset.name));
+    });
+    tbodyEl.querySelectorAll('.btn-change-password-user').forEach(btn => {
+      btn.addEventListener('click', () => this.showChangePasswordModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
     });
     tbodyEl.querySelectorAll('.btn-rename-user').forEach(btn => {
       btn.addEventListener('click', () => this.showRenameModal(btn.dataset.id, btn.dataset.name, btn.dataset.username));
@@ -6996,6 +7105,66 @@ SPARouter.prototype.showAssignRoleModal = function(userId, userName, currentRole
   document.getElementById('assign-role-close-btn').onclick = () => {
     modal.style.display = 'none';
   };
+};
+
+SPARouter.prototype.showChangePasswordModal = function(userId, userName, username) {
+  const modal = document.getElementById('change-password-modal');
+  const targetNameEl = document.getElementById('change-password-target-name');
+  const newPassInput = document.getElementById('change-password-new-input');
+  const confirmPassInput = document.getElementById('change-password-confirm-input');
+  const confirmBtn = document.getElementById('change-password-confirm-btn');
+  const cancelBtn = document.getElementById('change-password-cancel-btn');
+  const closeBtn = document.getElementById('change-password-close-btn');
+
+  if (targetNameEl) targetNameEl.textContent = `${userName} (@${username})`;
+  if (newPassInput) newPassInput.value = '';
+  if (confirmPassInput) confirmPassInput.value = '';
+  if (modal) modal.style.display = 'flex';
+
+  const closeModal = () => {
+    if (modal) modal.style.display = 'none';
+  };
+
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+  if (closeBtn) closeBtn.onclick = closeModal;
+
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      const newPassword = (newPassInput?.value || '').trim();
+      const confirmPassword = (confirmPassInput?.value || '').trim();
+      if (!newPassword || newPassword.length < 6) {
+        this.showUsersToast('Пароль должен быть не короче 6 символов', 'error');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        this.showUsersToast('Пароли не совпадают', 'error');
+        return;
+      }
+
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Сохранение...';
+      try {
+        const res = await fetch(`/api/users/${userId}/password`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + authManager.getToken()
+          },
+          body: JSON.stringify({ newPassword, confirmPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ошибка смены пароля');
+
+        closeModal();
+        this.showUsersToast(data.message || `Пароль пользователя ${userName} успешно изменён`, 'success');
+      } catch (err) {
+        this.showUsersToast(err.message || 'Ошибка смены пароля', 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Сохранить пароль';
+      }
+    };
+  }
 };
 
 SPARouter.prototype.showRenameModal = function(userId, userName, username) {
@@ -7568,6 +7737,7 @@ SPARouter.prototype.renderProfile = async function(targetId) {
 
     const me = authManager.getUser() || {};
     this.setupProfileBookmarks(String(targetId) === String(me.id));
+    this.setupProfilePassword(String(targetId) === String(me.id));
   } catch (error) {
     loadingEl.style.display = 'none';
     errorEl.style.display = 'block';
@@ -8054,6 +8224,85 @@ SPARouter.prototype.setupProfileBookmarks = function(isSelf) {
 // Список закладок текущего пользователя по ВСЕМ статьям, сгруппированный
 // по статье — клик открывает статью в Antropedia и скроллит к блоку
 // закладки (см. antropediaManager.openArticleView/scrollToBlock).
+SPARouter.prototype.setupProfilePassword = function(isSelf) {
+  const section = document.getElementById('profile-password-section');
+  if (!section) return;
+  if (!isSelf) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  const form = document.getElementById('profile-password-form');
+  const oldInput = document.getElementById('profile-old-password');
+  const newInput = document.getElementById('profile-new-password');
+  const confirmInput = document.getElementById('profile-confirm-password');
+  const submitBtn = document.getElementById('profile-password-submit-btn');
+
+  if (!form || form._hasPasswordHandler) return;
+  form._hasPasswordHandler = true;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const oldPassword = (oldInput?.value || '').trim();
+    const newPassword = (newInput?.value || '').trim();
+    const confirmPassword = (confirmInput?.value || '').trim();
+
+    if (!oldPassword) {
+      this.showProfilePasswordMsg('Введите текущий пароль', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      this.showProfilePasswordMsg('Новый пароль должен быть не короче 6 символов', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      this.showProfilePasswordMsg('Новые пароли не совпадают', 'error');
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Обновление...';
+    }
+
+    try {
+      const res = await fetch('/api/profile/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + authManager.getToken()
+        },
+        body: JSON.stringify({ oldPassword, newPassword, confirmPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка смены пароля');
+
+      if (oldInput) oldInput.value = '';
+      if (newInput) newInput.value = '';
+      if (confirmInput) confirmInput.value = '';
+      this.showProfilePasswordMsg('Пароль успешно обновлён', 'success');
+      showMessage('Пароль успешно обновлён', 'success');
+    } catch (err) {
+      this.showProfilePasswordMsg(err.message, 'error');
+      showMessage(err.message, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Обновить пароль';
+      }
+    }
+  });
+};
+
+SPARouter.prototype.showProfilePasswordMsg = function(text, type) {
+  const el = document.getElementById('profile-password-msg');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.color = type === 'success' ? 'var(--green, #57f287)' : 'var(--red, #ed4245)';
+  el.textContent = text;
+};
+
 SPARouter.prototype.renderProfileBookmarks = async function() {
   const loadingEl = document.getElementById('profile-bookmarks-loading');
   const emptyEl = document.getElementById('profile-bookmarks-empty');

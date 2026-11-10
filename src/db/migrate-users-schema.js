@@ -264,6 +264,23 @@ function ensureUserSchema(db) {
           )
         )
         .then(() => run(db, "DELETE FROM archived_users WHERE transfer_status = 'transferred'"))
+        .then(() =>
+          run(
+            db,
+            `CREATE TABLE IF NOT EXISTS password_reset_requests (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              username TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              proposed_password TEXT NOT NULL,
+              reason TEXT,
+              status TEXT NOT NULL DEFAULT 'pending',
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              resolved_at DATETIME,
+              resolved_by INTEGER
+            )`
+          )
+        )
         .then(
           () =>
             new Promise((res2, rej2) => {
