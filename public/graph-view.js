@@ -1493,6 +1493,9 @@
   // Легенда цветов тегов
   // ---------------------------------------------------------------------------
   function renderGraphLegend(container, nodes, tagColors) {
+    const oldLegend = container.querySelector('.graph-legend');
+    if (oldLegend) oldLegend.remove();
+
     const legend = document.createElement('div');
     legend.className = 'graph-legend';
 
@@ -1509,17 +1512,42 @@
     const LIMIT = 12;
     const sorted = [...counts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ru'));
     const swatches = sorted.slice(0, LIMIT)
-      .map((e) => `<span><span class="dot" style="background:${e.color}"></span>${escapeHtml(e.name)}</span>`)
+      .map((e) => `<span class="graph-legend-item"><span class="dot" style="background:${e.color}"></span>${escapeHtml(e.name)}</span>`)
       .join('');
-    const more = sorted.length > LIMIT ? `<span>+${sorted.length - LIMIT} тегов</span>` : '';
+    const more = sorted.length > LIMIT ? `<span class="graph-legend-item graph-legend-more">+${sorted.length - LIMIT} тегов</span>` : '';
     const noTag = untagged
-      ? `<span><span class="dot" style="background:${NO_TAG_COLOR}"></span>Без тегов</span>`
+      ? `<span class="graph-legend-item"><span class="dot" style="background:${NO_TAG_COLOR}"></span>Без тегов</span>`
       : '';
 
     legend.innerHTML = `
-      ${swatches}${more}${noTag}
-      <span>Цвет узла — цвет первого тега · Размер — число связей · Подложки — группы связанных статей · Клик — открыть · Долгое нажатие / ПКМ — окрестность · Пинч / Колесо — зум</span>
+      <div class="graph-legend-bar">
+        <button type="button" class="graph-legend-toggle" title="Показать или скрыть теги">
+          <span class="graph-legend-toggle-icon">🏷️</span>
+          <span class="graph-legend-toggle-text">Теги <span class="graph-legend-count">(${sorted.length})</span></span>
+          <i class="fas fa-chevron-up graph-legend-arrow"></i>
+        </button>
+        <div class="graph-legend-tags">
+          ${swatches}${more}${noTag}
+        </div>
+      </div>
+      <div class="graph-legend-hint">
+        Цвет узла — цвет первого тега · Размер — число связей · Подложки — группы связанных статей · Клик — открыть · Долгое нажатие / ПКМ — окрестность
+      </div>
     `;
+
+    const toggleBtn = legend.querySelector('.graph-legend-toggle');
+    toggleBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      legend.classList.toggle('graph-legend-open');
+    });
+
+    const canvasEl = container.querySelector('canvas.graph-canvas');
+    canvasEl?.addEventListener('pointerdown', () => {
+      if (legend.classList.contains('graph-legend-open')) {
+        legend.classList.remove('graph-legend-open');
+      }
+    });
+
     container.appendChild(legend);
   }
 
@@ -1705,8 +1733,8 @@
       cardEl.classList.remove('graph-controls-open');
       if (fullscreenBtn) {
         fullscreenBtn.innerHTML = on
-          ? '<i class="fas fa-compress"></i> Свернуть'
-          : '<i class="fas fa-expand"></i> Во весь экран';
+          ? '<i class="fas fa-compress"></i> <span class="graph-btn-label">Свернуть</span>'
+          : '<i class="fas fa-expand"></i> <span class="graph-btn-label">Во весь экран</span>';
         fullscreenBtn.title = on ? 'Свернуть граф' : 'Открыть граф на весь экран';
       }
       exitActiveGraphFullscreen = on ? () => setGraphFullscreen(false) : null;

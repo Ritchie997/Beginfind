@@ -1170,17 +1170,73 @@
   left: 10px;
   right: 10px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  flex-direction: column;
+  gap: 6px;
   font-size: 11px;
   color: var(--text-muted);
-  background: rgba(0, 0, 0, 0.25);
-  padding: 6px 10px;
-  border-radius: 6px;
-  pointer-events: none;
+  background: rgba(15, 17, 23, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 12px;
+  border-radius: 8px;
+  z-index: 5;
+  pointer-events: auto;
+  transition: all 0.2s ease;
 }
-.graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.graph-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+.graph-legend-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.graph-legend-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-normal);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.graph-legend-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.graph-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.graph-legend .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.graph-legend-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.8;
+  line-height: 1.4;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 5px;
+  margin-top: 2px;
+}
 
 /* === Панель фильтров графа (дашборд) — сервер / поиск / изолированные / подписи / PNG === */
 .graph-controls {
@@ -1265,9 +1321,6 @@
 .graph-focus-title i { color: var(--green); margin-right: 4px; }
 .graph-card-top.graph-fullscreen .graph-focus-bar { flex: 0 0 auto; }
 
-/* margin-left:auto только на первой кнопке "хвоста" (fullscreen) — она
-   утягивает вправо всю группу, включая идущую следом PNG-кнопку, без
-   разрыва между ними (см. .graph-controls-export ниже). */
 .graph-controls-fullscreen {
   margin-left: auto;
   white-space: nowrap;
@@ -1277,14 +1330,7 @@
   white-space: nowrap;
 }
 
-/* === Полноэкранный режим графа связей (дашборд) ===
-   Тумблер #graphFullscreenToggle в graph-view.js добавляет/снимает этот
-   класс на .graph-card-top (вся карточка: заголовок + панель фильтров/
-   поиска + сам граф) — так поиск и остальные controls остаются на месте,
-   просто карточка растягивается на весь экран поверх остального интерфейса.
-   Свой fixed-оверлей, а не Fullscreen API браузера: тот на iOS Safari
-   работает с ограничениями и требует жеста пользователя на каждый вызов;
-   через CSS-класс работает одинаково на ПК и мобильных. */
+/* === Полноэкранный режим графа связей (дашборд) === */
 .graph-card-top.graph-fullscreen {
   position: fixed;
   inset: 0;
@@ -1304,57 +1350,208 @@
   height: auto;
   min-height: 0;
 }
-/* Кнопка "Фильтры" нужна только в полноэкранном режиме на телефоне. */
 .graph-controls-toggle { display: none; }
 
-/* Телефон: панель фильтров (6 переключателей, сервер, PNG) встаёт столбиком
-   выше самого графа — в полноэкранном режиме граф выходил даже НИЖЕ, чем
-   в обычной карточке. Поэтому на весь экран остаются поиск, "Фильтры" и
-   "Свернуть"; остальное раскрывается кнопкой "Фильтры" (класс
-   .graph-controls-open на карточке, см. graph-view.js). */
+/* === Мобильная оптимизация карточки графа, фильтров и легенды (<= 768px) === */
 @media (max-width: 768px) {
-  .graph-card-top.graph-fullscreen {
-    padding: 8px;
+  .graph-card-top {
+    padding: 12px;
+    margin-bottom: 14px;
   }
-  .graph-card-top.graph-fullscreen .graph-page-header {
-    margin-bottom: 6px;
+  .graph-page-header {
+    margin-bottom: 8px;
+    gap: 4px;
   }
-  .graph-card-top.graph-fullscreen .chart-title {
+  .chart-title {
     font-size: 16px;
+    margin-bottom: 0;
   }
-  .graph-card-top.graph-fullscreen .graph-controls {
+  .graph-page-count {
+    font-size: 11px;
+  }
+  .graph-container.graph-container-dashboard {
+    height: 52vh;
+    min-height: 320px;
+    max-height: 480px;
+  }
+
+  /* Панель фильтров: в одну аккуратную строку [Поиск] + [Фильтры] + [Во весь экран] */
+  .graph-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
-  .graph-card-top.graph-fullscreen .graph-search-wrap {
-    flex: 1 1 100px;
+  .graph-controls-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+    flex: 0 0 auto;
+    border-radius: 6px;
+  }
+  .graph-search-wrap {
+    flex: 1 1 120px;
     min-width: 0;
     max-width: none;
   }
-  .graph-card-top.graph-fullscreen .graph-controls-toggle { display: inline-flex; }
-  /* global-styles.css растягивает .btn на всю ширину при ≤480px — здесь
-     кнопки должны стоять в одну строку с поиском. */
-  .graph-card-top.graph-fullscreen .graph-controls .btn {
-    width: auto;
-    flex: 0 0 auto;
-    /* mobile-menu.css даёт .btn 12px 16px — с ним "Фильтры" + "Свернуть"
-       не помещаются рядом с поиском и уезжают второй строкой. */
-    padding: 8px 12px;
+  .graph-search-wrap .form-input {
+    height: 34px;
+    font-size: 12px;
+    padding-left: 28px;
+    padding-right: 26px;
+    border-radius: 6px;
   }
-  .graph-card-top.graph-fullscreen .graph-controls-fullscreen { margin-left: 0; }
-  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-select,
-  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-checkbox,
-  .graph-card-top.graph-fullscreen:not(.graph-controls-open) .graph-controls-export {
+  .graph-search-wrap i.fa-search {
+    left: 9px;
+    font-size: 11px;
+  }
+  .graph-controls-fullscreen,
+  .graph-controls-export {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+    flex: 0 0 auto;
+    border-radius: 6px;
+  }
+  .graph-controls-fullscreen {
+    margin-left: 0;
+  }
+  .graph-controls-fullscreen .graph-btn-label,
+  .graph-controls-export .graph-btn-label {
     display: none;
   }
-  /* Раскрытые фильтры не должны снова съесть весь экран. */
-  .graph-card-top.graph-fullscreen.graph-controls-open .graph-controls {
-    max-height: 45vh;
-    overflow-y: auto;
+
+  /* По умолчанию на мобилках скрываем громоздкие чекбоксы и селектор сервера */
+  .graph-card-top:not(.graph-controls-open) .graph-controls-select,
+  .graph-card-top:not(.graph-controls-open) .graph-controls-checkbox,
+  .graph-card-top:not(.graph-controls-open) .graph-controls-export {
+    display: none;
   }
-  .graph-card-top.graph-fullscreen.graph-controls-open .graph-controls-toggle {
+
+  /* Раскрытая панель фильтров: аккуратная выдвижная плашка настроек */
+  .graph-card-top.graph-controls-open .graph-controls {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-accent);
+    border-radius: 8px;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .graph-card-top.graph-controls-open .graph-controls-toggle {
     background: var(--blurple);
     color: #fff;
+    border-color: var(--blurple);
+  }
+  .graph-card-top.graph-controls-open .graph-controls-select {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+    height: 34px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .graph-card-top.graph-controls-open .graph-controls-checkbox {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 130px;
+    font-size: 12px;
+    padding: 4px 0;
+  }
+  .graph-card-top.graph-controls-open .graph-controls-export {
+    width: 100%;
+    margin-top: 4px;
+    justify-content: center;
+  }
+  .graph-card-top.graph-controls-open .graph-controls-export .graph-btn-label {
+    display: inline;
+    margin-left: 6px;
+  }
+
+  /* Полноэкранный режим на телефоне */
+  .graph-card-top.graph-fullscreen {
+    padding: 8px;
+  }
+  .graph-card-top.graph-fullscreen .graph-container {
+    height: auto;
+    max-height: none;
+  }
+  .graph-card-top.graph-fullscreen.graph-controls-open .graph-controls {
+    max-height: 48vh;
+    overflow-y: auto;
+  }
+
+  /* Полоса окрестности статьи на мобилках */
+  .graph-focus-bar {
+    font-size: 12px;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    background: rgba(59, 165, 92, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(59, 165, 92, 0.2);
+  }
+  .graph-focus-title {
+    width: 100%;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+  .graph-focus-bar .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    height: 28px;
+  }
+
+  /* === Легенда тегов на мобилках: компактный плавающий бейдж в углу!
+     Занимает меньше 30px и НЕ перекрывает экран графа === */
+  .graph-legend {
+    right: auto;
+    bottom: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+    padding: 4px 8px;
+    background: rgba(15, 17, 23, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    gap: 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  }
+  .graph-legend-toggle {
+    display: inline-flex;
+    padding: 2px 4px;
+    font-size: 11px;
+  }
+  .graph-legend-arrow {
+    font-size: 9px;
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+  }
+  /* В свернутом виде теги и подсказка скрыты */
+  .graph-legend:not(.graph-legend-open) .graph-legend-tags,
+  .graph-legend:not(.graph-legend-open) .graph-legend-hint {
+    display: none;
+  }
+  /* При нажатии на [Теги]: компактно раскрывается список тегов над кнопкой */
+  .graph-legend.graph-legend-open {
+    right: 8px;
+    padding: 8px 10px;
+    gap: 6px;
+    max-height: 42vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  }
+  .graph-legend.graph-legend-open .graph-legend-arrow {
+    transform: rotate(180deg);
+  }
+  .graph-legend.graph-legend-open .graph-legend-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+    font-size: 11px;
+  }
+  .graph-legend-hint {
+    display: none;
   }
 }
 
