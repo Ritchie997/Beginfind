@@ -921,6 +921,9 @@
   /* Цвет фона графа — переменной: в режиме "космос" он темнее, и обводка
      подписей (см. .graph-node-label) должна следовать за ним. */
   --graph-bg: var(--background-tertiary);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   width: 100%;
   height: 70vh;
   background: var(--graph-bg);
@@ -959,6 +962,56 @@
   height: 100%;
   cursor: grab;
   position: relative; /* выше звёздного canvas (он position:absolute и раньше в DOM) */
+}
+
+.graph-canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+.graph-canvas:active {
+  cursor: grabbing;
+}
+
+.graph-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(20, 22, 28, 0.94);
+  color: var(--header-primary, #ffffff);
+  border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  z-index: 10;
+  max-width: 280px;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+  transition: opacity 0.12s ease;
+  white-space: nowrap;
+}
+.graph-tooltip-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-tooltip-tags {
+  font-size: 11px;
+  color: var(--text-muted, #8e9297);
+  margin-top: 2px;
+}
+.graph-tooltip-hint {
+  font-size: 10px;
+  color: var(--text-muted, #8e9297);
+  margin-top: 4px;
+  opacity: 0.8;
 }
 
 /* === "Космос" в графе на дашборде: глубокий тёмный фон, звёзды на canvas
