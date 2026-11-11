@@ -253,6 +253,15 @@ async function resolveReportedArticle(user, slug) {
 }
 
 async function assertNoPending(user) {
+  if (!user) return;
+  if (!user.id || user.id <= 0) {
+    const name = actorName(user);
+    const pending = await get("SELECT COUNT(*) as cnt FROM feedback_reports WHERE author_id = 0 AND author_name = ? AND status = 'new'", [name]);
+    if (pending && pending.cnt >= MAX_PENDING_PER_USER) {
+      throw httpError(429, `У вас уже ${pending.cnt} обращений ждут проверки — дождитесь, пока модераторы их разберут`);
+    }
+    return;
+  }
   const pending = await get("SELECT COUNT(*) as cnt FROM feedback_reports WHERE author_id = ? AND status = 'new'", [user.id]);
   if (pending && pending.cnt >= MAX_PENDING_PER_USER) {
     throw httpError(429, `У вас уже ${pending.cnt} обращений ждут проверки — дождитесь, пока модераторы их разберут`);

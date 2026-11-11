@@ -4,6 +4,7 @@
 // src/services/feedback-store.js.
 
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const store = require('../services/feedback-store');
 
@@ -37,15 +38,42 @@ const cases = [...base, auth.checkPermission('feedback_cases')];
 const decide = [...base, auth.checkPermission('feedback_decide')];
 const caseViewers = [...base, checkAnyPermission('feedback_cases', 'feedback_decide')];
 
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  jwt.verify(token, auth.JWT_SECRET, (err, user) => {
+    if (err || !user) {
+      req.user = null;
+      return next();
+    }
+    req.user = user;
+    auth.checkApproved(req, res, (apprErr) => {
+      if (apprErr) return next(apprErr);
+      next();
+    });
+  });
+}
+
 // --- Пользователь ---
 
 router.post('/feedback/reports', ...base, handle((req) => store.createReport(req.user, req.body || {})));
 
 // Упрощённый эндпоинт отправки обращений и жалоб на статьи
-router.post('/feedback', ...base, handle(async (req) => {
+router.post('/feedback', optionalAuth, handle(async (req) => {
   const body = req.body || {};
-  const isArticle = body.target_type === 'article' || body.category === 'complaint' || body.type === 'article';
+  const isArticle = body.target_type === 'article' || body.type === 'article' ||
+    (body.category === 'complaint' && (body.target_slug || body.articleSlug || body.slug));
+
   if (isArticle) {
+    if (!req.user) {
+      const err = new Error('Для подачи жалобы на статью необходимо авторизоваться');
+      err.status = 401;
+      throw err;
+    }
     const articleSlug = body.target_slug || body.articleSlug || body.slug;
     if (!articleSlug) {
       const err = new Error('Укажите slug статьи');
@@ -62,11 +90,59 @@ router.post('/feedback', ...base, handle(async (req) => {
     return { success: true, id: report.id, report };
   }
 
-  const type = body.category === 'bug' ? 'bug' : 'idea';
-  const report = await store.createReport(req.user, {
+  // Общее обращение в техподдержку (модалка из футера)
+  const categoryMap = {
+    bug: { type: 'bug', label: 'Ошибка' },
+    error: { type: 'bug', label: 'Ошибка' },
+    'ошибка': { type: 'bug', label: 'Ошибка' },
+    idea: { type: 'idea', label: 'Идея' },
+    'идея': { type: 'idea', label: 'Идея' },
+    complaint: { type: 'bug', label: 'Жалоба' },
+    'жалоба': { type: 'bug', label: 'Жалоба' },
+    question: { type: 'idea', label: 'Вопрос' },
+    'вопрос': { type: 'idea', label: 'Вопрос' }
+  };
+
+  const categoryKey = String(body.category || 'bug').toLowerCase().trim();
+  const categoryInfo = categoryMap[categoryKey] || { type: 'bug', label: 'Обращение' };
+  const type = categoryInfo.type;
+  const label = categoryInfo.label;
+
+  const rawText = String(body.text || body.description || '').trim();
+  if (!rawText) {
+    const err = new Error('Заполните текст обращения');
+    err.status = 400;
+    throw err;
+  }
+
+  const contact = String(body.contact || body.email || '').trim();
+
+  let user = req.user;
+  if (!user) {
+    if (!contact) {
+      const err = new Error('Укажите контакт или email для обратной связи');
+      err.status = 400;
+      throw err;
+    }
+    user = {
+      id: 0,
+      username: contact.slice(0, 50),
+      display_name: `Гость (${contact.slice(0, 50)})`
+    };
+  }
+
+  let description = rawText;
+  if (contact) {
+    description += `\n\nКонтакт для связи: ${contact}`;
+  }
+
+  const snippet = rawText.replace(/\s+/g, ' ').slice(0, 80);
+  const title = (body.title || `[${label}] ${snippet || 'Обращение в поддержку'}`).slice(0, 150);
+
+  const report = await store.createReport(user, {
     type,
-    title: body.title || (body.text ? body.text.slice(0, 50) : 'Обращение'),
-    description: body.text || body.description || '',
+    title,
+    description,
     attachments: body.attachments || []
   });
   return { success: true, id: report.id, report };

@@ -162,7 +162,7 @@
     - Добавить ссылку «Карты» в навигацию `public/site/site-header.js` и в шапку всех страниц.
     - Инициализировать ядро `public/maps/map-core.js` с опцией `readOnly: true`, загружая миры через `GET /api/public/maps` (или `maps-store.js`).
 
-- [ ] **Рабочая форма обратной связи в футере**
+- [x] **Рабочая форма обратной связи в футере**
   - **Что делать:** Заменить некликабельную ссылку `href="#"` в футере на модальное окно подачи обращения в техподдержку.
   - **Где чинить:**
     - `public/site/index.html`, `antropedia.html`, `alltell.html`, `gallery.html`, `profile.html`: в футере заменить `<a href="#">Обратная связь</a>` на `<button type="button" class="site-footer-link" id="footerFeedbackBtn">Обратная связь</button>`.

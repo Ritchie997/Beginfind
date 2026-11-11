@@ -5,6 +5,22 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-11 — рабочая форма обратной связи в футере публичного сайта
+
+- Обратная связь и техподдержка (`public/site/index.html`, `public/site/antropedia.html`, `public/site/alltell.html`, `public/site/gallery.html`, `public/site/profile.html`, `public/site/site.js`, `public/site/site.css`, `src/routes/feedback.routes.js`, `src/services/feedback-store.js`, `src/routes/feedback.test.js`, `docs/TASKS_PARITY_CHECKLIST.md`):
+  - **Кнопка обратной связи в футере:**
+    - На всех страницах витрины (`index.html`, `antropedia.html`, `alltell.html`, `gallery.html`, `profile.html`) некликабельная ссылка `href="#"` заменена на `<button type="button" class="site-footer-link" id="footerFeedbackBtn">Обратная связь</button>`.
+    - В `public/site/site.css` добавлены стили для `.site-footer-link` и модального окна `.site-feedback-modal`.
+  - **Модальное окно подачи тикета:**
+    - В `public/site/site.js` реализованы функции `ensureFeedbackModal()`, `openFeedbackModal()` и `initFooterFeedback()`.
+    - Модалка включает выбор категории (ошибка, идея, жалоба, вопрос), многострочный текст обращения, поле контакта/email (с автоматическим предзаполнением для авторизованных пользователей) и отправку запроса `POST /api/feedback`.
+    - Реализовано закрытие по клику вне модалки, по кнопке отмены/крестику и клавише Escape, а также корректная работа при SPA-переходах (делегирование событий).
+  - **Серверная обработка обращений:**
+    - В `src/routes/feedback.routes.js` маршрут `POST /feedback` обновлен с поддержкой опциональной авторизации (`optionalAuth`) для приема обращений как от авторизованных пользователей, так и от гостей с указанным контактом.
+    - Разделена обработка жалоб на статьи (требующих `target_slug`) и общих жалоб/тикетов техподдержки.
+    - В `src/services/feedback-store.js` обновлена проверка `assertNoPending` для раздельного учета ожидающих тикетов гостей по контакту.
+    - Добавлен автоматический интеграционный тест `src/routes/feedback.test.js`.
+
 ## 2026-11-10 — смена пароля в профиле, админский сброс и заявки «Забыли пароль?»
 
 - Авторизация и профили (`src/routes/auth.routes.js`, `src/middleware/auth.js`, `src/db/migrate-users-schema.js`, `public/views/profile.html`, `public/site/profile.html`, `public/site/profile.js`, `public/site/site.css`, `public/views/users-list.html`, `public/views/pending-users.html`, `public/spa-router.js`, `public/auth-system.js`, `docs/TASKS_PARITY_CHECKLIST.md`):

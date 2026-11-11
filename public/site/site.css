@@ -8193,13 +8193,78 @@ textarea.alltell-hub-desc-textarea {
     gap: 10px;
 }
 
-.site-footer-links a {
+.site-footer-links a,
+.site-footer-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     color: var(--interactive-normal);
     text-decoration: none;
     font-size: 13.5px;
+    display: inline-block;
+    transition: color 0.15s ease;
 }
 
-.site-footer-links a:hover { color: #fff; }
+.site-footer-links a:hover,
+.site-footer-link:hover { color: #fff; }
+
+/* Модальное окно обратной связи в футере */
+.site-feedback-modal .modal-box {
+    max-width: 520px;
+    width: 92%;
+}
+
+.site-feedback-modal .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.site-feedback-modal .form-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-normal, #dcddde);
+}
+
+.site-feedback-modal .form-label .required {
+    color: var(--text-danger, #ed4245);
+}
+
+.site-feedback-modal .form-input,
+.site-feedback-modal .form-select,
+.site-feedback-modal .form-textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.site-feedback-status {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.site-feedback-status:empty,
+.site-feedback-status[hidden] {
+    display: none;
+}
+
+.site-feedback-status.is-error {
+    background: rgba(237, 66, 69, 0.15);
+    color: var(--text-danger, #ed4245);
+    border: 1px solid rgba(237, 66, 69, 0.3);
+}
+
+.site-feedback-status.is-success {
+    background: rgba(87, 242, 135, 0.15);
+    color: #57f287;
+    border: 1px solid rgba(87, 242, 135, 0.3);
+}
 
 .site-footer-bottom {
     max-width: 1280px;

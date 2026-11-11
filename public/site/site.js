@@ -6298,6 +6298,196 @@
     return readyPromise;
   }
 
+  function ensureFeedbackModal() {
+    var existing = document.getElementById('siteFeedbackModal');
+    if (existing) return existing;
+
+    var modal = document.createElement('div');
+    modal.id = 'siteFeedbackModal';
+    modal.className = 'modal-overlay site-feedback-modal';
+    modal.hidden = true;
+    modal.style.zIndex = '3000';
+    modal.innerHTML =
+      '<div class="modal-box modal-box-wide" role="dialog" aria-modal="true" aria-labelledby="siteFeedbackModalTitle">' +
+        '<div class="modal-header">' +
+          '<h3 id="siteFeedbackModalTitle">Обращение в техподдержку</h3>' +
+          '<button type="button" class="modal-close" data-close-feedback-modal aria-label="Закрыть">&times;</button>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<p class="modal-hint" style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">' +
+            '<i class="fas fa-circle-info" aria-hidden="true"></i>' +
+            '<span>Столкнулись с проблемой или есть предложение? Напишите нам — обращение поступит в службу поддержки.</span>' +
+          '</p>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="siteFeedbackCategory">Категория <span class="required">*</span></label>' +
+            '<select id="siteFeedbackCategory" class="form-select">' +
+              '<option value="bug">Ошибка</option>' +
+              '<option value="idea">Идея</option>' +
+              '<option value="complaint">Жалоба</option>' +
+              '<option value="question">Вопрос</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="siteFeedbackText">Текст обращения <span class="required">*</span></label>' +
+            '<textarea id="siteFeedbackText" class="form-textarea" maxlength="5000" rows="5" placeholder="Опишите подробно проблему, вопрос или предложение" style="resize: vertical;"></textarea>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="siteFeedbackContact">Контакт или email <span id="siteFeedbackContactReq" class="required">*</span></label>' +
+            '<input type="text" id="siteFeedbackContact" class="form-input" maxlength="150" placeholder="Ваш email или имя в Telegram / Discord">' +
+            '<small style="font-size: 12px; color: var(--text-muted);">Нужен для ответа службы поддержки</small>' +
+          '</div>' +
+          '<div id="siteFeedbackStatus" class="site-feedback-status" hidden></div>' +
+        '</div>' +
+        '<div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">' +
+          '<button type="button" class="btn btn-secondary" data-close-feedback-modal>Отмена</button>' +
+          '<button type="button" class="btn btn-primary" id="siteFeedbackSubmitBtn">Отправить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll('[data-close-feedback-modal]').forEach(function (btn) {
+      btn.onclick = function () { modal.hidden = true; };
+    });
+    modal.onclick = function (e) {
+      if (e.target === modal) modal.hidden = true;
+    };
+    return modal;
+  }
+
+  function openFeedbackModal() {
+    var modal = ensureFeedbackModal();
+    var categoryEl = modal.querySelector('#siteFeedbackCategory');
+    var textEl = modal.querySelector('#siteFeedbackText');
+    var contactEl = modal.querySelector('#siteFeedbackContact');
+    var contactReqEl = modal.querySelector('#siteFeedbackContactReq');
+    var statusEl = modal.querySelector('#siteFeedbackStatus');
+    var submitBtn = modal.querySelector('#siteFeedbackSubmitBtn');
+
+    if (categoryEl) categoryEl.value = 'bug';
+    if (textEl) textEl.value = '';
+    if (statusEl) {
+      statusEl.hidden = true;
+      statusEl.className = 'site-feedback-status';
+      statusEl.textContent = '';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Отправить';
+    }
+
+    var token = (window.authManager && typeof window.authManager.getToken === 'function' ? window.authManager.getToken() : null) ||
+                localStorage.getItem('alltell_auth_token') ||
+                localStorage.getItem('token') || '';
+    var currentUser = window.authManager && typeof window.authManager.getUser === 'function' ? window.authManager.getUser() : null;
+    if (contactEl) {
+      if (!contactEl.value || contactEl.value.trim() === '') {
+        contactEl.value = currentUser ? (currentUser.email || currentUser.username || '') : '';
+      }
+    }
+    if (contactReqEl) {
+      contactReqEl.style.display = (token || currentUser) ? 'none' : 'inline';
+    }
+
+    modal.hidden = false;
+    if (textEl) textEl.focus();
+
+    submitBtn.onclick = async function () {
+      var category = categoryEl ? categoryEl.value : 'bug';
+      var text = textEl ? textEl.value.trim() : '';
+      var contact = contactEl ? contactEl.value.trim() : '';
+      var authToken = (window.authManager && typeof window.authManager.getToken === 'function' ? window.authManager.getToken() : null) ||
+                      localStorage.getItem('alltell_auth_token') ||
+                      localStorage.getItem('token') || '';
+
+      if (!text) {
+        if (statusEl) {
+          statusEl.textContent = 'Заполните текст обращения';
+          statusEl.className = 'site-feedback-status is-error';
+          statusEl.hidden = false;
+        }
+        if (textEl) textEl.focus();
+        return;
+      }
+
+      if (!authToken && !contact) {
+        if (statusEl) {
+          statusEl.textContent = 'Укажите контакт или email для обратной связи';
+          statusEl.className = 'site-feedback-status is-error';
+          statusEl.hidden = false;
+        }
+        if (contactEl) contactEl.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Отправка...';
+      if (statusEl) {
+        statusEl.hidden = true;
+        statusEl.textContent = '';
+      }
+
+      try {
+        var payload = {
+          category: category,
+          text: text,
+          contact: contact
+        };
+        var headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+        var resp = await fetch('/api/feedback', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload)
+        });
+        var data = await resp.json().catch(function () { return {}; });
+
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка отправки обращения (' + resp.status + ')');
+        }
+
+        modal.hidden = true;
+        var msg = (data && data.id)
+          ? 'Обращение #' + data.id + ' успешно отправлено в техподдержку'
+          : 'Обращение успешно отправлено в техподдержку';
+
+        if (window.confirmDialog) {
+          window.confirmDialog.alert({ title: 'Обращение отправлено', message: msg });
+        } else {
+          alert(msg);
+        }
+      } catch (err) {
+        console.error('Ошибка отправки обращения:', err);
+        if (statusEl) {
+          statusEl.textContent = err.message || 'Не удалось отправить обращение';
+          statusEl.className = 'site-feedback-status is-error';
+          statusEl.hidden = false;
+        } else {
+          alert(err.message || 'Не удалось отправить обращение');
+        }
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Отправить';
+      }
+    };
+  }
+
+  function initFooterFeedback() {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('#footerFeedbackBtn');
+      if (btn) {
+        e.preventDefault();
+        openFeedbackModal();
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        var modal = document.getElementById('siteFeedbackModal');
+        if (modal && !modal.hidden) modal.hidden = true;
+      }
+    });
+  }
+
   function cleanupPublicPage() {
     if (currentRouteCleanup) {
       currentRouteCleanup();
@@ -6311,13 +6501,17 @@
     mountPage: mountPublicPage,
     cleanupPage: cleanupPublicPage,
     saveArticleListPosition: saveArticleListPosition,
+    openFeedbackModal: openFeedbackModal,
     navigateTo: function (url) {
       if (window.PublicSiteRouter) window.PublicSiteRouter.navigate(url);
       else window.location.href = url;
     }
   };
+  window.openFeedbackModal = openFeedbackModal;
 
   ready(function () {
+    initFooterFeedback();
+
     if (window.SiteHeader) {
       window.SiteHeader.init();
     } else {
