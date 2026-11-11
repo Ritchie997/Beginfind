@@ -12,6 +12,26 @@ const { uploadSticker } = require('../uploads/multer-config');
 
 const router = express.Router();
 
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return next();
+  let continued = false;
+  const publicFallback = {
+    status() { return this; },
+    json() {
+      if (continued) return;
+      continued = true;
+      delete req.user;
+      next();
+    }
+  };
+  return auth.authenticateToken(req, publicFallback, () => auth.checkApproved(req, publicFallback, () => {
+    if (continued) return;
+    continued = true;
+    next();
+  }));
+}
+
 function displayName(user) {
   return user.display_name || user.username;
 }
@@ -60,10 +80,10 @@ router.get('/stickers/by-user/:userId', auth.authenticateToken, auth.checkApprov
 });
 
 // GET /api/stickers/catalog?q=... — одобренные наборы + отметка, добавлен
-// ли себе (subscribed) — экран "Каталог" во вкладке "Стикеры".
-router.get('/stickers/catalog', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+// ли себе (subscribed) — экран "Каталог" во вкладке "Стикеры" и публичный каталог.
+router.get('/stickers/catalog', optionalAuth, async (req, res) => {
   try {
-    res.json(await store.listCatalog(req.user.id, req.query.q));
+    res.json(await store.listCatalog(req.user ? req.user.id : null, req.query.q));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -82,13 +102,13 @@ router.get('/stickers/subscribed', auth.authenticateToken, auth.checkApproved, a
 // GET /api/stickers/packs/:id — набор целиком (со стикерами) для модалки
 // просмотра/управления. Approved-наборы видны всем; pending/rejected —
 // только автору или модератору (moderate_stickers/владелец).
-router.get('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+router.get('/stickers/packs/:id', optionalAuth, async (req, res) => {
   try {
     const pack = await store.getPackWithStickers(req.params.id);
     if (!pack) return res.status(404).json({ error: 'Набор не найден' });
 
-    const isOwner = pack.authorId === req.user.id;
-    const isModerator = req.user.is_root || !!(req.user.permissions && req.user.permissions.moderate_stickers);
+    const isOwner = req.user && pack.authorId === req.user.id;
+    const isModerator = req.user && (req.user.is_root || !!(req.user.permissions && req.user.permissions.moderate_stickers));
     // Черновик приватен — его не видит никто, кроме автора (даже модераторы:
     // им набор доступен только после публикации, из очереди "На модерации").
     if (pack.status === 'draft' && !isOwner) {
@@ -104,13 +124,13 @@ router.get('/stickers/packs/:id', auth.authenticateToken, auth.checkApproved, as
     // набор (тот же canModerateOtherUsersPack, что и в PUT/DELETE/revoke
     // ниже) — фронту нужно заранее знать, показывать ли кнопки модерации в
     // модалке чужого набора, не дожидаясь 403 от реального действия.
-    pack.subscribed = await store.isSubscribed(req.user.id, pack.id);
-    pack.isOwn = isOwner;
-    pack.canModerate = !isOwner && await canModerateOtherUsersPack(req.user, pack.authorId);
+    pack.subscribed = req.user ? await store.isSubscribed(req.user.id, pack.id) : false;
+    pack.isOwn = Boolean(isOwner);
+    pack.canModerate = Boolean(!isOwner && req.user && await canModerateOtherUsersPack(req.user, pack.authorId));
     // myCollab — моя текущая (draft/pending) заявка на коллаборацию с этим
     // набором со стикерами, если есть (см. раздел "Коллаборации" в
     // stickers-store.js); автору собственного набора заявка ни к чему.
-    pack.myCollab = (!isOwner && pack.status === 'approved') ? await store.getMyCollab(req.user.id, pack.id) : null;
+    pack.myCollab = (!isOwner && req.user && pack.status === 'approved') ? await store.getMyCollab(req.user.id, pack.id) : null;
     res.json(pack);
   } catch (err) {
     res.status(500).json({ error: err.message });

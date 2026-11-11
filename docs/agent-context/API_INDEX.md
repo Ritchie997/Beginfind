@@ -58,6 +58,7 @@
 - `POST /refresh-token`
 - `GET /profile`
 - `PUT /profile`
+- `POST /profile/change-password`
 - `POST /profile/avatar`
 - `DELETE /profile/avatar`
 - `GET /users/:id/profile`
@@ -66,6 +67,10 @@
 - `GET /pending-users`
 - `PUT /pending-users/:id/approve`
 - `PUT /pending-users/:id/reject`
+- `POST /password-reset-request`
+- `GET /password-reset-requests`
+- `PUT /password-reset-requests/:id/approve`
+- `PUT /password-reset-requests/:id/reject`
 - `GET /all-users`
 - `GET /archived-users`
 - `GET /admin-roles`
@@ -77,6 +82,7 @@
 - `DELETE /users/:id`
 - `POST /archived-users/:id/transfer-content`
 - `PUT /users/:id/rename`
+- `PUT /users/:id/password`
 - `PUT /users/:id/block`
 - `PUT /users/:id/unblock`
 - `PUT /users/:id/mute`
@@ -123,6 +129,7 @@
 ## `feedback.routes.js`
 
 - `POST /feedback/reports`
+- `POST /feedback`
 - `GET /feedback/reports/mine`
 - `GET /feedback/reports/:id/comments`
 - `POST /feedback/reports/:id/comments`
@@ -174,6 +181,7 @@
 - `GET /public/gallery/works`
 - `GET /public/gallery/tags`
 - `GET /public/gallery/works/:id`
+- `POST /public/gallery/works/:id/view`
 - `GET /public/gallery/works/:id/likes`
 - `GET /public/gallery/works/:id/reactions`
 - `GET /public/gallery/works/:id/comments`

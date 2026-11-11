@@ -82,20 +82,36 @@
     }
   `;
 
+  function pluralizePacks(count) {
+    const abs = Math.abs(count) % 100;
+    const num = abs % 10;
+    if (abs > 10 && abs < 20) return 'наборов';
+    if (num > 1 && num < 5) return 'набора';
+    if (num === 1) return 'набор';
+    return 'наборов';
+  }
+
   class StickerStore {
     constructor() {
       this._els = null;
       this._onChange = null;
       this._searchDebounce = null;
+      this._pageTarget = null;
+      this._cachedPacks = [];
+    }
+
+    ensureStyles() {
+      if (document.getElementById('stickerStoreStyles')) return;
+      const style = document.createElement('style');
+      style.id = 'stickerStoreStyles';
+      style.textContent = STYLES;
+      document.head.appendChild(style);
     }
 
     ensureModal() {
       if (this._els) return this._els;
 
-      const style = document.createElement('style');
-      style.id = 'stickerStoreStyles';
-      style.textContent = STYLES;
-      document.head.appendChild(style);
+      this.ensureStyles();
 
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -156,39 +172,53 @@
       if (this.isOpen()) {
         await this.load(this._els?.searchEl?.value || '');
       }
+      if (this._pageTarget && this._pageTarget.grid) {
+        await this.loadPage(this._pageTarget.searchEl?.value || '');
+      }
       this._onChange?.();
+    }
+
+    mountPage(options = {}) {
+      this.ensureStyles();
+      const grid = typeof options.grid === 'string' ? document.querySelector(options.grid) : (options.grid || document.getElementById('stickersGrid'));
+      const searchEl = typeof options.searchEl === 'string' ? document.querySelector(options.searchEl) : (options.searchEl || document.getElementById('stickersSearch'));
+      const emptyEl = typeof options.emptyEl === 'string' ? document.querySelector(options.emptyEl) : (options.emptyEl || document.getElementById('stickersEmpty'));
+      const countEl = typeof options.countEl === 'string' ? document.querySelector(options.countEl) : (options.countEl || document.getElementById('stickersCountBadge'));
+      if (!grid) return;
+
+      this._pageTarget = { grid, searchEl, emptyEl, countEl, filter: options.filter || 'all' };
+      if (searchEl) {
+        searchEl.addEventListener('input', () => {
+          clearTimeout(this._searchDebounce);
+          this._searchDebounce = setTimeout(() => this.loadPage(searchEl.value), 250);
+        });
+      }
+      return this.loadPage(searchEl ? searchEl.value : '');
+    }
+
+    setFilter(filter) {
+      if (!this._pageTarget) return;
+      this._pageTarget.filter = filter || 'all';
+      this.renderPage(this._cachedPacks || []);
+    }
+
+    async fetchCatalog(query) {
+      if (window.apiClient && typeof window.apiClient.getStickerCatalog === 'function') {
+        const res = await window.apiClient.getStickerCatalog(query);
+        return res.success ? (res.data || []) : (Array.isArray(res) ? res : []);
+      }
+      const res = await apiRequest(`/api/stickers/catalog${query ? '?q=' + encodeURIComponent(query) : ''}`, 'GET');
+      return res.success ? (res.data || []) : [];
     }
 
     async load(search) {
       const els = this._els;
       if (!els) return;
       const query = (search || '').trim();
-      const token = getToken();
-      if (!token) {
-        els.grid.innerHTML = `
-          <div class="sst-empty">
-            <div style="font-size:14px;margin-bottom:10px;">Для просмотра каталога стикеров необходимо войти в аккаунт.</div>
-            <button type="button" class="btn btn-primary btn-sm" id="sstLoginBtn">
-              <i class="fas fa-right-to-bracket"></i> Войти
-            </button>
-          </div>`;
-        els.grid.querySelector('#sstLoginBtn')?.addEventListener('click', () => {
-          if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
-          else window.location.href = '/admin-panel';
-        });
-        return;
-      }
 
       els.grid.innerHTML = `<div class="sst-empty">Загрузка…</div>`;
       try {
-        let packs = [];
-        if (window.apiClient && typeof window.apiClient.getStickerCatalog === 'function') {
-          const res = await window.apiClient.getStickerCatalog(query);
-          packs = res.success ? (res.data || []) : (Array.isArray(res) ? res : []);
-        } else {
-          const res = await apiRequest(`/api/stickers/catalog${query ? '?q=' + encodeURIComponent(query) : ''}`, 'GET');
-          packs = res.success ? (res.data || []) : [];
-        }
+        const packs = await this.fetchCatalog(query);
         packs.sort((a, b) => (b.subscribed ? 1 : 0) - (a.subscribed ? 1 : 0));
         this.render(packs);
       } catch (e) {
@@ -196,41 +226,53 @@
       }
     }
 
-    render(packs) {
-      const els = this._els;
-      if (!packs.length) {
-        els.grid.innerHTML = `<div class="sst-empty">Наборы не найдены</div>`;
-        return;
+    async loadPage(search) {
+      const target = this._pageTarget;
+      if (!target || !target.grid) return;
+      const query = (search || '').trim();
+
+      target.grid.innerHTML = '<div class="sst-empty"><div class="loading-pulse">Загрузка наборов…</div></div>';
+      if (target.emptyEl) target.emptyEl.hidden = true;
+      try {
+        const packs = await this.fetchCatalog(query);
+        packs.sort((a, b) => (b.subscribed ? 1 : 0) - (a.subscribed ? 1 : 0));
+        this._cachedPacks = packs;
+        this.renderPage(packs);
+      } catch (e) {
+        target.grid.innerHTML = '<div class="sst-empty">Не удалось загрузить каталог наборов</div>';
       }
+    }
 
-      els.grid.innerHTML = packs.map((p) => {
-        const preview = (p.stickers || []).slice(0, 3);
-        const count = p.stickersCount ?? preview.length;
-        const previewHtml = preview.length
-          ? preview.map((s) => `<img src="${escapeHtml(s.fileUrl)}" alt="">`).join('')
-          : `<span class="sst-preview-empty">Пусто</span>`;
+    renderCardHtml(p) {
+      const preview = (p.stickers || []).slice(0, 4);
+      const count = p.stickersCount ?? preview.length;
+      const previewHtml = preview.length
+        ? preview.map((s) => `<img src="${escapeHtml(s.fileUrl)}" alt="" loading="lazy">`).join('')
+        : `<span class="sst-preview-empty">Пусто</span>`;
 
-        const ownBadge = p.isOwn
-          ? `<span class="sst-own-badge">Ваш набор</span>`
-          : '';
-        const actionBtn = `
-          <button type="button" class="btn ${p.subscribed ? 'btn-secondary' : 'btn-primary'} btn-sm" data-pack-id="${p.id}" data-subscribed="${p.subscribed ? '1' : '0'}">
-            ${p.subscribed ? '<i class="fas fa-xmark"></i> Убрать' : '<i class="fas fa-plus"></i> Добавить'}
-          </button>`;
-        const descriptionHtml = p.description
-          ? `<div class="sst-description" title="${escapeHtml(p.description)}">${escapeHtml(p.description)}</div>`
-          : '';
-        return `
-          <div class="sst-card${p.subscribed ? ' subscribed' : ''}">
-            <div class="sst-preview" data-open-pack="${p.id}" title="Просмотреть все стикеры набора">${previewHtml}</div>
-            <div class="sst-title" data-open-pack="${p.id}" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</div>
-            ${descriptionHtml}
-            <div class="sst-meta"><span>от ${escapeHtml(p.authorName || 'автора')} · ${count} шт.</span>${ownBadge}</div>
-            ${actionBtn}
-          </div>`;
-      }).join('');
+      const ownBadge = p.isOwn
+        ? `<span class="sst-own-badge">Ваш набор</span>`
+        : '';
+      const actionBtn = `
+        <button type="button" class="btn ${p.subscribed ? 'btn-secondary' : 'btn-primary'} btn-sm sst-action-btn" data-pack-id="${p.id}" data-subscribed="${p.subscribed ? '1' : '0'}" title="${p.subscribed ? 'Убрать набор' : 'Добавить набор себе'}">
+          ${p.subscribed ? '<i class="fas fa-xmark"></i> Убрать' : '<i class="fas fa-plus"></i> Добавить себе'}
+        </button>`;
+      const descriptionHtml = p.description
+        ? `<div class="sst-description" title="${escapeHtml(p.description)}">${escapeHtml(p.description)}</div>`
+        : '';
+      return `
+        <div class="sst-card${p.subscribed ? ' subscribed' : ''}">
+          <div class="sst-preview" data-open-pack="${p.id}" title="Просмотреть все стикеры набора">${previewHtml}</div>
+          <div class="sst-title" data-open-pack="${p.id}" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</div>
+          ${descriptionHtml}
+          <div class="sst-meta"><span>от ${escapeHtml(p.authorName || 'автора')} · ${count} шт.</span>${ownBadge}</div>
+          ${actionBtn}
+        </div>`;
+    }
 
-      els.grid.querySelectorAll('[data-open-pack]').forEach((node) => {
+    bindCardEvents(container) {
+      if (!container) return;
+      container.querySelectorAll('[data-open-pack]').forEach((node) => {
         node.addEventListener('click', () => {
           const packId = node.dataset.openPack;
           if (packId && window.stickerPackView && typeof window.stickerPackView.open === 'function') {
@@ -239,7 +281,7 @@
         });
       });
 
-      els.grid.querySelectorAll('[data-pack-id]').forEach((btn) => {
+      container.querySelectorAll('[data-pack-id]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.toggle(btn.dataset.packId, btn.dataset.subscribed === '1', btn);
@@ -247,7 +289,58 @@
       });
     }
 
+    render(packs) {
+      const els = this._els;
+      if (!els) return;
+      if (!packs.length) {
+        els.grid.innerHTML = `<div class="sst-empty">Наборы не найдены</div>`;
+        return;
+      }
+      els.grid.innerHTML = packs.map((p) => this.renderCardHtml(p)).join('');
+      this.bindCardEvents(els.grid);
+    }
+
+    renderPage(packs) {
+      const target = this._pageTarget;
+      if (!target || !target.grid) return;
+      const filter = target.filter || 'all';
+      let filtered = packs.slice();
+      if (filter === 'subscribed') {
+        filtered = filtered.filter((p) => p.subscribed);
+      } else if (filter === 'own') {
+        filtered = filtered.filter((p) => p.isOwn);
+      }
+
+      if (target.countEl) {
+        const count = filtered.length;
+        target.countEl.textContent = `${count} ${pluralizePacks(count)}`;
+      }
+
+      if (!filtered.length) {
+        let msg = 'Наборы не найдены';
+        if (filter === 'subscribed') msg = 'У вас пока нет добавленных наборов. Добавьте понравившиеся паки из каталога.';
+        else if (filter === 'own') msg = 'У вас пока нет созданных наборов.';
+        target.grid.innerHTML = `<div class="sst-empty">${escapeHtml(msg)}</div>`;
+        if (target.emptyEl) target.emptyEl.hidden = false;
+        return;
+      }
+
+      if (target.emptyEl) target.emptyEl.hidden = true;
+      target.grid.innerHTML = filtered.map((p) => this.renderCardHtml(p)).join('');
+      this.bindCardEvents(target.grid);
+    }
+
     async toggle(packId, isSubscribed, btn) {
+      const token = getToken();
+      if (!token) {
+        if (typeof window.showModalLogin === 'function') {
+          window.showModalLogin('login');
+        } else {
+          window.location.href = '/admin-panel';
+        }
+        return;
+      }
+
       if (btn) btn.disabled = true;
       try {
         if (window.apiClient && typeof window.apiClient.subscribeStickerPack === 'function') {
@@ -258,8 +351,7 @@
           const res = await apiRequest(`/api/stickers/packs/${encodeURIComponent(packId)}/subscribe`, method);
           if (!res.success) throw new Error(res.error || 'Не удалось обновить подписку');
         }
-        await this.load(this._els?.searchEl?.value || '');
-        this._onChange?.();
+        await this.refresh();
       } catch (e) {
         notify(e.message || 'Не удалось изменить подписку на набор', 'error');
         if (btn) btn.disabled = false;

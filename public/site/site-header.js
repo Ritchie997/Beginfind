@@ -36,6 +36,7 @@
           </button>
           <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
             <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+            <a href="/stickers" role="menuitem"><i class="fas fa-icons"></i> Стикеры</a>
             <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
           </div>
         </div>
@@ -332,8 +333,8 @@
         event.preventDefault();
         var query = input.value.trim();
         var page = document.body.dataset.page;
-        // Если на странице галереи или антропедии — пусть локальный поиск подхватит
-        if (page === 'gallery' || page === 'antropedia') return;
+        // Если на странице галереи, стикеров или антропедии — пусть локальный поиск подхватит
+        if (page === 'gallery' || page === 'antropedia' || page === 'stickers') return;
         if (query) {
           if (window.PublicSite) window.PublicSite.navigateTo('/antropedia?q=' + encodeURIComponent(query));
           else window.location.href = '/antropedia?q=' + encodeURIComponent(query);

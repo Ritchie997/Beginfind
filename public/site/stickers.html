@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Каталог стикеров AllTell — авторские наборы и стикерпаки сообщества</title>
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="/site/stickers.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/user-notifications.css">
+<script src="/user-notifications.js"></script>
+</head>
+<body data-page="stickers">
+
+<!-- ============ ШАПКА ============ -->
+<header class="site-header" id="siteHeader">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
+      <a href="/alltell?view=feed" class="site-nav-link" data-page="alltell">AllTell</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+      <a href="/stickers" class="site-nav-link active" data-page="stickers">Стикеры</a>
+    </nav>
+    <div class="site-header-actions">
+      <div class="site-search"><i class="fas fa-search" aria-hidden="true"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
+      <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="notif-bell" id="notif-bell">
+        <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+        <div class="notif-bell-dropdown" hidden>
+          <div class="notif-bell-head">
+            <b>Уведомления</b>
+            <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+          </div>
+          <div class="notif-bell-list"></div>
+        </div>
+      </div>
+      <div class="site-user" id="siteUserMenu" hidden>
+        <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
+          <span class="site-user-avatar" id="siteUserAvatar"></span>
+          <span class="site-user-name" id="siteUserName"></span>
+          <i class="fas fa-chevron-down site-user-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
+          <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+          <a href="/stickers" role="menuitem"><i class="fas fa-icons"></i> Стикеры</a>
+          <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
+        </div>
+      </div>
+      <div class="site-auth-actions" id="siteGuestActions">
+        <button type="button" class="site-auth-button" data-auth-tab="login">Войти</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<!-- ============ HERO ============ -->
+<section class="site-hero site-hero-small stickers-hero-section">
+  <div class="stickers-hero-glow" aria-hidden="true"></div>
+  <span class="site-hero-badge"><i class="fas fa-icons"></i> Стикеры AllTell</span>
+  <h1>Каталог стикеров сообщества</h1>
+  <p>Исследуйте авторские наборы стикеров сообщества AllTell, открывайте предпросмотр и добавляйте понравившиеся стикерпаки себе в один клик.</p>
+  <div class="home-hero-features">
+    <span class="home-hero-feature"><i class="fas fa-icons"></i> Авторские стикерпаки</span>
+    <span class="home-hero-feature"><i class="fas fa-heart"></i> Реакции и комментарии</span>
+    <span class="home-hero-feature"><i class="fas fa-plus"></i> Быстрое добавление</span>
+    <span class="home-hero-feature"><i class="fas fa-shield-halved"></i> Проверенный контент</span>
+  </div>
+  <div class="site-hero-actions">
+    <a class="btn btn-primary btn-lg" href="#stickersCatalogSection"><i class="fas fa-compass"></i> Смотреть каталог</a>
+    <button type="button" class="btn btn-secondary btn-lg" id="stickersHeroCreateBtn"><i class="fas fa-plus"></i> Создать набор</button>
+  </div>
+</section>
+
+<!-- ============ КАТАЛОГ СТИКЕРОВ ============ -->
+<main class="site-main">
+  <section class="site-section stickers-section" id="stickersCatalogSection">
+    <div class="stickers-page-wrap">
+      <div class="stickers-toolbar">
+        <div class="stickers-toolbar-header">
+          <h2><i class="fas fa-icons" aria-hidden="true"></i> Все наборы</h2>
+          <p class="stickers-toolbar-desc">Находите наборы по названию или автору, открывайте предпросмотр стикеров и добавляйте их в свою коллекцию для комментариев и реакций.</p>
+        </div>
+
+        <div class="stickers-toolbar-controls">
+          <div class="stickers-search-wrap">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="search" id="stickersSearch" class="stickers-search-input" placeholder="Поиск наборов по названию…" aria-label="Поиск по наборам стикеров" autocomplete="off">
+          </div>
+
+          <div class="stickers-filter-chips">
+            <button type="button" class="filter-chip stickers-filter-chip active" data-filter="all">Все наборы</button>
+            <button type="button" class="filter-chip stickers-filter-chip" data-filter="subscribed">Добавленные себе</button>
+            <button type="button" class="filter-chip stickers-filter-chip" data-filter="own">Мои наборы</button>
+          </div>
+
+          <div class="stickers-status-line">
+            <span id="stickersCountBadge" class="stickers-count-badge">Загрузка…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sst-grid stickers-page-grid" id="stickersGrid">
+        <div class="sst-empty"><div class="loading-pulse">Загрузка наборов…</div></div>
+      </div>
+
+      <div class="empty-state stickers-empty-state" id="stickersEmpty" hidden>
+        <i class="fas fa-icons"></i>
+        <h3>Наборы не найдены</h3>
+        <p>Попробуйте изменить поисковый запрос или сбросить фильтры.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ ПОДВАЛ ============ -->
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> AllTell</div>
+      <p>Энциклопедия, ролевые сообщества и галерея творчества фэндома AllTell — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/antropedia">Antropedia</a>
+      <a href="/alltell?view=feed">AllTell</a>
+      <a href="/site/gallery.html">Галерея</a>
+      <a href="/stickers">Стикеры</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+      <button type="button" class="site-footer-link" id="footerFeedbackBtn">Обратная связь</button>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="/admin-panel">Админ-панель</a>
+    </div></div>
+  </div>
+  <div class="site-footer-bottom">
+    <span>© AllTell. Энциклопедия, сообщества и творчество.</span>
+    <span>Стикеры доступны для предпросмотра гостям, а добавление требует входа.</span>
+  </div>
+</footer>
+
+<script src="/auth-system.js"></script>
+<script src="/confirm-dialog.js"></script>
+<script src="/sticker-pack-view.js"></script>
+<script src="/sticker-store.js"></script>
+<script src="/site/stickers.js"></script>
+<script src="/site/stickers-client.js"></script>
+<script src="/site/site-header.js"></script>
+<script src="/site/site.js"></script>
+<script src="/site/router.js"></script>
+</body>
+</html>

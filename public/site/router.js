@@ -19,7 +19,9 @@
       normalizedPath === '/alltell' ||
       normalizedPath === '/site/alltell.html' ||
       normalizedPath === '/gallery' ||
-      normalizedPath === '/site/gallery.html';
+      normalizedPath === '/site/gallery.html' ||
+      normalizedPath === '/stickers' ||
+      normalizedPath === '/site/stickers.html';
   }
 
   function syncHead(parsedDocument) {

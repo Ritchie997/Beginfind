@@ -259,12 +259,12 @@ async function listCatalog(userId, search) {
   if (!counted.length) return counted;
   const packs = await attachCoAuthors(await attachStickerPreviews(counted));
 
-  const subRows = await all(
+  const subRows = userId ? await all(
     `SELECT pack_id FROM sticker_subscriptions WHERE user_id = ? AND pack_id IN (${packs.map(() => '?').join(',')})`,
     [userId, ...packs.map((p) => p.id)]
-  );
+  ) : [];
   const subscribed = new Set(subRows.map((r) => r.pack_id));
-  return packs.map((p) => ({ ...p, subscribed: subscribed.has(p.id), isOwn: p.authorId === userId }));
+  return packs.map((p) => ({ ...p, subscribed: subscribed.has(p.id), isOwn: Boolean(userId && p.authorId === userId) }));
 }
 
 // Наборы, добавленные пользователем себе — вместе со стикерами, для пикера

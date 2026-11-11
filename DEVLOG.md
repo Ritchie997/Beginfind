@@ -5,6 +5,25 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-11 — публичный каталог стикеров (/stickers)
+
+- Стикеры и публичная витрина (`public/site/stickers.html`, `public/site/stickers.css`, `public/site/stickers-client.js`, `public/site/router.js`, `public/site/site-header.js`, `public/site/site.js`, `public/sticker-store.js`, `public/sticker-pack-view.js`, `src/routes/pages.routes.js`, `src/routes/stickers.routes.js`, `src/services/stickers-store.js`, `src/routes/stickers.test.js`, `public/site/index.html`, `public/site/antropedia.html`, `public/site/alltell.html`, `public/site/gallery.html`, `public/site/profile.html`):
+  - **Публичная страница `/stickers`:**
+    - Создана страница `public/site/stickers.html` со стандартной публичной оболочкой AllTell, героем с быстрым переходом в каталог и кнопкой создания набора, строкой поиска, фильтр-чипами («Все наборы», «Добавленные себе», «Мои наборы») и сеткой карточек наборов.
+    - В `src/routes/pages.routes.js` зарегистрирован маршрут `GET /stickers` (и совместимый `/site/stickers.html`), отдающий `site/stickers.html`.
+    - В `public/site/router.js` путь `/stickers` добавлен в `isPublicPath` для бесшовной SPA-навигации между страницами сайта.
+    - В `public/site/site.js` в `mountPublicPage()` подключена инициализация страницы при `data-page="stickers"`.
+  - **Подключение модулей `sticker-store.js` и `sticker-pack-view.js`:**
+    - Модуль `public/sticker-store.js` расширен поддержкой встраивания в страницу витрины через `mountPage()` с сохранением функционала модального окна `open()`. Карточки наборов отображают превью стикеров, автора, число стикеров и кнопку «Добавить себе» / «Убрать». Клик по карточке открывает детализированный предпросмотр стикеров через `window.stickerPackView.open(packId)`.
+    - В `public/sticker-pack-view.js` улучшена поддержка аутентификации гостей (предложение войти в аккаунт при попытке подписки без токена) и синхронизация состояния с каталогом витрины при добавлении/удалении наборов.
+    - В `src/routes/stickers.routes.js` маршруты `GET /api/stickers/catalog` и `GET /api/stickers/packs/:id` переведены на `optionalAuth`, открывая гостям чтение подтверждённых стикерпаков сообщества без обязательного токена авторизации.
+    - В `src/services/stickers-store.js` в `listCatalog` обеспечена корректная работа при отсутствии `userId` (гостевой режим).
+  - **Навигация и ссылки на стикеры:**
+    - Ссылка «Стикеры» (`/stickers`) добавлена в меню профиля (`#siteUserDropdown`) в шапке `site-header.js` и на всех страницах витрины (`index.html`, `antropedia.html`, `alltell.html`, `gallery.html`, `profile.html`).
+    - Ссылка «Стикеры» добавлена в секцию «Разделы» футера на всех страницах витрины.
+  - **Тестирование:**
+    - Написан автоматический интеграционный тест `src/routes/stickers.test.js`, проверяющий доступность каталога для гостей, отдачу HTML-страницы `/stickers` и доступ к отдельным наборам.
+
 ## 2026-11-11 — рабочая форма обратной связи в футере публичного сайта
 
 - Обратная связь и техподдержка (`public/site/index.html`, `public/site/antropedia.html`, `public/site/alltell.html`, `public/site/gallery.html`, `public/site/profile.html`, `public/site/site.js`, `public/site/site.css`, `src/routes/feedback.routes.js`, `src/services/feedback-store.js`, `src/routes/feedback.test.js`, `docs/TASKS_PARITY_CHECKLIST.md`):

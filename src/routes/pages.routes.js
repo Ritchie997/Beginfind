@@ -97,6 +97,8 @@ function createPagesRouter(articleStoreInstance = articleStore) {
   router.get('/', sendPage('site/index.html'));
   router.get('/alltell', sendPage('site/alltell.html'));
   router.get('/gallery', sendPage('site/gallery.html'));
+  router.get('/stickers', sendPage('site/stickers.html'));
+  router.get('/site/stickers.html', sendPage('site/stickers.html'));
   router.get('/profile', sendPage('site/profile.html'));
   router.get('/profile/:id', sendPage('site/profile.html'));
   router.get('/antropedia', (req, res) => {

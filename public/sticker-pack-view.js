@@ -38,8 +38,18 @@
     window.setTimeout(() => toast.remove(), 5000);
   }
 
+  function getToken() {
+    try {
+      return (window.authManager && typeof window.authManager.getToken === 'function')
+        ? (window.authManager.getToken() || '')
+        : (localStorage.getItem('alltell_auth_token') || '');
+    } catch (_) {
+      return '';
+    }
+  }
+
   async function apiRequest(method, path) {
-    const accessToken = window.authManager?.getToken();
+    const accessToken = getToken();
     const response = await fetch(path, {
       method,
       credentials: 'same-origin',
@@ -253,6 +263,12 @@
       // новой страницы.
       this._els.footer.querySelector('[data-nav]')?.addEventListener('click', () => this.close());
       this._els.footer.querySelector('#stickerPackViewSubBtn')?.addEventListener('click', async (e) => {
+        const token = getToken();
+        if (!token) {
+          if (typeof window.showModalLogin === 'function') window.showModalLogin('login');
+          else window.location.href = '/admin-panel';
+          return;
+        }
         const btn = e.currentTarget;
         btn.disabled = true;
         try {
