@@ -5,6 +5,15 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-11 — улучшение вкладки «Карты» в управлении франшизой AllTell
+
+- Интерактивные карты (`public/site/alltell-client.js`, `public/site/site.css`, `public/site/alltell-mobile.css`, `src/routes/maps.routes.js`, `src/services/map-access.test.js`):
+  - **Превью карт:** карточки карт во вкладке «Карты» рабочего пространства управления франшизой теперь отображают полноценную миниатюру (изображение `m.preview` или тайл `previewTile` с сохранением пропорций, либо стилизованную заглушку при отсутствии изображения). Клик по превью открывает карту в новой вкладке.
+  - **Удаление карты:** на карточки карт добавлена кнопка удаления с иконкой корзины. Удаление запрашивает подтверждение через диалог AllTell (`confirmDialog`), вызывает `DELETE /api/maps/:id` и автоматически обновляет список карт. В API маршруте `GET /api/maps` передаётся флаг `can_delete` на основе прав пользователя (автор карты, администратор сервера или root).
+  - **Устранение дублирования кнопок создания:** убрана лишняя кнопка «Создать карту» из заголовка секции (`.alltell-ws-section-header`). Создание карт вынесено в акцентную карточку «+ Создать карту» в конце сетки карт, а при отсутствии карт — в кнопку в пустом состоянии.
+  - **Улучшения UX:** автофокус поля ввода при открытии формы создания карты и сохранение по нажатию `Enter`. Добавлены адаптивные стили для мобильных устройств.
+
+
 ## 2026-11-11 — публичный каталог стикеров (/stickers)
 
 - Стикеры и публичная витрина (`public/site/stickers.html`, `public/site/stickers.css`, `public/site/stickers-client.js`, `public/site/router.js`, `public/site/site-header.js`, `public/site/site.js`, `public/sticker-store.js`, `public/sticker-pack-view.js`, `src/routes/pages.routes.js`, `src/routes/stickers.routes.js`, `src/services/stickers-store.js`, `src/routes/stickers.test.js`, `public/site/index.html`, `public/site/antropedia.html`, `public/site/alltell.html`, `public/site/gallery.html`, `public/site/profile.html`):

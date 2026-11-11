@@ -140,7 +140,8 @@ router.get('/maps', auth.authenticateToken, auth.checkApproved, async (req, res)
           }
           : null,
         updated_at: map.updated_at,
-        can_edit: await access.canEditMap(req.user, map)
+        can_edit: await access.canEditMap(req.user, map),
+        can_delete: req.user ? await access.canDeleteMap(req.user, map) : false
       });
     }
     result.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));

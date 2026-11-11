@@ -1036,6 +1036,12 @@
     font-size: 12.5px !important;
   }
 
+  /* Интерактивные карты в Workspace */
+  .alltell-map-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
   /* Форма редактирования хаба */
   .alltell-hub-edit-form {
     padding: 14px !important;

@@ -3552,6 +3552,17 @@
     `;
   }
 
+  function renderMapCardPreview(m) {
+    if (m && m.preview) {
+      return `<img src="${escapeHtml(m.preview)}" alt="${escapeHtml(m.title || '')}" loading="lazy">`;
+    }
+    var t = m && m.previewTile;
+    if (t && t.fw > 0 && t.fh > 0) {
+      return `<span class="alltell-map-card-crop" style="aspect-ratio:${Number(t.aspect || 1).toFixed(4)};background-image:url('${escapeHtml(t.url)}');background-size:${(100 / t.fw).toFixed(3)}% ${(100 / t.fh).toFixed(3)}%"></span>`;
+    }
+    return `<div class="alltell-map-card-preview-placeholder"><i class="fas fa-map"></i></div>`;
+  }
+
   function renderWorkspaceMapsTab(state, data, canManage, isOwner, isRoot) {
     var maps = state.workspaceData.maps || [];
     var world = state.workspaceData.world;
@@ -3562,11 +3573,6 @@
           <h3 class="alltell-ws-title"><i class="fas fa-map" style="color:var(--blurple)"></i> Интерактивные карты (${maps.length})</h3>
           <p style="margin:4px 0 0;font-size:0.84rem;color:var(--text-muted);">Карты материков, планет и локаций, привязанные к этому миру.</p>
         </div>
-        ${canManage ? `
-          <button type="button" class="btn btn-primary btn-sm" data-action="manage-toggle-create-map">
-            <i class="fas fa-plus"></i> Создать карту
-          </button>
-        ` : ''}
       </div>
 
       <div id="alltell-create-map-box" class="alltell-hub-edit-form" ${state.showCreateMap ? '' : 'hidden'}>
@@ -3582,34 +3588,62 @@
       </div>
 
       ${maps.length ? `
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:28px;">
+        <div class="alltell-map-grid">
           ${maps.map(function (m) {
+            var canDelete = Boolean(canManage || isOwner || isRoot || m.can_delete);
             return `
-              <div style="background:var(--background-tertiary);border:1px solid var(--background-accent);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(88,101,242,0.15);color:var(--blurple);display:flex;align-items:center;justify-content:center;font-size:18px;">
-                    <i class="fas fa-map-location-dot"></i>
+              <div class="alltell-map-card" data-map-id="${m.id}">
+                <a class="alltell-map-card-preview" href="/map/${m.id}" target="_blank" title="Открыть карту">
+                  ${renderMapCardPreview(m)}
+                </a>
+                <div class="alltell-map-card-body">
+                  <h4 class="alltell-map-card-title">
+                    <a href="/map/${m.id}" target="_blank">${escapeHtml(m.title)}</a>
+                  </h4>
+                  <div class="alltell-map-card-meta">
+                    <i class="fas fa-layer-group"></i>
+                    <span>${m.zoneCount || 0} зон · ${m.basemapCount || 0} слоёв</span>
                   </div>
-                  <div>
-                    <h4 style="margin:0;font-size:0.95rem;color:var(--text-normal);">${escapeHtml(m.title)}</h4>
-                    <span style="font-size:11px;color:var(--text-muted);">${m.zoneCount || 0} зон · ${m.basemapCount || 0} слоёв</span>
+                  <div class="alltell-map-card-foot">
+                    <a class="btn btn-secondary btn-sm" href="/map/${m.id}" target="_blank" style="flex:1;justify-content:center;">
+                      <i class="fas fa-eye"></i> Открыть
+                    </a>
+                    ${m.can_edit ? `
+                      <a class="btn btn-secondary btn-sm" href="/map/${m.id}/edit" target="_blank" title="Редактор карты">
+                        <i class="fas fa-pen"></i>
+                      </a>
+                    ` : ''}
+                    ${canDelete ? `
+                      <button type="button" class="btn btn-danger btn-sm" data-action="manage-delete-map" data-map-id="${m.id}" data-map-title="${escapeHtml(m.title)}" title="Удалить карту">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    ` : ''}
                   </div>
-                </div>
-                <div style="margin-top:auto;display:flex;gap:8px;padding-top:10px;border-top:1px solid var(--background-accent);">
-                  <a class="btn btn-secondary btn-sm" href="/map/${m.id}" target="_blank" style="flex:1;justify-content:center;"><i class="fas fa-eye"></i> Открыть</a>
-                  ${m.can_edit ? `<a class="btn btn-secondary btn-sm" href="/map/${m.id}/edit" target="_blank" title="Редактор"><i class="fas fa-pen"></i></a>` : ''}
                 </div>
               </div>
             `;
           }).join('')}
+          ${canManage ? `
+            <button type="button" class="alltell-map-create-card" data-action="manage-toggle-create-map" title="Создать новую карту">
+              <div class="alltell-map-create-icon"><i class="fas fa-plus"></i></div>
+              <span style="font-size:0.92rem;font-weight:600;">Создать карту</span>
+            </button>
+          ` : ''}
         </div>
-      ` : `
+      ` : (!state.showCreateMap ? `
         <div class="alltell-state alltell-state-empty" style="margin-bottom:24px;">
           <div class="alltell-empty-icon"><i class="fas fa-map"></i></div>
           <h3>В этом мире пока нет карт</h3>
           <p>Создайте интерактивную карту для визуализации локаций и привязки статей.</p>
+          ${canManage ? `
+            <div style="margin-top:16px;">
+              <button type="button" class="btn btn-primary" data-action="manage-toggle-create-map">
+                <i class="fas fa-plus"></i> Создать карту
+              </button>
+            </div>
+          ` : ''}
         </div>
-      `}
+      ` : '')}
 
       <div style="border-top:1px solid var(--background-accent);padding-top:20px;">
         <h4 style="margin:0 0 8px;font-size:1rem;color:var(--text-normal);display:flex;align-items:center;gap:8px;">
@@ -4816,6 +4850,27 @@
         await request('/api/maps', 'POST', { serverId: Number(franchiseId), title: title });
         showToast('Карта создана');
         state.showCreateMap = false;
+        await loadMapsData(franchiseId);
+        renderDetail(root, state);
+      } catch (error) {
+        notifyError(error.message);
+      }
+    }
+
+    async function deleteMap(franchiseId, mapId, mapTitle) {
+      var ok = window.confirmDialog
+        ? await window.confirmDialog.open({
+            title: 'Удалить карту?',
+            message: 'Удалить интерактивную карту «' + (mapTitle || '') + '»? Все маркеры, зоны и слои этой карты будут удалены безвозвратно.',
+            confirmLabel: 'Удалить',
+            cancelLabel: 'Отмена',
+            danger: true
+          })
+        : confirm('Удалить интерактивную карту «' + (mapTitle || '') + '»?');
+      if (!ok) return;
+      try {
+        await request('/api/maps/' + encodeURIComponent(mapId), 'DELETE');
+        showToast('Карта удалена');
         await loadMapsData(franchiseId);
         renderDetail(root, state);
       } catch (error) {
@@ -6073,8 +6128,18 @@
       } else if (action === 'manage-toggle-create-map') {
         state.showCreateMap = !state.showCreateMap;
         renderDetail(root, state);
+        if (state.showCreateMap) {
+          var mapInput = root.querySelector('#new-map-title-input');
+          if (mapInput) mapInput.focus();
+        }
       } else if (action === 'manage-save-map') {
         saveNewMap(state.detail.franchise.id);
+      } else if (action === 'manage-delete-map') {
+        var mapId = button.dataset.mapId;
+        var mapTitle = button.dataset.mapTitle;
+        if (state.detail && state.detail.franchise && mapId) {
+          deleteMap(state.detail.franchise.id, mapId, mapTitle);
+        }
       } else if (action === 'manage-open-change-owner') {
         openChangeOwnerModal(state.detail.franchise.id);
       } else if (action === 'manage-delete-franchise') {
@@ -6128,6 +6193,21 @@
     }
 
     function onKeyDown(event) {
+      if (event.target.matches('#new-map-title-input')) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (state.detail && state.detail.franchise) {
+            saveNewMap(state.detail.franchise.id);
+          }
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          state.showCreateMap = false;
+          renderDetail(root, state);
+          return;
+        }
+      }
       if (event.target.matches('#alltell-search-input')) {
         if (event.key === 'Enter') {
           event.preventDefault();
