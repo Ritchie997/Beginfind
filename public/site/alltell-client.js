@@ -1270,6 +1270,9 @@
     var postArticles = Array.isArray(post.articles) && post.articles.length
       ? post.articles
       : (post.article ? [post.article] : []);
+    var postMaps = Array.isArray(post.maps) && post.maps.length
+      ? post.maps
+      : (post.map ? [post.map] : []);
 
     return `
       <article class="alltell-post-card" data-post-id="${Number(post.id)}">
@@ -1353,6 +1356,40 @@
           </div>
         ` : ''}
 
+        ${postMaps.length ? `
+          <div class="alltell-post-maps-list">
+            ${postMaps.map(function (m) {
+              var zonesCount = m.zones_count != null ? m.zones_count : (m.zoneCount || 0);
+              var layersCount = m.layers_count != null ? m.layers_count : (m.basemapCount || 0);
+              var metaParts = [];
+              if (zonesCount > 0) metaParts.push(zonesCount + ' зон');
+              if (layersCount > 0) metaParts.push(layersCount + ' слоёв');
+              var metaLabel = metaParts.length ? metaParts.join(' · ') : 'Интерактивная карта мира';
+              return `
+                <div class="alltell-post-map-card" data-post-map-id="${escapeHtml(m.id)}">
+                  <a class="alltell-post-map-preview-wrap" href="/map/${encodeURIComponent(m.id)}" target="_blank" title="Открыть карту «${escapeHtml(m.title || '')}»">
+                    ${renderMapCardPreview(m)}
+                    <span class="alltell-post-map-badge"><i class="fas fa-map-location-dot"></i> Карта</span>
+                  </a>
+                  <div class="alltell-post-map-body">
+                    <div class="alltell-post-map-info">
+                      <span class="alltell-post-map-tag"><i class="fas fa-layer-group"></i> ${escapeHtml(metaLabel)}</span>
+                      <h4 class="alltell-post-map-title">
+                        <a href="/map/${encodeURIComponent(m.id)}" target="_blank">${escapeHtml(m.title || 'Интерактивная карта')}</a>
+                      </h4>
+                    </div>
+                    <div class="alltell-post-map-actions">
+                      <a class="btn btn-primary btn-sm alltell-post-map-btn" href="/map/${encodeURIComponent(m.id)}" target="_blank">
+                        <i class="fas fa-up-right-from-square"></i> Открыть карту
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+
         ${canEdit || (canManage && post.approval_status === 'pending') ? `
           <div class="alltell-post-admin-actions">
             ${canManage && post.approval_status === 'pending' ? `
@@ -1423,6 +1460,21 @@
           <i class="fas fa-book-bookmark" aria-hidden="true"></i>
           <span class="alltell-article-tag-title" title="${escapeHtml(art.title || art.slug)}">${escapeHtml(art.title || art.slug)}</span>
           <button type="button" class="alltell-article-tag-remove" data-action="remove-article-tag" data-slug="${escapeHtml(art.slug)}" title="Удалить из выбранных" aria-label="Удалить статью">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </span>
+      `;
+    }).join('');
+  }
+
+  function renderSelectedMapChips(maps) {
+    if (!maps || !maps.length) return '';
+    return maps.map(function (m) {
+      return `
+        <span class="alltell-map-tag-chip" data-map-id="${escapeHtml(m.id)}">
+          <i class="fas fa-map-location-dot" aria-hidden="true"></i>
+          <span class="alltell-map-tag-title" title="${escapeHtml(m.title || m.id)}">${escapeHtml(m.title || m.id)}</span>
+          <button type="button" class="alltell-map-tag-remove" data-action="remove-map-tag" data-map-id="${escapeHtml(m.id)}" title="Удалить из выбранных" aria-label="Удалить карту">
             <i class="fas fa-xmark" aria-hidden="true"></i>
           </button>
         </span>
@@ -2305,6 +2357,19 @@
       case 'callout':
         addPostCalloutBlock(state, dataset.variant || 'info');
         break;
+      case 'map':
+        var form = document.querySelector('[data-post-form]');
+        if (form) {
+          var extraDetails = form.querySelector('[data-post-extra-details]') || form.querySelector('.antropedia-editor-section');
+          if (extraDetails) extraDetails.open = true;
+          var mapInput = form.querySelector('[data-map-search]');
+          if (mapInput) {
+            mapInput.focus();
+            mapInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (mapInput.value.trim()) renderMapOptions(mapInput);
+          }
+        }
+        break;
       case 'link':
         applyPostLink(state);
         break;
@@ -2813,6 +2878,7 @@
       return `<option value="${Number(hub.id)}" ${post && Number(post.hub_id) === Number(hub.id) ? 'selected' : ''}>${escapeHtml(hub.name)}</option>`;
     }).join('');
     var postArticles = state.postArticles || [];
+    var postMaps = state.postMaps || [];
     return `
       <div class="antropedia-editor-view alltell-post-editor-view" data-post-form-container>
         <div class="antropedia-editor-header">
@@ -2965,6 +3031,7 @@
                             <button type="button" class="toolbar-button" data-post-cmd="divider" title="Разделитель"><i class="fas fa-minus"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="code-block" title="Блок кода"><i class="fas fa-file-code"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="callout" data-variant="info" title="Врезка / плашка"><i class="fas fa-circle-info"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="map" title="Прикрепить интерактивную карту"><i class="fas fa-map-location-dot"></i></button>
                           </div>
                           <span class="toolbar-group-label">блоки</span>
                         </div>
@@ -3002,12 +3069,12 @@
             </div>
           </details>
 
-          <!-- СЕКЦИЯ 3: МЕДИА И СТАТЬИ -->
-          <details class="form-section antropedia-editor-section" open>
+          <!-- СЕКЦИЯ 3: МЕДИА, СТАТЬИ И КАРТЫ -->
+          <details class="form-section antropedia-editor-section" data-post-extra-details open>
             <summary>
               <i class="fas fa-paperclip"></i>
-              <span>Медиа и статьи</span>
-              <span class="form-section-hint">Изображения галереи и прикрепление статей Antropedia</span>
+              <span>Медиа, статьи и карты</span>
+              <span class="form-section-hint">Изображения галереи, статьи Antropedia и интерактивные карты</span>
               <i class="fas fa-chevron-down form-section-chevron"></i>
             </summary>
             <div class="form-section-body">
@@ -3075,6 +3142,36 @@
                   <div class="alltell-article-options" data-article-options hidden></div>
                 </div>
                 <div class="form-hint">Прикреплённые статьи появятся в виде кликабельных карточек с быстрым переходом к чтению.</div>
+              </div>
+
+              <!-- СВЯЗАННЫЕ КАРТЫ -->
+              <div class="form-group full-width alltell-map-picker-field">
+                <div class="alltell-article-picker-header">
+                  <label class="form-label" style="margin:0;">
+                    <i class="fas fa-map-location-dot"></i>
+                    <span>Интерактивные карты</span>
+                  </label>
+                  <span class="alltell-editor-badge" data-map-count>
+                    ${postMaps.length ? postMaps.length + ' выбрано' : 'Не выбрано'}
+                  </span>
+                </div>
+
+                <div class="alltell-article-picker-wrapper" style="position: relative;">
+                  <div class="alltell-article-picker-box alltell-map-picker-box" data-map-picker-box>
+                    <div class="alltell-selected-articles alltell-selected-maps" data-selected-maps>
+                      ${renderSelectedMapChips(postMaps)}
+                    </div>
+                    <input name="map_search"
+                           type="text"
+                           class="alltell-article-search-input alltell-map-search-input"
+                           autocomplete="off"
+                           value=""
+                           placeholder="${postMaps.length ? 'Прикрепить ещё карту…' : 'Поиск интерактивной карты по названию для прикрепления…'}"
+                           data-map-search>
+                  </div>
+                  <div class="alltell-article-options alltell-map-options" data-map-options hidden></div>
+                </div>
+                <div class="form-hint">Прикреплённые карты отобразятся в публикации с превью, метаданными зон и кнопкой для открытия на весь экран.</div>
               </div>
             </div>
           </details>
@@ -4103,11 +4200,14 @@
       favoriteStickers: null,
       postImages: [],
       postArticles: [],
+      postMaps: [],
       uploadingImages: false,
       submittingPost: false,
       draggedImageIndex: null,
       articleIndex: [],
       articleIndexError: '',
+      mapIndex: [],
+      mapIndexError: '',
       loading: true,
       error: '',
       mineError: '',
@@ -4190,6 +4290,58 @@
       if (options) {
         if (!options.hidden && searchInput && searchInput.value.trim()) {
           renderArticleOptions(searchInput);
+        } else if (searchInput && !searchInput.value.trim()) {
+          options.hidden = true;
+          options.replaceChildren();
+        }
+      }
+    }
+
+    function setPostMaps(post) {
+      if (post && Array.isArray(post.maps) && post.maps.length) {
+        state.postMaps = post.maps.map(function (m) {
+          return {
+            id: m.id,
+            title: m.title || 'Интерактивная карта',
+            zones_count: m.zones_count != null ? m.zones_count : (m.zoneCount || 0),
+            layers_count: m.layers_count != null ? m.layers_count : (m.basemapCount || 0),
+            preview: m.preview || null,
+            previewTile: m.previewTile || null
+          };
+        });
+      } else if (post && post.map) {
+        state.postMaps = [{
+          id: post.map.id,
+          title: post.map.title || 'Интерактивная карта',
+          zones_count: post.map.zones_count != null ? post.map.zones_count : (post.map.zoneCount || 0),
+          layers_count: post.map.layers_count != null ? post.map.layers_count : (post.map.basemapCount || 0),
+          preview: post.map.preview || null,
+          previewTile: post.map.previewTile || null
+        }];
+      } else {
+        state.postMaps = [];
+      }
+    }
+
+    function updateMapPickerUI(form) {
+      if (!form) return;
+      var selectedContainer = form.querySelector('[data-selected-maps]');
+      if (selectedContainer) {
+        selectedContainer.innerHTML = renderSelectedMapChips(state.postMaps || []);
+      }
+      var countEl = form.querySelector('[data-map-count]');
+      if (countEl) {
+        var count = (state.postMaps || []).length;
+        countEl.textContent = count ? count + ' выбрано' : 'Не выбрано';
+      }
+      var searchInput = form.querySelector('[data-map-search]');
+      if (searchInput) {
+        searchInput.placeholder = (state.postMaps || []).length ? 'Добавить ещё карту…' : 'Поиск интерактивной карты по названию для прикрепления…';
+      }
+      var options = form.querySelector('[data-map-options]');
+      if (options) {
+        if (!options.hidden && searchInput && searchInput.value.trim()) {
+          renderMapOptions(searchInput);
         } else if (searchInput && !searchInput.value.trim()) {
           options.hidden = true;
           options.replaceChildren();
@@ -4586,6 +4738,23 @@
         console.error('Не удалось загрузить доступные статьи:', error);
         state.articleIndex = [];
         state.articleIndexError = error.message;
+      }
+    }
+
+    async function loadMapIndex(franchiseId) {
+      if (!token()) {
+        state.mapIndex = [];
+        state.mapIndexError = '';
+        return;
+      }
+      try {
+        var result = await request('/api/maps');
+        state.mapIndex = Array.isArray(result) ? result : [];
+        state.mapIndexError = '';
+      } catch (error) {
+        console.error('Не удалось загрузить доступные интерактивные карты:', error);
+        state.mapIndex = [];
+        state.mapIndexError = error.message;
       }
     }
 
@@ -5544,6 +5713,8 @@
       var imageUrls = state.postImages.map(function (image) { return image.url; }).filter(Boolean);
       var postArticles = state.postArticles || [];
       var articleSlugs = postArticles.map(function (a) { return a.slug; }).filter(Boolean);
+      var postMaps = state.postMaps || [];
+      var mapIds = postMaps.map(function (m) { return m.id; }).filter(Boolean);
       var bodyValue = formData.get('body');
       if (state.postBlocks && state.postBlocks.length) {
         bodyValue = serializePostBlocks(state.postBlocks);
@@ -5556,6 +5727,8 @@
         body: bodyValue,
         article_slug: articleSlugs[0] || null,
         article_slugs: articleSlugs,
+        map_id: mapIds[0] || null,
+        map_ids: mapIds,
         image_urls: imageUrls
       };
       var franchiseId = state.detail.franchise.id;
@@ -5571,6 +5744,7 @@
       state.postBlocks = null;
       releasePostImages();
       state.postArticles = [];
+      state.postMaps = [];
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
         ? 'Предложение отправлено создателю франшизы'
@@ -5622,6 +5796,76 @@
                   <div class="alltell-article-choice-info">
                     <span class="alltell-article-choice-title">${escapeHtml(article.title || article.slug)}</span>
                     ${tagsText ? `<span class="alltell-article-choice-tags">${tagsText}</span>` : ''}
+                  </div>
+                  <span class="alltell-article-choice-status">
+                    ${isSelected ? '<i class="fas fa-check" aria-hidden="true"></i> Выбрана' : 'Выбрать'}
+                  </span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      options.hidden = false;
+    }
+
+    function renderMapOptions(input) {
+      var form = input.closest('[data-post-form]');
+      if (!form) return;
+      var options = form.querySelector('[data-map-options]');
+      if (!options) return;
+      var query = input.value.trim().toLocaleLowerCase();
+      if (!query) {
+        options.hidden = true;
+        options.replaceChildren();
+        return;
+      }
+      var selectedIds = new Set((state.postMaps || []).map(function (m) { return String(m.id); }));
+      var list = state.mapIndex || [];
+      var currentFranchiseId = state.detail && state.detail.franchise ? Number(state.detail.franchise.id) : null;
+
+      var matches = list.filter(function (map) {
+        return ((map.title || '') + ' ' + (map.serverName || '') + ' ' + (map.id || '')).toLocaleLowerCase().includes(query);
+      });
+
+      if (currentFranchiseId) {
+        matches.sort(function (a, b) {
+          var aSame = Number(a.serverId) === currentFranchiseId ? 0 : 1;
+          var bSame = Number(b.serverId) === currentFranchiseId ? 0 : 1;
+          return aSame - bSame;
+        });
+      }
+      matches = matches.slice(0, 20);
+
+      if (!matches.length) {
+        options.innerHTML = state.mapIndexError
+          ? `<div class="alltell-article-option-empty">Не удалось загрузить карты: ${escapeHtml(state.mapIndexError)}</div>`
+          : '<div class="alltell-article-option-empty">Интерактивные карты не найдены по запросу</div>';
+      } else {
+        options.innerHTML = `
+          <div class="alltell-article-options-header">
+            <span>Найдено карт: ${matches.length}</span>
+            <span class="alltell-article-options-hint">Нажмите для выбора / отмены</span>
+          </div>
+          <div class="alltell-article-options-list">
+            ${matches.map(function (map) {
+              var isSelected = selectedIds.has(String(map.id));
+              var zones = map.zoneCount != null ? map.zoneCount : (map.zones_count || 0);
+              var layers = map.basemapCount != null ? map.basemapCount : (map.layers_count || 0);
+              var zonesText = zones + ' зон · ' + layers + ' слоёв';
+              var serverBadge = map.serverName ? ` [${escapeHtml(map.serverName)}]` : '';
+              return `
+                <button type="button"
+                        class="alltell-article-choice-chip ${isSelected ? 'is-selected' : ''}"
+                        data-map-choice
+                        data-map-id="${escapeHtml(map.id)}"
+                        data-map-title="${escapeHtml(map.title || 'Карта')}">
+                  <div class="alltell-article-choice-icon">
+                    <i class="fas ${isSelected ? 'fa-check' : 'fa-map-location-dot'}" aria-hidden="true"></i>
+                  </div>
+                  <div class="alltell-article-choice-info">
+                    <span class="alltell-article-choice-title">${escapeHtml(map.title || 'Интерактивная карта')}${serverBadge}</span>
+                    <span class="alltell-article-choice-tags"><i class="fas fa-layer-group"></i> ${escapeHtml(zonesText)}</span>
                   </div>
                   <span class="alltell-article-choice-status">
                     ${isSelected ? '<i class="fas fa-check" aria-hidden="true"></i> Выбрана' : 'Выбрать'}
@@ -5777,6 +6021,62 @@
         if (input) {
           input.focus();
           if (input.value.trim()) renderArticleOptions(input);
+        }
+        return;
+      }
+      var mapChoice = event.target.closest('[data-map-choice]');
+      if (mapChoice) {
+        var form = mapChoice.closest('[data-post-form]');
+        var mapId = mapChoice.dataset.mapId;
+        var mapTitle = mapChoice.dataset.mapTitle;
+        if (!mapId) return;
+        state.postMaps = state.postMaps || [];
+        var existingIdx = state.postMaps.findIndex(function (m) { return String(m.id) === String(mapId); });
+        if (existingIdx >= 0) {
+          state.postMaps.splice(existingIdx, 1);
+        } else {
+          var source = (state.mapIndex || []).find(function (m) { return String(m.id) === String(mapId); });
+          state.postMaps.push({
+            id: mapId,
+            title: mapTitle || (source && source.title) || 'Интерактивная карта',
+            zones_count: source ? (source.zoneCount || source.zones_count || 0) : 0,
+            layers_count: source ? (source.basemapCount || source.layers_count || 0) : 0,
+            preview: source ? source.preview : null,
+            previewTile: source ? source.previewTile : null
+          });
+        }
+        var searchInput = form && form.querySelector('[data-map-search]');
+        if (searchInput) {
+          searchInput.value = '';
+          searchInput.focus();
+        }
+        var options = form && form.querySelector('[data-map-options]');
+        if (options) {
+          options.hidden = true;
+          options.replaceChildren();
+        }
+        updateMapPickerUI(form);
+        return;
+      }
+      var removeMapTagBtn = event.target.closest('[data-action="remove-map-tag"]');
+      if (removeMapTagBtn) {
+        var form = removeMapTagBtn.closest('[data-post-form]');
+        var mapIdToRemove = removeMapTagBtn.dataset.mapId;
+        state.postMaps = (state.postMaps || []).filter(function (m) { return String(m.id) !== String(mapIdToRemove); });
+        updateMapPickerUI(form);
+        return;
+      }
+      var mapSearchInputEl = event.target.closest('[data-map-search]');
+      if (mapSearchInputEl) {
+        if (mapSearchInputEl.value.trim()) renderMapOptions(mapSearchInputEl);
+        return;
+      }
+      var mapPickerBox = event.target.closest('[data-map-picker-box]');
+      if (mapPickerBox && !event.target.closest('button, input')) {
+        var input = mapPickerBox.querySelector('[data-map-search]');
+        if (input) {
+          input.focus();
+          if (input.value.trim()) renderMapOptions(input);
         }
         return;
       }
@@ -5944,6 +6244,8 @@
         state.postBlocks = [{ id: genBlockId(), type: 'paragraph', data: { markdown: '' } }];
         setPostImages(null);
         setPostArticles(null);
+        setPostMaps(null);
+        loadMapIndex();
         renderDetail(root, state);
         (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         root.querySelector('#postTitleInput')?.focus();
@@ -5955,6 +6257,8 @@
         state.postBlocks = parsePostBlocks(state.editingPost ? state.editingPost.body : '');
         setPostImages(state.editingPost);
         setPostArticles(state.editingPost);
+        setPostMaps(state.editingPost);
+        loadMapIndex();
         renderDetail(root, state);
         (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         root.querySelector('#postTitleInput')?.focus();
@@ -5968,6 +6272,7 @@
         state._activePostTextarea = null;
         releasePostImages();
         state.postArticles = [];
+        state.postMaps = [];
         renderDetail(root, state);
       } else if (action === 'cancel-post-form') {
         state.editingPost = null;
@@ -5979,6 +6284,7 @@
         state._activePostTextarea = null;
         releasePostImages();
         state.postArticles = [];
+        state.postMaps = [];
         renderDetail(root, state);
       } else if (action === 'move-image') {
         var imageIndex = Number(button.dataset.imageIndex);
@@ -6165,6 +6471,7 @@
 
     function onInput(event) {
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
+      if (event.target.matches('[data-map-search]')) renderMapOptions(event.target);
       if (event.target.matches('textarea[data-autogrow]')) {
         event.target.style.height = 'auto';
         event.target.style.overflow = 'hidden';
@@ -6577,6 +6884,7 @@
 
     function onAuthChanged() {
       loadArticleIndex();
+      loadMapIndex();
       if (new URLSearchParams(window.location.search).has('franchise')) {
         loadDetail(new URLSearchParams(window.location.search).get('franchise'));
       } else if (new URLSearchParams(window.location.search).get('view') === 'catalog') {
@@ -6593,6 +6901,12 @@
       var pickerField = event.target.closest('.alltell-article-picker-field');
       if (!pickerField) {
         root.querySelectorAll('[data-article-options]').forEach(function (opt) {
+          opt.hidden = true;
+        });
+      }
+      var mapPickerField = event.target.closest('.alltell-map-picker-field');
+      if (!mapPickerField) {
+        root.querySelectorAll('[data-map-options]').forEach(function (opt) {
           opt.hidden = true;
         });
       }
@@ -6633,6 +6947,7 @@
     document.addEventListener('click', onDocClick);
     window.addEventListener('authChanged', onAuthChanged);
     await loadArticleIndex();
+    await loadMapIndex();
     await refreshCurrentView();
     return function () {
       state.disposed = true;

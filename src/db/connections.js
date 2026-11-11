@@ -173,6 +173,8 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
       body TEXT NOT NULL DEFAULT '',
       article_slug TEXT,
       article_slugs TEXT DEFAULT '[]',
+      map_id TEXT,
+      map_ids TEXT DEFAULT '[]',
       event_at DATETIME,
       created_by INTEGER NOT NULL,
       created_by_name TEXT NOT NULL,
@@ -191,7 +193,9 @@ const serversDb = new sqlite3.Database(dbPath('servers.db'), (err) => {
           ['image_url', 'ALTER TABLE franchise_posts ADD COLUMN image_url TEXT'],
           ['image_urls', 'ALTER TABLE franchise_posts ADD COLUMN image_urls TEXT'],
           ['hub_status', 'ALTER TABLE franchise_posts ADD COLUMN hub_status TEXT'],
-          ['article_slugs', "ALTER TABLE franchise_posts ADD COLUMN article_slugs TEXT DEFAULT '[]'"]
+          ['article_slugs', "ALTER TABLE franchise_posts ADD COLUMN article_slugs TEXT DEFAULT '[]'"],
+          ['map_id', 'ALTER TABLE franchise_posts ADD COLUMN map_id TEXT'],
+          ['map_ids', "ALTER TABLE franchise_posts ADD COLUMN map_ids TEXT DEFAULT '[]'"]
         ].filter(([name]) => !existingColumns.has(name));
         const addNextColumn = () => {
           const migration = migrations.shift();

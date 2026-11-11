@@ -8,6 +8,9 @@ const { isAdminOnServer } = require('../services/server-permissions');
 const articlesStore = require('../services/articles-store');
 const articleLayers = require('../services/article-layers');
 const publicArticles = require('../services/public-articles');
+const mapsStore = require('../services/maps-store');
+const mapAccess = require('../services/map-access');
+const mapTiler = require('../services/map-tiler');
 const { toRelativeUploadPath } = require('../services/blocks');
 const { serversSchemaReady } = require('../db/connections');
 const social = require('../services/social-store');
@@ -108,6 +111,14 @@ async function validatePostInput(body, franchiseId, user, canManage) {
       .map((slug) => typeof slug === 'string' ? slug.trim() : '')
       .filter(Boolean)
   ));
+  const rawMapIds = Array.isArray(body.map_ids)
+    ? body.map_ids
+    : (typeof body.map_id === 'string' && body.map_id.trim() ? [body.map_id.trim()] : []);
+  const mapIds = Array.from(new Set(
+    rawMapIds
+      .map((id) => typeof id === 'string' ? id.trim() : '')
+      .filter(Boolean)
+  ));
   const imageUrls = Array.isArray(body.image_urls)
     ? body.image_urls.map((url) => typeof url === 'string' ? url.trim() : '')
     : (typeof body.image_url === 'string' && body.image_url.trim() ? [body.image_url.trim()] : []);
@@ -149,6 +160,12 @@ async function validatePostInput(body, franchiseId, user, canManage) {
       throw Object.assign(new Error(`Указанная статья "${slug}" недоступна для публикации`), { status: 400 });
     }
   }
+  for (const mapId of mapIds) {
+    const record = mapsStore.getMap(mapId);
+    if (!record || !(await mapAccess.canViewMap(user, record))) {
+      throw Object.assign(new Error(`Указанная карта "${mapId}" недоступна для публикации`), { status: 400 });
+    }
+  }
 
   return {
     type,
@@ -157,6 +174,8 @@ async function validatePostInput(body, franchiseId, user, canManage) {
     hub_id: hubId,
     article_slug: articleSlugs[0] || null,
     article_slugs: articleSlugs,
+    map_id: mapIds[0] || null,
+    map_ids: mapIds,
     image_urls: imageUrls,
     hub_status: hubId ? hubStatus || null : null,
     event_at: null
@@ -191,6 +210,46 @@ async function publicPost(row, user) {
     }
   }
   const article = articles[0] || null;
+
+  let mapIds = [];
+  if (row.map_ids) {
+    try {
+      const parsed = JSON.parse(row.map_ids);
+      if (Array.isArray(parsed)) {
+        mapIds = parsed.map((s) => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+      }
+    } catch (_) {}
+  }
+  if (!mapIds.length && row.map_id) {
+    mapIds = [row.map_id.trim()];
+  }
+  const maps = [];
+  for (const mapId of mapIds) {
+    const mapRecord = mapsStore.getMap(mapId);
+    if (!mapRecord) continue;
+    if (user ? !(await mapAccess.canViewMap(user, mapRecord)) : (mapRecord.roles && mapRecord.roles.length)) continue;
+    const ready = mapRecord.basemaps.find((b) => b.status === 'ready');
+    maps.push({
+      id: mapRecord.id,
+      title: mapRecord.title,
+      serverId: mapRecord.serverId,
+      zoneCount: mapRecord.zones.length,
+      basemapCount: mapRecord.basemaps.length,
+      preview: ready && mapTiler.hasPreview(mapRecord.id, ready.id)
+        ? `/uploads/maps/${mapRecord.id}/${ready.id}/${mapTiler.PREVIEW_FILE}?v=${ready.tilesVersion || 0}`
+        : null,
+      previewTile: ready && ready.width && ready.height && Number.isInteger(ready.maxZoom)
+        ? {
+          url: mapsStore.tilesUrl(mapRecord.id, ready).replace('{z}/{y}/{x}', '0/0/0'),
+          fw: ready.width / (mapTiler.TILE_SIZE * 2 ** ready.maxZoom),
+          fh: ready.height / (mapTiler.TILE_SIZE * 2 ** ready.maxZoom),
+          aspect: ready.width / ready.height
+        }
+        : null
+    });
+  }
+  const map = maps[0] || null;
+
   return {
     id: row.id,
     hub_id: row.hub_id,
@@ -206,6 +265,10 @@ async function publicPost(row, user) {
     } : null,
     articles: articles,
     article_slugs: articles.map((a) => a.slug),
+    map: map,
+    maps: maps,
+    map_id: map ? map.id : null,
+    map_ids: maps.map((m) => m.id),
     hub_status: row.hub_status || null,
     approval_status: row.approval_status || 'published',
     can_edit: !!user && Number(row.created_by) === Number(user.id) &&
@@ -639,11 +702,12 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
     const authorName = req.user.display_name || req.user.username || `Пользователь ${req.user.id}`;
     const result = await dbRun(`
       INSERT INTO franchise_posts
-        (server_id, hub_id, type, title, body, article_slug, article_slugs, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (server_id, hub_id, type, title, body, article_slug, article_slugs, map_id, map_ids, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug,
       JSON.stringify(post.article_slugs),
+      post.map_id, JSON.stringify(post.map_ids),
       post.event_at, post.image_urls[0] || null, JSON.stringify(post.image_urls),
       post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
     ]);
@@ -672,13 +736,14 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
     const post = await validatePostInput(req.body, franchiseId, req.user, canManage);
     await dbRun(`
       UPDATE franchise_posts
-      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, article_slugs = ?, event_at = ?,
+      SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, article_slugs = ?, map_id = ?, map_ids = ?, event_at = ?,
           image_url = ?, image_urls = ?, hub_status = ?,
           approval_status = CASE WHEN created_by = ? AND approval_status != 'published' THEN 'pending' ELSE approval_status END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
     `, [
-      post.hub_id, post.type, post.title, post.body, post.article_slug, JSON.stringify(post.article_slugs), post.event_at,
+      post.hub_id, post.type, post.title, post.body, post.article_slug, JSON.stringify(post.article_slugs),
+      post.map_id, JSON.stringify(post.map_ids), post.event_at,
       post.image_urls[0] || null, JSON.stringify(post.image_urls), post.hub_status, req.user.id, postId, franchiseId
     ]);
     res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
