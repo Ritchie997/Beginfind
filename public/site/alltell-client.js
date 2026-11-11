@@ -3327,91 +3327,9 @@
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;">
         <button type="button" class="btn btn-primary" data-action="switch-ws-tab" data-ws-tab="hubs"><i class="fas fa-layer-group"></i> Управление хабами</button>
-        <button type="button" class="btn btn-secondary" data-action="switch-ws-tab" data-ws-tab="members"><i class="fas fa-user-plus"></i> Добавить участника</button>
+        <button type="button" class="btn btn-secondary" data-action="switch-detail-tab" data-detail-tab="members"><i class="fas fa-users"></i> Участники сообщества</button>
         <button type="button" class="btn btn-secondary" data-action="switch-ws-tab" data-ws-tab="roles"><i class="fas fa-plus"></i> Создать роль</button>
         <button type="button" class="btn btn-secondary" data-action="switch-ws-tab" data-ws-tab="settings"><i class="fas fa-gear"></i> Настройки франшизы</button>
-      </div>
-    `;
-  }
-
-  function renderWorkspaceMembersTab(state, data, canManage, isOwner, isRoot) {
-    var members = state.workspaceData.members || [];
-    var currentUser = window.authManager && window.authManager.getUser();
-    var userId = currentUser && currentUser.id;
-    return `
-      ${!canManage ? '<div class="alltell-permission-note"><i class="fas fa-circle-info"></i> Добавлять участников, назначать и снимать роли может только администратор франшизы. Вы просматриваете список в режиме чтения.</div>' : ''}
-      <div class="alltell-ws-section-header">
-        <h3 class="alltell-ws-title"><i class="fas fa-users" style="color:var(--blurple)"></i> Участники (${members.length})</h3>
-        ${canManage ? `
-          <button type="button" class="btn btn-primary btn-sm" data-action="manage-add-member">
-            <i class="fas fa-user-plus"></i> Добавить участника
-          </button>
-        ` : ''}
-      </div>
-      <div class="alltell-table-wrap">
-        <table class="alltell-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Пользователь</th>
-              <th>Роли</th>
-              <th class="alltell-table-action-col">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${members.length ? members.map(function (m) {
-              var isMemberOwner = Number(m.id) === Number(data.franchise.owner_id);
-              var isSelf = Number(m.id) === Number(userId);
-              var rolesHtml = (m.roles && m.roles.length) ? m.roles.map(function (r) {
-                return `<span class="alltell-role-chip ${r.type === 'system' ? 'is-system' : 'is-custom'}">
-                  ${escapeHtml(r.name)}
-                  ${canManage ? `<button type="button" class="alltell-role-remove" data-action="manage-remove-role" data-user-id="${m.id}" data-role-id="${r.id}" title="Снять роль">×</button>` : ''}
-                </span>`;
-              }).join('') : '<span style="color:var(--text-muted);font-size:12px;">Нет ролей</span>';
-
-              var actionsHtml = '';
-              if (isMemberOwner) {
-                actionsHtml = '<div class="alltell-table-actions"><span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Владелец</span></div>';
-              } else if (canManage) {
-                actionsHtml = `
-                  <div class="alltell-table-actions">
-                    <button class="btn btn-secondary btn-sm" type="button" data-action="manage-assign-role" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Назначить роль">
-                      <i class="fas fa-user-gear"></i> <span>Роль</span>
-                    </button>
-                    <button class="btn btn-danger btn-sm" type="button" data-action="manage-kick-member" data-user-id="${m.id}" data-user-name="${escapeHtml(m.display_name || m.username)}" title="Исключить участника">
-                      <i class="fas fa-user-xmark"></i> <span>Исключить</span>
-                    </button>
-                  </div>
-                `;
-              } else if (isSelf) {
-                actionsHtml = `
-                  <div class="alltell-table-actions">
-                    <button class="btn btn-danger btn-sm" type="button" data-action="leave" title="Покинуть франшизу">
-                      <i class="fas fa-right-from-bracket"></i> <span>Покинуть</span>
-                    </button>
-                  </div>
-                `;
-              }
-
-              return `
-                <tr>
-                  <td style="color:var(--text-muted);font-size:12px;">${m.id}</td>
-                  <td>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <div class="alltell-live-avatar" style="width:32px;height:32px;font-size:12px;border-radius:10px;">${escapeHtml(initials(m.display_name || m.username))}</div>
-                      <div>
-                        <strong>${escapeHtml(m.display_name || m.username)}</strong>
-                        ${isSelf ? '<span style="color:var(--text-muted);font-size:11px;"> (вы)</span>' : ''}
-                      </div>
-                    </div>
-                  </td>
-                  <td>${rolesHtml}</td>
-                  <td class="alltell-table-action-cell">${actionsHtml}</td>
-                </tr>
-              `;
-            }).join('') : '<tr class="alltell-table-empty"><td colspan="4">Участников пока нет</td></tr>'}
-          </tbody>
-        </table>
       </div>
     `;
   }
@@ -3858,7 +3776,7 @@
 
   function renderFranchiseWorkspace(state, data, canManage, isOwner, isRoot) {
     var wsTab = state.workspaceTab || 'overview';
-    var membersCount = (state.workspaceData.members || []).length;
+    if (wsTab === 'members') wsTab = 'overview';
     var rolesCount = (state.workspaceData.roles || []).length;
     var channelsCount = (state.workspaceData.channels || []).length;
     var hubsCount = (state.workspaceData.hubs || data.hubs || []).length;
@@ -3869,9 +3787,6 @@
         <div class="alltell-workspace-nav" role="tablist">
           <button type="button" class="alltell-ws-tab-btn ${wsTab === 'overview' ? 'active' : ''}" data-action="switch-ws-tab" data-ws-tab="overview">
             <i class="fas fa-chart-pie"></i> Обзор
-          </button>
-          <button type="button" class="alltell-ws-tab-btn ${wsTab === 'members' ? 'active' : ''}" data-action="switch-ws-tab" data-ws-tab="members">
-            <i class="fas fa-users"></i> Участники <span class="alltell-ws-tab-badge">${membersCount}</span>
           </button>
           <button type="button" class="alltell-ws-tab-btn ${wsTab === 'roles' ? 'active' : ''}" data-action="switch-ws-tab" data-ws-tab="roles">
             <i class="fas fa-user-shield"></i> Роли <span class="alltell-ws-tab-badge">${rolesCount}</span>
@@ -3895,7 +3810,6 @@
 
         <div class="alltell-workspace-body">
           ${wsTab === 'overview' ? renderWorkspaceOverviewTab(state, data, canManage, isOwner, isRoot) : ''}
-          ${wsTab === 'members' ? renderWorkspaceMembersTab(state, data, canManage, isOwner, isRoot) : ''}
           ${wsTab === 'roles' ? renderWorkspaceRolesTab(state, data, canManage, isOwner, isRoot) : ''}
           ${wsTab === 'channels' ? renderWorkspaceChannelsTab(state, data, canManage, isOwner, isRoot) : ''}
           ${wsTab === 'hubs' ? renderWorkspaceHubsTab(state, data, canManage, isOwner, isRoot) : ''}
@@ -3962,11 +3876,6 @@
               </div>
             </div>
             <div class="alltell-franchise-actions">
-              ${(canManage || isOwner) ? `
-                <button class="btn ${activeTab === 'manage' ? 'btn-primary' : 'btn-secondary'} alltell-manage-toggle-btn" type="button" data-action="toggle-manage">
-                  <i class="fas ${activeTab === 'manage' ? 'fa-arrow-left' : 'fa-sliders'}"></i> ${activeTab === 'manage' ? 'К витрине' : 'Управление'}
-                </button>
-              ` : ''}
               ${isOwner
                 ? '<span class="alltell-card-owner-pill"><i class="fas fa-crown"></i> Создатель</span>'
                 : (member
@@ -4172,7 +4081,7 @@
       expandedHubs: new Set(),
       expandedCardKey: null,
       hubPreviewCache: new Map(),
-      workspaceTab: new URLSearchParams(window.location.search).get('wstab') || 'overview',
+      workspaceTab: (new URLSearchParams(window.location.search).get('wstab') === 'members') ? 'overview' : (new URLSearchParams(window.location.search).get('wstab') || 'overview'),
       workspaceData: {
         members: [],
         roles: [],
@@ -5664,7 +5573,7 @@
       var tabParam = urlParams.get('tab');
       if (tabParam) state.detailTab = tabParam;
       var wsTabParam = urlParams.get('wstab');
-      if (wsTabParam) state.workspaceTab = wsTabParam;
+      if (wsTabParam) state.workspaceTab = wsTabParam === 'members' ? 'overview' : wsTabParam;
       if (franchiseId && /^\d+$/.test(franchiseId)) return loadDetail(franchiseId);
       state.view = urlParams.get('view') === 'catalog' ? 'catalog' : 'feed';
       return state.view === 'catalog' ? loadCatalog() : loadFeed();
