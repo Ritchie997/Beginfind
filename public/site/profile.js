@@ -164,7 +164,11 @@
     document.title = name + ' — профиль AllTell';
   }
 
-  function bindEditableProfile(profile, targetId, generation) {
+  function bindEditableProfile(profile, targetId, generation, isSelf) {
+    if (typeof isSelf !== 'boolean') {
+      var me = (window.authManager && window.authManager.getUser()) || {};
+      isSelf = String(targetId) === String(me.id) || String(profile.id) === String(me.id);
+    }
     var nameForm = el('publicProfileNameForm');
     var bioForm = el('publicProfileBioForm');
     var noteForm = el('publicProfileNoteForm');
@@ -858,12 +862,13 @@
       var profile = data.profile;
       if (!profile || !profile.id) throw new Error('Сервер не вернул профиль пользователя.');
 
+      var isSelf = String(targetId) === String(me.id);
       renderIdentity(profile);
       renderServers(Array.isArray(profile.servers) ? profile.servers : []);
-      bindEditableProfile(profile, targetId, generation);
+      bindEditableProfile(profile, targetId, generation, isSelf);
       el('siteProfileLoading').hidden = true;
       el('siteProfileContent').hidden = false;
-      bindMediaTabs(String(targetId) === String(me.id));
+      bindMediaTabs(isSelf);
     } catch (error) {
       if (generation !== profileLoadGeneration) return;
       el('siteProfileLoading').hidden = true;
