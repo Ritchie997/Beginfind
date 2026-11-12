@@ -15,6 +15,7 @@
     callout: 'Плашка',
     table: 'Таблица',
     image: 'Картинка',
+    audio: 'Аудио',
     columns: 'Колонки',
     infobox: 'Инфобокс',
     'spoiler-section': 'Спойлер-секция',
@@ -86,6 +87,10 @@
       if (!block.data.variant) block.data.variant = 'info';
       if (typeof block.data.title !== 'string') block.data.title = '';
       if (typeof block.data.markdown !== 'string') block.data.markdown = '';
+    } else if (block.type === 'audio') {
+      if (typeof block.data.src !== 'string') block.data.src = '';
+      if (typeof block.data.title !== 'string') block.data.title = '';
+      if (typeof block.data.artist !== 'string') block.data.artist = '';
     }
     return block;
   }

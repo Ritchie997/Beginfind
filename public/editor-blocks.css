@@ -485,6 +485,35 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   color: #fff;
   border-color: var(--blurple, #5865f2);
 }
+.eb-audio-actions .eb-audio-btn-delete:hover {
+  background: var(--red, #ed4245);
+  border-color: var(--red, #ed4245);
+  color: #fff;
+}
+.eb-audio-placeholder-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #949ba4);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.eb-audio-placeholder-remove:hover {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--red, #ed4245);
+}
+.eb-audio-loading {
+  color: var(--text-muted, #949ba4);
+  font-size: 14px;
+}
+.eb-audio-loading i {
+  color: var(--blurple, #5865f2);
+  margin-right: 8px;
+}
 /* Арт, пересланный из галереи (см. pickGalleryImageForBlock в editor-manager.js) */
 .eb-image-gallery-badge {
   position: absolute;

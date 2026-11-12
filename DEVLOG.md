@@ -7,6 +7,12 @@
 
 ## 2026-11-12 — поддержка музыки и аудио в статьях Antropedia и публикациях AllTell
 
+- Исправление и стабилизация аудиоблоков в редакторе (`public/audio-player.js`, `public/editor-manager.js`, `public/editor-blocks.js`, `public/editor-blocks.css`, `src/services/audio-support.test.js`):
+  - **Устранение сбоя при выборе и загрузке файла:** исправлен метод `AllTellAudio.create()`, добавлена полиморфная поддержка передачи как DOM-элемента (`element, options`), так и объекта настроек (`options`), с гарантированным возвратом DOM-узла. Добавлен try/catch с отказоустойчивым fallback на стандартный `<audio controls>`.
+  - **Индикация загрузки и уведомления об ошибках:** во время загрузки аудиофайла на сервер блок отображает спиннер и текст «Загрузка аудиофайла…»; добавлена функция `notifyUser()` для вывода понятных сообщений об ошибках в любом UI-контексте (админка, клиент).
+  - **Отображение блока в редакторе и возможность удаления:** блок больше не пропадает из режима редактирования при загрузке трека; в блоке и в плейсхолдере добавлены явные кнопки «Удалить» с акцентным стилем при наведении, помимо стандартных элементов управления блоком.
+  - **Предотвращение дублирования блоков:** в `setupToolbar()` добавлен флаг `_blockBound` и 250мс debounce, устраняющий накопление повторных обработчиков `mousedown` при повторной инициализации редактора и случайные двойные клики. В `EditorBlocks` добавлен тип блока `audio` в `TYPE_LABELS` и `createBlock()`.
+
 - Музыка и аудиозаписи (`src/uploads/multer-config.js`, `src/routes/uploads.routes.js`, `src/db/connections.js`, `src/routes/franchises.routes.js`, `src/services/blocks.js`, `src/services/cleanup.js`, `src/services/backup.js`, `public/audio-player.js`, `public/blocks-renderer.js`, `public/editor-manager.js`, `public/site/alltell-client.js`, `src/services/audio-support.test.js`):
   - **Поддержка форматов аудио:**
     - Реализована поддержка форматов `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.opus`, `.webm`, `.wma` с лимитом загрузки до 100 МБ.

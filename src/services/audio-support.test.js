@@ -59,3 +59,11 @@ test('cleanup & backup: all audio extensions are recognized and protected', () =
     assert.ok(blocks.AUDIO_EXT_RE.test(`track${ext}`), `AUDIO_EXT_RE must recognize ${ext}`);
   }
 });
+
+test('editor-blocks: audio label and createBlock structure', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const editorBlocksContent = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.js'), 'utf8');
+  assert.ok(editorBlocksContent.includes("audio: 'Аудио'"), "TYPE_LABELS must include audio: 'Аудио'");
+  assert.ok(editorBlocksContent.includes("block.type === 'audio'"), "createBlock must handle block.type === 'audio'");
+});

@@ -31,12 +31,23 @@
     constructor(element, options = {}) {
       this.el = element;
       this.options = options;
-      this.tracks = options.tracks || (options.src ? [{
-        url: options.src,
+      const rawTracks = options.tracks || options.playlist || (options.src || options.url ? [{
+        url: options.src || options.url,
         title: options.title || '',
         artist: options.artist || '',
         format: options.format || ''
       }] : []);
+
+      this.tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map((t) => {
+        if (!t) return null;
+        if (typeof t === 'string') return { url: t, title: '', artist: '', format: '' };
+        return {
+          url: t.url || t.src || '',
+          title: t.title || '',
+          artist: t.artist || '',
+          format: t.format || ''
+        };
+      }).filter((t) => t && Boolean(t.url));
 
       this.currentIndex = 0;
       this.audio = new Audio();
@@ -373,15 +384,36 @@
       this.pause();
       this.audio.src = '';
       activePlayers.delete(this);
-      this.el.innerHTML = '';
+      if (this.el) {
+        this.el.innerHTML = '';
+        delete this.el._audioPlayer;
+      }
     }
   }
 
   // Публичный API
   window.AllTellAudio = {
-    create(element, options) {
-      if (!element) return null;
-      return new CustomAudioPlayer(element, options);
+    create(elementOrOptions, maybeOptions) {
+      if (!elementOrOptions) return null;
+      let element;
+      let options;
+      if (elementOrOptions instanceof HTMLElement) {
+        element = elementOrOptions;
+        options = maybeOptions || {};
+      } else if (typeof elementOrOptions === 'object') {
+        options = elementOrOptions;
+        element = document.createElement('div');
+      } else {
+        return null;
+      }
+      element.setAttribute('data-audio-player', 'true');
+      element.setAttribute('data-audio-initialized', 'true');
+      if (element._audioPlayer && typeof element._audioPlayer.destroy === 'function') {
+        try { element._audioPlayer.destroy(); } catch (_) {}
+      }
+      const player = new CustomAudioPlayer(element, options);
+      element._audioPlayer = player;
+      return element;
     },
 
     initAll(container = document) {
@@ -394,12 +426,17 @@
           const raw = el.getAttribute('data-audio-config');
           if (raw) options = JSON.parse(raw);
         } catch (_) {}
-        if (!options.src && el.dataset.audioSrc) {
+        if (!options.src && !options.url && el.dataset.audioSrc) {
           options.src = el.dataset.audioSrc;
           options.title = el.dataset.audioTitle || '';
           options.artist = el.dataset.audioArtist || '';
         }
-        players.push(new CustomAudioPlayer(el, options));
+        if (el._audioPlayer && typeof el._audioPlayer.destroy === 'function') {
+          try { el._audioPlayer.destroy(); } catch (_) {}
+        }
+        const player = new CustomAudioPlayer(el, options);
+        el._audioPlayer = player;
+        players.push(player);
       });
       return players;
     },

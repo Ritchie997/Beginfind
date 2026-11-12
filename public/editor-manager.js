@@ -1943,14 +1943,26 @@
     // ===== Блок «Аудиозапись» =====
     renderAudioBody(block) {
       const wrap = document.createElement('div');
-      if (!block.data.src) {
+      if (block.data && block.data._isUploading) {
+        const loading = document.createElement('div');
+        loading.className = 'eb-audio-placeholder eb-audio-loading';
+        loading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка аудиофайла…';
+        wrap.appendChild(loading);
+        return wrap;
+      }
+
+      if (!block.data || !block.data.src) {
         const placeholder = document.createElement('div');
         placeholder.className = 'eb-audio-placeholder';
         placeholder.innerHTML = '<span data-audio-act="upload"><i class="fas fa-file-audio"></i> Загрузить аудиофайл</span>'
           + '<span class="eb-audio-placeholder-sep">или</span>'
-          + '<span data-audio-act="url"><i class="fas fa-link"></i> Указать ссылку</span>';
+          + '<span data-audio-act="url"><i class="fas fa-link"></i> Указать ссылку</span>'
+          + '<button type="button" class="eb-audio-placeholder-remove" data-audio-act="remove" title="Удалить блок"><i class="fas fa-xmark"></i></button>';
         placeholder.addEventListener('click', (e) => {
-          if (e.target.closest('[data-audio-act="url"]')) {
+          if (e.target.closest('[data-audio-act="remove"]')) {
+            const blkList = this.findBlockList(block);
+            if (blkList) this.removeBlockFrom(blkList, block);
+          } else if (e.target.closest('[data-audio-act="url"]')) {
             this.promptAudioUrl(block);
           } else {
             this.pickAndUploadAudioForBlock(block);
@@ -1965,9 +1977,20 @@
 
       const playerWrap = document.createElement('div');
       playerWrap.className = 'eb-audio-preview';
-      if (window.AllTellAudio && typeof window.AllTellAudio.create === 'function') {
-        playerWrap.appendChild(window.AllTellAudio.create(block.data));
-      } else {
+      try {
+        if (window.AllTellAudio && typeof window.AllTellAudio.create === 'function') {
+          const playerEl = window.AllTellAudio.create(playerWrap, block.data);
+          if (playerEl && playerEl !== playerWrap) {
+            playerWrap.appendChild(playerEl);
+          }
+        } else {
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.src = block.data.src;
+          playerWrap.appendChild(audio);
+        }
+      } catch (err) {
+        console.error('Failed to create audio player in editor:', err);
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.src = block.data.src;
@@ -1984,6 +2007,8 @@
       titleInput.value = block.data.title || '';
       titleInput.addEventListener('input', () => {
         block.data.title = titleInput.value;
+        const titleEl = playerWrap.querySelector('.audio-title');
+        if (titleEl) titleEl.textContent = titleInput.value || 'Аудиозапись';
         this.scheduleRenderPreview();
         this.recordHistory(false);
       });
@@ -1994,6 +2019,11 @@
       artistInput.value = block.data.artist || '';
       artistInput.addEventListener('input', () => {
         block.data.artist = artistInput.value;
+        const artistEl = playerWrap.querySelector('.audio-artist');
+        if (artistEl) {
+          artistEl.textContent = artistInput.value || '';
+          artistEl.style.display = artistInput.value ? '' : 'none';
+        }
         this.scheduleRenderPreview();
         this.recordHistory(false);
       });
@@ -2013,7 +2043,17 @@
       changeUrlBtn.title = 'Изменить прямую ссылку';
       changeUrlBtn.addEventListener('click', () => this.promptAudioUrl(block));
 
-      actions.append(replaceFileBtn, changeUrlBtn);
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'eb-audio-btn-delete';
+      deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Удалить';
+      deleteBtn.title = 'Удалить этот аудиоблок';
+      deleteBtn.addEventListener('click', () => {
+        const blkList = this.findBlockList(block);
+        if (blkList) this.removeBlockFrom(blkList, block);
+      });
+
+      actions.append(replaceFileBtn, changeUrlBtn, deleteBtn);
       fields.append(titleInput, artistInput, actions);
       holder.appendChild(fields);
 
@@ -2434,6 +2474,18 @@
       }
     }
 
+    notifyUser(msg, type = 'info') {
+      if (typeof window.showMessage === 'function') {
+        window.showMessage(msg, type);
+      } else if (typeof window.showToast === 'function') {
+        window.showToast(msg, type);
+      } else if (typeof window.toast === 'function') {
+        window.toast(msg);
+      } else if (type === 'error') {
+        alert(msg);
+      }
+    }
+
     async pickAndUploadAudioForBlock(block) {
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
@@ -2441,18 +2493,29 @@
       fileInput.onchange = async (event) => {
         const file = event.target.files && event.target.files[0];
         if (!file) return;
-        const uploadResult = await this.uploadAudioFile(file);
-        if (!uploadResult) return;
-        block.data = Object.assign({}, block.data, {
-          src: uploadResult.url,
-          title: block.data.title || uploadResult.title || file.name.replace(/\.[^/.]+$/, ''),
-          artist: block.data.artist || '',
-          format: uploadResult.format || '',
-          size: uploadResult.size || file.size
-        });
+        block.data._isUploading = true;
         this.renderAll();
-        this.scheduleRenderPreview();
-        this.recordHistory(true);
+        try {
+          const uploadResult = await this.uploadAudioFile(file);
+          delete block.data._isUploading;
+          if (!uploadResult || !uploadResult.url) {
+            this.renderAll();
+            return;
+          }
+          block.data = Object.assign({}, block.data, {
+            src: uploadResult.url,
+            title: block.data.title || uploadResult.title || file.name.replace(/\.[^/.]+$/, ''),
+            artist: block.data.artist || '',
+            format: uploadResult.format || '',
+            size: uploadResult.size || file.size
+          });
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        } catch (err) {
+          delete block.data._isUploading;
+          this.renderAll();
+        }
       };
       fileInput.click();
     }
@@ -2460,7 +2523,7 @@
     async uploadAudioFile(file) {
       const maxMb = 100;
       if (file.size > maxMb * 1024 * 1024) {
-        window.showMessage?.(`Размер файла превышает допустимый лимит (${maxMb}MB)`, 'error');
+        this.notifyUser(`Размер файла превышает допустимый лимит (${maxMb}MB)`, 'error');
         return null;
       }
       try {
@@ -2477,12 +2540,24 @@
           result = { success: res.ok, data, error: data && data.error };
         }
         if (!result || !result.success) {
-          window.showMessage?.('Ошибка при загрузке аудио: ' + (result?.error || 'Сбой'), 'error');
+          const errMsg = result?.error || (result?.data && result.data.error) || 'Сбой загрузки';
+          this.notifyUser('Ошибка при загрузке аудио: ' + errMsg, 'error');
           return null;
         }
-        return result.data;
+        const data = result.data || result;
+        const url = data.url || (data.data && data.data.url);
+        if (!url) {
+          this.notifyUser('Не получен URL загруженного аудиофайла', 'error');
+          return null;
+        }
+        return {
+          url: url,
+          title: data.title || '',
+          format: data.format || '',
+          size: data.size || file.size
+        };
       } catch (e) {
-        window.showMessage?.('Произошла ошибка при загрузке аудио: ' + e.message, 'error');
+        this.notifyUser('Произошла ошибка при загрузке аудио: ' + e.message, 'error');
         return null;
       }
     }
@@ -3133,14 +3208,22 @@
       if (!toolbar) return;
 
       toolbar.querySelectorAll('[data-inline-command]').forEach((btn) => {
+        if (btn._inlineBound) return;
+        btn._inlineBound = true;
         btn.addEventListener('mousedown', (e) => {
           e.preventDefault();
           this.runInlineCommand(btn.getAttribute('data-inline-command'), btn);
         });
       });
+      let lastBlockActionTime = 0;
       toolbar.querySelectorAll('[data-block-command]').forEach((btn) => {
+        if (btn._blockBound) return;
+        btn._blockBound = true;
         btn.addEventListener('mousedown', (e) => {
           e.preventDefault();
+          const now = Date.now();
+          if (now - lastBlockActionTime < 250) return;
+          lastBlockActionTime = now;
           this.runBlockCommand(btn.getAttribute('data-block-command'), btn.dataset);
         });
       });
