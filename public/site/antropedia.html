@@ -416,6 +416,18 @@
                   <input type="checkbox" id="addAsCoauthorCheckbox" checked>
                   <span>Добавить себя как соавтора</span>
                 </label>
+
+                <!-- Управление авторами — только владелец (is_root), только при
+                     редактировании существующей статьи (см. initArticleAuthorsAdmin в
+                     antropedia-editor-client.js и parseOwnerAuthorFields в articles.routes.js).
+                     Поиск — тот же GET /api/users/search, что и в "Добавить участника". -->
+                <div id="authorsAdmin" class="authors-admin" hidden>
+                  <div class="authors-admin-search">
+                    <input type="text" id="authorsAdminSearch" class="form-input" placeholder="Найти пользователя: назначить автором или соавтором…" autocomplete="off">
+                    <div class="chip-field-dropdown" id="authorsAdminDropdown" hidden></div>
+                  </div>
+                  <p class="authors-admin-hint">«Автор» заменяет основного автора. У соавтора: ↑ — сделать основным автором (прежний станет соавтором), × — убрать.</p>
+                </div>
               </div>
             </div>
 

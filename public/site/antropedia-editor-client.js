@@ -77,6 +77,19 @@
     };
   }
 
+  if (!window.apiClient.searchUsers) {
+    window.apiClient.searchUsers = async function (query) {
+      if (typeof window.apiClient.makeAuthenticatedRequest === 'function') {
+        return window.apiClient.makeAuthenticatedRequest(`/api/users/search?q=${encodeURIComponent(query)}`);
+      }
+      const accessToken = token();
+      const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, { headers });
+      const result = await res.json().catch(() => []);
+      return { success: res.ok, data: result, status: res.status };
+    };
+  }
+
   function escapeHtml(str) {
     return String(str || '').replace(/[&<>"']/g, (m) => ({
       '&': '&amp;',
@@ -133,6 +146,8 @@
       this._draftsSelected = new Set();
       this._draftsSelectMode = false;
       this._initialized = false;
+      this.articleAuthorsAdmin = null;
+      this._articleAuthorsOutsideClickBound = false;
     }
 
     init() {
@@ -224,6 +239,13 @@
     }
 
     resetArticleAuthorInfo() {
+      this.articleAuthorsAdmin = null;
+      const authorsAdmin = document.getElementById('authorsAdmin');
+      if (authorsAdmin) authorsAdmin.hidden = true;
+      this.hideArticleAuthorsDropdown();
+      const searchInput = document.getElementById('authorsAdminSearch');
+      if (searchInput) searchInput.value = '';
+
       const chip = document.getElementById('articleAuthorChip');
       const user = currentUser();
       if (chip) {
@@ -255,7 +277,21 @@
         this.resetArticleAuthorInfo();
         return;
       }
+
       const user = currentUser();
+      const isRoot = !!(
+        (window.authManager && typeof window.authManager.getUser === 'function' && window.authManager.getUser()?.is_root) ||
+        (user && user.is_root)
+      );
+
+      if (isRoot) {
+        this.initArticleAuthorsAdmin(article);
+        return;
+      }
+
+      const authorsAdmin = document.getElementById('authorsAdmin');
+      if (authorsAdmin) authorsAdmin.hidden = true;
+
       const chip = document.getElementById('articleAuthorChip');
       if (chip) {
         const authorName = (article.author && article.author.display_name)
@@ -298,6 +334,278 @@
           saveBtn.innerHTML = '<i class="fas fa-paper-plane"></i> <span>Опубликовать</span>';
           saveBtn.title = 'Опубликовать статью';
         }
+      }
+    }
+
+    // --- Управление авторами (только владелец / is_root) ---
+    initArticleAuthorsAdmin(article) {
+      const authorObj = article.author ? {
+        id: article.author.id,
+        display_name: article.author.display_name || article.author.username || 'Неизвестный автор'
+      } : null;
+
+      this.articleAuthorsAdmin = {
+        author: authorObj,
+        coAuthors: (article.co_authors || []).map((c) => ({
+          id: c.id,
+          display_name: c.display_name || c.username || 'Соавтор'
+        }))
+      };
+
+      const addAsCoauthorWrap = document.getElementById('addAsCoauthorWrap');
+      if (addAsCoauthorWrap) addAsCoauthorWrap.hidden = true;
+
+      this.ensureAuthorsAdminDom();
+
+      const authorsAdmin = document.getElementById('authorsAdmin');
+      if (authorsAdmin) authorsAdmin.hidden = false;
+
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (saveBtn) {
+        saveBtn.innerHTML = '<i class="fas fa-check"></i> <span>Обновить статью</span>';
+        saveBtn.title = 'Обновить статью и сохранить изменения авторства';
+      }
+
+      this.renderArticleAuthorsAdmin();
+    }
+
+    ensureAuthorsAdminDom() {
+      let authorsAdmin = document.getElementById('authorsAdmin');
+      if (!authorsAdmin) {
+        const targetParent = document.getElementById('addAsCoauthorWrap')?.parentElement
+          || document.querySelector('.antropedia-editor-view .author-field')?.parentElement;
+        if (targetParent) {
+          authorsAdmin = document.createElement('div');
+          authorsAdmin.id = 'authorsAdmin';
+          authorsAdmin.className = 'authors-admin';
+          authorsAdmin.hidden = true;
+          authorsAdmin.innerHTML = `
+            <div class="authors-admin-search">
+              <input type="text" id="authorsAdminSearch" class="form-input" placeholder="Найти пользователя: назначить автором или соавтором…" autocomplete="off">
+              <div class="chip-field-dropdown" id="authorsAdminDropdown" hidden></div>
+            </div>
+            <p class="authors-admin-hint">«Автор» заменяет основного автора. У соавтора: ↑ — сделать основным автором (прежний станет соавтором), × — убрать.</p>
+          `;
+          targetParent.appendChild(authorsAdmin);
+        }
+      }
+      this.setupArticleAuthorsAdmin();
+    }
+
+    renderArticleAuthorsAdmin() {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return;
+
+      const chip = document.getElementById('articleAuthorChip');
+      if (chip) {
+        const name = state.author ? state.author.display_name : '— (не назначен)';
+        chip.textContent = name;
+        chip.title = state.author ? 'Автор статьи: ' + name : 'Автор не назначен';
+      }
+
+      const list = document.getElementById('coAuthorsList') || document.getElementById('articleCoauthorsList');
+      if (!list) return;
+      list.innerHTML = '';
+      state.coAuthors.forEach((co) => {
+        const chipEl = document.createElement('span');
+        chipEl.className = 'author-chip is-coauthor';
+        chipEl.dataset.userId = String(co.id);
+        chipEl.appendChild(document.createTextNode(co.display_name));
+
+        const promoteBtn = document.createElement('button');
+        promoteBtn.type = 'button';
+        promoteBtn.className = 'author-chip-btn';
+        promoteBtn.dataset.action = 'promote';
+        promoteBtn.title = 'Сделать основным автором (прежний станет соавтором)';
+        promoteBtn.textContent = '↑';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'author-chip-btn';
+        removeBtn.dataset.action = 'remove';
+        removeBtn.title = 'Убрать из соавторов';
+        removeBtn.textContent = '×';
+
+        chipEl.append(promoteBtn, removeBtn);
+        list.appendChild(chipEl);
+      });
+      list.hidden = state.coAuthors.length === 0;
+    }
+
+    setArticleAuthor(user) {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return;
+      state.coAuthors = state.coAuthors.filter((c) => c.id !== user.id);
+      state.author = { id: user.id, display_name: user.display_name };
+      this.renderArticleAuthorsAdmin();
+    }
+
+    addArticleCoAuthor(user) {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return;
+      if (state.author && state.author.id === user.id) {
+        showMessage('Этот пользователь уже основной автор', 'warning');
+        return;
+      }
+      if (state.coAuthors.some((c) => c.id === user.id)) return;
+      state.coAuthors.push({ id: user.id, display_name: user.display_name });
+      this.renderArticleAuthorsAdmin();
+    }
+
+    promoteArticleCoAuthor(userId) {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return;
+      const idx = state.coAuthors.findIndex((c) => c.id === userId);
+      if (idx === -1) return;
+      const [promoted] = state.coAuthors.splice(idx, 1);
+      if (state.author && state.author.id) state.coAuthors.unshift(state.author);
+      state.author = promoted;
+      this.renderArticleAuthorsAdmin();
+    }
+
+    removeArticleCoAuthor(userId) {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return;
+      state.coAuthors = state.coAuthors.filter((c) => c.id !== userId);
+      this.renderArticleAuthorsAdmin();
+    }
+
+    collectArticleAuthorsPayload() {
+      const state = this.articleAuthorsAdmin;
+      if (!state) return {};
+      return {
+        ...(state.author && state.author.id ? { author_id: state.author.id } : {}),
+        co_author_ids: state.coAuthors.map((c) => c.id)
+      };
+    }
+
+    hideArticleAuthorsDropdown() {
+      const dropdown = document.getElementById('authorsAdminDropdown');
+      if (dropdown) {
+        dropdown.hidden = true;
+        dropdown.innerHTML = '';
+      }
+    }
+
+    async searchUsers(query) {
+      if (window.apiClient && typeof window.apiClient.searchUsers === 'function') {
+        const res = await window.apiClient.searchUsers(query);
+        if (res && res.success && Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.data)) return res.data;
+      }
+      const tokenVal = token();
+      const headers = {};
+      if (tokenVal) headers.Authorization = `Bearer ${tokenVal}`;
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, { headers });
+      if (!res.ok) return [];
+      const data = await res.json().catch(() => []);
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.data)) return data.data;
+      return [];
+    }
+
+    async runArticleAuthorsSearch() {
+      const query = document.getElementById('authorsAdminSearch')?.value.trim() || '';
+      const dropdown = document.getElementById('authorsAdminDropdown');
+      if (!dropdown) return;
+      if (!query) {
+        this.hideArticleAuthorsDropdown();
+        return;
+      }
+
+      try {
+        const users = await this.searchUsers(query);
+        // Пока запрос летел, поле могли очистить или уйти со страницы.
+        if (!document.getElementById('authorsAdminSearch')?.value.trim()) return;
+
+        dropdown.innerHTML = '';
+        if (users.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'chip-field-dropdown-empty';
+          empty.textContent = 'Никого не найдено';
+          dropdown.appendChild(empty);
+        } else {
+          users.forEach((u) => {
+            const name = u.display_name || u.username;
+            const row = document.createElement('div');
+            row.className = 'authors-admin-result';
+            row.dataset.userId = String(u.id);
+            row.dataset.name = name;
+
+            const label = document.createElement('span');
+            label.textContent = name;
+
+            const actions = document.createElement('span');
+            actions.className = 'authors-admin-result-actions';
+            [
+              ['author', 'Автор', 'btn btn-primary btn-sm'],
+              ['coauthor', 'Соавтор', 'btn btn-secondary btn-sm']
+            ].forEach(([action, text, cls]) => {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = cls;
+              btn.dataset.action = action;
+              btn.textContent = text;
+              actions.appendChild(btn);
+            });
+
+            row.append(label, actions);
+            dropdown.appendChild(row);
+          });
+        }
+        dropdown.hidden = false;
+      } catch (error) {
+        this.hideArticleAuthorsDropdown();
+      }
+    }
+
+    setupArticleAuthorsAdmin() {
+      let debounce = null;
+      const searchInput = document.getElementById('authorsAdminSearch');
+      if (searchInput && !searchInput._authorsAdminBound) {
+        searchInput._authorsAdminBound = true;
+        searchInput.addEventListener('input', () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => this.runArticleAuthorsSearch(), 200);
+        });
+      }
+
+      const dropdown = document.getElementById('authorsAdminDropdown');
+      if (dropdown && !dropdown._authorsAdminBound) {
+        dropdown._authorsAdminBound = true;
+        dropdown.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-action]');
+          const row = e.target.closest('.authors-admin-result');
+          if (!btn || !row) return;
+          const user = { id: parseInt(row.dataset.userId, 10), display_name: row.dataset.name };
+          if (btn.dataset.action === 'author') this.setArticleAuthor(user);
+          else this.addArticleCoAuthor(user);
+          const input = document.getElementById('authorsAdminSearch');
+          if (input) input.value = '';
+          this.hideArticleAuthorsDropdown();
+        });
+      }
+
+      const coAuthorsList = document.getElementById('coAuthorsList') || document.getElementById('articleCoauthorsList');
+      if (coAuthorsList && !coAuthorsList._authorsAdminBound) {
+        coAuthorsList._authorsAdminBound = true;
+        coAuthorsList.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-action]');
+          const chipEl = e.target.closest('[data-user-id]');
+          if (!btn || !chipEl || !this.articleAuthorsAdmin) return;
+          const userId = parseInt(chipEl.dataset.userId, 10);
+          if (btn.dataset.action === 'promote') this.promoteArticleCoAuthor(userId);
+          else if (btn.dataset.action === 'remove') this.removeArticleCoAuthor(userId);
+        });
+      }
+
+      if (!this._articleAuthorsOutsideClickBound) {
+        document.addEventListener('click', (e) => {
+          const wrap = document.getElementById('authorsAdminSearch')?.closest('.authors-admin-search');
+          if (wrap && !wrap.contains(e.target)) this.hideArticleAuthorsDropdown();
+        });
+        this._articleAuthorsOutsideClickBound = true;
       }
     }
 
@@ -489,6 +797,8 @@
           this.renderArticleLayersList();
         }
       });
+
+      this.setupArticleAuthorsAdmin();
     }
 
     // === Загрузка франшиз и хабов ===
@@ -819,6 +1129,10 @@
         add_as_coauthor: addAsCoauthor ? addAsCoauthor.checked : true
       };
 
+      if (this.articleAuthorsAdmin) {
+        Object.assign(data, this.collectArticleAuthorsPayload());
+      }
+
       if (this.articleLayersEnabled) {
         data.layers = this.articleLayers.map((l) => ({
           roles: l.roles,
@@ -928,6 +1242,9 @@
       const saveBtn = document.getElementById('saveArticleBtn');
       const articleId = saveBtn ? saveBtn.getAttribute('data-article-id') : null;
       const data = this.collectFormData();
+      if (articleId && this.articleAuthorsAdmin) {
+        Object.assign(data, this.collectArticleAuthorsPayload());
+      }
 
       if (!data.title.trim()) {
         showMessage('Пожалуйста, укажите заголовок статьи', 'error');

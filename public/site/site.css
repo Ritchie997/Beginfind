@@ -12974,6 +12974,70 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
     cursor: pointer;
 }
 
+/* --- Управление авторами (только владелец / is_root) --- */
+.antropedia-editor-view .authors-admin {
+    margin-top: 8px;
+    max-width: min(100%, 32rem);
+}
+
+.antropedia-editor-view .authors-admin[hidden] {
+    display: none !important;
+}
+
+.antropedia-editor-view .authors-admin-search {
+    position: relative; /* якорь для .chip-field-dropdown */
+}
+
+.antropedia-editor-view .authors-admin-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.antropedia-editor-view .author-chip-btn {
+    margin-left: 6px;
+    padding: 0 2px;
+    border: none;
+    background: none;
+    color: var(--text-normal);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+}
+
+.antropedia-editor-view .author-chip-btn:hover {
+    opacity: 1;
+}
+
+.antropedia-editor-view .authors-admin-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-normal);
+}
+
+.antropedia-editor-view .authors-admin-result:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.antropedia-editor-view .authors-admin-result-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.antropedia-editor-view .chip-field-dropdown-empty {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
 .antropedia-editor-view .article-franchise-path {
     font-size: 12px;
     color: var(--text-muted);
