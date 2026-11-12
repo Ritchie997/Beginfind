@@ -38,6 +38,8 @@ test('collectUsedUploadNames collects AllTell avatars, hubs, posts and comments'
   const testPostExtra = 'alltell-test-post-extra.png';
   const testPostBody = 'alltell-test-post-body.png';
   const testCommentImg = 'alltell-test-comment-img.png';
+  const testPostAudio = 'alltell-test-audio1.mp3';
+  const testPostAudioExtra = 'alltell-test-audio2.flac';
 
   const run = (db, sql, params = []) => new Promise((res, rej) => db.run(sql, params, function (err) { err ? rej(err) : res(this); }));
 
@@ -64,7 +66,7 @@ test('collectUsedUploadNames collects AllTell avatars, hubs, posts and comments'
     ]);
     hubId = hRes.lastID;
 
-    const pRes = await run(serversDb, 'INSERT INTO franchise_posts (server_id, hub_id, type, title, body, image_url, image_urls, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+    const pRes = await run(serversDb, 'INSERT INTO franchise_posts (server_id, hub_id, type, title, body, image_url, image_urls, audio_url, audio_tracks, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
       serverId,
       hubId,
       'news',
@@ -72,6 +74,8 @@ test('collectUsedUploadNames collects AllTell avatars, hubs, posts and comments'
       `Check this post image: /uploads/${testPostBody}`,
       `/uploads/${testPostMain}`,
       JSON.stringify([`/uploads/${testPostMain}`, `/uploads/${testPostExtra}`]),
+      `/uploads/${testPostAudio}`,
+      JSON.stringify([{ url: `/uploads/${testPostAudioExtra}`, title: 'Extra FLAC track' }]),
       1,
       'Owner'
     ]);
@@ -92,6 +96,8 @@ test('collectUsedUploadNames collects AllTell avatars, hubs, posts and comments'
     assert.ok(used.has(testPostMain), 'Post main image should be collected');
     assert.ok(used.has(testPostExtra), 'Post extra image should be collected');
     assert.ok(used.has(testPostBody), 'Post body image should be collected');
+    assert.ok(used.has(testPostAudio), 'Post audio_url should be collected');
+    assert.ok(used.has(testPostAudioExtra), 'Post audio_tracks should be collected');
     assert.ok(used.has(testCommentImg), 'Franchise comment image should be collected');
   } finally {
     if (commentId) await run(socialDb, 'DELETE FROM franchise_post_comments WHERE id = ?', [commentId]);

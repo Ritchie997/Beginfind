@@ -662,6 +662,38 @@ class ApiClient {
     }
   }
 
+  // Method for uploading audio
+  async uploadAudio(file) {
+    if (!authManager || !authManager.isAuthenticated()) {
+      return { success: false, error: 'Authentication required. Please log in.' };
+    }
+
+    const formData = new FormData();
+    formData.append('audio', file);
+
+    const options = {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authManager.getToken()}`
+      },
+      body: formData
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/upload-audio`, options);
+
+      if (response.status === 401) {
+        authManager.logout();
+        return { success: false, error: 'Authentication required. Please log in.' };
+      }
+
+      const result = await response.json();
+      return { success: response.ok, data: result, status: response.status, error: result && result.error };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Аватарка своего профиля: загрузить (поле avatar) / удалить.
   async uploadAvatar(file) {
     if (!authManager || !authManager.isAuthenticated()) {

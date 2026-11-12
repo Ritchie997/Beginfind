@@ -4,7 +4,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const auth = require('../middleware/auth');
-const { uploadImage } = require('../uploads/multer-config');
+const { uploadImage, uploadAudio } = require('../uploads/multer-config');
 const { UPLOADS_DIR } = require('../config/paths');
 const { readSettings } = require('../services/system-settings');
 
@@ -64,6 +64,37 @@ router.post('/upload-images', auth.authenticateToken, auth.checkApproved, upload
     cleanupFiles();
     console.error('Upload images error:', error);
     res.status(500).json({ error: 'Не удалось загрузить изображения: ' + error.message });
+  }
+});
+
+router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadAudio.single('audio'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Аудиофайл не загружен' });
+    }
+
+    const filePath = path.join(UPLOADS_DIR, req.file.filename);
+    if (!fs.existsSync(filePath)) {
+      console.error('Uploaded audio file not found:', filePath);
+      return res.status(500).json({ error: 'Ошибка сохранения аудиофайла' });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '');
+    const originalNameWithoutExt = path.basename(req.file.originalname, path.extname(req.file.originalname));
+
+    res.setHeader('Content-Type', 'application/json');
+    res.status(201).json({
+      success: true,
+      url: `/uploads/${req.file.filename}`,
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      title: originalNameWithoutExt,
+      size: req.file.size,
+      format: ext
+    });
+  } catch (error) {
+    console.error('Upload audio error:', error);
+    res.status(500).json({ error: 'Внутренняя ошибка сервера при загрузке аудио: ' + error.message });
   }
 });
 

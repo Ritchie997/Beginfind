@@ -541,6 +541,19 @@
           + '<div class="blk-map-canvas"><div class="blk-map-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка карты…</div></div>'
           + '</div>';
       }
+      case 'audio': {
+        if (!d.src) return '<div class="blk-audio blk-audio-empty"><i class="fas fa-music"></i> Аудиозапись не выбрана</div>';
+        const cfg = JSON.stringify({
+          src: d.src,
+          title: d.title || '',
+          artist: d.artist || '',
+          format: d.format || '',
+          duration: d.duration || null
+        });
+        return `<div class="blk-audio" data-audio-player data-audio-config="${escapeAttr(cfg)}">`
+          + '<div class="audio-player-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка плеера…</div>'
+          + '</div>';
+      }
       default:
         return ''; // неизвестный тип блока (см. blocks.js normalizeBlockData) — просто пропускаем
     }
@@ -599,6 +612,9 @@
       window.MapCore.mountEmbeds(container, {
         disableFullscreen: !!container.closest('.public-article-content')
       });
+    }
+    if (window.AllTellAudio && typeof window.AllTellAudio.initAll === 'function') {
+      window.AllTellAudio.initAll(container);
     }
     if (container.__blocksInteractionsAttached) return;
     container.__blocksInteractionsAttached = true;

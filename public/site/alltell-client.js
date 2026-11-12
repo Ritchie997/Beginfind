@@ -153,6 +153,54 @@
     return result;
   }
 
+  function extractPostAudioTracks(post) {
+    if (!post) return [];
+    var list = [];
+    if (Array.isArray(post.audio_tracks) && post.audio_tracks.length) {
+      list = post.audio_tracks;
+    } else if (typeof post.audio_tracks === 'string' && post.audio_tracks.trim()) {
+      try {
+        var parsed = JSON.parse(post.audio_tracks);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch (e) {}
+    }
+    if (!list.length && post.audio_url && typeof post.audio_url === 'string') {
+      list = [{ src: post.audio_url.trim(), title: post.title || 'Аудиозапись' }];
+    }
+    return list.filter(function (t) { return t && t.src; }).map(function (t) {
+      return {
+        src: t.src,
+        title: t.title || '',
+        artist: t.artist || '',
+        duration: t.duration || null,
+        size: t.size || null,
+        format: t.format || ''
+      };
+    });
+  }
+
+  function renderPostAudioItems(tracks) {
+    if (!tracks || !tracks.length) return '';
+    return tracks.map(function (track, index) {
+      var formatBadge = track.format ? track.format.toUpperCase() : (track.src.split('.').pop().split('?')[0].toUpperCase() || 'AUDIO');
+      var metaText = [formatBadge, track.artist, track.size ? Math.round(track.size / 1024) + ' KB' : ''].filter(Boolean).join(' · ');
+      return `
+        <div class="alltell-audio-track-item" data-audio-index="${index}">
+          <div class="alltell-audio-track-info">
+            <div class="alltell-audio-track-icon"><i class="fas fa-music"></i></div>
+            <div class="alltell-audio-track-details">
+              <span class="alltell-audio-track-title">${escapeHtml(track.title || 'Аудиозапись')}</span>
+              <span class="alltell-audio-track-meta">${escapeHtml(metaText)}</span>
+            </div>
+          </div>
+          <button type="button" class="alltell-audio-track-remove" data-action="remove-post-audio" data-audio-index="${index}" title="Удалить трек">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      `;
+    }).join('');
+  }
+
   function initials(value) {
     var words = String(value || '').trim().split(/\s+/).filter(Boolean);
     return words.slice(0, 2).map(function (word) { return word.charAt(0); }).join('').toLocaleUpperCase() || '✶';
@@ -834,6 +882,9 @@
         `}
       </div>
     `;
+    if (window.AllTellAudio && typeof window.AllTellAudio.initAll === 'function') {
+      window.AllTellAudio.initAll(root);
+    }
   }
 
   var STICKER_SOLO_RE = /^\s*:([a-z0-9-]{1,80}):([a-z0-9-]{1,80}):\s*$/i;
@@ -1267,6 +1318,7 @@
     var hub = post.hub_id ? hubMap.get(String(post.hub_id)) : null;
     var canEdit = canManage || post.can_edit;
     var images = extractPostImages(post);
+    var audioTracks = extractPostAudioTracks(post);
     var postArticles = Array.isArray(post.articles) && post.articles.length
       ? post.articles
       : (post.article ? [post.article] : []);
@@ -1306,6 +1358,10 @@
         <h3 class="alltell-post-title">${escapeHtml(post.title)}</h3>
 
         ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body)}</div>` : ''}
+
+        ${audioTracks.length ? `
+          <div class="alltell-post-audio" data-audio-player data-audio-config="${escapeHtml(JSON.stringify(audioTracks.length === 1 ? audioTracks[0] : { playlist: audioTracks }))}"></div>
+        ` : ''}
 
         ${images.length ? `
           <div class="alltell-post-carousel" data-image-carousel>
@@ -2357,6 +2413,19 @@
       case 'callout':
         addPostCalloutBlock(state, dataset.variant || 'info');
         break;
+      case 'audio':
+        var postForm = document.querySelector('[data-post-form]');
+        if (postForm) {
+          var details = postForm.querySelector('[data-post-extra-details]') || postForm.querySelector('.antropedia-editor-section');
+          if (details) details.open = true;
+          var audioSection = postForm.querySelector('[data-post-audio-section]');
+          if (audioSection) {
+            audioSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            var uploadInput = audioSection.querySelector('[data-audio-upload-input]');
+            if (uploadInput) uploadInput.click();
+          }
+        }
+        break;
       case 'map':
         var form = document.querySelector('[data-post-form]');
         if (form) {
@@ -3031,6 +3100,7 @@
                             <button type="button" class="toolbar-button" data-post-cmd="divider" title="Разделитель"><i class="fas fa-minus"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="code-block" title="Блок кода"><i class="fas fa-file-code"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="callout" data-variant="info" title="Врезка / плашка"><i class="fas fa-circle-info"></i></button>
+                            <button type="button" class="toolbar-button" data-post-cmd="audio" title="Прикрепить музыку"><i class="fas fa-music"></i></button>
                             <button type="button" class="toolbar-button" data-post-cmd="map" title="Прикрепить интерактивную карту"><i class="fas fa-map-location-dot"></i></button>
                           </div>
                           <span class="toolbar-group-label">блоки</span>
@@ -3069,12 +3139,12 @@
             </div>
           </details>
 
-          <!-- СЕКЦИЯ 3: МЕДИА, СТАТЬИ И КАРТЫ -->
+          <!-- СЕКЦИЯ 3: МЕДИА, МУЗЫКА, СТАТЬИ И КАРТЫ -->
           <details class="form-section antropedia-editor-section" data-post-extra-details open>
             <summary>
               <i class="fas fa-paperclip"></i>
-              <span>Медиа, статьи и карты</span>
-              <span class="form-section-hint">Изображения галереи, статьи Antropedia и интерактивные карты</span>
+              <span>Медиа, музыка, статьи и карты</span>
+              <span class="form-section-hint">Изображения, аудиозаписи, статьи Antropedia и интерактивные карты</span>
               <i class="fas fa-chevron-down form-section-chevron"></i>
             </summary>
             <div class="form-section-body">
@@ -3111,6 +3181,33 @@
                     <span data-image-progress-count></span>
                   </div>
                   <progress max="100" value="0" data-image-progress-bar></progress>
+                </div>
+              </div>
+
+              <!-- МУЗЫКА И АУДИОЗАПИСИ -->
+              <div class="form-group full-width alltell-post-audio-editor" data-post-audio-section>
+                <div class="alltell-image-editor-heading">
+                  <label class="form-label" style="margin:0;">
+                    <i class="fas fa-music"></i>
+                    <span>Музыка и аудиозаписи</span>
+                  </label>
+                  <span class="alltell-editor-badge" data-audio-selection>
+                    ${(state.postAudioTracks || []).length ? (state.postAudioTracks || []).length + ' прикреплено' : 'Не прикреплено'}
+                  </span>
+                </div>
+
+                <div class="alltell-audio-dropzone-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                  <label class="btn btn-secondary btn-sm" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fas fa-file-audio"></i> <span>Загрузить аудиофайл</span>
+                    <input type="file" name="post_audio_files" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,.wma" multiple hidden data-audio-upload-input>
+                  </label>
+                  <button type="button" class="btn btn-secondary btn-sm" data-action="add-audio-url" style="display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fas fa-link"></i> <span>Указать ссылку на трек</span>
+                  </button>
+                </div>
+
+                <div class="alltell-audio-tracks-list" data-post-audio-list>
+                  ${renderPostAudioItems(state.postAudioTracks || [])}
                 </div>
               </div>
 
@@ -4061,6 +4158,9 @@
     }
     var toolbarScroll = root.querySelector('[data-alltell-toolbar-scroll]');
     if (toolbarScroll) updatePostToolbarFade(toolbarScroll);
+    if (window.AllTellAudio && typeof window.AllTellAudio.initAll === 'function') {
+      window.AllTellAudio.initAll(root);
+    }
   }
 
   async function init() {
@@ -4110,6 +4210,7 @@
       postImages: [],
       postArticles: [],
       postMaps: [],
+      postAudioTracks: [],
       uploadingImages: false,
       submittingPost: false,
       draggedImageIndex: null,
@@ -4254,6 +4355,61 @@
         } else if (searchInput && !searchInput.value.trim()) {
           options.hidden = true;
           options.replaceChildren();
+        }
+      }
+    }
+
+    function setPostAudio(post) {
+      state.postAudioTracks = extractPostAudioTracks(post);
+    }
+
+    function updatePostAudioUI(form) {
+      form = form || root.querySelector('[data-post-form]');
+      if (!form) return;
+      var listEl = form.querySelector('[data-post-audio-list]');
+      if (listEl) {
+        listEl.innerHTML = renderPostAudioItems(state.postAudioTracks || []);
+      }
+      var badge = form.querySelector('[data-audio-selection]');
+      if (badge) {
+        var count = (state.postAudioTracks || []).length;
+        badge.textContent = count ? count + ' прикреплено' : 'Не прикреплено';
+      }
+    }
+
+    async function addPostAudioFiles(files) {
+      if (!files || !files.length) return;
+      var fileArray = Array.from(files);
+      for (var i = 0; i < fileArray.length; i++) {
+        var file = fileArray[i];
+        if (file.size > 100 * 1024 * 1024) {
+          notifyError('Файл «' + file.name + '» превышает 100 МБ');
+          continue;
+        }
+        var formData = new FormData();
+        formData.append('audio', file);
+        try {
+          var res = await fetch('/api/upload-audio', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token() },
+            credentials: 'same-origin',
+            body: formData
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok || !data.url) {
+            throw new Error(data.error || 'Ошибка загрузки аудио');
+          }
+          if (!state.postAudioTracks) state.postAudioTracks = [];
+          state.postAudioTracks.push({
+            src: data.url,
+            title: data.title || file.name.replace(/\.[^/.]+$/, ''),
+            artist: '',
+            size: data.size || file.size,
+            format: data.format || ''
+          });
+          updatePostAudioUI();
+        } catch (err) {
+          notifyError('Ошибка загрузки аудио «' + file.name + '»: ' + err.message);
         }
       }
     }
@@ -5624,6 +5780,16 @@
       var articleSlugs = postArticles.map(function (a) { return a.slug; }).filter(Boolean);
       var postMaps = state.postMaps || [];
       var mapIds = postMaps.map(function (m) { return m.id; }).filter(Boolean);
+      var audioTracks = (state.postAudioTracks || []).map(function (t) {
+        return {
+          src: t.src,
+          title: t.title || '',
+          artist: t.artist || '',
+          duration: t.duration || null,
+          size: t.size || null,
+          format: t.format || ''
+        };
+      }).filter(function (t) { return Boolean(t.src); });
       var bodyValue = formData.get('body');
       if (state.postBlocks && state.postBlocks.length) {
         bodyValue = serializePostBlocks(state.postBlocks);
@@ -5638,7 +5804,9 @@
         article_slugs: articleSlugs,
         map_id: mapIds[0] || null,
         map_ids: mapIds,
-        image_urls: imageUrls
+        image_urls: imageUrls,
+        audio_tracks: audioTracks,
+        audio_url: audioTracks.length ? audioTracks[0].src : null
       };
       var franchiseId = state.detail.franchise.id;
       var postId = state.editingPost && state.editingPost.id;
@@ -5654,6 +5822,7 @@
       releasePostImages();
       state.postArticles = [];
       state.postMaps = [];
+      state.postAudioTracks = [];
       renderDetail(root, state);
       showToast(post.approval_status === 'pending'
         ? 'Предложение отправлено создателю франшизы'
@@ -6154,6 +6323,7 @@
         setPostImages(null);
         setPostArticles(null);
         setPostMaps(null);
+        setPostAudio(null);
         loadMapIndex();
         renderDetail(root, state);
         (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -6167,6 +6337,7 @@
         setPostImages(state.editingPost);
         setPostArticles(state.editingPost);
         setPostMaps(state.editingPost);
+        setPostAudio(state.editingPost);
         loadMapIndex();
         renderDetail(root, state);
         (root.querySelector('[data-post-form-container]') || root.querySelector('[data-post-form]'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -6182,6 +6353,7 @@
         releasePostImages();
         state.postArticles = [];
         state.postMaps = [];
+        state.postAudioTracks = [];
         renderDetail(root, state);
       } else if (action === 'cancel-post-form') {
         state.editingPost = null;
@@ -6194,7 +6366,35 @@
         releasePostImages();
         state.postArticles = [];
         state.postMaps = [];
+        state.postAudioTracks = [];
         renderDetail(root, state);
+      } else if (action === 'remove-post-audio') {
+        var audioIndex = Number(button.dataset.audioIndex);
+        if (!isNaN(audioIndex) && state.postAudioTracks) {
+          state.postAudioTracks.splice(audioIndex, 1);
+          updatePostAudioUI();
+        }
+      } else if (action === 'add-audio-url') {
+        var audioUrl = window.prompt('Введите URL аудиофайла (MP3, WAV, OGG, FLAC и др.):');
+        if (audioUrl && audioUrl.trim()) {
+          var cleanUrl = audioUrl.trim();
+          var audioTitle = window.prompt('Название аудиозаписи (необязательно):');
+          if (!audioTitle || !audioTitle.trim()) {
+            var parts = cleanUrl.split('/');
+            var fname = parts[parts.length - 1] || 'Аудиозапись';
+            try { audioTitle = decodeURIComponent(fname.replace(/\.[^/.]+$/, '')); } catch (e) { audioTitle = fname.replace(/\.[^/.]+$/, ''); }
+          }
+          var artistName = window.prompt('Исполнитель / автор (необязательно):') || '';
+          if (!state.postAudioTracks) state.postAudioTracks = [];
+          state.postAudioTracks.push({
+            src: cleanUrl,
+            title: audioTitle.trim(),
+            artist: artistName.trim(),
+            size: null,
+            format: cleanUrl.split('.').pop().split('?')[0].toLowerCase()
+          });
+          updatePostAudioUI();
+        }
       } else if (action === 'move-image') {
         var imageIndex = Number(button.dataset.imageIndex);
         var destination = imageIndex + Number(button.dataset.direction);
@@ -6666,6 +6866,11 @@
       if (event.target.matches('[name="images"]')) {
         if (state.uploadingImages) return;
         addPostImages(event.target.files);
+        event.target.value = '';
+        return;
+      }
+      if (event.target.matches('[data-audio-upload-input]')) {
+        addPostAudioFiles(event.target.files);
         event.target.value = '';
         return;
       }

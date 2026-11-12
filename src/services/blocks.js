@@ -22,7 +22,7 @@ const crypto = require('crypto');
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'list', 'quote', 'code', 'table', 'divider',
-  'image', 'columns', 'infobox', 'callout', 'spoiler-section', 'map'
+  'image', 'columns', 'infobox', 'callout', 'spoiler-section', 'map', 'audio'
 ];
 
 // Типы, которые могут содержать вложенные блоки (columns — по колонке,
@@ -105,6 +105,21 @@ function toRelativeUploadPath(src) {
 }
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i;
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|flac|m4a|aac|opus|webm|wma)$/i;
+
+function sanitizeAudioPath(raw) {
+  if (typeof raw !== 'string') return '';
+  let s = raw.trim();
+  if (!s) return '';
+  s = toRelativeUploadPath(s);
+  if (/^https?:\/\//i.test(s)) return s;
+  const pathOnly = s.split(/[?#]/)[0];
+  if (s.startsWith('/uploads/') && AUDIO_EXT_RE.test(pathOnly)) return s;
+  if (s.startsWith('uploads/') && AUDIO_EXT_RE.test(pathOnly)) return '/' + s;
+  if (s.startsWith('/') && AUDIO_EXT_RE.test(pathOnly)) return s;
+  if (!s.includes('/') && AUDIO_EXT_RE.test(pathOnly)) return '/uploads/' + s;
+  return '';
+}
 
 /**
  * Приводит значение обложки (статьи или слоя) к валидному пути либо null.
@@ -262,6 +277,16 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
         blocks: normalizeChildBlocks(data.blocks, { allowContainers: false })
       };
 
+    case 'audio':
+      return {
+        src: sanitizeAudioPath(data.src),
+        title: str(data.title),
+        artist: str(data.artist),
+        duration: num(data.duration, null),
+        size: num(data.size, null),
+        format: str(data.format)
+      };
+
     default:
       // Неизвестный тип (например, блок из более новой версии редактора) —
       // сохраняем данные как есть, не теряем их молча; рендерер/редактор
@@ -361,6 +386,8 @@ function blockText(block, { includeCode }) {
       return [d.title, ...(d.rows || []).map((r) => `${r.label}: ${r.value}`)].filter(Boolean).join('\n');
     case 'spoiler-section':
       return d.title || '';
+    case 'audio':
+      return [d.title, d.artist].filter(Boolean).join(' - ');
     case 'code':
       return includeCode ? (d.code || '') : '';
     default:
@@ -433,6 +460,7 @@ function collectImagePaths(doc) {
   visitBlocks(doc, (block) => {
     if (block.type === 'image' && block.data.src) paths.push(block.data.src);
     if (block.type === 'infobox' && block.data.image && block.data.image.src) paths.push(block.data.image.src);
+    if (block.type === 'audio' && block.data.src) paths.push(block.data.src);
   });
   return paths;
 }
@@ -449,6 +477,9 @@ function mapImages(doc, mapFn) {
     }
     if (block.type === 'infobox' && block.data.image && block.data.image.src) {
       return { ...block, data: { ...block.data, image: { ...block.data.image, src: mapFn(block.data.image.src) } } };
+    }
+    if (block.type === 'audio' && block.data.src) {
+      return { ...block, data: { ...block.data, src: mapFn(block.data.src) } };
     }
     if (block.type === 'columns') {
       return {
@@ -533,8 +564,11 @@ module.exports = {
   extractWikiLinksFromDocument,
   extractHashtagsFromDocument,
   collectImagePaths,
+  collectMediaPaths: collectImagePaths,
   toRelativeUploadPath,
   sanitizeCoverPath,
+  sanitizeAudioPath,
+  AUDIO_EXT_RE,
   mapImages,
   rewriteWikiLinksInDocument
 };

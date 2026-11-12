@@ -167,6 +167,42 @@ async function validatePostInput(body, franchiseId, user, canManage) {
     }
   }
 
+  const rawAudioTracks = Array.isArray(body.audio_tracks)
+    ? body.audio_tracks
+    : (body.audio_url ? [{ url: body.audio_url, title: body.audio_title || '' }] : []);
+
+  const audioTracks = [];
+  for (const item of rawAudioTracks) {
+    if (!item) continue;
+    const url = typeof item === 'string' ? item.trim() : (typeof item.url === 'string' ? item.url.trim() : (typeof item.src === 'string' ? item.src.trim() : ''));
+    if (!url) continue;
+    const title = typeof item === 'object' && item.title ? String(item.title).trim() : '';
+    const artist = typeof item === 'object' && item.artist ? String(item.artist).trim() : '';
+    const duration = typeof item === 'object' && Number.isFinite(item.duration) ? item.duration : null;
+    const size = typeof item === 'object' && Number.isFinite(item.size) ? item.size : null;
+    const format = typeof item === 'object' && item.format ? String(item.format).trim().toLowerCase() : path.extname(url).replace('.', '').toLowerCase();
+
+    if (url.startsWith('/uploads/')) {
+      const audioName = url.slice('/uploads/'.length);
+      const audioPath = path.join(UPLOADS_DIR, audioName);
+      if (!fs.existsSync(audioPath)) {
+        throw Object.assign(new Error('Прикреплённый аудиофайл не найден на сервере'), { status: 400 });
+      }
+    } else if (!/^https?:\/\//i.test(url)) {
+      throw Object.assign(new Error('Некорректная ссылка на аудиофайл'), { status: 400 });
+    }
+
+    audioTracks.push({
+      url,
+      src: url,
+      title: title || path.basename(url, path.extname(url)),
+      artist: artist || '',
+      duration,
+      size,
+      format
+    });
+  }
+
   return {
     type,
     title,
@@ -177,6 +213,8 @@ async function validatePostInput(body, franchiseId, user, canManage) {
     map_id: mapIds[0] || null,
     map_ids: mapIds,
     image_urls: imageUrls,
+    audio_url: audioTracks[0] ? audioTracks[0].url : null,
+    audio_tracks: audioTracks,
     hub_status: hubId ? hubStatus || null : null,
     event_at: null
   };
@@ -250,6 +288,17 @@ async function publicPost(row, user) {
   }
   const map = maps[0] || null;
 
+  let audioTracks = [];
+  if (row.audio_tracks) {
+    try {
+      const parsed = JSON.parse(row.audio_tracks);
+      if (Array.isArray(parsed)) audioTracks = parsed;
+    } catch (_) {}
+  }
+  if (!audioTracks.length && row.audio_url) {
+    audioTracks = [{ url: row.audio_url, title: path.basename(row.audio_url, path.extname(row.audio_url)), artist: '' }];
+  }
+
   return {
     id: row.id,
     hub_id: row.hub_id,
@@ -258,6 +307,8 @@ async function publicPost(row, user) {
     body: row.body,
     images: parsePostImages(row),
     image_url: row.image_url ? toRelativeUploadPath(row.image_url) : (parsePostImages(row)[0] || null),
+    audio_url: audioTracks[0] ? audioTracks[0].url : (row.audio_url || null),
+    audio_tracks: audioTracks,
     article: article ? {
       slug: article.slug,
       title: article.title,
@@ -702,13 +753,14 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
     const authorName = req.user.display_name || req.user.username || `Пользователь ${req.user.id}`;
     const result = await dbRun(`
       INSERT INTO franchise_posts
-        (server_id, hub_id, type, title, body, article_slug, article_slugs, map_id, map_ids, event_at, image_url, image_urls, hub_status, approval_status, created_by, created_by_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (server_id, hub_id, type, title, body, article_slug, article_slugs, map_id, map_ids, event_at, image_url, image_urls, audio_url, audio_tracks, hub_status, approval_status, created_by, created_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       franchiseId, post.hub_id, post.type, post.title, post.body, post.article_slug,
       JSON.stringify(post.article_slugs),
       post.map_id, JSON.stringify(post.map_ids),
       post.event_at, post.image_urls[0] || null, JSON.stringify(post.image_urls),
+      post.audio_url, JSON.stringify(post.audio_tracks),
       post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
     ]);
     const row = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [result.lastID]);
@@ -737,14 +789,15 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
     await dbRun(`
       UPDATE franchise_posts
       SET hub_id = ?, type = ?, title = ?, body = ?, article_slug = ?, article_slugs = ?, map_id = ?, map_ids = ?, event_at = ?,
-          image_url = ?, image_urls = ?, hub_status = ?,
+          image_url = ?, image_urls = ?, audio_url = ?, audio_tracks = ?, hub_status = ?,
           approval_status = CASE WHEN created_by = ? AND approval_status != 'published' THEN 'pending' ELSE approval_status END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND server_id = ?
     `, [
       post.hub_id, post.type, post.title, post.body, post.article_slug, JSON.stringify(post.article_slugs),
       post.map_id, JSON.stringify(post.map_ids), post.event_at,
-      post.image_urls[0] || null, JSON.stringify(post.image_urls), post.hub_status, req.user.id, postId, franchiseId
+      post.image_urls[0] || null, JSON.stringify(post.image_urls),
+      post.audio_url, JSON.stringify(post.audio_tracks), post.hub_status, req.user.id, postId, franchiseId
     ]);
     res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
   } catch (error) {

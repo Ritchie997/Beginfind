@@ -206,4 +206,42 @@ const uploadGallery = multer({
   }
 });
 
-module.exports = { uploadImage, uploadBackupZip, uploadSticker, uploadAvatar, uploadGallery, ALLOWED_IMAGE_EXTENSIONS };
+// Разрешённые расширения для аудиофайлов (музыка любых форматов).
+const ALLOWED_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.webm', '.wma']);
+
+const audioStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, 'audio-' + uniqueSuffix + ext);
+  }
+});
+
+const uploadAudio = multer({
+  storage: audioStorage,
+  limits: {
+    fileSize: 100 * 1024 * 1024 // Технический потолок 100 МБ для музыки / lossless
+  },
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_AUDIO_EXTENSIONS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Разрешены только аудиофайлы (mp3, wav, ogg, flac, m4a, aac, opus, webm, wma)!'));
+    }
+  }
+});
+
+module.exports = {
+  uploadImage,
+  uploadBackupZip,
+  uploadSticker,
+  uploadAvatar,
+  uploadGallery,
+  uploadAudio,
+  ALLOWED_IMAGE_EXTENSIONS,
+  ALLOWED_AUDIO_EXTENSIONS
+};

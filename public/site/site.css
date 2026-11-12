@@ -3686,6 +3686,86 @@ input::-ms-clear {
     font-weight: 700;
 }
 
+/* --- AllTell Post Audio Player & Composer --- */
+.alltell-post-audio {
+    margin: 12px 0;
+}
+.alltell-post-audio .alltell-audio-player {
+    background: rgba(20, 22, 26, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+.alltell-post-audio-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.alltell-audio-tracks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+.alltell-audio-track-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+.alltell-audio-track-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+.alltell-audio-track-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: rgba(88, 101, 242, 0.15);
+    color: var(--blurple, #5865f2);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+.alltell-audio-track-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.alltell-audio-track-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-normal, #fff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.alltell-audio-track-meta {
+    font-size: 11px;
+    color: var(--text-muted, #949ba4);
+}
+.alltell-audio-track-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted, #949ba4);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    transition: all 0.15s ease;
+}
+.alltell-audio-track-remove:hover {
+    color: var(--red, #ed4245);
+    background: rgba(237, 66, 69, 0.1);
+}
+
 /* --- Linked Article Embed Card --- */
 .alltell-post-article-card {
     display: flex;

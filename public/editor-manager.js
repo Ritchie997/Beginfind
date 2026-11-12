@@ -81,7 +81,7 @@
 
   const TYPE_LABELS = {
     paragraph: 'Текст', heading: 'Заголовок', quote: 'Цитата', code: 'Код',
-    list: 'Список', table: 'Таблица', divider: 'Линия', image: 'Картинка',
+    list: 'Список', table: 'Таблица', divider: 'Линия', image: 'Картинка', audio: 'Аудио',
     columns: 'Колонки', infobox: 'Инфобокс', callout: 'Плашка', 'spoiler-section': 'Спойлер-секция',
     map: 'Карта'
   };
@@ -138,7 +138,7 @@
 
   // Типы, разрешённые ВНУТРИ columns/spoiler-section — без вложенности
   // контейнеров друг в друга (см. CONTAINER_TYPES в src/services/blocks.js).
-  const NESTED_ALLOWED_TYPES = ['paragraph', 'heading', 'list', 'quote', 'image', 'table', 'code', 'divider'];
+  const NESTED_ALLOWED_TYPES = ['paragraph', 'heading', 'list', 'quote', 'image', 'audio', 'table', 'code', 'divider'];
 
   // Иконки для меню "+ добавить блок" (renderNestedAddButton/openBlockTypeMenu)
   // — те же, что и на кнопках основного тулбара (см. data-block-command в
@@ -146,7 +146,7 @@
   // в обоих местах.
   const NESTED_TYPE_ICONS = {
     paragraph: 'fa-paragraph', heading: 'fa-heading', list: 'fa-list-ul',
-    quote: 'fa-quote-right', image: 'fa-image', table: 'fa-table',
+    quote: 'fa-quote-right', image: 'fa-image', audio: 'fa-music', table: 'fa-table',
     code: 'fa-file-code', divider: 'fa-minus'
   };
 
@@ -197,6 +197,7 @@
       case 'callout': return { variant: 'info', title: '', markdown: '' };
       case 'spoiler-section': return { title: 'Подробности', openByDefault: false, blocks: [] };
       case 'image': return Object.assign({ src: '', alt: '', widthPct: 100, align: 'center', frame: { show: false, color: DEFAULT_FRAME_COLOR } }, extra || {});
+      case 'audio': return Object.assign({ src: '', title: '', artist: '', duration: null, size: null, format: '' }, extra || {});
       case 'map': return { mapId: null, height: 420, view: null, focusZoneId: null, basemapId: null, day: null, hiddenLayers: { zoneTypes: [], markerTypes: [], groups: [], markers: [], keepMarkers: [] }, locked: false, lockMargin: 0.5 };
       default: return {};
     }
@@ -1151,6 +1152,7 @@
         case 'table': return this.renderTableBody(block, list);
         case 'divider': return this.renderDividerBody();
         case 'image': return this.renderImageBody(block);
+        case 'audio': return this.renderAudioBody(block);
         case 'columns': return this.renderColumnsBody(block);
         case 'infobox': return this.renderInfoboxBody(block, list);
         case 'callout': return this.renderCalloutBody(block, list);
@@ -1938,6 +1940,87 @@
       return wrap;
     }
 
+    // ===== Блок «Аудиозапись» =====
+    renderAudioBody(block) {
+      const wrap = document.createElement('div');
+      if (!block.data.src) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'eb-audio-placeholder';
+        placeholder.innerHTML = '<span data-audio-act="upload"><i class="fas fa-file-audio"></i> Загрузить аудиофайл</span>'
+          + '<span class="eb-audio-placeholder-sep">или</span>'
+          + '<span data-audio-act="url"><i class="fas fa-link"></i> Указать ссылку</span>';
+        placeholder.addEventListener('click', (e) => {
+          if (e.target.closest('[data-audio-act="url"]')) {
+            this.promptAudioUrl(block);
+          } else {
+            this.pickAndUploadAudioForBlock(block);
+          }
+        });
+        wrap.appendChild(placeholder);
+        return wrap;
+      }
+
+      const holder = document.createElement('div');
+      holder.className = 'eb-audio-block';
+
+      const playerWrap = document.createElement('div');
+      playerWrap.className = 'eb-audio-preview';
+      if (window.AllTellAudio && typeof window.AllTellAudio.create === 'function') {
+        playerWrap.appendChild(window.AllTellAudio.create(block.data));
+      } else {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = block.data.src;
+        playerWrap.appendChild(audio);
+      }
+      holder.appendChild(playerWrap);
+
+      const fields = document.createElement('div');
+      fields.className = 'eb-audio-fields';
+
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.placeholder = 'Название композиции';
+      titleInput.value = block.data.title || '';
+      titleInput.addEventListener('input', () => {
+        block.data.title = titleInput.value;
+        this.scheduleRenderPreview();
+        this.recordHistory(false);
+      });
+
+      const artistInput = document.createElement('input');
+      artistInput.type = 'text';
+      artistInput.placeholder = 'Исполнитель / автор';
+      artistInput.value = block.data.artist || '';
+      artistInput.addEventListener('input', () => {
+        block.data.artist = artistInput.value;
+        this.scheduleRenderPreview();
+        this.recordHistory(false);
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'eb-audio-actions';
+
+      const replaceFileBtn = document.createElement('button');
+      replaceFileBtn.type = 'button';
+      replaceFileBtn.innerHTML = '<i class="fas fa-file-arrow-up"></i> Заменить';
+      replaceFileBtn.title = 'Загрузить другой файл';
+      replaceFileBtn.addEventListener('click', () => this.pickAndUploadAudioForBlock(block));
+
+      const changeUrlBtn = document.createElement('button');
+      changeUrlBtn.type = 'button';
+      changeUrlBtn.innerHTML = '<i class="fas fa-link"></i> URL';
+      changeUrlBtn.title = 'Изменить прямую ссылку';
+      changeUrlBtn.addEventListener('click', () => this.promptAudioUrl(block));
+
+      actions.append(replaceFileBtn, changeUrlBtn);
+      fields.append(titleInput, artistInput, actions);
+      holder.appendChild(fields);
+
+      wrap.appendChild(holder);
+      return wrap;
+    }
+
     // ===== Блок «Интерактивная карта» (см. public/maps/map-core.js) =====
     // Выбор карты, высота, подсвеченная зона, подложка и начальный вид:
     // карту в превью блока можно подвинуть и приблизить, затем «Запомнить
@@ -2351,6 +2434,80 @@
       }
     }
 
+    async pickAndUploadAudioForBlock(block) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,.wma';
+      fileInput.onchange = async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const uploadResult = await this.uploadAudioFile(file);
+        if (!uploadResult) return;
+        block.data = Object.assign({}, block.data, {
+          src: uploadResult.url,
+          title: block.data.title || uploadResult.title || file.name.replace(/\.[^/.]+$/, ''),
+          artist: block.data.artist || '',
+          format: uploadResult.format || '',
+          size: uploadResult.size || file.size
+        });
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      };
+      fileInput.click();
+    }
+
+    async uploadAudioFile(file) {
+      const maxMb = 100;
+      if (file.size > maxMb * 1024 * 1024) {
+        window.showMessage?.(`Размер файла превышает допустимый лимит (${maxMb}MB)`, 'error');
+        return null;
+      }
+      try {
+        let result = null;
+        if (window.apiClient && typeof window.apiClient.uploadAudio === 'function') {
+          result = await window.apiClient.uploadAudio(file);
+        } else {
+          const formData = new FormData();
+          formData.append('audio', file);
+          const token = (typeof window.authManager?.getToken === 'function') ? window.authManager.getToken() : null;
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+          const res = await fetch('/api/upload-audio', { method: 'POST', headers, body: formData });
+          const data = await res.json().catch(() => ({}));
+          result = { success: res.ok, data, error: data && data.error };
+        }
+        if (!result || !result.success) {
+          window.showMessage?.('Ошибка при загрузке аудио: ' + (result?.error || 'Сбой'), 'error');
+          return null;
+        }
+        return result.data;
+      } catch (e) {
+        window.showMessage?.('Произошла ошибка при загрузке аудио: ' + e.message, 'error');
+        return null;
+      }
+    }
+
+    promptAudioUrl(block) {
+      const current = block.data.src || '';
+      const url = window.prompt('Введите URL аудиофайла (MP3, WAV, OGG, FLAC и др.):', current);
+      if (url === null) return;
+      const cleanUrl = url.trim();
+      if (!cleanUrl) return;
+      block.data.src = cleanUrl;
+      if (!block.data.title) {
+        const parts = cleanUrl.split('/');
+        const fname = parts[parts.length - 1] || 'Аудиозапись';
+        try {
+          block.data.title = decodeURIComponent(fname.replace(/\.[^/.]+$/, ''));
+        } catch (e) {
+          block.data.title = fname.replace(/\.[^/.]+$/, '');
+        }
+      }
+      this.renderAll();
+      this.scheduleRenderPreview();
+      this.recordHistory(true);
+    }
+
     // ===== Диалог размера/положения/рамки картинки (упрощён относительно
     // прежней версии — режим "колонка" убран: та же задача "картинка +
     // текст рядом фиксированной ширины" теперь явный блок `columns`, а не
@@ -2759,6 +2916,7 @@
           this.scheduleRenderPreview();
           this.recordHistory(true);
           if (type === 'image') this.pickAndUploadImageForBlock(block);
+          if (type === 'audio') this.pickAndUploadAudioForBlock(block);
         });
         el.appendChild(btn);
       });
@@ -3175,6 +3333,11 @@
         case 'gallery-image': {
           const block = this.insertBlockAfterActive('image', {});
           this.pickGalleryImageForBlock(block);
+          break;
+        }
+        case 'audio': {
+          const block = this.insertBlockAfterActive('audio', {});
+          this.pickAndUploadAudioForBlock(block);
           break;
         }
       }

@@ -60,6 +60,11 @@
         const formData = new FormData();
         formData.append('image', file);
         return this.makeAuthenticatedRequest('/api/upload-image', 'POST', formData);
+      },
+      async uploadAudio(file) {
+        const formData = new FormData();
+        formData.append('audio', file);
+        return this.makeAuthenticatedRequest('/api/upload-audio', 'POST', formData);
       }
     };
   } else if (!window.apiClient.uploadImage) {
@@ -72,6 +77,21 @@
       const accessToken = token();
       const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
       const res = await fetch('/api/upload-image', { method: 'POST', headers, body: formData });
+      const result = await res.json().catch(() => ({}));
+      return { success: res.ok, data: result, status: res.status, error: result && result.error };
+    };
+  }
+
+  if (!window.apiClient.uploadAudio) {
+    window.apiClient.uploadAudio = async function (file) {
+      const formData = new FormData();
+      formData.append('audio', file);
+      if (typeof window.apiClient.makeAuthenticatedRequest === 'function') {
+        return window.apiClient.makeAuthenticatedRequest('/api/upload-audio', 'POST', formData);
+      }
+      const accessToken = token();
+      const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      const res = await fetch('/api/upload-audio', { method: 'POST', headers, body: formData });
       const result = await res.json().catch(() => ({}));
       return { success: res.ok, data: result, status: res.status, error: result && result.error };
     };

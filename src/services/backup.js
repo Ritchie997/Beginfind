@@ -45,10 +45,13 @@ const CONTENT_ZIP_FOLDER = 'content';
 // указывали бы в пустоту).
 const UPLOADS_ZIP_FOLDER = 'uploads';
 
-// Те же расширения, что принимает загрузка (см. ALLOWED_IMAGE_EXTENSIONS в
-// src/uploads/multer-config.js) — при восстановлении в публично раздаваемую
+// Те же расширения, что принимает загрузка (см. ALLOWED_IMAGE_EXTENSIONS и
+// ALLOWED_AUDIO_EXTENSIONS в src/uploads/multer-config.js) — при восстановлении в публично раздаваемую
 // public/uploads не пропускаем ничего другого (.html/.svg дали бы хранимый XSS).
-const RESTORABLE_UPLOAD_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+const RESTORABLE_UPLOAD_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp',
+  '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.webm', '.wma'
+]);
 
 // Директория для хранения бэкапов
 const BACKUP_DIR = BACKUPS_DIR;
@@ -510,5 +513,6 @@ module.exports = {
   BACKUP_DIR,
   MAX_BACKUPS,
   DATABASE_FILES,
-  SETTINGS_FILES
+  SETTINGS_FILES,
+  RESTORABLE_UPLOAD_EXTENSIONS
 };

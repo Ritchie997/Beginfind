@@ -204,9 +204,10 @@ async function collectUsedUploadNames() {
     const hubs = await dbAll(serversDb, 'SELECT avatar_url FROM franchise_hubs WHERE avatar_url IS NOT NULL', []).catch(() => []);
     hubs.forEach((r) => add(r.avatar_url));
 
-    const posts = await dbAll(serversDb, 'SELECT image_url, image_urls, body FROM franchise_posts', []).catch(() => []);
+    const posts = await dbAll(serversDb, 'SELECT image_url, image_urls, audio_url, audio_tracks, body FROM franchise_posts', []).catch(() => []);
     posts.forEach((r) => {
       add(r.image_url);
+      add(r.audio_url);
       if (r.image_urls) {
         try {
           const parsed = JSON.parse(r.image_urls);
@@ -214,6 +215,18 @@ async function collectUsedUploadNames() {
           else if (typeof parsed === 'string') add(parsed);
         } catch (_) {
           extractFlatUploadNamesFromText(r.image_urls).forEach((n) => used.add(n));
+        }
+      }
+      if (r.audio_tracks) {
+        try {
+          const parsed = JSON.parse(r.audio_tracks);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((t) => add(typeof t === 'string' ? t : (t && t.url)));
+          } else if (typeof parsed === 'string') {
+            add(parsed);
+          }
+        } catch (_) {
+          extractFlatUploadNamesFromText(r.audio_tracks).forEach((n) => used.add(n));
         }
       }
       extractFlatUploadNamesFromText(r.body).forEach((n) => used.add(n));

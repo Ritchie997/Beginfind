@@ -5,6 +5,29 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-12 — поддержка музыки и аудио в статьях Antropedia и публикациях AllTell
+
+- Музыка и аудиозаписи (`src/uploads/multer-config.js`, `src/routes/uploads.routes.js`, `src/db/connections.js`, `src/routes/franchises.routes.js`, `src/services/blocks.js`, `src/services/cleanup.js`, `src/services/backup.js`, `public/audio-player.js`, `public/blocks-renderer.js`, `public/editor-manager.js`, `public/site/alltell-client.js`, `src/services/audio-support.test.js`):
+  - **Поддержка форматов аудио:**
+    - Реализована поддержка форматов `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.opus`, `.webm`, `.wma` с лимитом загрузки до 100 МБ.
+    - Добавлен эндпоинт `POST /api/upload-audio` с аутентификацией и автоопределением метаданных.
+  - **Защита от удаления и бэкапы:**
+    - `src/services/cleanup.js`: сборщик используемых файлов `collectUsedUploadNames` защищает прикреплённые аудиофайлы статей Antropedia (`collectImagePaths`/`collectMediaPaths`) и публикаций AllTell (`audio_url`, `audio_tracks`).
+    - `src/services/backup.js`: расширения аудио включены в `RESTORABLE_UPLOAD_EXTENSIONS`, гарантируя включение аудио в ZIP-архивы бэкапов и их корректное восстановление при импорте.
+  - **Кастомный аудиоплеер AllTell (`public/audio-player.js`):**
+    - Разработан автономный плеер на чистом JS: воспроизведение/пауза, перемотка по таймлайну с буферизацией, регулировка громкости и mute, бейджи формата (MP3, FLAC, OGG и др.), режим повтора (loop), скачивание трека и поддержка плейлистов с автопереходом к следующему треку.
+    - Реализована взаимная остановка других играющих плееров при старте нового.
+  - **Блок аудио в статьях Antropedia:**
+    - В блочную модель добавлен тип блока `audio` с полями `src`, `title`, `artist`, `duration`, `size`, `format`.
+    - В редакторах статей (в админ-панели `public/views/articles.html` и на клиентском сайте `public/site/antropedia.html`) добавлена кнопка «Аудиозапись» в панель инструментов и поддержка вложенности в контейнеры (`columns`, `spoiler-section`).
+    - В `public/blocks-renderer.js` добавлен рендеринг аудио-блоков с автоматической инициализацией плеера.
+  - **Аудиозаписи в публикациях AllTell:**
+    - В таблицу `franchise_posts` добавлены поля `audio_url` и `audio_tracks`.
+    - В форму создания/редактирования публикации добавлен блок прикрепления аудио: загрузка файлов с устройства, прикрепление по прямой ссылке, список прикреплённых треков с возможностью удаления.
+    - В ленте сообществ AllTell карточки публикаций отображают аудиоплеер/плейлист при наличии аудиозаписей.
+  - **Тестирование:**
+    - Добавлен комплексный набор автотестов `src/services/audio-support.test.js` (валидация форматов, нормализация блоков, защита в cleanup и backup).
+
 ## 2026-11-12 — панель назначения авторов Root (authorsAdmin) в клиентском редакторе Antropedia
 
 - Редактор статей Antropedia (`public/site/antropedia-editor-client.js`, `public/site/antropedia.html`, `public/site/site.css`):

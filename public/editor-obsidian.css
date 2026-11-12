@@ -1864,3 +1864,302 @@
   text-decoration: line-through;
   opacity: 0.7;
 }
+
+/* === Блок аудио / Аудиоплеер AllTell & Antropedia === */
+.alltell-audio-player,
+.preview-pane .blk-audio {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--background-secondary, #23272a);
+  border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 14px 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.alltell-audio-player:hover,
+.preview-pane .blk-audio:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.alltell-audio-player.is-playing,
+.preview-pane .blk-audio.is-playing {
+  border-color: #6366f1;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.25);
+}
+
+.alltell-audio-player .audio-player-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.alltell-audio-player .audio-control-btn {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: #6366f1;
+  color: #fff;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
+}
+
+.alltell-audio-player .audio-control-btn:hover {
+  background: #4f46e5;
+  transform: scale(1.05);
+}
+
+.alltell-audio-player .audio-control-btn:active {
+  transform: scale(0.96);
+}
+
+.alltell-audio-player .audio-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alltell-audio-player .audio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.alltell-audio-player .audio-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.alltell-audio-player .audio-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-normal, #f2f3f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.alltell-audio-player .audio-artist {
+  font-size: 12.5px;
+  color: var(--text-muted, #949ba4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.alltell-audio-player .audio-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.alltell-audio-player .audio-progress-wrap {
+  position: relative;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.alltell-audio-player .audio-progress-bg {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  transition: height 0.15s;
+}
+
+.alltell-audio-player .audio-progress-wrap:hover .audio-progress-bg {
+  height: 7px;
+}
+
+.alltell-audio-player .audio-progress-buffered {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0%;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.alltell-audio-player .audio-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0%;
+  background: #818cf8;
+  border-radius: 3px;
+  transition: width 0.05s linear;
+}
+
+.alltell-audio-player .audio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted, #949ba4);
+}
+
+.alltell-audio-player .audio-time {
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.alltell-audio-player .audio-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alltell-audio-player .audio-tool-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #949ba4);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.alltell-audio-player .audio-tool-btn:hover {
+  color: var(--text-normal, #fff);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.alltell-audio-player .audio-tool-btn.is-active {
+  color: #818cf8;
+}
+
+.alltell-audio-player .audio-volume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.alltell-audio-player .audio-volume-slider {
+  width: 55px;
+  height: 4px;
+  accent-color: #818cf8;
+  cursor: pointer;
+}
+
+/* --- Playlist styles --- */
+.alltell-audio-player .audio-playlist {
+  margin-top: 8px;
+  border-top: 1px solid var(--background-accent, rgba(255, 255, 255, 0.08));
+  padding-top: 8px;
+}
+
+.alltell-audio-player .audio-playlist-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #949ba4);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alltell-audio-player .audio-playlist-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.alltell-audio-player .audio-playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.12s;
+}
+
+.alltell-audio-player .audio-playlist-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.alltell-audio-player .audio-playlist-item.is-active {
+  background: rgba(99, 102, 241, 0.18);
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.alltell-audio-player .audio-playlist-num {
+  font-size: 11px;
+  opacity: 0.6;
+  width: 16px;
+  text-align: right;
+}
+
+.alltell-audio-player .audio-playlist-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.alltell-audio-player .audio-playlist-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alltell-audio-player .audio-playlist-artist {
+  font-size: 11.5px;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alltell-audio-player .audio-playlist-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.7;
+}
