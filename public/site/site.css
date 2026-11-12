@@ -13574,6 +13574,43 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
     background: rgba(30, 31, 34, 0.85);
 }
 
+/* --- Аудиоблок в редакторе статей --- */
+.eb-audio-fields {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+.eb-audio-fields input {
+    flex: 1 1 160px;
+    min-width: 140px;
+    height: 32px;
+    box-sizing: border-box !important;
+}
+.eb-audio-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+}
+.eb-audio-actions button {
+    height: 32px !important;
+    padding: 0 12px !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    word-wrap: normal !important;
+    overflow-wrap: normal !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+}
+.eb-audio-actions button * {
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+}
+
 /* --- Тёмный стеклянный стиль модального окна черновиков --- */
 .drafts-modal.modal-overlay {
     backdrop-filter: blur(18px) !important;

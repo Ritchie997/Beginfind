@@ -432,7 +432,7 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   background: rgba(0, 0, 0, 0.12);
 }
 .eb-audio-placeholder:hover { border-color: var(--blurple); color: var(--text-normal); }
-.eb-audio-placeholder [data-audio-act] { cursor: pointer; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; }
+.eb-audio-placeholder [data-audio-act] { cursor: pointer; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap !important; word-break: keep-all !important; }
 .eb-audio-placeholder [data-audio-act]:hover { background: var(--background-accent); color: var(--text-normal); }
 .eb-audio-placeholder-sep { margin: 0 6px; opacity: 0.6; }
 
@@ -446,39 +446,58 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   padding: 12px;
 }
 .eb-audio-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 .eb-audio-fields input {
+  flex: 1 1 160px;
+  min-width: 140px;
   background: var(--background-tertiary, #202225);
   border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.1));
   border-radius: 4px;
   color: var(--text-normal, #dcddde);
   padding: 6px 10px;
   font-size: 13px;
+  height: 32px;
+  box-sizing: border-box !important;
   outline: none;
 }
 .eb-audio-fields input:focus {
   border-color: var(--blurple, #5865f2);
 }
 .eb-audio-actions {
-  display: flex;
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 .eb-audio-actions button {
   background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
   border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.1));
   color: var(--text-muted, #949ba4);
-  padding: 6px 10px;
+  padding: 0 12px;
+  height: 32px;
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  line-height: 1;
   transition: all 0.15s ease;
+}
+.eb-audio-actions button * {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
 }
 .eb-audio-actions button:hover {
   background: var(--blurple, #5865f2);
@@ -489,6 +508,23 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   background: var(--red, #ed4245);
   border-color: var(--red, #ed4245);
   color: #fff;
+}
+@media (max-width: 600px) {
+  .eb-audio-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .eb-audio-fields input {
+    width: 100%;
+    min-width: 0;
+  }
+  .eb-audio-actions {
+    width: 100%;
+    display: flex;
+  }
+  .eb-audio-actions button {
+    flex: 1;
+  }
 }
 .eb-audio-placeholder-remove {
   background: transparent;
