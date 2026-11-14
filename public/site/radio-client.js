@@ -906,6 +906,14 @@
       });
     });
 
+    document.querySelectorAll('.radio-modal-backdrop').forEach((backdrop) => {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+          backdrop.hidden = true;
+        }
+      });
+    });
+
     dom.btnOpenUploadTrack?.addEventListener('click', openUploadModal);
     dom.btnUploadTrackFromFeed?.addEventListener('click', openUploadModal);
     dom.btnOpenCreateStation?.addEventListener('click', openCreateStationModal);

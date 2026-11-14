@@ -67,6 +67,10 @@
   border-color: rgba(255, 71, 87, 0.3);
 }
 
+.radio-tab-content[hidden] {
+  display: none !important;
+}
+
 /* Главная эфирная дека (Radio Main Deck) */
 .radio-deck {
   background: var(--radio-deck-bg);
@@ -731,6 +735,10 @@
 }
 
 /* Модальные окна */
+.radio-modal-backdrop[hidden] {
+  display: none !important;
+}
+
 .radio-modal-backdrop {
   position: fixed;
   top: 0;
