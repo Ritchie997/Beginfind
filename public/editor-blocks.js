@@ -76,7 +76,7 @@
     } else if (block.type === 'list') {
       if (!block.data.style) block.data.style = 'bullet';
       if (!Array.isArray(block.data.items) || !block.data.items.length) {
-        block.data.items = [{ id: genBlockId(), markdown: '', checked: false }];
+        block.data.items = [{ id: genBlockId(), markdown: '', checked: false, indent: 0 }];
       }
     } else if (block.type === 'divider') {
       // no specific data
@@ -430,36 +430,88 @@
       });
       wrap.appendChild(styleGroup);
 
+      function normalizeEbItemsIndent(items) {
+        if (!Array.isArray(items)) return;
+        let prevIndent = -1;
+        items.forEach(function (it, i) {
+          let ind = Math.max(0, Math.min(5, parseInt(it.indent, 10) || 0));
+          if (i === 0) ind = 0;
+          else if (ind > prevIndent + 1) ind = prevIndent + 1;
+          it.indent = ind;
+          prevIndent = ind;
+        });
+      }
+
+      function getEbOrderedMarker(items, idx) {
+        const curIndent = Math.max(0, Math.min(5, parseInt(items[idx].indent, 10) || 0));
+        let count = 1;
+        for (let i = idx - 1; i >= 0; i--) {
+          const prevIndent = Math.max(0, Math.min(5, parseInt(items[i].indent, 10) || 0));
+          if (prevIndent < curIndent) break;
+          if (prevIndent === curIndent) count++;
+        }
+        if (curIndent % 2 === 0) return count + '.';
+        const letters = 'abcdefghijklmnopqrstuvwxyz';
+        return (letters[(count - 1) % 26] || count) + '.';
+      }
+
       const itemsEl = document.createElement('div');
       itemsEl.className = 'eb-gap';
       block.data.items = Array.isArray(block.data.items) ? block.data.items : [];
       if (!block.data.items.length) {
-        block.data.items.push({ id: genBlockId(), markdown: '', checked: false });
+        block.data.items.push({ id: genBlockId(), markdown: '', checked: false, indent: 0 });
       }
+      normalizeEbItemsIndent(block.data.items);
+
+      const isBlockChecklist = block.data.style === 'checklist';
 
       block.data.items.forEach(function (item, idx) {
         const row = document.createElement('div');
         row.className = 'eb-list-item';
+        const indent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+        row.dataset.indent = String(indent);
+        if (indent > 0) {
+          row.style.marginLeft = (indent * 24) + 'px';
+        }
+        if (item.checked) {
+          row.classList.add('is-checked');
+        }
 
-        if (block.data.style === 'checklist') {
+        const isItemCheck = (isBlockChecklist && item.style !== 'bullet') || item.style === 'checklist';
+
+        if (isItemCheck) {
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.checked = !!item.checked;
           cb.addEventListener('change', function () {
             item.checked = cb.checked;
+            row.classList.toggle('is-checked', !!item.checked);
             notifyInput(block);
           });
           row.appendChild(cb);
         } else {
           const marker = document.createElement('span');
           marker.className = 'eb-list-marker';
-          marker.textContent = (block.data.style === 'ordered' ? (idx + 1) + '.' : '•');
+          if (block.data.style === 'ordered') {
+            marker.textContent = getEbOrderedMarker(block.data.items, idx);
+          } else {
+            const bullets = ['•', '◦', '▪'];
+            marker.textContent = bullets[indent % bullets.length] || '•';
+          }
+          if (isBlockChecklist) {
+            marker.title = 'Нажмите, чтобы переключить на чекбокс';
+            marker.classList.add('eb-list-type-toggle');
+            marker.addEventListener('click', function () {
+              item.style = 'checklist';
+              notifyStructure(block);
+            });
+          }
           row.appendChild(marker);
         }
 
         if (makeTa) {
           const ta = makeTa(item.markdown, {
-            placeholder: 'Пункт списка…',
+            placeholder: indent > 0 ? 'Подпункт списка…' : 'Пункт списка…',
             onInput: function (val) {
               item.markdown = val;
               notifyInput(block);
@@ -472,33 +524,123 @@
               const before = ta.value.slice(0, pos);
               const after = ta.value.slice(pos);
               item.markdown = before;
-              block.data.items.splice(idx + 1, 0, { id: genBlockId(), markdown: after, checked: false });
+              block.data.items.splice(idx + 1, 0, {
+                id: genBlockId(),
+                markdown: after,
+                checked: false,
+                indent: item.indent || 0,
+                style: item.style
+              });
+              normalizeEbItemsIndent(block.data.items);
               notifyStructure(block);
-            } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && block.data.items.length > 1) {
+            } else if (e.key === 'Tab' && !e.shiftKey) {
               e.preventDefault();
-              block.data.items.splice(idx, 1);
-              notifyStructure(block);
+              if (idx > 0) {
+                const prevIndent = Math.max(0, Math.min(5, parseInt(block.data.items[idx - 1].indent, 10) || 0));
+                const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+                if (curIndent < prevIndent + 1 && curIndent < 5) {
+                  item.indent = curIndent + 1;
+                  normalizeEbItemsIndent(block.data.items);
+                  notifyStructure(block);
+                }
+              }
+            } else if (e.key === 'Tab' && e.shiftKey) {
+              e.preventDefault();
+              const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+              if (curIndent > 0) {
+                item.indent = curIndent - 1;
+                normalizeEbItemsIndent(block.data.items);
+                notifyStructure(block);
+              }
+            } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+              const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+              if (curIndent > 0) {
+                e.preventDefault();
+                item.indent = curIndent - 1;
+                normalizeEbItemsIndent(block.data.items);
+                notifyStructure(block);
+              } else if (block.data.items.length > 1 && !item.markdown) {
+                e.preventDefault();
+                block.data.items.splice(idx, 1);
+                normalizeEbItemsIndent(block.data.items);
+                notifyStructure(block);
+              }
             }
           });
           row.appendChild(ta);
         }
 
+        const actions = document.createElement('div');
+        actions.className = 'eb-list-item-actions';
+
+        const prevIndent = idx > 0 ? (Math.max(0, Math.min(5, parseInt(block.data.items[idx - 1].indent, 10) || 0))) : 0;
+        const canIndent = idx > 0 && indent < prevIndent + 1 && indent < 5;
+        const canOutdent = indent > 0;
+
+        const outdentBtn = document.createElement('button');
+        outdentBtn.type = 'button';
+        outdentBtn.className = 'eb-icon-btn eb-list-shift-btn';
+        outdentBtn.title = 'Уменьшить отступ (Shift+Tab)';
+        outdentBtn.disabled = !canOutdent;
+        outdentBtn.innerHTML = '<i class="fas fa-outdent"></i>';
+        outdentBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!canOutdent) return;
+          item.indent = indent - 1;
+          normalizeEbItemsIndent(block.data.items);
+          notifyStructure(block);
+        });
+
+        const indentBtn = document.createElement('button');
+        indentBtn.type = 'button';
+        indentBtn.className = 'eb-icon-btn eb-list-shift-btn';
+        indentBtn.title = 'Сделать подпунктом (Tab)';
+        indentBtn.disabled = !canIndent;
+        indentBtn.innerHTML = '<i class="fas fa-indent"></i>';
+        indentBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!canIndent) return;
+          item.indent = indent + 1;
+          normalizeEbItemsIndent(block.data.items);
+          notifyStructure(block);
+        });
+
+        if (isBlockChecklist) {
+          const toggleStyleBtn = document.createElement('button');
+          toggleStyleBtn.type = 'button';
+          toggleStyleBtn.className = 'eb-icon-btn eb-list-shift-btn';
+          toggleStyleBtn.title = isItemCheck ? 'Сменить чекбокс на маркер' : 'Сменить маркер на чекбокс';
+          toggleStyleBtn.innerHTML = isItemCheck ? '<i class="fas fa-circle-dot"></i>' : '<i class="fas fa-square-check"></i>';
+          toggleStyleBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            item.style = isItemCheck ? 'bullet' : 'checklist';
+            notifyStructure(block);
+          });
+          actions.appendChild(toggleStyleBtn);
+        }
+
         const del = document.createElement('button');
         del.type = 'button';
-        del.className = 'eb-icon-btn';
+        del.className = 'eb-icon-btn eb-list-del-btn';
         del.title = 'Удалить пункт';
         del.innerHTML = '<i class="fas fa-xmark"></i>';
         del.addEventListener('click', function (e) {
           e.stopPropagation();
           if (block.data.items.length <= 1) return;
           block.data.items.splice(idx, 1);
+          normalizeEbItemsIndent(block.data.items);
           notifyStructure(block);
         });
-        row.appendChild(del);
+
+        actions.append(outdentBtn, indentBtn, del);
+        row.appendChild(actions);
 
         itemsEl.appendChild(row);
       });
       wrap.appendChild(itemsEl);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'eb-list-bottom-actions';
 
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
@@ -506,10 +648,30 @@
       addBtn.innerHTML = '<i class="fas fa-plus"></i> Пункт';
       addBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        block.data.items.push({ id: genBlockId(), markdown: '', checked: false });
+        const lastItem = block.data.items[block.data.items.length - 1];
+        const indent = lastItem ? (lastItem.indent || 0) : 0;
+        block.data.items.push({ id: genBlockId(), markdown: '', checked: false, indent: indent });
+        normalizeEbItemsIndent(block.data.items);
         notifyStructure(block);
       });
-      wrap.appendChild(addBtn);
+
+      const addSubBtn = document.createElement('button');
+      addSubBtn.type = 'button';
+      addSubBtn.className = 'eb-mini-btn';
+      addSubBtn.innerHTML = '<i class="fas fa-level-down-alt fa-rotate-90"></i> Подпункт';
+      addSubBtn.title = 'Добавить вложенный подпункт';
+      addSubBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const lastItem = block.data.items[block.data.items.length - 1];
+        const curIndent = lastItem ? (lastItem.indent || 0) : 0;
+        const subIndent = Math.min(5, curIndent + 1);
+        block.data.items.push({ id: genBlockId(), markdown: '', checked: false, indent: subIndent });
+        normalizeEbItemsIndent(block.data.items);
+        notifyStructure(block);
+      });
+
+      btnRow.append(addBtn, addSubBtn);
+      wrap.appendChild(btnRow);
 
       return wrap;
     }

@@ -451,6 +451,62 @@
     return withBlockAttrs(renderBlockContent(block, marked), block);
   }
 
+  function renderListBlock(d, marked, renderInline) {
+    const isBlockChecklist = d.style === 'checklist';
+    const isOrdered = d.style === 'ordered';
+    const rootTag = isOrdered ? 'ol' : 'ul';
+    const rootClass = isBlockChecklist ? 'blk-checklist' : 'blk-list';
+    const items = Array.isArray(d.items) ? d.items : [];
+    if (!items.length) return '';
+
+    let html = '';
+    let currentIndent = 0;
+    const tagStack = [rootTag];
+    html += `<${rootTag} class="${rootClass}">`;
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      let targetIndent = Math.max(0, Math.min(5, parseInt(it.indent, 10) || 0));
+      if (i === 0) targetIndent = 0;
+      else if (targetIndent > currentIndent + 1) targetIndent = currentIndent + 1;
+
+      if (targetIndent > currentIndent) {
+        while (currentIndent < targetIndent) {
+          currentIndent++;
+          const subTag = isOrdered ? 'ol' : 'ul';
+          const subClass = isBlockChecklist ? 'blk-checklist blk-checklist-nested' : 'blk-list-nested';
+          tagStack.push(subTag);
+          html += `<${subTag} class="${subClass}">`;
+        }
+      } else if (targetIndent < currentIndent) {
+        while (currentIndent > targetIndent) {
+          currentIndent--;
+          const closingTag = tagStack.pop();
+          html += `</li></${closingTag}>`;
+        }
+        html += '</li>';
+      } else {
+        if (i > 0) html += '</li>';
+      }
+
+      const itemIsCheck = (isBlockChecklist && it.style !== 'bullet') || it.style === 'checklist';
+      if (itemIsCheck) {
+        const checkedAttr = it.checked ? ' checked' : '';
+        const checkedCls = it.checked ? ' is-checked' : '';
+        html += `<li class="blk-check-item${checkedCls}"><input type="checkbox" disabled${checkedAttr}> <span>${renderInline(marked, it.markdown)}</span>`;
+      } else {
+        html += `<li><span>${renderInline(marked, it.markdown)}</span>`;
+      }
+    }
+
+    while (tagStack.length > 0) {
+      const closingTag = tagStack.pop();
+      html += `</li></${closingTag}>`;
+    }
+
+    return html;
+  }
+
   function renderBlockContent(block, marked) {
     const d = block.data || {};
     switch (block.type) {
@@ -464,17 +520,8 @@
         return `<blockquote>${renderInline(marked, d.markdown)}</blockquote>`;
       case 'code':
         return `<pre class="blk-code"><code${d.language ? ` class="language-${escapeAttr(d.language)}"` : ''}>${escapeHtml(d.code)}</code></pre>`;
-      case 'list': {
-        if (d.style === 'checklist') {
-          const items = d.items.map((it) =>
-            `<li class="blk-check-item"><input type="checkbox" disabled${it.checked ? ' checked' : ''}> <span>${renderInline(marked, it.markdown)}</span></li>`
-          ).join('');
-          return `<ul class="blk-checklist">${items}</ul>`;
-        }
-        const tag = d.style === 'ordered' ? 'ol' : 'ul';
-        const items = d.items.map((it) => `<li>${renderInline(marked, it.markdown)}</li>`).join('');
-        return `<${tag}>${items}</${tag}>`;
-      }
+      case 'list':
+        return renderListBlock(d, marked, renderInline);
       case 'table': {
         const rows = [...d.rows];
         while (rows.length && rows[rows.length - 1].every((cell) => !String(cell).trim())) rows.pop();

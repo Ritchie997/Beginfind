@@ -794,11 +794,47 @@
   margin: 4px 0;
   padding: 0;
 }
-.preview-pane .blk-check-item input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.preview-pane .blk-check-item input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  margin-top: 3px;
+  accent-color: var(--blurple, #5865f2);
+}
 .preview-pane .blk-check-item > span {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.preview-pane .blk-check-item.is-checked > span,
+.preview-pane .blk-check-item:has(> input:checked) > span {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* --- вложенные списки и подпункты (режим чтения и превью) --- */
+.preview-pane ul.blk-list-nested,
+.preview-pane ol.blk-list-nested,
+.preview-pane ul.blk-checklist-nested {
+  position: relative;
+  margin: 4px 0 6px 14px;
+  padding-left: 14px;
+  border-left: 1.5px solid var(--background-modifier-border, rgba(255, 255, 255, 0.15));
+}
+.theme-light .preview-pane ul.blk-list-nested,
+.theme-light .preview-pane ol.blk-list-nested,
+.theme-light .preview-pane ul.blk-checklist-nested {
+  border-left-color: rgba(0, 0, 0, 0.15);
+}
+.preview-pane ul.blk-checklist-nested {
+  list-style: disc;
+}
+.preview-pane ul.blk-checklist-nested > li.blk-check-item {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 0;
 }
 
 .preview-pane .blk-table-wrap { overflow-x: auto; margin: 0 0 1em; }

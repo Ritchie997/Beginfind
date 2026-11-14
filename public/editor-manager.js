@@ -404,6 +404,7 @@
       this._activeTextInput = null; // { el, list, block } — последнее сфокусированное markdown-поле (для тулбара форматирования)
       this._active = null; // { list, block } — последний сфокусированный блок любого типа (для "вставить после")
       this._pendingFocusBlockId = null;
+      this._pendingFocusItemIdx = null;
       this._articleIdObserver = null;
       this._previewTimer = null;
       this._lastObservedArticleId = undefined;
@@ -1090,8 +1091,22 @@
       if (this._pendingFocusBlockId) {
         const id = this._pendingFocusBlockId;
         this._pendingFocusBlockId = null;
-        const target = this.container.querySelector(`[data-block-id="${id}"] [data-autofocus]`);
-        if (target) target.focus();
+        const targetIdx = this._pendingFocusItemIdx;
+        this._pendingFocusItemIdx = null;
+        let target = null;
+        if (typeof targetIdx === 'number') {
+          const tas = this.container.querySelectorAll(`[data-block-id="${id}"] .eb-list-item textarea`);
+          if (tas && tas[targetIdx]) target = tas[targetIdx];
+        }
+        if (!target) {
+          target = this.container.querySelector(`[data-block-id="${id}"] [data-autofocus]`);
+        }
+        if (target) {
+          target.focus();
+          if (typeof target.selectionStart === 'number') {
+            target.selectionStart = target.selectionEnd = target.value.length;
+          }
+        }
       }
     }
 
@@ -1769,85 +1784,312 @@
         btn.type = 'button';
         btn.textContent = label;
         btn.classList.toggle('active', block.data.style === style);
-        btn.addEventListener('click', () => { block.data.style = style; this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
+        btn.addEventListener('click', () => {
+          block.data.style = style;
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
         styleGroup.appendChild(btn);
       });
       wrap.appendChild(styleGroup);
+
+      this._normalizeListItemsIndent(block.data.items);
 
       const itemsEl = document.createElement('div');
       itemsEl.className = 'eb-gap';
       block.data.items.forEach((item, idx) => itemsEl.appendChild(this.renderListItem(block, item, idx, list)));
       wrap.appendChild(itemsEl);
 
+      const btnRow = document.createElement('div');
+      btnRow.className = 'eb-list-bottom-actions';
+
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'eb-mini-btn';
       addBtn.innerHTML = '<i class="fas fa-plus"></i> Пункт';
       addBtn.addEventListener('click', () => {
-        block.data.items.push({ markdown: '', checked: false });
+        const lastItem = block.data.items[block.data.items.length - 1];
+        const indent = lastItem ? (lastItem.indent || 0) : 0;
+        block.data.items.push({ markdown: '', checked: false, indent });
+        this._normalizeListItemsIndent(block.data.items);
         this._pendingFocusBlockId = block.id;
-        this.renderAll();
-      });
-      wrap.appendChild(addBtn);
-      return wrap;
-    }
-
-    renderListItem(block, item, idx, list) {
-      const row = document.createElement('div');
-      row.className = 'eb-list-item';
-
-      if (block.data.style === 'checklist') {
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = !!item.checked;
-        cb.addEventListener('change', () => { item.checked = cb.checked; this.scheduleRenderPreview(); this.recordHistory(true); });
-        row.appendChild(cb);
-      } else {
-        const marker = document.createElement('span');
-        marker.className = 'eb-list-marker';
-        marker.textContent = block.data.style === 'ordered' ? `${idx + 1}.` : '•';
-        row.appendChild(marker);
-      }
-
-      const ta = this.makeTextArea(item.markdown, {
-        placeholder: 'Пункт списка…',
-        list, block,
-        autofocus: idx === block.data.items.length - 1 && idx > 0,
-        onInput: (val) => { item.markdown = val; }
-      });
-      ta.addEventListener('keydown', (e) => {
-        if (this._suggestEl && !this._suggestEl.hidden) return; // автодополнение уже перехватило клавиши
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          block.data.items.splice(idx + 1, 0, { markdown: '', checked: false });
-          this._pendingFocusBlockId = block.id;
-          this.renderAll();
-          this.scheduleRenderPreview();
-          this.recordHistory(true);
-        } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && block.data.items.length > 1) {
-          e.preventDefault();
-          block.data.items.splice(idx, 1);
-          this._pendingFocusBlockId = block.id;
-          this.renderAll();
-          this.scheduleRenderPreview();
-          this.recordHistory(true);
-        }
-      });
-
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'eb-icon-btn';
-      del.title = 'Удалить пункт';
-      del.innerHTML = '<i class="fas fa-xmark"></i>';
-      del.addEventListener('click', () => {
-        if (block.data.items.length <= 1) return;
-        block.data.items.splice(idx, 1);
+        this._pendingFocusItemIdx = block.data.items.length - 1;
         this.renderAll();
         this.scheduleRenderPreview();
         this.recordHistory(true);
       });
 
-      row.append(ta, del);
+      const addSubBtn = document.createElement('button');
+      addSubBtn.type = 'button';
+      addSubBtn.className = 'eb-mini-btn';
+      addSubBtn.innerHTML = '<i class="fas fa-level-down-alt fa-rotate-90"></i> Подпункт';
+      addSubBtn.title = 'Добавить вложенный подпункт';
+      addSubBtn.addEventListener('click', () => {
+        const lastItem = block.data.items[block.data.items.length - 1];
+        const curIndent = lastItem ? (lastItem.indent || 0) : 0;
+        const subIndent = Math.min(5, curIndent + 1);
+        block.data.items.push({ markdown: '', checked: false, indent: subIndent });
+        this._normalizeListItemsIndent(block.data.items);
+        this._pendingFocusBlockId = block.id;
+        this._pendingFocusItemIdx = block.data.items.length - 1;
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      });
+
+      btnRow.append(addBtn, addSubBtn);
+      wrap.appendChild(btnRow);
+      return wrap;
+    }
+
+    _normalizeListItemsIndent(items) {
+      if (!Array.isArray(items)) return;
+      let prevIndent = -1;
+      items.forEach((it, i) => {
+        let ind = Math.max(0, Math.min(5, parseInt(it.indent, 10) || 0));
+        if (i === 0) ind = 0;
+        else if (ind > prevIndent + 1) ind = prevIndent + 1;
+        it.indent = ind;
+        prevIndent = ind;
+      });
+    }
+
+    _getListOrderedMarker(items, idx) {
+      const curIndent = Math.max(0, Math.min(5, parseInt(items[idx].indent, 10) || 0));
+      let count = 1;
+      for (let i = idx - 1; i >= 0; i--) {
+        const prevIndent = Math.max(0, Math.min(5, parseInt(items[i].indent, 10) || 0));
+        if (prevIndent < curIndent) break;
+        if (prevIndent === curIndent) count++;
+      }
+      if (curIndent % 2 === 0) return `${count}.`;
+      const letters = 'abcdefghijklmnopqrstuvwxyz';
+      return `${letters[(count - 1) % 26] || count}.`;
+    }
+
+    renderListItem(block, item, idx, list) {
+      const row = document.createElement('div');
+      row.className = 'eb-list-item';
+      const indent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+      row.dataset.indent = String(indent);
+      if (indent > 0) {
+        row.style.marginLeft = `${indent * 24}px`;
+      }
+      if (item.checked) {
+        row.classList.add('is-checked');
+      }
+
+      const isBlockChecklist = block.data.style === 'checklist';
+      const isItemCheck = (isBlockChecklist && item.style !== 'bullet') || item.style === 'checklist';
+
+      if (isItemCheck) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!item.checked;
+        cb.addEventListener('change', () => {
+          item.checked = cb.checked;
+          row.classList.toggle('is-checked', !!item.checked);
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
+        row.appendChild(cb);
+      } else {
+        const marker = document.createElement('span');
+        marker.className = 'eb-list-marker';
+        if (block.data.style === 'ordered') {
+          marker.textContent = this._getListOrderedMarker(block.data.items, idx);
+        } else {
+          const bullets = ['•', '◦', '▪'];
+          marker.textContent = bullets[indent % bullets.length] || '•';
+        }
+        if (isBlockChecklist) {
+          marker.title = 'Нажмите, чтобы переключить на чекбокс';
+          marker.classList.add('eb-list-type-toggle');
+          marker.addEventListener('click', () => {
+            item.style = 'checklist';
+            this._pendingFocusBlockId = block.id;
+            this._pendingFocusItemIdx = idx;
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+          });
+        }
+        row.appendChild(marker);
+      }
+
+      const ta = this.makeTextArea(item.markdown, {
+        placeholder: indent > 0 ? 'Подпункт списка…' : 'Пункт списка…',
+        list, block,
+        autofocus: idx === block.data.items.length - 1 && idx > 0,
+        onInput: (val) => { item.markdown = val; }
+      });
+
+      ta.addEventListener('keydown', (e) => {
+        if (this._suggestEl && !this._suggestEl.hidden) return; // автодополнение уже перехватило клавиши
+
+        // 1. Enter: создать новый пункт на том же уровне
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const pos = ta.selectionStart;
+          const before = ta.value.slice(0, pos);
+          const after = ta.value.slice(pos);
+          item.markdown = before;
+          const newItem = {
+            markdown: after,
+            checked: false,
+            indent: item.indent || 0,
+            ...(item.style ? { style: item.style } : {})
+          };
+          block.data.items.splice(idx + 1, 0, newItem);
+          this._normalizeListItemsIndent(block.data.items);
+          this._pendingFocusBlockId = block.id;
+          this._pendingFocusItemIdx = idx + 1;
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+          return;
+        }
+
+        // 2. Tab: сделать подпунктом (увеличить отступ)
+        if (e.key === 'Tab' && !e.shiftKey) {
+          e.preventDefault();
+          if (idx > 0) {
+            const prevIndent = Math.max(0, Math.min(5, parseInt(block.data.items[idx - 1].indent, 10) || 0));
+            const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+            if (curIndent < prevIndent + 1 && curIndent < 5) {
+              item.indent = curIndent + 1;
+              this._normalizeListItemsIndent(block.data.items);
+              this._pendingFocusBlockId = block.id;
+              this._pendingFocusItemIdx = idx;
+              this.renderAll();
+              this.scheduleRenderPreview();
+              this.recordHistory(true);
+            }
+          }
+          return;
+        }
+
+        // 3. Shift+Tab: уменьшить отступ
+        if (e.key === 'Tab' && e.shiftKey) {
+          e.preventDefault();
+          const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+          if (curIndent > 0) {
+            item.indent = curIndent - 1;
+            this._normalizeListItemsIndent(block.data.items);
+            this._pendingFocusBlockId = block.id;
+            this._pendingFocusItemIdx = idx;
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+          }
+          return;
+        }
+
+        // 4. Backspace: уменьшить отступ, если в начале строки
+        if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+          const curIndent = Math.max(0, Math.min(5, parseInt(item.indent, 10) || 0));
+          if (curIndent > 0) {
+            e.preventDefault();
+            item.indent = curIndent - 1;
+            this._normalizeListItemsIndent(block.data.items);
+            this._pendingFocusBlockId = block.id;
+            this._pendingFocusItemIdx = idx;
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+            return;
+          } else if (block.data.items.length > 1 && !item.markdown) {
+            e.preventDefault();
+            block.data.items.splice(idx, 1);
+            this._normalizeListItemsIndent(block.data.items);
+            this._pendingFocusBlockId = block.id;
+            this._pendingFocusItemIdx = Math.max(0, idx - 1);
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+            return;
+          }
+        }
+      });
+
+      // Actions buttons
+      const actions = document.createElement('div');
+      actions.className = 'eb-list-item-actions';
+
+      const prevIndent = idx > 0 ? (Math.max(0, Math.min(5, parseInt(block.data.items[idx - 1].indent, 10) || 0))) : 0;
+      const canIndent = idx > 0 && indent < prevIndent + 1 && indent < 5;
+      const canOutdent = indent > 0;
+
+      const outdentBtn = document.createElement('button');
+      outdentBtn.type = 'button';
+      outdentBtn.className = 'eb-icon-btn eb-list-shift-btn';
+      outdentBtn.title = 'Уменьшить отступ (Shift+Tab)';
+      outdentBtn.disabled = !canOutdent;
+      outdentBtn.innerHTML = '<i class="fas fa-outdent"></i>';
+      outdentBtn.addEventListener('click', () => {
+        if (!canOutdent) return;
+        item.indent = indent - 1;
+        this._normalizeListItemsIndent(block.data.items);
+        this._pendingFocusBlockId = block.id;
+        this._pendingFocusItemIdx = idx;
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      });
+
+      const indentBtn = document.createElement('button');
+      indentBtn.type = 'button';
+      indentBtn.className = 'eb-icon-btn eb-list-shift-btn';
+      indentBtn.title = 'Сделать подпунктом (Tab)';
+      indentBtn.disabled = !canIndent;
+      indentBtn.innerHTML = '<i class="fas fa-indent"></i>';
+      indentBtn.addEventListener('click', () => {
+        if (!canIndent) return;
+        item.indent = indent + 1;
+        this._normalizeListItemsIndent(block.data.items);
+        this._pendingFocusBlockId = block.id;
+        this._pendingFocusItemIdx = idx;
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      });
+
+      if (isBlockChecklist) {
+        const toggleStyleBtn = document.createElement('button');
+        toggleStyleBtn.type = 'button';
+        toggleStyleBtn.className = 'eb-icon-btn eb-list-shift-btn';
+        toggleStyleBtn.title = isItemCheck ? 'Сменить чекбокс на маркер' : 'Сменить маркер на чекбокс';
+        toggleStyleBtn.innerHTML = isItemCheck ? '<i class="fas fa-circle-dot"></i>' : '<i class="fas fa-square-check"></i>';
+        toggleStyleBtn.addEventListener('click', () => {
+          item.style = isItemCheck ? 'bullet' : 'checklist';
+          this._pendingFocusBlockId = block.id;
+          this._pendingFocusItemIdx = idx;
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
+        actions.appendChild(toggleStyleBtn);
+      }
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'eb-icon-btn eb-list-del-btn';
+      del.title = 'Удалить пункт';
+      del.innerHTML = '<i class="fas fa-xmark"></i>';
+      del.addEventListener('click', () => {
+        if (block.data.items.length <= 1) return;
+        block.data.items.splice(idx, 1);
+        this._normalizeListItemsIndent(block.data.items);
+        this._pendingFocusBlockId = block.id;
+        this._pendingFocusItemIdx = Math.max(0, idx - 1);
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      });
+
+      actions.append(outdentBtn, indentBtn, del);
+      row.append(ta, actions);
       return row;
     }
 

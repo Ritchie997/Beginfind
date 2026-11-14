@@ -169,11 +169,24 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
 
     case 'list': {
       const style = ['bullet', 'ordered', 'checklist'].includes(data.style) ? data.style : 'bullet';
+      let prevIndent = -1;
       const items = Array.isArray(data.items)
-        ? data.items.map((it) => ({
-            markdown: str(isPlainObject(it) ? it.markdown : it),
-            checked: !!(isPlainObject(it) && it.checked)
-          }))
+        ? data.items.map((it, idx) => {
+            const rawIndent = isPlainObject(it) ? parseInt(it.indent, 10) : 0;
+            let indent = Number.isFinite(rawIndent) ? Math.max(0, Math.min(5, rawIndent)) : 0;
+            if (idx === 0) indent = 0;
+            else if (indent > prevIndent + 1) indent = prevIndent + 1;
+            prevIndent = indent;
+
+            const itemStyle = isPlainObject(it) && ['bullet', 'checklist', 'ordered'].includes(it.style) ? it.style : null;
+            const res = {
+              markdown: str(isPlainObject(it) ? it.markdown : it),
+              checked: !!(isPlainObject(it) && it.checked),
+              indent
+            };
+            if (itemStyle) res.style = itemStyle;
+            return res;
+          })
         : [];
       return { style, items };
     }

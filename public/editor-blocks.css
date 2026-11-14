@@ -371,10 +371,67 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   cursor: pointer;
 }
 .eb-list-style-group button.active { background: var(--blurple); border-color: var(--blurple); color: #fff; }
-.eb-list-item { display: flex; align-items: flex-start; gap: 8px; }
-.eb-list-item .eb-list-marker { width: 20px; flex: 0 0 auto; color: var(--text-muted); padding-top: 6px; text-align: center; }
-.eb-list-item input[type="checkbox"] { margin-top: 8px; }
-.eb-list-item .eb-text { flex: 1; }
+.eb-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  transition: margin-left 0.15s ease;
+}
+.eb-list-item[data-indent]:not([data-indent="0"]) {
+  position: relative;
+  border-left: 2px solid var(--background-modifier-border, rgba(255, 255, 255, 0.15));
+  padding-left: 10px;
+}
+.theme-light .eb-list-item[data-indent]:not([data-indent="0"]) {
+  border-left-color: rgba(0, 0, 0, 0.15);
+}
+.eb-list-item .eb-list-marker {
+  width: 20px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  padding-top: 6px;
+  text-align: center;
+  font-family: inherit;
+}
+.eb-list-item input[type="checkbox"] {
+  margin-top: 8px;
+  flex: 0 0 auto;
+  accent-color: var(--blurple, #5865f2);
+  cursor: pointer;
+}
+.eb-list-item .eb-text { flex: 1; min-width: 0; }
+.eb-list-item.is-checked .eb-text {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.eb-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding-top: 3px;
+}
+.eb-list-shift-btn:hover:not(:disabled) {
+  color: var(--blurple);
+  border-color: var(--blurple);
+}
+.eb-list-item-actions .eb-icon-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+.eb-list-bottom-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.eb-list-type-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.eb-list-type-toggle:hover {
+  color: var(--blurple);
+}
 
 /* --- таблица --- */
 .eb-table { border-collapse: collapse; width: 100%; }
