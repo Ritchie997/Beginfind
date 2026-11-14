@@ -19,7 +19,7 @@ const path = require('path');
 const { ROOT_DIR } = require('../config/paths');
 
 const SETTINGS_PATH = path.join(ROOT_DIR, 'system-settings.json');
-const MAINTENANCE_PAGE_KEYS = ['home', 'alltell', 'antropedia', 'gallery'];
+const MAINTENANCE_PAGE_KEYS = ['home', 'alltell', 'antropedia', 'gallery', 'radio'];
 
 const DEFAULT_SETTINGS = {
   // МБ — реальный лимит на загрузку картинки через POST /api/upload-image
@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS = {
   // значения не требует перезапуска — подействует на СЛЕДУЮЩИЙ вход; уже
   // выданные токены живут до срока, с которым были подписаны.
   sessionDurationHours: 8,
-  maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false },
+  maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false, radio: false },
   maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
 };
 

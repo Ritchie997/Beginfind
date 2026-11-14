@@ -65,3 +65,36 @@ test('GET /api/radio/tracks returns tracks list with pagination', async () => {
   assert.ok(Array.isArray(res.body.tracks), 'Response should have tracks array');
   assert.equal(typeof res.body.total, 'number');
 });
+
+test('maintenance mode: radio page and API gating', async () => {
+  const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
+  const { readSettings, writeSettings } = require('../services/system-settings');
+
+  assert.equal(maintenancePageForPath('/radio'), 'radio');
+  assert.equal(maintenancePageForPath('/site/radio.html'), 'radio');
+
+  const prevSettings = readSettings();
+  try {
+    writeSettings({
+      maintenancePages: { ...prevSettings.maintenancePages, radio: true }
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use(maintenancePageGate);
+    app.use('/api', maintenanceGate);
+    app.use('/api', radioRoutes);
+    app.use(createPagesRouter());
+
+    const pageRes = await callApi(app, 'GET', '/radio');
+    assert.equal(pageRes.status, 503);
+    assert.ok(pageRes.rawBody.includes('Техническое обслуживание'));
+
+    const apiRes = await callApi(app, 'GET', '/api/radio/stations');
+    assert.equal(apiRes.status, 503);
+    assert.equal(apiRes.body.maintenance, true);
+    assert.equal(apiRes.body.page, 'radio');
+  } finally {
+    writeSettings(prevSettings);
+  }
+});

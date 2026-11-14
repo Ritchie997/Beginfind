@@ -5823,13 +5823,14 @@ class SPARouter {
       home: document.getElementById('maintenancePageHome')?.checked || false,
       alltell: document.getElementById('maintenancePageAlltell')?.checked || false,
       antropedia: document.getElementById('maintenancePageAntropedia')?.checked || false,
-      gallery: document.getElementById('maintenancePageGallery')?.checked || false
+      gallery: document.getElementById('maintenancePageGallery')?.checked || false,
+      radio: document.getElementById('maintenancePageRadio')?.checked || false
     };
     const maintenanceMessage = document.getElementById('maintenanceMessage')?.value;
 
     const enabledPages = Object.entries(maintenancePages)
       .filter(([, enabled]) => enabled)
-      .map(([page]) => ({ home: 'Главная', alltell: 'AllTell', antropedia: 'Antropedia', gallery: 'Галерея' }[page]));
+      .map(([page]) => ({ home: 'Главная', alltell: 'AllTell', antropedia: 'Antropedia', gallery: 'Галерея', radio: 'Радио' }[page]));
 
     try {
       const res = await fetch('/api/system-settings', {
@@ -5860,7 +5861,7 @@ class SPARouter {
           maxFileSize: 5,
           allowRegistration: true,
           sessionDurationHours: 8,
-          maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false },
+          maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false, radio: false },
           maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
         })
       });
@@ -5889,6 +5890,7 @@ class SPARouter {
       if (maintenancePages.alltell !== undefined) document.getElementById('maintenancePageAlltell').checked = maintenancePages.alltell;
       if (maintenancePages.antropedia !== undefined) document.getElementById('maintenancePageAntropedia').checked = maintenancePages.antropedia;
       if (maintenancePages.gallery !== undefined) document.getElementById('maintenancePageGallery').checked = maintenancePages.gallery;
+      if (maintenancePages.radio !== undefined) document.getElementById('maintenancePageRadio').checked = maintenancePages.radio;
       if (settings.maintenanceMessage != null) document.getElementById('maintenanceMessage').value = settings.maintenanceMessage;
     } catch (error) {
       showMessage(`Ошибка загрузки настроек: ${error.message}`, 'error');

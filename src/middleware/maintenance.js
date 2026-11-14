@@ -21,6 +21,7 @@ function maintenancePageForPath(pathname) {
   if (normalizedPath === '/' || normalizedPath === '/site/index.html') return 'home';
   if (normalizedPath === '/site/alltell.html' || normalizedPath === '/alltell') return 'alltell';
   if (normalizedPath === '/site/gallery.html' || normalizedPath === '/gallery') return 'gallery';
+  if (normalizedPath === '/site/radio.html' || normalizedPath === '/radio') return 'radio';
   if (
     normalizedPath === '/antropedia' ||
     normalizedPath === '/site/antropedia.html' ||
@@ -36,6 +37,7 @@ function maintenancePageForApi(req) {
     pathname === '/api/public/articles-graph'
   ) return 'home';
   if (pathname.startsWith('/api/public/gallery/')) return 'gallery';
+  if (pathname.startsWith('/api/radio/')) return 'radio';
   if (pathname === '/api/public/articles') {
     const surface = new URL(req.originalUrl, 'http://localhost').searchParams.get('surface');
     return surface === 'home' ? 'home' : 'antropedia';
@@ -144,6 +146,7 @@ function maintenancePageHtml(page, message) {
         <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
         <a href="/site/alltell.html" class="site-nav-link" data-page="alltell">AllTell</a>
         <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+        <a href="/radio" class="site-nav-link" data-page="radio">Радио</a>
       </nav>
       <div class="site-header-actions">
         <div class="site-user" id="siteUserMenu" hidden>
