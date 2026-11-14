@@ -224,6 +224,18 @@ async function deleteStation(id, actingUserId, isRootOrAdmin) {
   return true;
 }
 
+async function clearTimelineSlots(stationId, actingUserId, isRootOrAdmin) {
+  const station = await getStationById(stationId);
+  if (!station) throw new Error('Станция не найдена');
+
+  if (station.owner_id !== actingUserId && !isRootOrAdmin) {
+    throw new Error('Недостаточно прав для очистки эфира');
+  }
+
+  await run('DELETE FROM radio_timeline_slots WHERE station_id = ?', [stationId]);
+  return true;
+}
+
 // ===== Управление лентой времени (24h редактор и эфирные слоты) =====
 
 async function getTimelineSlots(stationId, fromTime = null, toTime = null) {
@@ -434,6 +446,7 @@ module.exports = {
   createStation,
   updateStation,
   deleteStation,
+  clearTimelineSlots,
   getTimelineSlots,
   setTimelineSlots,
   getStationLiveState,

@@ -106,8 +106,15 @@ test('radio-store: stations, frequencies and timeline slots', async () => {
   assert.ok(liveState.remaining <= 21, 'Remaining should be around 20s');
   assert.equal(liveState.nextSlots.length, 2);
 
+  // Clear timeline slots test
+  await radioStore.clearTimelineSlots(station.id, 888, false);
+  const clearedSlots = await radioStore.getTimelineSlots(station.id);
+  assert.equal(clearedSlots.length, 0, 'Timeline slots should be empty after clearTimelineSlots');
+
   // Cleanup station
   await radioStore.deleteStation(station.id, 888, false);
+  const deleted = await radioStore.getStationById(station.id);
+  assert.equal(deleted, null);
 });
 
 test('radio cleanup & backup protection: audio files are tracked and protected', async () => {

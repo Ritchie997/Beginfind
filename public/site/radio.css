@@ -67,7 +67,9 @@
   border-color: rgba(255, 71, 87, 0.3);
 }
 
-.radio-tab-content[hidden] {
+.radio-tab-content[hidden],
+.radio-track-view-page[hidden],
+.radio-feed-player-bar[hidden] {
   display: none !important;
 }
 
@@ -836,5 +838,523 @@
   }
   .radio-controls-main {
     justify-content: center;
+  }
+}
+
+/* ========================================================
+   СТРАНИЦА ОТДЕЛЬНОГО ТРЕКА / ПОДКАСТА (RADIO TRACK VIEW)
+   ======================================================== */
+.radio-track-view-page {
+  padding-bottom: 60px;
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.radio-track-nav {
+  margin-bottom: 24px;
+}
+
+.radio-track-hero-card {
+  display: flex;
+  gap: 36px;
+  background: var(--radio-deck-bg);
+  border: 1px solid var(--radio-border);
+  border-radius: 24px;
+  padding: 36px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.radio-track-hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #ff4757, #ff6b81, #ffa502);
+}
+
+.radio-track-cover-wrap {
+  flex-shrink: 0;
+  width: 240px;
+}
+
+.radio-track-cover-large {
+  width: 240px;
+  height: 240px;
+  border-radius: 20px;
+  background: #191c25;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+  color: var(--radio-accent);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 71, 87, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+
+.radio-track-cover-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.radio-track-cover-large:hover img {
+  transform: scale(1.03);
+}
+
+.radio-track-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.radio-track-type-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.radio-track-format-pill {
+  font-size: 0.75rem;
+  font-family: monospace;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.radio-track-page-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 10px 0;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.radio-track-page-author {
+  font-size: 1rem;
+  color: #94a3b8;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.radio-track-page-author a {
+  color: #ff6b81;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.radio-track-page-author a:hover {
+  text-decoration: underline;
+}
+
+.radio-track-page-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-bottom: 24px;
+}
+
+.radio-track-page-meta-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Собственный аудиоплеер трека */
+.radio-track-standalone-player {
+  background: rgba(12, 14, 19, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.standalone-player-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.standalone-play-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--radio-accent);
+  color: #fff;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px var(--radio-accent-glow);
+  flex-shrink: 0;
+}
+
+.standalone-play-btn:hover {
+  transform: scale(1.06);
+  background: #ff5e6c;
+}
+
+.standalone-scrub-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.standalone-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.standalone-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ff4757, #ffa502);
+  border-radius: 4px;
+  transition: width 0.1s linear;
+}
+
+.standalone-action-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: color 0.15s;
+}
+
+.standalone-action-btn:hover, .standalone-action-btn.is-active {
+  color: #fff;
+}
+
+.standalone-vol-slider {
+  width: 80px;
+  accent-color: var(--radio-accent);
+  cursor: pointer;
+}
+
+.radio-track-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ========================================================
+   ОТДЕЛЬНЫЙ ПЛЕЕР ЛЕНТЫ ТРЕКОВ И ПОДКАСТОВ (BOTTOM BAR)
+   ======================================================== */
+.radio-feed-player-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 950;
+  background: rgba(18, 20, 27, 0.96);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+  padding: 10px 24px;
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.feed-player-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.feed-player-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.feed-player-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #12141a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--radio-accent);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.feed-player-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feed-player-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-player-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-player-title:hover {
+  text-decoration: underline;
+  color: #ff6b81;
+}
+
+.feed-player-author {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-player-center {
+  flex: 1;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.feed-player-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feed-player-ctrl-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.feed-player-ctrl-btn:hover {
+  color: #fff;
+}
+
+.feed-player-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--radio-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px var(--radio-accent-glow);
+}
+
+.feed-player-play-btn:hover {
+  transform: scale(1.05);
+  background: #ff5e6c;
+}
+
+.feed-player-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.feed-player-time {
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: #94a3b8;
+  width: 36px;
+  text-align: center;
+}
+
+.feed-player-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.feed-player-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--radio-accent);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+.feed-player-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-player-sub-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+  display: inline-flex;
+  align-items: center;
+}
+
+.feed-player-sub-btn:hover, .feed-player-sub-btn.is-active {
+  color: #fff;
+}
+
+.feed-player-volume {
+  width: 70px;
+  accent-color: var(--radio-accent);
+  cursor: pointer;
+}
+
+/* ========================================================
+   УЛУЧШЕНИЯ РЕДАКТОРА ЭФИРА (24Ч)
+   ======================================================== */
+.radio-editor-toolbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: rgba(14, 16, 21, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.radio-editor-station-select-wrap,
+.radio-editor-time-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.radio-editor-station-select-wrap label,
+.radio-editor-time-wrap label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.radio-editor-danger-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.radio-form-input-sm {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  width: auto;
+}
+
+/* Слоты таймлайна с отображением точного времени */
+.radio-slot-time-range {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #ffa502;
+  background: rgba(255, 165, 2, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+  border: 1px solid rgba(255, 165, 2, 0.2);
+}
+
+.radio-slot-quick-words {
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.radio-slot-quick-words:hover {
+  background: rgba(255, 71, 87, 0.15);
+  color: #fff;
+  border-color: rgba(255, 71, 87, 0.3);
+}
+
+@media (max-width: 900px) {
+  .radio-track-hero-card {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 24px;
+  }
+  .radio-track-cover-wrap, .radio-track-cover-large {
+    width: 180px;
+    height: 180px;
+  }
+  .radio-track-page-author, .radio-track-page-meta-row, .radio-track-actions-row {
+    justify-content: center;
+  }
+  .feed-player-right {
+    display: none;
   }
 }

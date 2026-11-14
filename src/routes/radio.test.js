@@ -51,6 +51,14 @@ test('GET /radio serves public radio.html page', async () => {
   assert.ok(res.rawBody.includes('radio-client.js'), 'Should include radio client script');
 });
 
+test('GET /radio/track/:id serves public radio.html page for track view', async () => {
+  const app = createApp();
+  const res = await callApi(app, 'GET', '/radio/track/999');
+  assert.equal(res.status, 200);
+  assert.ok(res.rawBody.includes('radioTrackView'), 'Should include track view markup');
+  assert.ok(res.rawBody.includes('feedPlayerBar'), 'Should include separate feed player bar');
+});
+
 test('GET /api/radio/stations returns stations list for unauthenticated guest', async () => {
   const app = createApp();
   const res = await callApi(app, 'GET', '/api/radio/stations');

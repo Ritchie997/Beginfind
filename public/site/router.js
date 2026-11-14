@@ -23,6 +23,7 @@
       normalizedPath === '/stickers' ||
       normalizedPath === '/site/stickers.html' ||
       normalizedPath === '/radio' ||
+      /^\/radio\/track\/[^/]+$/.test(normalizedPath) ||
       normalizedPath === '/site/radio.html';
   }
 

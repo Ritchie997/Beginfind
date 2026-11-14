@@ -98,6 +98,7 @@ function createPagesRouter(articleStoreInstance = articleStore) {
   router.get('/alltell', sendPage('site/alltell.html'));
   router.get('/gallery', sendPage('site/gallery.html'));
   router.get('/radio', sendPage('site/radio.html'));
+  router.get('/radio/track/:id', sendPage('site/radio.html'));
   router.get('/site/radio.html', sendPage('site/radio.html'));
   router.get('/stickers', sendPage('site/stickers.html'));
   router.get('/site/stickers.html', sendPage('site/stickers.html'));

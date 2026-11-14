@@ -216,4 +216,24 @@ router.put('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApp
   }
 });
 
+// DELETE /api/radio/stations/:id/timeline — очистка сетки вещания (освободить эфир)
+router.delete('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const station = await radioStore.getStationById(req.params.id);
+    if (!station) {
+      return res.status(404).json({ error: 'Радиостанция не найдена' });
+    }
+
+    if (station.owner_id !== req.user.id && !isRootOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Только владелец станции может очистить эфир' });
+    }
+
+    await radioStore.clearTimelineSlots(req.params.id, req.user.id, isRootOrAdmin(req.user));
+    res.json({ success: true, message: 'Сетка вещания радиостанции очищена' });
+  } catch (error) {
+    console.error('[radio] Error clearing timeline:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 module.exports = router;

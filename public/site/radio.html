@@ -74,8 +74,80 @@
 
 <main class="site-main">
   <section class="site-section">
+    <!-- 0. СТРАНИЦА ОТДЕЛЬНОГО ТРЕКА / ПОДКАСТА -->
+    <div class="radio-track-view-page" id="radioTrackView" hidden>
+      <div class="radio-track-nav">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnBackFromTrackView">
+          <i class="fas fa-arrow-left"></i> Назад ко всем трекам и эфиру
+        </button>
+      </div>
+
+      <div class="radio-track-hero-card">
+        <div class="radio-track-cover-wrap">
+          <div class="radio-track-cover-large" id="trackPageCover">
+            <i class="fas fa-music"></i>
+          </div>
+        </div>
+        <div class="radio-track-details">
+          <div class="radio-track-type-badge-wrap">
+            <span class="radio-track-type-badge type-track" id="trackPageTypeBadge">🎵 Музыка</span>
+            <span class="radio-track-format-pill" id="trackPageFormatPill">MP3</span>
+          </div>
+          <h1 class="radio-track-page-title" id="trackPageTitle">Название трека</h1>
+          <div class="radio-track-page-author" id="trackPageAuthorWrap">
+            <i class="fas fa-circle-user"></i> Автор: <a href="#" id="trackPageAuthorLink">Имя автора</a>
+          </div>
+          <div class="radio-track-page-meta-row">
+            <span id="trackPageDuration"><i class="far fa-clock"></i> 00:00</span>
+            <span id="trackPageSize"><i class="fas fa-hard-drive"></i> 0 МБ</span>
+            <span id="trackPageDate"><i class="far fa-calendar"></i> Дата</span>
+          </div>
+
+          <!-- Собственный плеер трека на странице -->
+          <div class="radio-track-standalone-player">
+            <div class="standalone-player-controls">
+              <button type="button" class="standalone-play-btn" id="trackPagePlayBtn" title="Воспроизведение">
+                <i class="fas fa-play"></i>
+              </button>
+              <div class="standalone-scrub-wrap">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">
+                  <span id="trackPageCurrentTime">00:00</span>
+                  <span id="trackPageTotalDuration">00:00</span>
+                </div>
+                <div class="standalone-progress-bar" id="trackPageProgressBar">
+                  <div class="standalone-progress-fill" id="trackPageProgressFill"></div>
+                </div>
+              </div>
+              <button type="button" class="standalone-action-btn" id="trackPageLoopBtn" title="Зациклить">
+                <i class="fas fa-repeat"></i>
+              </button>
+              <button type="button" class="standalone-action-btn" id="trackPageMuteBtn" title="Глушить звук">
+                <i class="fas fa-volume-high"></i>
+              </button>
+              <input type="range" min="0" max="1" step="0.05" value="0.9" class="standalone-vol-slider" id="trackPageVolumeSlider">
+            </div>
+          </div>
+
+          <div class="radio-track-actions-row">
+            <button type="button" class="btn btn-primary" id="trackPageAddToEditorBtn">
+              <i class="fas fa-tower-broadcast"></i> В эфир
+            </button>
+            <a href="#" class="btn btn-secondary" id="trackPageDownloadBtn" download>
+              <i class="fas fa-download"></i> Скачать
+            </a>
+            <button type="button" class="btn btn-secondary" id="trackPageShareBtn">
+              <i class="fas fa-share-nodes"></i> Поделиться ссылкой
+            </button>
+            <button type="button" class="btn btn-outline-danger" id="trackPageDeleteBtn" style="display:none;">
+              <i class="fas fa-trash"></i> Удалить
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Навигационные вкладки радио -->
-    <div class="radio-nav-tabs">
+    <div class="radio-nav-tabs" id="radioNavTabs">
       <button type="button" class="radio-nav-tab is-active" data-tab="live">
         <i class="fas fa-radio"></i> Живой эфир и частоты
       </button>
@@ -213,6 +285,27 @@
           </div>
         </div>
 
+        <!-- Верхняя панель управления станцией и временем старта -->
+        <div class="radio-editor-toolbar-top">
+          <div class="radio-editor-station-select-wrap">
+            <label><i class="fas fa-tower-broadcast"></i> Станция:</label>
+            <select id="editorStationSelect" class="radio-form-select" style="min-width:200px;"></select>
+          </div>
+          <div class="radio-editor-time-wrap">
+            <label><i class="far fa-clock"></i> Старт вещания:</label>
+            <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnSetStartTimeNow" title="Синхронизировать с текущим временем">Сейчас</button>
+          </div>
+          <div class="radio-editor-danger-actions">
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btnClearTimelineBtn" title="Очистить всю сетку вещания (освободить эфир)">
+              <i class="fas fa-trash-can"></i> Освободить эфир
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btnReleaseStationBtn" title="Удалить радиостанцию и освободить частоту">
+              <i class="fas fa-door-open"></i> Освободить частоту
+            </button>
+          </div>
+        </div>
+
         <!-- Виджет быстрой записи слов с микрофона -->
         <div class="radio-record-box">
           <div>
@@ -227,20 +320,26 @@
           </div>
         </div>
 
-        <!-- Панель добавления слотов -->
-        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+        <!-- Панель добавления слотов и загрузки плейлиста -->
+        <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
           <button type="button" class="btn btn-secondary" id="btnPickFromMyTracks">
-            <i class="fas fa-list-music"></i> Добавить из медиатеки
+            <i class="fas fa-list-music"></i> Из медиатеки
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnUploadPlaylist">
+            <i class="fas fa-list-ol"></i> Загрузить плейлист (файлы)
           </button>
           <button type="button" class="btn btn-secondary" id="btnUploadNewSlot">
-            <i class="fas fa-file-arrow-up"></i> Загрузить файл аудио
+            <i class="fas fa-file-arrow-up"></i> 1 аудиофайл
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnOpenInsertWordsModal">
+            <i class="fas fa-clock"></i> Вставить слова по времени
           </button>
           <button type="button" class="btn btn-primary" style="margin-left:auto;" id="btnSaveTimeline">
             <i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)
           </button>
         </div>
 
-        <!-- Конструктор элементов ленты -->
+        <!-- Конструктор элементов ленты с точным расписанием слотов -->
         <div class="radio-slots-builder" id="editorSlotsList">
           <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, подкасты или слова выше.</p>
         </div>
@@ -271,6 +370,14 @@
             <option value="podcast">🎙️ Подкаст / Передача</option>
             <option value="speech">🗣️ Разговор / Слова ведущего</option>
           </select>
+        </div>
+        <div class="radio-form-group">
+          <label>Обложка записи (изображение JPG, PNG, WEBP — необязательно)</label>
+          <input type="file" id="trackCoverInput" class="radio-form-input" accept="image/*">
+          <div id="trackCoverPreviewBox" style="margin-top:8px; display:none; align-items:center; gap:12px;">
+            <img id="trackCoverPreviewImg" src="" alt="Обложка" style="width:64px; height:64px; border-radius:10px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);">
+            <span style="font-size:0.85rem; color:#94a3b8;">Обложка выбрана</span>
+          </div>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px;">
           <button type="button" class="btn btn-secondary" data-close="modalUploadTrack">Отмена</button>
@@ -323,11 +430,123 @@
         <h3>Добавить запись в сетку вещания</h3>
         <button type="button" class="radio-modal-close" data-close="modalPickTrack">×</button>
       </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:0 4px;">
+        <label style="font-size:0.85rem; color:#94a3b8; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="pickTrackSelectAll"> Выбрать все
+        </label>
+        <button type="button" class="btn btn-primary btn-sm" id="btnPickTracksBatch" disabled>
+          <i class="fas fa-plus"></i> Добавить выбранные в сетку
+        </button>
+      </div>
       <div style="max-height:400px; overflow-y:auto; margin-bottom:16px;" id="modalPickTrackList">
         <p class="alltell-state">Загружаем треки...</p>
       </div>
       <div style="display:flex; justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" data-close="modalPickTrack">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ВСТАВКА СЛОВ ПО ВРЕМЕНИ -->
+  <div class="radio-modal-backdrop" id="modalInsertWordsByTime" hidden>
+    <div class="radio-modal" style="max-width:560px;">
+      <div class="radio-modal-head">
+        <h3>Вставить слова / джингл по времени</h3>
+        <button type="button" class="radio-modal-close" data-close="modalInsertWordsByTime">×</button>
+      </div>
+      <form id="formInsertWordsByTime">
+        <div class="radio-form-group">
+          <label>Желаемое время выхода в эфир (ЧЧ:ММ):</label>
+          <input type="time" id="speechTargetTimeInput" class="radio-form-input" required>
+          <p style="font-size:0.82rem; color:#94a3b8; margin:6px 0 0 0;">
+            Слова ведущего встанут сразу после окончания трека, который звучит в это время, а следующий трек начнется после завершения слов.
+          </p>
+        </div>
+        <div class="radio-form-group">
+          <label>Заголовок эфирного слота:</label>
+          <input type="text" id="speechSlotTitleInput" class="radio-form-input" placeholder="Например: Новости эфира / Приветствие" value="Слова ведущего" required>
+        </div>
+        <div class="radio-form-group">
+          <label>Источник записи:</label>
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="radio-filter-btn is-active" id="btnSpeechTabMic"><i class="fas fa-microphone"></i> Микрофон</button>
+            <button type="button" class="radio-filter-btn" id="btnSpeechTabFile"><i class="fas fa-file-audio"></i> Файл с диска</button>
+            <button type="button" class="radio-filter-btn" id="btnSpeechTabLib"><i class="fas fa-folder-open"></i> Из медиатеки</button>
+          </div>
+          
+          <div id="speechBoxMic" style="padding:14px; background:#12141a; border-radius:12px; border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-size:0.85rem; color:#cbd5e1;" id="speechMicStatus"><i class="fas fa-microphone"></i> Голос не записан</span>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span id="speechModalRecordTimer" style="font-family:monospace; color:#ff4757; display:none; font-weight:700;">00:00</span>
+              <button type="button" class="radio-record-btn" id="btnModalRecordSpeech"><i class="fas fa-circle"></i> Записать</button>
+            </div>
+          </div>
+
+          <div id="speechBoxFile" style="display:none;">
+            <input type="file" id="speechFileInput" class="radio-form-input" accept="audio/*">
+          </div>
+
+          <div id="speechBoxLib" style="display:none; max-height:220px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px;">
+            <p class="alltell-state">Загружаем аудиозаписи...</p>
+          </div>
+        </div>
+
+        <div id="speechPlanCalculatedBox" style="font-size:0.85rem; color:#2ed573; padding:12px; background:rgba(46,213,115,0.08); border:1px solid rgba(46,213,115,0.2); border-radius:10px; margin-bottom:18px; display:none;">
+          <i class="fas fa-circle-check"></i> <span id="speechPlanText">План рассчитан</span>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" data-close="modalInsertWordsByTime">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitInsertSpeech">Вставить в сетку</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ПРОГРЕСС ЗАГРУЗКИ ПЛЕЙЛИСТА -->
+  <div class="radio-modal-backdrop" id="modalPlaylistProgress" hidden>
+    <div class="radio-modal" style="max-width:440px; text-align:center;">
+      <h3 style="margin-bottom:12px;"><i class="fas fa-spinner fa-spin"></i> Загрузка плейлиста в эфир</h3>
+      <p id="playlistProgressText" style="color:#94a3b8; font-size:0.95rem; margin-bottom:16px;">Загружаем аудиофайлы...</p>
+      <div class="radio-capacity-bar" style="margin-bottom:16px;">
+        <div class="radio-capacity-fill" id="playlistProgressFill" style="width:0%; background:#ff4757;"></div>
+      </div>
+      <p style="font-size:0.8rem; color:#64748b;">Файлы загружаются и последовательно формируют сетку вещания.</p>
+    </div>
+  </div>
+
+  <!-- ОТДЕЛЬНЫЙ ПЛЕЕР ДЛЯ ЛЕНТЫ ТРЕКОВ И ПОДКАСТОВ (BOTTOM BAR) -->
+  <div class="radio-feed-player-bar" id="feedPlayerBar" hidden>
+    <div class="feed-player-inner">
+      <div class="feed-player-left">
+        <div class="feed-player-cover" id="feedPlayerCover">
+          <i class="fas fa-music"></i>
+        </div>
+        <div class="feed-player-meta">
+          <a href="#" class="feed-player-title" id="feedPlayerTitle">Название трека</a>
+          <div class="feed-player-author" id="feedPlayerAuthor">Автор</div>
+        </div>
+      </div>
+      <div class="feed-player-center">
+        <div class="feed-player-controls">
+          <button type="button" class="feed-player-ctrl-btn" id="feedPlayerPrevBtn" title="Предыдущий трек"><i class="fas fa-backward-step"></i></button>
+          <button type="button" class="feed-player-ctrl-btn feed-player-play-btn" id="feedPlayerPlayBtn" title="Воспроизведение"><i class="fas fa-play"></i></button>
+          <button type="button" class="feed-player-ctrl-btn" id="feedPlayerNextBtn" title="Следующий трек"><i class="fas fa-forward-step"></i></button>
+        </div>
+        <div class="feed-player-progress-row">
+          <span class="feed-player-time" id="feedPlayerCurrentTime">00:00</span>
+          <div class="feed-player-progress-bar" id="feedPlayerProgressBar">
+            <div class="feed-player-progress-fill" id="feedPlayerProgressFill"></div>
+          </div>
+          <span class="feed-player-time" id="feedPlayerDuration">00:00</span>
+        </div>
+      </div>
+      <div class="feed-player-right">
+        <button type="button" class="feed-player-sub-btn" id="feedPlayerLoopBtn" title="Повтор"><i class="fas fa-repeat"></i></button>
+        <button type="button" class="feed-player-sub-btn" id="feedPlayerMuteBtn" title="Звук"><i class="fas fa-volume-high"></i></button>
+        <input type="range" min="0" max="1" step="0.05" value="0.9" class="feed-player-volume" id="feedPlayerVolume">
+        <a href="#" class="feed-player-sub-btn" id="feedPlayerOpenTrackBtn" title="Открыть страницу трека"><i class="fas fa-up-right-from-square"></i></a>
+        <button type="button" class="feed-player-sub-btn" id="feedPlayerCloseBtn" title="Закрыть плеер"><i class="fas fa-xmark"></i></button>
       </div>
     </div>
   </div>
