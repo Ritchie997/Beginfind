@@ -159,31 +159,7 @@
       idx = list.findIndex(function (b) { return b.id === block.id; });
     }
 
-    // 1. Вверх
-    const upBtn = document.createElement('button');
-    upBtn.type = 'button';
-    upBtn.innerHTML = '<i class="fas fa-arrow-up"></i> <span>Переместить вверх</span>';
-    upBtn.disabled = idx <= 0;
-    upBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      closeBlockActionMenu();
-      if (opts.onMove) opts.onMove(-1);
-    });
-    menu.appendChild(upBtn);
-
-    // 2. Вниз
-    const downBtn = document.createElement('button');
-    downBtn.type = 'button';
-    downBtn.innerHTML = '<i class="fas fa-arrow-down"></i> <span>Переместить вниз</span>';
-    downBtn.disabled = idx === -1 || idx >= list.length - 1;
-    downBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      closeBlockActionMenu();
-      if (opts.onMove) opts.onMove(1);
-    });
-    menu.appendChild(downBtn);
-
-    // 3. Дублировать
+    // 1. Дублировать
     const dupBtn = document.createElement('button');
     dupBtn.type = 'button';
     dupBtn.innerHTML = '<i class="fas fa-copy"></i> <span>Дублировать блок</span>';
@@ -288,31 +264,7 @@
       opts.attachDragHandle(dragBtn, opts.wrap);
     }
 
-    // 2. Явная кнопка «Вверх»
-    const upBtn = document.createElement('button');
-    upBtn.type = 'button';
-    upBtn.className = 'eb-move-btn eb-move-up';
-    upBtn.title = 'Переместить вверх';
-    upBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
-    upBtn.disabled = idx <= 0;
-    upBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (opts.onMove) opts.onMove(-1);
-    });
-
-    // 3. Явная кнопка «Вниз»
-    const downBtn = document.createElement('button');
-    downBtn.type = 'button';
-    downBtn.className = 'eb-move-btn eb-move-down';
-    downBtn.title = 'Переместить вниз';
-    downBtn.innerHTML = '<i class="fas fa-arrow-down"></i>';
-    downBtn.disabled = idx === -1 || idx >= list.length - 1;
-    downBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (opts.onMove) opts.onMove(1);
-    });
-
-    // 4. Явная кнопка «Дублировать блок»
+    // 2. Явная кнопка «Дублировать блок»
     const dupBtn = document.createElement('button');
     dupBtn.type = 'button';
     dupBtn.className = 'eb-copy-btn eb-duplicate-btn';
@@ -323,7 +275,7 @@
       if (opts.onDuplicate) opts.onDuplicate();
     });
 
-    // 5. Явная кнопка «Удалить блок»
+    // 3. Явная кнопка «Удалить блок»
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'eb-remove';
@@ -334,12 +286,7 @@
       if (opts.onRemove) opts.onRemove();
     });
 
-    const showMoveButtons = opts.showMoveButtons !== false && opts.showUpDown !== false;
-    if (showMoveButtons) {
-      controls.append(dragBtn, upBtn, downBtn, dupBtn, delBtn);
-    } else {
-      controls.append(dragBtn, dupBtn, delBtn);
-    }
+    controls.append(dragBtn, dupBtn, delBtn);
 
     // Мобильная / компактная кнопка меню
     const moreBtn = document.createElement('button');

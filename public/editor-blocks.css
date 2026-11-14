@@ -85,7 +85,10 @@
   color: var(--red, #ed4245);
 }
 
-/* В редакторе публикаций AllTell на блоках скрыты стрелки вверх/вниз (перемещение — через drag&drop или меню позиции) */
+/* Кнопки перемещения блоков скрыты (перемещение выполняется через drag&drop ручкой) */
+.eb-move-btn,
+.eb-move-up,
+.eb-move-down,
 #postBlocksContent .eb-move-btn,
 .alltell-post-form .eb-move-btn {
   display: none !important;

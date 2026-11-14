@@ -193,3 +193,13 @@ test('subitems: preview and reader styles prevent marker collision and checklist
   assert.ok(rendererJs.includes('blk-check-row'), 'blocks-renderer.js must wrap checklist text in blk-check-row');
   assert.ok(rendererJs.includes('getOrderedNum'), 'blocks-renderer.js must have getOrderedNum');
 });
+test('blocks: move up/down buttons are removed from blocks and action menu in favor of drag-and-drop', () => {
+  const editorBlocksJs = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.js'), 'utf8');
+  assert.ok(!editorBlocksJs.includes('Переместить вверх'), 'editor-blocks.js must not have "Переместить вверх"');
+  assert.ok(!editorBlocksJs.includes('Переместить вниз'), 'editor-blocks.js must not have "Переместить вниз"');
+  assert.ok(!editorBlocksJs.includes('eb-move-btn'), 'editor-blocks.js must not create eb-move-btn');
+  assert.ok(editorBlocksJs.includes('controls.append(dragBtn, dupBtn, delBtn);'), 'renderBlockControls must have clean 3-button stack');
+
+  const blocksCss = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.css'), 'utf8');
+  assert.ok(blocksCss.includes('.eb-move-btn') && blocksCss.includes('display: none !important;'), 'editor-blocks.css must ensure move buttons remain hidden');
+});
