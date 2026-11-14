@@ -1,4 +1,5 @@
 // radio-client.js — клиентский контроллер интерактивного радио, медиатеки и редактора таймлайна AllTell.
+// Интегрирован с синглтоном AllTellGlobalRadio для непрерывного воспроизведения между разделами и админ-панелью.
 (function () {
   'use strict';
 
@@ -25,7 +26,12 @@
     })[m]);
   }
 
-  // ===== Состояние радио-эфира (Главная дека) =====
+  // Получение глобального аудиоплеера
+  function getGlobalAudio() {
+    return window.AllTellGlobalRadio;
+  }
+
+  // ===== Состояние страницы Радио =====
   const state = {
     currentStation: null,
     currentSlot: null,
@@ -33,41 +39,19 @@
     prevSlots: [],
     isLiveMode: true,
     isTimeshift: false,
-    audio: new Audio(),
-    isPlaying: false,
     pollTimer: null,
     feedFilter: 'all',
     feedSearch: '',
     myStations: [],
     selectedStationForEdit: null,
     editorSlots: [],
-    editorStartTime: null, // Дата/время старта вещания в редакторе
+    editorStartTime: null,
     // Запись с микрофона в редакторе
     mediaRecorder: null,
     recordedChunks: [],
     recordStartTime: 0,
     recordTimerInterval: null,
-    audioHandlersBound: false
-  };
-
-  // ===== Состояние отдельного плеера ленты треков =====
-  const feedPlayerState = {
-    audio: new Audio(),
-    currentTrack: null,
-    isPlaying: false,
-    tracks: [],
-    currentIndex: -1,
-    isLoop: false,
-    handlersBound: false
-  };
-
-  // ===== Состояние плеера страницы трека =====
-  const trackPageState = {
-    audio: new Audio(),
-    track: null,
-    isPlaying: false,
-    isLoop: false,
-    handlersBound: false
+    globalUnsub: null
   };
 
   let dom = {};
@@ -104,24 +88,6 @@
       trackPageDownloadBtn: document.getElementById('trackPageDownloadBtn'),
       trackPageShareBtn: document.getElementById('trackPageShareBtn'),
       trackPageDeleteBtn: document.getElementById('trackPageDeleteBtn'),
-
-      // Отдельный плеер ленты (Bottom Player Bar)
-      feedPlayerBar: document.getElementById('feedPlayerBar'),
-      feedPlayerCover: document.getElementById('feedPlayerCover'),
-      feedPlayerTitle: document.getElementById('feedPlayerTitle'),
-      feedPlayerAuthor: document.getElementById('feedPlayerAuthor'),
-      feedPlayerPrevBtn: document.getElementById('feedPlayerPrevBtn'),
-      feedPlayerPlayBtn: document.getElementById('feedPlayerPlayBtn'),
-      feedPlayerNextBtn: document.getElementById('feedPlayerNextBtn'),
-      feedPlayerProgressBar: document.getElementById('feedPlayerProgressBar'),
-      feedPlayerProgressFill: document.getElementById('feedPlayerProgressFill'),
-      feedPlayerCurrentTime: document.getElementById('feedPlayerCurrentTime'),
-      feedPlayerDuration: document.getElementById('feedPlayerDuration'),
-      feedPlayerLoopBtn: document.getElementById('feedPlayerLoopBtn'),
-      feedPlayerMuteBtn: document.getElementById('feedPlayerMuteBtn'),
-      feedPlayerVolume: document.getElementById('feedPlayerVolume'),
-      feedPlayerOpenTrackBtn: document.getElementById('feedPlayerOpenTrackBtn'),
-      feedPlayerCloseBtn: document.getElementById('feedPlayerCloseBtn'),
 
       // Главная эфирная дека
       deckTitle: document.getElementById('deckStationTitle'),
@@ -205,7 +171,10 @@
 
   function updateDeckUI() {
     if (!dom.deckTitle) return;
-    const st = state.currentStation;
+    const globalAudio = getGlobalAudio();
+    const gState = globalAudio ? globalAudio.getState() : {};
+    const st = state.currentStation || gState.station;
+
     if (!st) {
       dom.deckTitle.innerHTML = '<span>Выберите станцию</span><span class="radio-freq-pill">--- FM</span>';
       if (dom.deckOwner) dom.deckOwner.textContent = 'Вещание не запущено';
@@ -229,11 +198,13 @@
       }
     }
 
+    const slot = state.currentSlot || gState.currentSlot;
+
     if (dom.deckStatus) {
       if (state.isTimeshift) {
         dom.deckStatus.className = 'radio-status-tag is-timeshift';
         dom.deckStatus.textContent = 'Таймшифт';
-      } else if (state.currentSlot) {
+      } else if (slot) {
         dom.deckStatus.className = 'radio-status-tag is-live';
         dom.deckStatus.textContent = 'В эфире';
       } else {
@@ -242,7 +213,6 @@
       }
     }
 
-    const slot = state.currentSlot;
     if (slot) {
       if (dom.deckTrackTitle) dom.deckTrackTitle.textContent = slot.title;
       if (dom.deckTrackType) {
@@ -255,11 +225,13 @@
       if (dom.deckTrackSub) dom.deckTrackSub.textContent = 'Ожидание выхода в эфир';
     }
 
+    const isPlaying = gState.isPlaying && (gState.mode === 'radio' && gState.station && gState.station.id === st.id);
+
     if (dom.deckPlayBtn) {
-      dom.deckPlayBtn.innerHTML = state.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+      dom.deckPlayBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
     }
     if (dom.deckVisualizer) {
-      if (state.isPlaying) {
+      if (isPlaying) {
         dom.deckVisualizer.classList.add('is-playing');
       } else {
         dom.deckVisualizer.classList.remove('is-playing');
@@ -282,33 +254,15 @@
       state.nextSlots = live.nextSlots || [];
       state.prevSlots = live.prevSlots || [];
 
-      if (state.currentSlot && state.currentSlot.audioUrl) {
-        // Если играет плеер ленты — глушим его
-        if (feedPlayerState.isPlaying) {
-          feedPlayerState.audio.pause();
-          feedPlayerState.isPlaying = false;
-          updateFeedPlayerUI();
+      const globalAudio = getGlobalAudio();
+      if (globalAudio) {
+        if (state.currentSlot && state.currentSlot.audioUrl) {
+          globalAudio.playRadio(station, state.currentSlot, live.offset || 0);
+        } else {
+          globalAudio.playRadio(station, null, 0);
         }
-
-        state.audio.src = state.currentSlot.audioUrl;
-        const offset = live.offset || 0;
-        state.audio.currentTime = offset;
-
-        if (autoPlay) {
-          state.audio.play().then(() => {
-            state.isPlaying = true;
-            updateDeckUI();
-          }).catch((err) => {
-            console.warn('[radio] Autoplay blocked:', err);
-            state.isPlaying = false;
-            updateDeckUI();
-          });
-        }
-      } else {
-        state.audio.pause();
-        state.audio.src = '';
-        state.isPlaying = false;
       }
+
       updateDeckUI();
       highlightActiveStation(station.id);
     } catch (e) {
@@ -326,223 +280,193 @@
     });
   }
 
-  function bindDeckAudioEvents() {
-    if (state.audioHandlersBound) return;
-    state.audioHandlersBound = true;
-
-    state.audio.addEventListener('timeupdate', () => {
-      if (!dom.deckTimeCurrent) return;
-      const cur = state.audio.currentTime || 0;
-      const dur = state.audio.duration || (state.currentSlot ? state.currentSlot.duration : 0);
-      dom.deckTimeCurrent.textContent = formatDuration(cur);
-
-      if (dom.deckTimeRemaining) {
-        const rem = Math.max(0, dur - cur);
-        dom.deckTimeRemaining.textContent = '-' + formatDuration(rem);
+  // ===== 2. Каталог радиостанций =====
+  async function loadStations() {
+    if (!dom.stationsGrid) return;
+    dom.stationsGrid.innerHTML = '<p class="alltell-state">Загружаем список радиостанций…</p>';
+    try {
+      const stations = await api('/api/radio/stations');
+      if (!stations || stations.length === 0) {
+        dom.stationsGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align:center; padding: 40px; color:#94a3b8;">
+            <i class="fas fa-radio" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#64748b;"></i>
+            Пока никто не занял радиочастоту. Станьте первым ведущим радиостанции!
+            <div style="margin-top:16px;">
+              <button class="btn btn-primary" id="btnEmptyCreateStation"><i class="fas fa-plus"></i> Занять частоту</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('btnEmptyCreateStation')?.addEventListener('click', openCreateStationModal);
+        return;
       }
 
-      if (dom.deckProgressFill && dur > 0) {
-        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-        dom.deckProgressFill.style.width = `${pct}%`;
+      const globalAudio = getGlobalAudio();
+      const gState = globalAudio ? globalAudio.getState() : {};
+      const activeStationId = (state.currentStation && state.currentStation.id) || (gState.station && gState.station.id);
+
+      dom.stationsGrid.innerHTML = stations.map((st) => `
+        <div class="radio-station-card ${activeStationId === st.id ? 'is-active-tune' : ''}" data-id="${st.id}">
+          <div>
+            <div class="radio-card-top">
+              <div class="radio-card-avatar">
+                ${st.avatar_url ? `<img src="${escapeHtml(st.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
+              </div>
+              <div class="radio-card-meta">
+                <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
+                <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
+              </div>
+            </div>
+            ${st.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(st.description)}</p>` : ''}
+          </div>
+          <div>
+            <div class="radio-card-playing">
+              <i class="fas fa-compact-disc ${st.isLive ? 'fa-spin' : ''}" style="color:${st.isLive ? '#2ed573' : '#94a3b8'};"></i>
+              <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${st.currentTrack ? escapeHtml(st.currentTrack.title) : (st.fallback_mode === 'loop' ? 'Эфир зациклен' : 'Офлайн')}
+              </span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      dom.stationsGrid.querySelectorAll('.radio-station-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          const id = card.dataset.id;
+          const found = stations.find((s) => s.id == id);
+          if (found) tuneStation(found, true);
+        });
+      });
+
+      if (!state.currentStation && stations.length > 0) {
+        if (gState.station) {
+          state.currentStation = gState.station;
+          updateDeckUI();
+          highlightActiveStation(gState.station.id);
+        } else {
+          tuneStation(stations[0], false);
+        }
       }
-    });
-
-    state.audio.addEventListener('ended', () => {
-      if (state.nextSlots.length > 0) {
-        const next = state.nextSlots.shift();
-        state.prevSlots.unshift(state.currentSlot);
-        state.currentSlot = next;
-        state.audio.src = next.audioUrl;
-        state.audio.currentTime = 0;
-        state.audio.play();
-        updateDeckUI();
-      } else if (state.currentStation) {
-        tuneStation(state.currentStation, true);
+    } catch (e) {
+      if (dom.stationsGrid) {
+        dom.stationsGrid.innerHTML = `<p class="alltell-error">Ошибка загрузки станций: ${escapeHtml(e.message)}</p>`;
       }
-    });
-
-    state.audio.addEventListener('play', () => {
-      state.isPlaying = true;
-      updateDeckUI();
-    });
-
-    state.audio.addEventListener('pause', () => {
-      state.isPlaying = false;
-      updateDeckUI();
-    });
-  }
-
-  // ===== 2. Отдельный аудиоплеер для ленты треков и подкастов (Bottom Bar) =====
-
-  function bindFeedPlayerEvents() {
-    if (feedPlayerState.handlersBound) return;
-    feedPlayerState.handlersBound = true;
-
-    feedPlayerState.audio.addEventListener('timeupdate', () => {
-      if (!dom.feedPlayerCurrentTime) return;
-      const cur = feedPlayerState.audio.currentTime || 0;
-      const dur = feedPlayerState.audio.duration || (feedPlayerState.currentTrack ? feedPlayerState.currentTrack.duration : 0);
-      dom.feedPlayerCurrentTime.textContent = formatDuration(cur);
-      if (dom.feedPlayerDuration) dom.feedPlayerDuration.textContent = formatDuration(dur);
-
-      if (dom.feedPlayerProgressFill && dur > 0) {
-        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-        dom.feedPlayerProgressFill.style.width = `${pct}%`;
-      }
-    });
-
-    feedPlayerState.audio.addEventListener('ended', () => {
-      if (feedPlayerState.isLoop) {
-        feedPlayerState.audio.currentTime = 0;
-        feedPlayerState.audio.play();
-      } else if (feedPlayerState.currentIndex >= 0 && feedPlayerState.currentIndex < feedPlayerState.tracks.length - 1) {
-        playFeedTrackAt(feedPlayerState.currentIndex + 1);
-      } else {
-        feedPlayerState.isPlaying = false;
-        updateFeedPlayerUI();
-      }
-    });
-
-    feedPlayerState.audio.addEventListener('play', () => {
-      feedPlayerState.isPlaying = true;
-      updateFeedPlayerUI();
-    });
-
-    feedPlayerState.audio.addEventListener('pause', () => {
-      feedPlayerState.isPlaying = false;
-      updateFeedPlayerUI();
-    });
-
-    // Клики по контроллерам плеера ленты
-    dom.feedPlayerPlayBtn?.addEventListener('click', () => {
-      if (!feedPlayerState.currentTrack) return;
-      if (feedPlayerState.isPlaying) {
-        feedPlayerState.audio.pause();
-      } else {
-        feedPlayerState.audio.play();
-      }
-    });
-
-    dom.feedPlayerPrevBtn?.addEventListener('click', () => {
-      if (feedPlayerState.currentIndex > 0) {
-        playFeedTrackAt(feedPlayerState.currentIndex - 1);
-      }
-    });
-
-    dom.feedPlayerNextBtn?.addEventListener('click', () => {
-      if (feedPlayerState.currentIndex < feedPlayerState.tracks.length - 1) {
-        playFeedTrackAt(feedPlayerState.currentIndex + 1);
-      }
-    });
-
-    dom.feedPlayerProgressBar?.addEventListener('click', (e) => {
-      const rect = dom.feedPlayerProgressBar.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const dur = feedPlayerState.audio.duration || 0;
-      if (dur > 0) {
-        feedPlayerState.audio.currentTime = ratio * dur;
-      }
-    });
-
-    dom.feedPlayerLoopBtn?.addEventListener('click', () => {
-      feedPlayerState.isLoop = !feedPlayerState.isLoop;
-      dom.feedPlayerLoopBtn.classList.toggle('is-active', feedPlayerState.isLoop);
-    });
-
-    dom.feedPlayerMuteBtn?.addEventListener('click', () => {
-      feedPlayerState.audio.muted = !feedPlayerState.audio.muted;
-      dom.feedPlayerMuteBtn.innerHTML = feedPlayerState.audio.muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
-    });
-
-    dom.feedPlayerVolume?.addEventListener('input', (e) => {
-      feedPlayerState.audio.volume = parseFloat(e.target.value);
-    });
-
-    dom.feedPlayerCloseBtn?.addEventListener('click', () => {
-      feedPlayerState.audio.pause();
-      feedPlayerState.isPlaying = false;
-      if (dom.feedPlayerBar) dom.feedPlayerBar.hidden = true;
-      updateFeedPlayButtons();
-    });
-
-    dom.feedPlayerOpenTrackBtn?.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (feedPlayerState.currentTrack) {
-        openTrackPage(feedPlayerState.currentTrack.id);
-      }
-    });
-
-    dom.feedPlayerTitle?.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (feedPlayerState.currentTrack) {
-        openTrackPage(feedPlayerState.currentTrack.id);
-      }
-    });
-  }
-
-  function playFeedTrack(track, tracksList, index) {
-    // Пауза деки прямого эфира, чтобы звуки не накладывались
-    if (state.isPlaying) {
-      state.audio.pause();
-      state.isPlaying = false;
-      updateDeckUI();
-    }
-
-    feedPlayerState.currentTrack = track;
-    feedPlayerState.tracks = tracksList || feedPlayerState.tracks;
-    feedPlayerState.currentIndex = index !== undefined ? index : feedPlayerState.tracks.findIndex((t) => t.id === track.id);
-
-    feedPlayerState.audio.src = track.audio_url;
-    feedPlayerState.audio.currentTime = 0;
-    feedPlayerState.audio.play().then(() => {
-      feedPlayerState.isPlaying = true;
-      updateFeedPlayerUI();
-    }).catch((err) => {
-      console.warn('Feed track autoplay blocked:', err);
-      feedPlayerState.isPlaying = false;
-      updateFeedPlayerUI();
-    });
-
-    if (dom.feedPlayerBar) dom.feedPlayerBar.hidden = false;
-    updateFeedPlayerUI();
-    updateFeedPlayButtons();
-  }
-
-  function playFeedTrackAt(index) {
-    if (index >= 0 && index < feedPlayerState.tracks.length) {
-      playFeedTrack(feedPlayerState.tracks[index], feedPlayerState.tracks, index);
     }
   }
 
-  function updateFeedPlayerUI() {
-    if (!dom.feedPlayerTitle) return;
-    const t = feedPlayerState.currentTrack;
-    if (!t) return;
+  // ===== 3. Лента треков и подкастов =====
+  async function loadTracks() {
+    if (!dom.tracksList) return;
+    dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем аудиозаписи…</p>';
+    try {
+      const query = new URLSearchParams();
+      if (state.feedFilter && state.feedFilter !== 'all') query.set('type', state.feedFilter);
+      if (state.feedSearch) query.set('search', state.feedSearch);
 
-    dom.feedPlayerTitle.textContent = t.title;
-    if (dom.feedPlayerAuthor) dom.feedPlayerAuthor.textContent = `${t.author_name} • ${t.type === 'podcast' ? 'Подкаст' : t.type === 'speech' ? 'Слова' : 'Музыка'}`;
+      const data = await api(`/api/radio/tracks?${query.toString()}`);
+      if (!data.tracks || data.tracks.length === 0) {
+        dom.tracksList.innerHTML = `
+          <div style="text-align:center; padding:40px; color:#94a3b8;">
+            <i class="fas fa-music" style="font-size:2rem; margin-bottom:12px; display:block; color:#64748b;"></i>
+            Аудиозаписи не найдены. Опубликуйте свой трек или подкаст!
+          </div>
+        `;
+        return;
+      }
 
-    if (dom.feedPlayerCover) {
-      if (t.cover_url) {
-        dom.feedPlayerCover.innerHTML = `<img src="${escapeHtml(t.cover_url)}" alt="">`;
-      } else {
-        dom.feedPlayerCover.innerHTML = `<i class="fas fa-music"></i>`;
+      const globalAudio = getGlobalAudio();
+      const gState = globalAudio ? globalAudio.getState() : {};
+
+      dom.tracksList.innerHTML = data.tracks.map((t, idx) => {
+        const isThisPlaying = gState.isPlaying && gState.track && gState.track.id === t.id;
+        return `
+          <div class="radio-track-item ${isThisPlaying ? 'is-playing-now' : ''}" data-id="${t.id}" data-index="${idx}">
+            <div class="radio-track-left">
+              <button type="button" class="radio-track-play-btn" data-index="${idx}" title="Воспроизвести">
+                <i class="fas ${isThisPlaying ? 'fa-pause' : 'fa-play'}"></i>
+              </button>
+              <div class="radio-track-cover-mini btn-open-track-detail" data-id="${t.id}" style="width:40px; height:40px; border-radius:8px; overflow:hidden; background:#12141a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                ${t.cover_url ? `<img src="${escapeHtml(t.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-music" style="color:#64748b;"></i>'}
+              </div>
+              <div class="radio-track-info">
+                <div class="radio-track-title btn-open-track-detail" data-id="${t.id}" style="cursor:pointer;" title="Открыть страницу трека">${escapeHtml(t.title)}</div>
+                <div class="radio-track-author">
+                  <i class="fas fa-user-circle"></i> ${escapeHtml(t.author_name)} • 
+                  <span class="radio-track-type-badge type-${t.type}">${t.type === 'podcast' ? 'Подкаст' : t.type === 'speech' ? 'Слова' : 'Музыка'}</span> • 
+                  <span>${escapeHtml(String(t.format || 'mp3').toUpperCase())}</span>
+                </div>
+              </div>
+            </div>
+            <div class="radio-track-right">
+              <span class="radio-track-duration">${formatDuration(t.duration)}</span>
+              <button type="button" class="radio-action-btn btn-open-track-detail" data-id="${t.id}" title="Страница трека">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </button>
+              <button type="button" class="radio-action-btn btn-add-to-timeline" data-id="${t.id}" data-url="${escapeHtml(t.audio_url)}" data-title="${escapeHtml(t.title)}" data-duration="${t.duration}" data-type="${t.type}" title="Добавить в сетку эфира">
+                <i class="fas fa-calendar-plus"></i> В эфир
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Клик по Play: воспроизводит трек через глобальный плеер AllTell
+      dom.tracksList.querySelectorAll('.radio-track-play-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.index, 10);
+          const t = data.tracks[idx];
+          if (!t) return;
+
+          const gAudio = getGlobalAudio();
+          if (!gAudio) return;
+          const curr = gAudio.getState();
+
+          if (curr.isPlaying && curr.track && curr.track.id === t.id) {
+            gAudio.pause();
+          } else {
+            gAudio.playTrack(t, data.tracks, idx);
+          }
+        });
+      });
+
+      // Клик по названию или обложке: открывает отдельную страницу трека
+      dom.tracksList.querySelectorAll('.btn-open-track-detail').forEach((el) => {
+        el.addEventListener('click', () => {
+          openTrackPage(el.dataset.id);
+        });
+      });
+
+      // Добавить в эфир
+      dom.tracksList.querySelectorAll('.btn-add-to-timeline').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const slot = {
+            track_id: btn.dataset.id,
+            title: btn.dataset.title,
+            audio_url: btn.dataset.url,
+            duration: parseFloat(btn.dataset.duration) || 180,
+            type: btn.dataset.type || 'track'
+          };
+          addSlotToEditor(slot);
+          alert(`Запись "${slot.title}" добавлена в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
+        });
+      });
+    } catch (e) {
+      if (dom.tracksList) {
+        dom.tracksList.innerHTML = `<p class="alltell-error">Ошибка загрузки треков: ${escapeHtml(e.message)}</p>`;
       }
     }
-
-    if (dom.feedPlayerPlayBtn) {
-      dom.feedPlayerPlayBtn.innerHTML = feedPlayerState.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
-    }
-
-    updateFeedPlayButtons();
   }
 
   function updateFeedPlayButtons() {
+    const globalAudio = getGlobalAudio();
+    const gState = globalAudio ? globalAudio.getState() : {};
+
     document.querySelectorAll('.radio-track-item').forEach((item) => {
       const id = item.dataset.id;
       const btn = item.querySelector('.radio-track-play-btn');
       if (!btn) return;
-      if (feedPlayerState.currentTrack && feedPlayerState.currentTrack.id == id && feedPlayerState.isPlaying) {
+      if (gState.track && gState.track.id == id && gState.isPlaying) {
         btn.innerHTML = '<i class="fas fa-pause"></i>';
         item.classList.add('is-playing-now');
       } else {
@@ -552,140 +476,22 @@
     });
   }
 
-  // ===== 3. Страница отдельного трека (Radio Track Page) =====
+  // ===== 4. Страница отдельного трека (Radio Track Page) =====
 
-  function bindTrackPageEvents() {
-    if (trackPageState.handlersBound) return;
-    trackPageState.handlersBound = true;
-
-    trackPageState.audio.addEventListener('timeupdate', () => {
-      if (!dom.trackPageCurrentTime) return;
-      const cur = trackPageState.audio.currentTime || 0;
-      const dur = trackPageState.audio.duration || (trackPageState.track ? trackPageState.track.duration : 0);
-      dom.trackPageCurrentTime.textContent = formatDuration(cur);
-      if (dom.trackPageTotalDuration) dom.trackPageTotalDuration.textContent = formatDuration(dur);
-
-      if (dom.trackPageProgressFill && dur > 0) {
-        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-        dom.trackPageProgressFill.style.width = `${pct}%`;
-      }
-    });
-
-    trackPageState.audio.addEventListener('play', () => {
-      trackPageState.isPlaying = true;
-      if (dom.trackPagePlayBtn) dom.trackPagePlayBtn.innerHTML = '<i class="fas fa-pause"></i>';
-    });
-
-    trackPageState.audio.addEventListener('pause', () => {
-      trackPageState.isPlaying = false;
-      if (dom.trackPagePlayBtn) dom.trackPagePlayBtn.innerHTML = '<i class="fas fa-play"></i>';
-    });
-
-    trackPageState.audio.addEventListener('ended', () => {
-      if (trackPageState.isLoop) {
-        trackPageState.audio.currentTime = 0;
-        trackPageState.audio.play();
-      } else {
-        trackPageState.isPlaying = false;
-        if (dom.trackPagePlayBtn) dom.trackPagePlayBtn.innerHTML = '<i class="fas fa-play"></i>';
-      }
-    });
-
-    dom.trackPagePlayBtn?.addEventListener('click', () => {
-      if (!trackPageState.track) return;
-      if (state.isPlaying) state.audio.pause();
-      if (feedPlayerState.isPlaying) feedPlayerState.audio.pause();
-
-      if (trackPageState.isPlaying) {
-        trackPageState.audio.pause();
-      } else {
-        trackPageState.audio.play();
-      }
-    });
-
-    dom.trackPageProgressBar?.addEventListener('click', (e) => {
-      const rect = dom.trackPageProgressBar.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const dur = trackPageState.audio.duration || 0;
-      if (dur > 0) {
-        trackPageState.audio.currentTime = ratio * dur;
-      }
-    });
-
-    dom.trackPageLoopBtn?.addEventListener('click', () => {
-      trackPageState.isLoop = !trackPageState.isLoop;
-      dom.trackPageLoopBtn.classList.toggle('is-active', trackPageState.isLoop);
-    });
-
-    dom.trackPageMuteBtn?.addEventListener('click', () => {
-      trackPageState.audio.muted = !trackPageState.audio.muted;
-      dom.trackPageMuteBtn.innerHTML = trackPageState.audio.muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
-    });
-
-    dom.trackPageVolumeSlider?.addEventListener('input', (e) => {
-      trackPageState.audio.volume = parseFloat(e.target.value);
-    });
-
-    dom.btnBackFromTrackView?.addEventListener('click', () => {
-      trackPageState.audio.pause();
-      trackPageState.isPlaying = false;
-      window.history.pushState(null, '', '/radio');
-      if (dom.trackView) dom.trackView.hidden = true;
-      if (dom.navTabs) dom.navTabs.hidden = false;
-      if (dom.tabFeed) dom.tabFeed.hidden = false;
-    });
-
-    dom.trackPageShareBtn?.addEventListener('click', () => {
-      if (!trackPageState.track) return;
-      const url = `${window.location.origin}/radio/track/${trackPageState.track.id}`;
-      navigator.clipboard.writeText(url).then(() => {
-        alert('Ссылка на трек скопирована в буфер обмена!');
-      }).catch(() => {
-        prompt('Ссылка на трек:', url);
-      });
-    });
-
-    dom.trackPageAddToEditorBtn?.addEventListener('click', () => {
-      if (!trackPageState.track) return;
-      addSlotToEditor({
-        track_id: trackPageState.track.id,
-        title: trackPageState.track.title,
-        audio_url: trackPageState.track.audio_url,
-        duration: Number(trackPageState.track.duration) || 180,
-        type: trackPageState.track.type || 'track'
-      });
-      alert(`Трек "${trackPageState.track.title}" успешно добавлен в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
-    });
-
-    dom.trackPageDeleteBtn?.addEventListener('click', async () => {
-      if (!trackPageState.track) return;
-      if (!confirm(`Вы действительно хотите удалить аудиозапись "${trackPageState.track.title}"?`)) return;
-      try {
-        await api('/api/radio/tracks/' + trackPageState.track.id, { method: 'DELETE' });
-        alert('Аудиозапись успешно удалена.');
-        dom.btnBackFromTrackView?.click();
-        loadTracks();
-      } catch (err) {
-        alert('Ошибка при удалении трека: ' + err.message);
-      }
-    });
-  }
+  let currentViewingTrack = null;
 
   async function openTrackPage(trackId) {
     try {
       const track = await api('/api/radio/tracks/' + trackId);
       if (!track) throw new Error('Трек не найден');
-
-      trackPageState.track = track;
-      trackPageState.audio.src = track.audio_url;
-      trackPageState.audio.currentTime = 0;
+      currentViewingTrack = track;
 
       // Скрываем табы и показываем страницу трека
-      if (dom.navTabs) dom.navTabs.hidden = true;
-      if (dom.tabLive) dom.tabLive.hidden = true;
-      if (dom.tabFeed) dom.tabFeed.hidden = true;
-      if (dom.tabEditor) dom.tabEditor.hidden = true;
-      if (dom.trackView) dom.trackView.hidden = false;
+      if (dom.navTabs) { dom.navTabs.hidden = true; dom.navTabs.style.display = 'none'; }
+      if (dom.tabLive) { dom.tabLive.hidden = true; dom.tabLive.style.display = 'none'; }
+      if (dom.tabFeed) { dom.tabFeed.hidden = true; dom.tabFeed.style.display = 'none'; }
+      if (dom.tabEditor) { dom.tabEditor.hidden = true; dom.tabEditor.style.display = 'none'; }
+      if (dom.trackView) { dom.trackView.hidden = false; dom.trackView.style.display = 'block'; }
 
       // Заполняем данные
       if (dom.trackPageTitle) dom.trackPageTitle.textContent = track.title;
@@ -734,165 +540,7 @@
     }
   }
 
-  // ===== 4. Каталог радиостанций =====
-  async function loadStations() {
-    if (!dom.stationsGrid) return;
-    dom.stationsGrid.innerHTML = '<p class="alltell-state">Загружаем список радиостанций…</p>';
-    try {
-      const stations = await api('/api/radio/stations');
-      if (!stations || stations.length === 0) {
-        dom.stationsGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align:center; padding: 40px; color:#94a3b8;">
-            <i class="fas fa-radio" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#64748b;"></i>
-            Пока никто не занял радиочастоту. Станьте первым ведущим радиостанции!
-            <div style="margin-top:16px;">
-              <button class="btn btn-primary" id="btnEmptyCreateStation"><i class="fas fa-plus"></i> Занять частоту</button>
-            </div>
-          </div>
-        `;
-        document.getElementById('btnEmptyCreateStation')?.addEventListener('click', openCreateStationModal);
-        return;
-      }
-
-      dom.stationsGrid.innerHTML = stations.map((st) => `
-        <div class="radio-station-card ${state.currentStation && state.currentStation.id === st.id ? 'is-active-tune' : ''}" data-id="${st.id}">
-          <div>
-            <div class="radio-card-top">
-              <div class="radio-card-avatar">
-                ${st.avatar_url ? `<img src="${escapeHtml(st.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
-              </div>
-              <div class="radio-card-meta">
-                <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
-                <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
-              </div>
-            </div>
-            ${st.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(st.description)}</p>` : ''}
-          </div>
-          <div>
-            <div class="radio-card-playing">
-              <i class="fas fa-compact-disc ${st.isLive ? 'fa-spin' : ''}" style="color:${st.isLive ? '#2ed573' : '#94a3b8'};"></i>
-              <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                ${st.currentTrack ? escapeHtml(st.currentTrack.title) : (st.fallback_mode === 'loop' ? 'Эфир зациклен' : 'Офлайн')}
-              </span>
-            </div>
-          </div>
-        </div>
-      `).join('');
-
-      dom.stationsGrid.querySelectorAll('.radio-station-card').forEach((card) => {
-        card.addEventListener('click', () => {
-          const id = card.dataset.id;
-          const found = stations.find((s) => s.id == id);
-          if (found) tuneStation(found, true);
-        });
-      });
-
-      if (!state.currentStation && stations.length > 0) {
-        tuneStation(stations[0], false);
-      }
-    } catch (e) {
-      if (dom.stationsGrid) {
-        dom.stationsGrid.innerHTML = `<p class="alltell-error">Ошибка загрузки станций: ${escapeHtml(e.message)}</p>`;
-      }
-    }
-  }
-
-  // ===== 5. Лента треков и подкастов =====
-  async function loadTracks() {
-    if (!dom.tracksList) return;
-    dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем аудиозаписи…</p>';
-    try {
-      const query = new URLSearchParams();
-      if (state.feedFilter && state.feedFilter !== 'all') query.set('type', state.feedFilter);
-      if (state.feedSearch) query.set('search', state.feedSearch);
-
-      const data = await api(`/api/radio/tracks?${query.toString()}`);
-      if (!data.tracks || data.tracks.length === 0) {
-        dom.tracksList.innerHTML = `
-          <div style="text-align:center; padding:40px; color:#94a3b8;">
-            <i class="fas fa-music" style="font-size:2rem; margin-bottom:12px; display:block; color:#64748b;"></i>
-            Аудиозаписи не найдены. Опубликуйте свой трек или подкаст!
-          </div>
-        `;
-        return;
-      }
-
-      dom.tracksList.innerHTML = data.tracks.map((t, idx) => `
-        <div class="radio-track-item ${feedPlayerState.currentTrack && feedPlayerState.currentTrack.id === t.id && feedPlayerState.isPlaying ? 'is-playing-now' : ''}" data-id="${t.id}" data-index="${idx}">
-          <div class="radio-track-left">
-            <button type="button" class="radio-track-play-btn" data-index="${idx}" title="Воспроизвести в отдельном плеере">
-              <i class="fas ${feedPlayerState.currentTrack && feedPlayerState.currentTrack.id === t.id && feedPlayerState.isPlaying ? 'fa-pause' : 'fa-play'}"></i>
-            </button>
-            <div class="radio-track-cover-mini" data-id="${t.id}" style="width:40px; height:40px; border-radius:8px; overflow:hidden; background:#12141a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-              ${t.cover_url ? `<img src="${escapeHtml(t.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-music" style="color:#64748b;"></i>'}
-            </div>
-            <div class="radio-track-info">
-              <div class="radio-track-title btn-open-track-detail" data-id="${t.id}" style="cursor:pointer;" title="Открыть страницу трека">${escapeHtml(t.title)}</div>
-              <div class="radio-track-author">
-                <i class="fas fa-user-circle"></i> ${escapeHtml(t.author_name)} • 
-                <span class="radio-track-type-badge type-${t.type}">${t.type === 'podcast' ? 'Подкаст' : t.type === 'speech' ? 'Слова' : 'Музыка'}</span> • 
-                <span>${escapeHtml(String(t.format || 'mp3').toUpperCase())}</span>
-              </div>
-            </div>
-          </div>
-          <div class="radio-track-right">
-            <span class="radio-track-duration">${formatDuration(t.duration)}</span>
-            <button type="button" class="radio-action-btn btn-open-track-detail" data-id="${t.id}" title="Страница трека">
-              <i class="fas fa-arrow-up-right-from-square"></i>
-            </button>
-            <button type="button" class="radio-action-btn btn-add-to-timeline" data-id="${t.id}" data-url="${escapeHtml(t.audio_url)}" data-title="${escapeHtml(t.title)}" data-duration="${t.duration}" data-type="${t.type}" title="Добавить в сетку эфира">
-              <i class="fas fa-calendar-plus"></i> В эфир
-            </button>
-          </div>
-        </div>
-      `).join('');
-
-      // Клик по Play: запускает в отдельном нижнем плеере
-      dom.tracksList.querySelectorAll('.radio-track-play-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = parseInt(btn.dataset.index, 10);
-          const t = data.tracks[idx];
-          if (!t) return;
-
-          if (feedPlayerState.currentTrack && feedPlayerState.currentTrack.id === t.id && feedPlayerState.isPlaying) {
-            feedPlayerState.audio.pause();
-          } else {
-            playFeedTrack(t, data.tracks, idx);
-          }
-        });
-      });
-
-      // Клик по названию или обложке: открывает отдельную страницу трека
-      dom.tracksList.querySelectorAll('.btn-open-track-detail, .radio-track-cover-mini').forEach((el) => {
-        el.addEventListener('click', () => {
-          openTrackPage(el.dataset.id);
-        });
-      });
-
-      // Добавить в эфир
-      dom.tracksList.querySelectorAll('.btn-add-to-timeline').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const slot = {
-            track_id: btn.dataset.id,
-            title: btn.dataset.title,
-            audio_url: btn.dataset.url,
-            duration: parseFloat(btn.dataset.duration) || 180,
-            type: btn.dataset.type || 'track'
-          };
-          addSlotToEditor(slot);
-          alert(`Запись "${slot.title}" добавлена в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
-        });
-      });
-    } catch (e) {
-      if (dom.tracksList) {
-        dom.tracksList.innerHTML = `<p class="alltell-error">Ошибка загрузки треков: ${escapeHtml(e.message)}</p>`;
-      }
-    }
-  }
-
-  // ===== 6. Редактор сетки вещания (24 часа) с точным расписанием =====
+  // ===== 5. Редактор сетки вещания (24 часа) =====
 
   async function initEditor() {
     if (!dom.editorSlotsList) return;
@@ -925,7 +573,6 @@
         return;
       }
 
-      // Заполняем селектор станций
       if (dom.editorStationSelect) {
         dom.editorStationSelect.innerHTML = state.myStations.map((s) => `
           <option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.frequency)} FM)</option>
@@ -1015,7 +662,6 @@
       `;
     }).join('');
 
-    // Обработчики кнопок слотов
     dom.editorSlotsList.querySelectorAll('.btn-slot-up').forEach((btn) => {
       btn.addEventListener('click', () => {
         const i = parseInt(btn.dataset.index, 10);
@@ -1088,7 +734,7 @@
     }
   }
 
-  // ===== 7. Умная вставка слов ведущего по времени =====
+  // ===== 6. Умная вставка слов ведущего по времени =====
 
   let insertWordsContext = {
     targetSlotIndex: -1,
@@ -1120,7 +766,6 @@
       const durMs = (Number(slot.duration) || 0) * 1000;
       const endMs = cursor + durMs;
 
-      // Если целевое время попадает в пределы этого слота
       if (targetMs <= endMs) {
         return {
           insertIndex: i + 1,
@@ -1146,10 +791,8 @@
     insertWordsContext.targetSlotIndex = slotIndex + 1;
     insertWordsContext.audioUrl = null;
 
-    const modal = document.getElementById('modalInsertWordsByTime');
-    if (modal) modal.hidden = false;
+    showModal('modalInsertWordsByTime');
 
-    // Рассчитываем приблизительное время окончания этого трека
     let cursor = new Date(state.editorStartTime || Date.now()).getTime();
     for (let i = 0; i <= slotIndex && i < state.editorSlots.length; i++) {
       cursor += (Number(state.editorSlots[i].duration) || 0) * 1000;
@@ -1185,6 +828,21 @@
     }
   }
 
+  // ===== Вспомогательные функции для модальных окон =====
+  function showModal(modal) {
+    if (typeof modal === 'string') modal = document.getElementById(modal);
+    if (!modal) return;
+    modal.hidden = false;
+    modal.style.display = 'flex';
+  }
+
+  function hideModal(modal) {
+    if (typeof modal === 'string') modal = document.getElementById(modal);
+    if (!modal) return;
+    modal.hidden = true;
+    modal.style.display = 'none';
+  }
+
   // ===== Открытие / закрытие модалок =====
   function openUploadModal() {
     const user = window.authManager && window.authManager.getUser();
@@ -1192,8 +850,7 @@
       alert('Для загрузки аудиозаписей необходимо войти в аккаунт AllTell');
       return;
     }
-    const modal = document.getElementById('modalUploadTrack');
-    if (modal) modal.hidden = false;
+    showModal('modalUploadTrack');
   }
 
   function openCreateStationModal() {
@@ -1202,33 +859,72 @@
       alert('Для занятия радиочастоты необходимо войти в аккаунт AllTell');
       return;
     }
-    const modal = document.getElementById('modalCreateStation');
-    if (modal) modal.hidden = false;
+    showModal('modalCreateStation');
   }
 
-  // ===== Главная инициализация страницы =====
+  // ===== ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ СТРАНИЦЫ =====
   function init() {
-    dom = queryDom();
-    if (!dom.deckPlayBtn) return null; // Не на странице радио
+    // ЗАЩИТА ОТ ДВОЙНОГО ВЫЗОВА И ДВОЕНИЯ СЛУШАТЕЛЕЙ
+    if (window.RadioClient._mounted) {
+      return window.RadioClient._cleanup;
+    }
+    window.RadioClient._mounted = true;
 
-    bindDeckAudioEvents();
-    bindFeedPlayerEvents();
-    bindTrackPageEvents();
+    // Скрываем все модальные окна при старте страницы
+    document.querySelectorAll('.radio-modal-backdrop').forEach((m) => hideModal(m));
+
+    dom = queryDom();
+    if (!dom.deckPlayBtn) {
+      window.RadioClient._mounted = false;
+      return null;
+    }
+
+    const globalAudio = getGlobalAudio();
+
+    // Подписка на глобальный аудиоплеер AllTell
+    if (globalAudio) {
+      state.globalUnsub = globalAudio.subscribe((gState) => {
+        updateDeckUI();
+        updateFeedPlayButtons();
+
+        // Обновление плеера на странице трека
+        if (currentViewingTrack && gState.track && gState.track.id === currentViewingTrack.id) {
+          if (dom.trackPagePlayBtn) {
+            dom.trackPagePlayBtn.innerHTML = gState.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+          }
+          const cur = globalAudio.audio.currentTime || 0;
+          const dur = globalAudio.audio.duration || currentViewingTrack.duration || 0;
+          if (dom.trackPageCurrentTime) dom.trackPageCurrentTime.textContent = formatDuration(cur);
+          if (dom.trackPageTotalDuration) dom.trackPageTotalDuration.textContent = formatDuration(dur);
+          if (dom.trackPageProgressFill && dur > 0) {
+            dom.trackPageProgressFill.style.width = `${Math.min(100, (cur / dur) * 100)}%`;
+          }
+        }
+      });
+    }
 
     // 1. Табы
     dom.tabs.forEach((tab) => {
       tab.addEventListener('click', () => {
-        // Если была открыта страница отдельного трека — скрываем её
-        if (dom.trackView) dom.trackView.hidden = true;
-        if (dom.navTabs) dom.navTabs.hidden = false;
+        if (dom.trackView) { dom.trackView.hidden = true; dom.trackView.style.display = 'none'; }
+        if (dom.navTabs) { dom.navTabs.hidden = false; dom.navTabs.style.display = ''; }
 
         dom.tabs.forEach((t) => t.classList.remove('is-active'));
         tab.classList.add('is-active');
 
         const tabName = tab.dataset.tab;
-        if (dom.tabLive) dom.tabLive.hidden = tabName !== 'live';
-        if (dom.tabFeed) dom.tabFeed.hidden = tabName !== 'feed';
-        if (dom.tabEditor) dom.tabEditor.hidden = tabName !== 'editor';
+        if (dom.tabLive) {
+          dom.tabLive.hidden = tabName !== 'live';
+          dom.tabLive.style.display = tabName === 'live' ? '' : 'none';
+        }
+        if (dom.tabFeed) {
+          dom.tabFeed.hidden = tabName !== 'feed';
+          dom.tabFeed.style.display = tabName === 'feed' ? '' : 'none';
+        }
+        if (dom.tabEditor) {
+          dom.tabEditor.hidden = tabName !== 'editor';
+          dom.tabEditor.style.display = tabName === 'editor' ? '' : 'none';
+        }
 
         if (tabName === 'live') loadStations();
         if (tabName === 'feed') loadTracks();
@@ -1238,25 +934,30 @@
 
     // 2. Управление эфирной декой
     dom.deckPlayBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
+
       if (!state.currentStation) {
         const firstCard = document.querySelector('.radio-station-card');
         if (firstCard) firstCard.click();
         return;
       }
-      if (state.isPlaying) {
-        state.audio.pause();
+
+      const curr = gAudio.getState();
+      if (curr.isPlaying) {
+        gAudio.pause();
       } else {
-        if (feedPlayerState.isPlaying) feedPlayerState.audio.pause();
-        state.audio.play();
+        gAudio.resume();
       }
     });
 
     dom.deckUnfreezeBtn?.addEventListener('click', () => {
-      if (!state.currentSlot) return;
-      state.audio.currentTime = 0;
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
+      gAudio.seek(0);
       state.isTimeshift = true;
       updateDeckUI();
-      if (!state.isPlaying) state.audio.play();
+      gAudio.resume();
     });
 
     dom.deckLiveSyncBtn?.addEventListener('click', () => {
@@ -1270,9 +971,10 @@
         state.prevSlots.unshift(state.currentSlot);
         state.currentSlot = next;
         state.isTimeshift = true;
-        state.audio.src = next.audioUrl;
-        state.audio.currentTime = 0;
-        state.audio.play();
+        const gAudio = getGlobalAudio();
+        if (gAudio) {
+          gAudio.playRadio(state.currentStation, next, 0);
+        }
         updateDeckUI();
       } else if (state.currentStation) {
         tuneStation(state.currentStation, true);
@@ -1280,24 +982,25 @@
     });
 
     dom.deckProgressBar?.addEventListener('click', (e) => {
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
       const rect = dom.deckProgressBar.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const dur = state.audio.duration || (state.currentSlot ? state.currentSlot.duration : 0);
-      if (dur > 0) {
-        state.audio.currentTime = ratio * dur;
-        state.isTimeshift = true;
-        updateDeckUI();
-      }
+      gAudio.seek(ratio);
+      state.isTimeshift = true;
+      updateDeckUI();
     });
 
     dom.deckVolumeSlider?.addEventListener('input', (e) => {
-      state.audio.volume = parseFloat(e.target.value);
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.setVolume(parseFloat(e.target.value));
     });
 
     dom.deckMuteBtn?.addEventListener('click', () => {
-      state.audio.muted = !state.audio.muted;
-      if (dom.deckMuteBtn) {
-        dom.deckMuteBtn.innerHTML = state.audio.muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.toggleMute();
+        dom.deckMuteBtn.innerHTML = gAudio.getState().muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
       }
     });
 
@@ -1322,9 +1025,8 @@
       }, 300);
     });
 
-    // 4. Редактор сетки вещания и управление станцией
+    // 4. Редактор сетки вещания
 
-    // Смена станции в редакторе
     dom.editorStationSelect?.addEventListener('change', (e) => {
       const id = e.target.value;
       const found = state.myStations.find((s) => s.id == id);
@@ -1334,7 +1036,6 @@
       }
     });
 
-    // Изменение времени старта вещания в редакторе
     dom.editorBroadcastStartTime?.addEventListener('change', (e) => {
       if (e.target.value) {
         state.editorStartTime = new Date(e.target.value).toISOString();
@@ -1347,7 +1048,6 @@
       renderEditorSlots();
     });
 
-    // Очистить сетку (Освободить эфир)
     dom.btnClearTimelineBtn?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) return;
       if (!confirm(`Вы действительно хотите очистить всю сетку вещания радиостанции "${state.selectedStationForEdit.name}"? Эфир будет освобожден.`)) {
@@ -1367,7 +1067,6 @@
       }
     });
 
-    // Освободить частоту (Удалить радиостанцию навсегда)
     dom.btnReleaseStationBtn?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) return;
       const st = state.selectedStationForEdit;
@@ -1387,7 +1086,6 @@
       }
     });
 
-    // Сохранить сетку в эфир на 24 часа
     dom.btnSaveTimeline?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) {
         alert('Выберите радиостанцию');
@@ -1423,7 +1121,7 @@
       }
     });
 
-    // Загрузка плейлиста в эфир (несколько файлов сразу)
+    // Пакетная загрузка плейлиста
     dom.btnUploadPlaylist?.addEventListener('click', () => {
       const user = window.authManager && window.authManager.getUser();
       if (!user) {
@@ -1443,7 +1141,7 @@
         const progressModal = document.getElementById('modalPlaylistProgress');
         const progressText = document.getElementById('playlistProgressText');
         const progressFill = document.getElementById('playlistProgressFill');
-        if (progressModal) progressModal.hidden = false;
+        showModal(progressModal);
 
         let addedCount = 0;
         for (let i = 0; i < files.length; i++) {
@@ -1479,14 +1177,13 @@
         }
 
         if (progressFill) progressFill.style.width = '100%';
-        if (progressModal) progressModal.hidden = true;
+        hideModal(progressModal);
         alert(`Плейлист из ${addedCount} треков успешно добавлен в сетку! Вы можете поменять их порядок или вставить слова, а затем нажать "Опубликовать в эфир".`);
       };
 
       fileInput.click();
     });
 
-    // Загрузка одного файла
     dom.btnUploadNewSlot?.addEventListener('click', () => {
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
@@ -1521,7 +1218,6 @@
       fileInput.click();
     });
 
-    // Запись голоса ведущего с микрофона (виджет в шапке редактора)
     dom.btnToggleRecord?.addEventListener('click', async () => {
       if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
         state.mediaRecorder.stop();
@@ -1598,11 +1294,10 @@
       }
     });
 
-    // Выбор из медиатеки с пакетным добавлением
     dom.btnPickFromMyTracks?.addEventListener('click', async () => {
       const modal = document.getElementById('modalPickTrack');
       const list = document.getElementById('modalPickTrackList');
-      if (modal) modal.hidden = false;
+      showModal(modal);
       if (list) list.innerHTML = '<p class="alltell-state">Загружаем ваши аудиозаписи…</p>';
       if (dom.btnPickTracksBatch) dom.btnPickTracksBatch.disabled = true;
       if (dom.pickTrackSelectAll) dom.pickTrackSelectAll.checked = false;
@@ -1660,7 +1355,7 @@
                 type: cb.dataset.type || 'track'
               });
             });
-            if (modal) modal.hidden = true;
+            hideModal(modal);
           });
 
           list.querySelectorAll('.btn-pick-single-item').forEach((b) => {
@@ -1672,7 +1367,7 @@
                 duration: parseFloat(b.dataset.duration) || 180,
                 type: b.dataset.type || 'track'
               });
-              if (modal) modal.hidden = true;
+              hideModal(modal);
             });
           });
         }
@@ -1681,11 +1376,9 @@
       }
     });
 
-    // 5. Модальное окно: Вставка слов по времени
-
+    // 5. Модалка слов
     dom.btnOpenInsertWordsModal?.addEventListener('click', () => {
-      const modal = document.getElementById('modalInsertWordsByTime');
-      if (modal) modal.hidden = false;
+      showModal('modalInsertWordsByTime');
       const d = new Date();
       const pad = (n) => (n < 10 ? '0' : '') + n;
       const timeInput = document.getElementById('speechTargetTimeInput');
@@ -1695,7 +1388,6 @@
 
     document.getElementById('speechTargetTimeInput')?.addEventListener('input', updateSpeechPlanPreview);
 
-    // Табы источника в модалке слов
     const tabMic = document.getElementById('btnSpeechTabMic');
     const tabFile = document.getElementById('btnSpeechTabFile');
     const tabLib = document.getElementById('btnSpeechTabLib');
@@ -1745,7 +1437,6 @@
       }
     });
 
-    // Запись с микрофона в модалке слов
     let modalMediaRecorder = null;
     let modalChunks = [];
     let modalRecStart = 0;
@@ -1803,7 +1494,6 @@
       }
     });
 
-    // Отправка формы вставки слов
     document.getElementById('formInsertWordsByTime')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const title = document.getElementById('speechSlotTitleInput')?.value.trim() || 'Слова ведущего';
@@ -1819,7 +1509,6 @@
         let finalAudioUrl = insertWordsContext.audioUrl;
         let finalDuration = insertWordsContext.duration || 5;
 
-        // Если записан микрофон
         if (insertWordsContext.micRecordedBlob && !finalAudioUrl) {
           const formData = new FormData();
           const file = new File([insertWordsContext.micRecordedBlob], `speech-${Date.now()}.webm`, { type: 'audio/webm' });
@@ -1828,7 +1517,6 @@
           finalAudioUrl = uploadRes.url;
         }
 
-        // Если выбран файл
         const fileInput = document.getElementById('speechFileInput');
         if (fileInput && fileInput.files[0] && !finalAudioUrl) {
           const file = fileInput.files[0];
@@ -1857,8 +1545,7 @@
           duration: finalDuration
         }, calc.insertIndex);
 
-        const modal = document.getElementById('modalInsertWordsByTime');
-        if (modal) modal.hidden = true;
+        hideModal('modalInsertWordsByTime');
         alert(`Слова ведущего успешно установлены в сетку вещания сразу после трека №${calc.priorSlotIndex || 1}!`);
       } catch (err) {
         alert('Ошибка добавления слов: ' + err.message);
@@ -1870,28 +1557,109 @@
       }
     });
 
-    // 6. Модальные окна: открытие и закрытие
+    // 6. Управление страницей отдельного трека
+
+    dom.btnBackFromTrackView?.addEventListener('click', () => {
+      window.history.pushState(null, '', '/radio');
+      if (dom.trackView) { dom.trackView.hidden = true; dom.trackView.style.display = 'none'; }
+      if (dom.navTabs) { dom.navTabs.hidden = false; dom.navTabs.style.display = ''; }
+      if (dom.tabFeed) { dom.tabFeed.hidden = false; dom.tabFeed.style.display = ''; }
+    });
+
+    dom.trackPagePlayBtn?.addEventListener('click', () => {
+      if (!currentViewingTrack) return;
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
+
+      const curr = gAudio.getState();
+      if (curr.isPlaying && curr.track && curr.track.id === currentViewingTrack.id) {
+        gAudio.pause();
+      } else {
+        gAudio.playTrack(currentViewingTrack, [currentViewingTrack], 0);
+      }
+    });
+
+    dom.trackPageProgressBar?.addEventListener('click', (e) => {
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
+      const rect = dom.trackPageProgressBar.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      gAudio.seek(ratio);
+    });
+
+    dom.trackPageMuteBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.toggleMute();
+    });
+
+    dom.trackPageVolumeSlider?.addEventListener('input', (e) => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.setVolume(parseFloat(e.target.value));
+    });
+
+    dom.trackPageShareBtn?.addEventListener('click', () => {
+      if (!currentViewingTrack) return;
+      const url = `${window.location.origin}/radio/track/${currentViewingTrack.id}`;
+      navigator.clipboard.writeText(url).then(() => {
+        alert('Ссылка на трек скопирована в буфер обмена!');
+      }).catch(() => {
+        prompt('Ссылка на трек:', url);
+      });
+    });
+
+    dom.trackPageAddToEditorBtn?.addEventListener('click', () => {
+      if (!currentViewingTrack) return;
+      addSlotToEditor({
+        track_id: currentViewingTrack.id,
+        title: currentViewingTrack.title,
+        audio_url: currentViewingTrack.audio_url,
+        duration: Number(currentViewingTrack.duration) || 180,
+        type: currentViewingTrack.type || 'track'
+      });
+      alert(`Трек "${currentViewingTrack.title}" успешно добавлен в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
+    });
+
+    dom.trackPageDeleteBtn?.addEventListener('click', async () => {
+      if (!currentViewingTrack) return;
+      if (!confirm(`Вы действительно хотите удалить аудиозапись "${currentViewingTrack.title}"?`)) return;
+      try {
+        await api('/api/radio/tracks/' + currentViewingTrack.id, { method: 'DELETE' });
+        alert('Аудиозапись успешно удалена.');
+        dom.btnBackFromTrackView?.click();
+        loadTracks();
+      } catch (err) {
+        alert('Ошибка при удалении трека: ' + err.message);
+      }
+    });
+
+    // 7. Модальные окна: открытие и закрытие
     document.querySelectorAll('[data-close]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const modalId = btn.dataset.close;
-        const target = document.getElementById(modalId);
-        if (target) target.hidden = true;
+        hideModal(modalId);
       });
     });
 
     document.querySelectorAll('.radio-modal-backdrop').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
-          backdrop.hidden = true;
+          hideModal(backdrop);
         }
       });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.radio-modal-backdrop').forEach((backdrop) => {
+          hideModal(backdrop);
+        });
+      }
     });
 
     dom.btnOpenUploadTrack?.addEventListener('click', openUploadModal);
     dom.btnUploadTrackFromFeed?.addEventListener('click', openUploadModal);
     dom.btnOpenCreateStation?.addEventListener('click', openCreateStationModal);
 
-    // Превью обложки трека в форме загрузки
     document.getElementById('trackCoverInput')?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       const previewBox = document.getElementById('trackCoverPreviewBox');
@@ -1902,16 +1670,23 @@
       }
     });
 
-    // Отправка формы загрузки трека
+    // ФЛАГ-БЛОКИРОВЩИК ОТ ПОВТОРНОЙ ОТПРАВКИ И ДВОЕНИЯ УВЕДОМЛЕНИЙ
+    let isUploadingTrack = false;
     dom.formUploadTrack?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isUploadingTrack) return;
+      isUploadingTrack = true;
+
       const file = document.getElementById('trackFileInput')?.files[0];
       const title = document.getElementById('trackTitleInput')?.value.trim();
       const type = document.getElementById('trackTypeSelect')?.value;
       const coverFile = document.getElementById('trackCoverInput')?.files[0];
       const submitBtn = document.getElementById('btnSubmitUploadTrack');
 
-      if (!file) return;
+      if (!file) {
+        isUploadingTrack = false;
+        return;
+      }
 
       if (submitBtn) {
         submitBtn.disabled = true;
@@ -1919,7 +1694,6 @@
       }
 
       try {
-        // Загрузка обложки при наличии
         let coverUrl = null;
         if (coverFile) {
           const coverForm = new FormData();
@@ -1967,12 +1741,12 @@
         const previewBox = document.getElementById('trackCoverPreviewBox');
         if (previewBox) previewBox.style.display = 'none';
 
-        const modal = document.getElementById('modalUploadTrack');
-        if (modal) modal.hidden = true;
+        hideModal('modalUploadTrack');
         loadTracks();
       } catch (err) {
         alert('Ошибка публикации аудиозаписи: ' + err.message);
       } finally {
+        isUploadingTrack = false;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Опубликовать';
@@ -1980,9 +1754,12 @@
       }
     });
 
-    // Отправка формы создания станции
+    let isCreatingStation = false;
     dom.formCreateStation?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isCreatingStation) return;
+      isCreatingStation = true;
+
       const freq = document.getElementById('stationFreqInput')?.value;
       const name = document.getElementById('stationNameInput')?.value.trim();
       const desc = document.getElementById('stationDescInput')?.value.trim();
@@ -2008,13 +1785,13 @@
 
         alert(`Поздравляем! Частота ${newStation.frequency} FM успешно занята вашей радиостанцией "${newStation.name}".`);
         dom.formCreateStation?.reset();
-        const modal = document.getElementById('modalCreateStation');
-        if (modal) modal.hidden = true;
+        hideModal('modalCreateStation');
         loadStations();
         document.getElementById('tabEditorBtn')?.click();
       } catch (err) {
         alert('Ошибка создания радиостанции: ' + err.message);
       } finally {
+        isCreatingStation = false;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Занять частоту';
@@ -2030,7 +1807,6 @@
     if (trackIdToOpen) {
       openTrackPage(trackIdToOpen);
     } else {
-      // Загрузка начальных данных
       loadStations();
       loadTracks();
     }
@@ -2039,49 +1815,46 @@
     clearInterval(state.pollTimer);
     state.pollTimer = setInterval(() => {
       if (state.currentStation && state.isLiveMode && !state.isTimeshift) {
-        tuneStation(state.currentStation, state.isPlaying);
+        const gAudio = getGlobalAudio();
+        const gState = gAudio ? gAudio.getState() : {};
+        tuneStation(state.currentStation, gState.isPlaying);
       }
     }, 30000);
 
-    window.RadioClient._mounted = true;
-
-    return function cleanup() {
+    const cleanupFn = function cleanup() {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
       if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
         state.mediaRecorder.stop();
       }
       clearInterval(state.recordTimerInterval);
-      state.audio.pause();
-      state.audio.src = '';
-      state.isPlaying = false;
-
-      feedPlayerState.audio.pause();
-      feedPlayerState.audio.src = '';
-      feedPlayerState.isPlaying = false;
-
-      trackPageState.audio.pause();
-      trackPageState.audio.src = '';
-      trackPageState.isPlaying = false;
-
+      if (typeof state.globalUnsub === 'function') {
+        state.globalUnsub();
+        state.globalUnsub = null;
+      }
       window.RadioClient._mounted = false;
+
+      // НЕ ОСТАНАВЛИВАЕМ globalAudio! Радио или музыка продолжают играть
+      // на любой другой странице публичного сайта или в панели администратора.
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.syncBar();
+      }
     };
+
+    window.RadioClient._cleanup = cleanupFn;
+    return cleanupFn;
   }
 
   window.RadioClient = {
     _mounted: false,
+    _cleanup: null,
     init,
     cleanup() {
-      if (window.RadioClient._mounted) {
-        clearInterval(state.pollTimer);
-        state.pollTimer = null;
-        state.audio.pause();
-        state.audio.src = '';
-        state.isPlaying = false;
-        feedPlayerState.audio.pause();
-        trackPageState.audio.pause();
-        window.RadioClient._mounted = false;
+      if (typeof window.RadioClient._cleanup === 'function') {
+        window.RadioClient._cleanup();
       }
+      window.RadioClient._mounted = false;
     },
     openTrackPage
   };

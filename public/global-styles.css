@@ -4207,3 +4207,258 @@ body.articles-page .content-body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+
+/* ========================================================
+   ГЛОБАЛЬНЫЙ ПЛЕЕР ALLTELL (РАДИО И ТРЕКИ СКВОЗЬ ВСЕ СТРАНИЦЫ И АДМИНКУ)
+   ======================================================== */
+.alltell-global-audio-bar[hidden] {
+  display: none !important;
+}
+
+.alltell-global-audio-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 99999;
+  background: rgba(18, 20, 27, 0.96);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+  padding: 10px 24px;
+  animation: globalBarSlideUp 0.25s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #fff;
+}
+
+@keyframes globalBarSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.alltell-global-audio-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.alltell-global-audio-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.alltell-global-audio-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #151821;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff4757;
+  font-size: 1.2rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.alltell-global-audio-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.alltell-global-audio-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.alltell-global-audio-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alltell-global-audio-badge {
+  font-size: 0.72rem;
+  font-family: monospace;
+  font-weight: 700;
+  background: rgba(255, 71, 87, 0.2);
+  color: #ff6b81;
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  padding: 2px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.alltell-global-audio-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alltell-global-audio-title:hover {
+  text-decoration: underline;
+  color: #ff6b81;
+}
+
+.alltell-global-audio-sub {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.alltell-global-audio-center {
+  flex: 1;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.alltell-global-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.alltell-global-audio-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.alltell-global-audio-btn:hover {
+  color: #fff;
+}
+
+.alltell-global-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ff4757;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(255, 71, 87, 0.3);
+}
+
+.alltell-global-play-btn:hover {
+  transform: scale(1.05);
+  background: #ff5e6c;
+}
+
+.alltell-global-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.alltell-global-time {
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: #94a3b8;
+  width: 40px;
+  text-align: center;
+}
+
+.alltell-global-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.alltell-global-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #ff4757;
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+.alltell-global-audio-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alltell-global-tool-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.alltell-global-tool-btn:hover {
+  color: #fff;
+}
+
+.alltell-global-vol-slider {
+  width: 70px;
+  accent-color: #ff4757;
+  cursor: pointer;
+}
+
+.alltell-global-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 71, 87, 0.15);
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  color: #ff6b81;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.alltell-global-link-btn:hover {
+  background: #ff4757;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .alltell-global-audio-actions {
+    display: none;
+  }
+}
+
+/* Глобальная защита от отображения скрытых элементов и модалок */
+[hidden],
+.radio-modal-backdrop[hidden] {
+  display: none !important;
+}

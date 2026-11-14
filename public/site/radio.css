@@ -11,6 +11,14 @@
   --radio-border: rgba(255, 255, 255, 0.08);
 }
 
+[hidden],
+.radio-modal-backdrop[hidden],
+.radio-tab-content[hidden],
+.radio-track-view-page[hidden],
+.radio-feed-player-bar[hidden] {
+  display: none !important;
+}
+
 /* Hero секция */
 .radio-hero-section {
   position: relative;
