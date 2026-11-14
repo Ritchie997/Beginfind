@@ -212,8 +212,7 @@ body.eb-drag-active * {
   color: var(--text-normal);
   font-size: 13px;
 }
-.eb-select-bar[hidden],
-body:not(.articles-page) .eb-select-bar { display: none; }
+.eb-select-bar[hidden] { display: none; }
 .eb-select-bar-count { margin-right: 6px; white-space: nowrap; }
 .eb-select-bar button {
   display: flex;

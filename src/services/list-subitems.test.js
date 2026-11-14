@@ -89,3 +89,68 @@ test('styles: editor-blocks.css and editor-obsidian.css contain sub-item and tre
   assert.ok(obsidianCss.includes('.preview-pane ul.blk-list-nested'), 'editor-obsidian.css must style nested lists');
   assert.ok(obsidianCss.includes('.preview-pane ul.blk-checklist-nested'), 'editor-obsidian.css must style nested checklists');
 });
+
+test('multiblock: drag-and-drop algorithm moves selected blocks in order and skips unselected', () => {
+  // Test the exact multi-move algorithm implemented in editor-manager.js
+  function moveMulti(list, selectedIds, targetIndex) {
+    const movingBlocks = list.filter((b) => selectedIds.has(b.id));
+    const movingSet = new Set(movingBlocks.map((b) => b.id));
+
+    const countBefore = movingBlocks.filter((b) => list.indexOf(b) < targetIndex).length;
+    const finalIndex = Math.max(0, targetIndex - countBefore);
+
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (movingSet.has(list[i].id)) list.splice(i, 1);
+    }
+
+    list.splice(finalIndex, 0, ...movingBlocks);
+    return list;
+  }
+
+  // Initial: [A*, B, C*, D, E*, F, G]
+  // Target: drop between F and G (index 6, before G)
+  {
+    const list = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }, { id: 'E' }, { id: 'F' }, { id: 'G' }];
+    const selected = new Set(['A', 'C', 'E']);
+    const result = moveMulti(list, selected, 6);
+    assert.deepStrictEqual(result.map(x => x.id), ['B', 'D', 'F', 'A', 'C', 'E', 'G']);
+  }
+
+  // Target: drop between B and C (index 2, before C) -> inserts between B and D
+  {
+    const list = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }, { id: 'E' }, { id: 'F' }, { id: 'G' }];
+    const selected = new Set(['A', 'C', 'E']);
+    const result = moveMulti(list, selected, 2);
+    assert.deepStrictEqual(result.map(x => x.id), ['B', 'A', 'C', 'E', 'D', 'F', 'G']);
+  }
+
+  // Target: drop at start (index 0)
+  {
+    const list = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }, { id: 'E' }, { id: 'F' }, { id: 'G' }];
+    const selected = new Set(['A', 'C', 'E']);
+    const result = moveMulti(list, selected, 0);
+    assert.deepStrictEqual(result.map(x => x.id), ['A', 'C', 'E', 'B', 'D', 'F', 'G']);
+  }
+
+  // Target: drop at end (index 7)
+  {
+    const list = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }, { id: 'E' }, { id: 'F' }, { id: 'G' }];
+    const selected = new Set(['A', 'C', 'E']);
+    const result = moveMulti(list, selected, 7);
+    assert.deepStrictEqual(result.map(x => x.id), ['B', 'D', 'F', 'G', 'A', 'C', 'E']);
+  }
+});
+
+test('multiblock: selection bar is not restricted to articles-page and supports client site', () => {
+  const blocksCss = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.css'), 'utf8');
+  assert.ok(!blocksCss.includes('body:not(.articles-page) .eb-select-bar'), 'editor-blocks.css must not restrict eb-select-bar to articles-page');
+  assert.ok(blocksCss.includes('.eb-select-bar[hidden] { display: none; }'), 'editor-blocks.css must use [hidden] to toggle eb-select-bar');
+
+  const editorBlocksJs = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.js'), 'utf8');
+  assert.ok(editorBlocksJs.includes('opts.hasSelection'), 'editor-blocks.js must check hasSelection on handle click');
+
+  const editorManagerJs = fs.readFileSync(path.join(__dirname, '../../public/editor-manager.js'), 'utf8');
+  assert.ok(editorManagerJs.includes('movingBlocks'), 'editor-manager.js must support movingBlocks in drag and drop');
+  assert.ok(editorManagerJs.includes('countBefore'), 'editor-manager.js must calculate countBefore for multi-block insertion');
+});
+

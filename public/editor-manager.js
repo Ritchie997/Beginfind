@@ -859,15 +859,34 @@
       this.closeBlockTypeMenu();
       this.closeSuggest();
 
+      // Групповой перенос: если перетаскиваемый блок выделен и в списке есть другие
+      // выделенные блоки — переносим всю группу в порядке их расположения сверху вниз.
+      const isMulti = this._selectedIds.has(block.id) && this._selectedIds.size > 1;
+      const movingBlocks = isMulti
+        ? list.filter((b) => this._selectedIds.has(b.id))
+        : [block];
+
       // "Призрак" у пальца/курсора: тип блока и начало текста. Клон самого
       // блока не годится — cloneNode не переносит текущий value у textarea.
       const ghost = document.createElement('div');
       ghost.className = 'eb-drag-ghost';
       ghost.innerHTML = '<i class="fas fa-grip-vertical"></i>';
-      const typeEl = document.createElement('span'); typeEl.className = 'eb-drag-ghost-type'; typeEl.textContent = blockTypeTag(block);
+      const typeEl = document.createElement('span');
+      typeEl.className = 'eb-drag-ghost-type';
+      if (movingBlocks.length > 1) {
+        typeEl.textContent = `${movingBlocks.length} ${pluralBlocks(movingBlocks.length)}`;
+      } else {
+        typeEl.textContent = blockTypeTag(block);
+      }
       ghost.appendChild(typeEl);
+
       const preview = blockDragPreviewText(block);
-      if (preview) { const t = document.createElement('span'); t.className = 'eb-drag-ghost-text'; t.textContent = preview; ghost.appendChild(t); }
+      if (preview) {
+        const t = document.createElement('span');
+        t.className = 'eb-drag-ghost-text';
+        t.textContent = movingBlocks.length > 1 ? `${preview} (и ещё ${movingBlocks.length - 1})` : preview;
+        ghost.appendChild(t);
+      }
       document.body.appendChild(ghost);
 
       const indicator = document.createElement('div');
@@ -875,11 +894,15 @@
       indicator.hidden = true;
       document.body.appendChild(indicator);
 
-      wrap.classList.add('eb-dragging');
+      // Подсвечиваем все переносимые блоки полупрозрачными
+      movingBlocks.forEach((b) => {
+        const w = this.container.querySelector(`[data-block-id="${b.id}"]`);
+        if (w) w.classList.add('eb-dragging');
+      });
       document.body.classList.add('eb-drag-active');
 
       const d = this._drag = {
-        pointerId: e.pointerId, wrap, list, block, ghost, indicator,
+        pointerId: e.pointerId, wrap, list, block, movingBlocks, ghost, indicator,
         x: e.clientX, y: e.clientY, target: null, raf: 0, lastTs: 0, scrollAcc: 0
       };
 
@@ -981,12 +1004,16 @@
         if (!el || !this.container.contains(el)) return null;
       }
       if (d.wrap.contains(el)) return null;
+      if (Array.isArray(d.movingBlocks) && d.movingBlocks.some((b) => {
+        const w = this.container.querySelector(`[data-block-id="${b.id}"]`);
+        return w && w.contains(el);
+      })) return null;
 
       // От элемента под курсором вверх до ближайшего списка блоков, в который
       // этот тип можно положить: колонки/секции внутрь вложенных списков не
       // кладутся (см. NESTED_ALLOWED_TYPES) — для них цель поднимется до
       // списка верхнего уровня.
-      const canHost = (listEl) => !listEl._ebNested || NESTED_ALLOWED_TYPES.includes(d.block.type);
+      const canHost = (listEl) => !listEl._ebNested || (d.movingBlocks || [d.block]).every((b) => NESTED_ALLOWED_TYPES.includes(b.type));
       for (let node = el; node && node !== this.container.parentElement; node = node.parentElement) {
         if (!node._ebList || !canHost(node)) continue;
         const blocks = Array.from(node.children).filter((c) => c.classList.contains('eb-block'));
@@ -1008,7 +1035,12 @@
       d.detach();
       d.ghost.remove();
       d.indicator.remove();
-      d.wrap.classList.remove('eb-dragging');
+
+      const movingBlocks = Array.isArray(d.movingBlocks) && d.movingBlocks.length ? d.movingBlocks : [d.block];
+      movingBlocks.forEach((b) => {
+        const w = this.container.querySelector(`[data-block-id="${b.id}"]`);
+        if (w) w.classList.remove('eb-dragging');
+      });
       document.body.classList.remove('eb-drag-active');
 
       // Отпускание над ручкой даёт ещё и click — меню открываться не должно.
@@ -1017,25 +1049,49 @@
 
       if (!commit || !d.target) return;
       const toList = d.target.list;
-      let index = d.target.index; // DOM-блоки списка идут 1:1 с массивом (renderBlockList)
-      const from = d.list.indexOf(d.block);
-      if (from === -1) return;
+      let targetIndex = d.target.index; // DOM-блоки списка идут 1:1 с массивом (renderBlockList)
+
+      const movingSet = new Set(movingBlocks.map((b) => b.id));
+
       if (toList === d.list) {
-        if (index > from) index--;
-        if (index === from) return;
+        // Сколько перемещаемых блоков стояли до позиции вставки targetIndex
+        const countBefore = movingBlocks.filter((b) => d.list.indexOf(b) < targetIndex).length;
+        const finalIndex = Math.max(0, targetIndex - countBefore);
+
+        // Удаляем перемещаемые блоки из исходного списка in-place
+        for (let i = d.list.length - 1; i >= 0; i--) {
+          if (movingSet.has(d.list[i].id)) {
+            d.list.splice(i, 1);
+          }
+        }
+
+        // Вставляем все перемещаемые блоки в их порядке сверху вниз
+        d.list.splice(finalIndex, 0, ...movingBlocks);
+      } else {
+        // Перемещение между разными контейнерами (например, в колонку или спойлер)
+        for (let i = d.list.length - 1; i >= 0; i--) {
+          if (movingSet.has(d.list[i].id)) {
+            d.list.splice(i, 1);
+          }
+        }
+        const finalIndex = Math.max(0, Math.min(targetIndex, toList.length));
+        toList.splice(finalIndex, 0, ...movingBlocks);
       }
-      d.list.splice(from, 1);
-      toList.splice(Math.max(0, Math.min(index, toList.length)), 0, d.block);
+
       this._active = { list: toList, block: d.block };
       this.renderAll();
       this.scheduleRenderPreview();
       this.recordHistory(true);
 
-      const moved = this.container.querySelector(`[data-block-id="${d.block.id}"]`);
-      if (moved) {
-        moved.classList.add('eb-just-dropped');
-        setTimeout(() => moved.classList.remove('eb-just-dropped'), 700);
-      }
+      movingBlocks.forEach((b) => {
+        const moved = this.container.querySelector(`[data-block-id="${b.id}"]`);
+        if (moved) {
+          moved.classList.add('eb-just-dropped');
+          setTimeout(() => moved.classList.remove('eb-just-dropped'), 700);
+        }
+      });
+
+      this.updateSelectionUI();
     }
 
     // ===== Рендер списка блоков (используется и для верхнего уровня, и для

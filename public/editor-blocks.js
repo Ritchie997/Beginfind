@@ -278,7 +278,7 @@
     dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
     dragBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (opts.onSelect && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      if (opts.onSelect && (e.shiftKey || e.ctrlKey || e.metaKey || opts.hasSelection)) {
         opts.onSelect({ range: e.shiftKey });
         return;
       }
