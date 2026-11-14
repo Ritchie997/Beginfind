@@ -168,12 +168,13 @@ async function deleteTrack(id, actingUserId, isRootOrAdmin = false) {
   const track = await getTrackById(id);
   if (!track) return false;
 
-  if (track.user_id !== actingUserId && !isRootOrAdmin) {
+  if (Number(track.user_id) !== Number(actingUserId) && !isRootOrAdmin) {
     throw new Error('Недостаточно прав для удаления трека');
   }
 
   await run('DELETE FROM radio_favorites WHERE track_id = ?', [id]);
   await run('DELETE FROM radio_playlist_tracks WHERE track_id = ?', [id]);
+  await run('DELETE FROM radio_timeline_slots WHERE track_id = ?', [id]);
   await run('DELETE FROM radio_tracks WHERE id = ?', [id]);
   return true;
 }

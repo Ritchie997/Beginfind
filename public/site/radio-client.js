@@ -1054,7 +1054,14 @@
       updateTrackPageFavoriteUI();
 
       const currentUser = window.authManager && window.authManager.getUser();
-      const isOwnerOrAdmin = currentUser && (currentUser.id === track.user_id || currentUser.is_root || currentUser.admin_level > 0);
+      const isOwnerOrAdmin = currentUser && (
+        Number(currentUser.id) === Number(track.user_id) ||
+        Boolean(currentUser.is_root) ||
+        Number(currentUser.admin_level) > 0 ||
+        Boolean(currentUser.is_admin) ||
+        currentUser.role === 'admin' ||
+        currentUser.role === 'root'
+      );
       if (dom.trackPageDeleteBtn) {
         dom.trackPageDeleteBtn.style.display = isOwnerOrAdmin ? 'inline-flex' : 'none';
       }
@@ -1366,11 +1373,16 @@
   }
 
   async function showConfirm(message, opts = {}) {
-    if (typeof window.showConfirm === 'function') {
-      return await window.showConfirm(message, opts);
+    const confirmEl = document.getElementById('confirmDialogModal');
+    if (confirmEl) {
+      confirmEl.style.display = 'flex';
+      confirmEl.hidden = false;
     }
     if (window.confirmDialog && typeof window.confirmDialog.open === 'function') {
       return await window.confirmDialog.open({ message, ...opts });
+    }
+    if (typeof window.showConfirm === 'function') {
+      return await window.showConfirm(message, opts);
     }
     return window.confirm(message);
   }
@@ -1400,7 +1412,7 @@
     if (typeof modal === 'string') modal = document.getElementById(modal);
     if (!modal) return;
     // Скрываем все остальные открытые модалки единой системы для избежания наслоения окон
-    document.querySelectorAll('.modal-overlay').forEach((m) => {
+    document.querySelectorAll('.modal-overlay:not(#confirmDialogModal)').forEach((m) => {
       if (m !== modal) hideModal(m);
     });
     modal.hidden = false;
@@ -1493,7 +1505,7 @@
     window.RadioClient._mounted = true;
 
     // Скрываем все модальные окна при старте страницы
-    document.querySelectorAll('.modal-overlay').forEach((m) => hideModal(m));
+    document.querySelectorAll('.modal-overlay:not(#confirmDialogModal)').forEach((m) => hideModal(m));
 
     dom = queryDom();
     if (!dom.deckPlayBtn) {
@@ -2182,9 +2194,7 @@
 
     dom.btnBackFromTrackView?.addEventListener('click', () => {
       window.history.pushState(null, '', '/radio');
-      if (dom.trackView) { dom.trackView.hidden = true; dom.trackView.style.display = 'none'; }
-      if (dom.navTabs) { dom.navTabs.hidden = false; dom.navTabs.style.display = ''; }
-      if (dom.tabFeed) { dom.tabFeed.hidden = false; dom.tabFeed.style.display = ''; }
+      switchTab('feed');
     });
 
     dom.trackPagePlayBtn?.addEventListener('click', () => {
@@ -2257,7 +2267,8 @@
 
     dom.trackPageDeleteBtn?.addEventListener('click', async () => {
       if (!currentViewingTrack) return;
-      const ok = await showConfirm(`Удалить аудиозапись «${currentViewingTrack.title}»? Действие необратимо.`, {
+      const trackToDelete = currentViewingTrack;
+      const ok = await showConfirm(`Удалить аудиозапись «${trackToDelete.title}»? Действие необратимо.`, {
         title: 'Удалить аудиозапись?',
         confirmLabel: 'Удалить',
         danger: true
@@ -2265,9 +2276,18 @@
       if (!ok) return;
 
       try {
-        await api('/api/radio/tracks/' + currentViewingTrack.id, { method: 'DELETE' });
+        await api('/api/radio/tracks/' + trackToDelete.id, { method: 'DELETE' });
         showToast('Аудиозапись успешно удалена.', 'info');
-        dom.btnBackFromTrackView?.click();
+        const gAudio = getGlobalAudio();
+        if (gAudio) {
+          const gState = gAudio.getState();
+          if (gState.track && Number(gState.track.id) === Number(trackToDelete.id)) {
+            gAudio.stop();
+          }
+        }
+        currentViewingTrack = null;
+        window.history.pushState(null, '', '/radio');
+        switchTab('feed');
         loadTracks();
       } catch (err) {
         showToast('Ошибка при удалении трека: ' + err.message, 'error');
@@ -2385,7 +2405,7 @@
       });
     });
 
-    document.querySelectorAll('.modal-overlay').forEach((backdrop) => {
+    document.querySelectorAll('.modal-overlay:not(#confirmDialogModal)').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
           hideModal(backdrop);
@@ -2395,7 +2415,7 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-overlay').forEach((backdrop) => {
+        document.querySelectorAll('.modal-overlay:not(#confirmDialogModal)').forEach((backdrop) => {
           hideModal(backdrop);
         });
       }

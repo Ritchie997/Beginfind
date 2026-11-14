@@ -169,6 +169,7 @@
         }
 
         overlay.hidden = true;
+        overlay.style.display = 'none';
         const resolve = this._resolve;
         this._resolve = null;
         const hist = this._hist;
@@ -223,6 +224,7 @@
     _show() {
       const els = this.ensureModal();
       els.overlay.hidden = false;
+      els.overlay.style.display = 'flex';
       if (!this._hist && window.modalHistory) {
         this._hist = window.modalHistory.open(() => els.cancel({ fromHistory: true }));
       }
