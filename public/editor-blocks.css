@@ -431,6 +431,56 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 .eb-list-type-toggle:hover {
   color: var(--blurple);
 }
+.eb-list-style-btn:hover {
+  color: var(--blurple);
+  border-color: var(--blurple);
+}
+.eb-list-style-popover {
+  background: var(--background-secondary, #2b2d31);
+  border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.15));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 125px;
+  font-family: inherit;
+  z-index: 10000;
+}
+.eb-list-style-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
+  color: var(--text-normal, #dcddde);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+.eb-list-style-opt:hover {
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-normal, #fff);
+}
+.eb-list-style-opt.active {
+  background: var(--blurple, #5865f2);
+  color: #fff;
+  font-weight: 600;
+}
+.eb-list-style-opt i {
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}
+.theme-light .eb-list-style-popover {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
 
 /* --- таблица --- */
 .eb-table { border-collapse: collapse; width: 100%; }

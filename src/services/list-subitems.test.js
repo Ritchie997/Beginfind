@@ -152,5 +152,44 @@ test('multiblock: selection bar is not restricted to articles-page and supports 
   const editorManagerJs = fs.readFileSync(path.join(__dirname, '../../public/editor-manager.js'), 'utf8');
   assert.ok(editorManagerJs.includes('movingBlocks'), 'editor-manager.js must support movingBlocks in drag and drop');
   assert.ok(editorManagerJs.includes('countBefore'), 'editor-manager.js must calculate countBefore for multi-block insertion');
+
+  const antropediaHtml = fs.readFileSync(path.join(__dirname, '../../public/site/antropedia.html'), 'utf8');
+  assert.ok(antropediaHtml.includes('src="/editor-blocks.js"'), 'antropedia.html must load editor-blocks.js script');
+});
+test('subitems: ordered markers use purely decimal numbers without latin letters', () => {
+  const editorManagerJs = fs.readFileSync(path.join(__dirname, '../../public/editor-manager.js'), 'utf8');
+  assert.ok(!editorManagerJs.includes('abcdefghijklmnopqrstuvwxyz'), 'editor-manager.js must not alternate to latin letters');
+  assert.ok(editorManagerJs.includes('_getListOrderedMarker'), 'editor-manager.js must have _getListOrderedMarker');
+
+  const editorBlocksJs = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.js'), 'utf8');
+  assert.ok(!editorBlocksJs.includes('abcdefghijklmnopqrstuvwxyz'), 'editor-blocks.js must not alternate to latin letters');
+  assert.ok(editorBlocksJs.includes('getEbOrderedMarker'), 'editor-blocks.js must have getEbOrderedMarker');
 });
 
+test('subitems: style picker popover and marker toggles exist in both editors', () => {
+  const editorManagerJs = fs.readFileSync(path.join(__dirname, '../../public/editor-manager.js'), 'utf8');
+  assert.ok(editorManagerJs.includes('_openListStylePopover'), 'editor-manager.js must define _openListStylePopover');
+  assert.ok(editorManagerJs.includes('eb-list-style-btn'), 'editor-manager.js must have style button');
+  assert.ok(editorManagerJs.includes('eb-list-type-toggle'), 'editor-manager.js must allow toggling via marker click');
+
+  const editorBlocksJs = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.js'), 'utf8');
+  assert.ok(editorBlocksJs.includes('openEbListStylePopover'), 'editor-blocks.js must define openEbListStylePopover');
+  assert.ok(editorBlocksJs.includes('eb-list-style-btn'), 'editor-blocks.js must have style button');
+  assert.ok(editorBlocksJs.includes('eb-list-type-toggle'), 'editor-blocks.js must allow toggling via marker click');
+
+  const blocksCss = fs.readFileSync(path.join(__dirname, '../../public/editor-blocks.css'), 'utf8');
+  assert.ok(blocksCss.includes('.eb-list-style-popover'), 'editor-blocks.css must style list style popover');
+  assert.ok(blocksCss.includes('.eb-list-style-opt'), 'editor-blocks.css must style popover options');
+});
+
+test('subitems: preview and reader styles prevent marker collision and checklist breakage', () => {
+  const obsidianCss = fs.readFileSync(path.join(__dirname, '../../public/editor-obsidian.css'), 'utf8');
+  assert.ok(obsidianCss.includes('list-style-type: decimal !important;'), 'editor-obsidian.css must enforce decimal numbering for nested ordered lists');
+  assert.ok(obsidianCss.includes('.preview-pane ul.blk-list-nested') && obsidianCss.includes('padding-left: 24px;'), 'editor-obsidian.css must provide padding-left: 24px for nested lists');
+  assert.ok(obsidianCss.includes('.preview-pane .blk-check-row'), 'editor-obsidian.css must style blk-check-row');
+  assert.ok(obsidianCss.includes('margin-left: 0 !important;'), 'editor-obsidian.css must reset negative margin for checklist items');
+
+  const rendererJs = fs.readFileSync(path.join(__dirname, '../../public/blocks-renderer.js'), 'utf8');
+  assert.ok(rendererJs.includes('blk-check-row'), 'blocks-renderer.js must wrap checklist text in blk-check-row');
+  assert.ok(rendererJs.includes('getOrderedNum'), 'blocks-renderer.js must have getOrderedNum');
+});

@@ -786,55 +786,116 @@
 .preview-pane .blk-spoiler-body > *:first-child { margin-top: 0; }
 
 /* --- чек-лист (список с disabled-чекбоксами, только для чтения) --- */
-.preview-pane ul.blk-checklist { list-style: none; padding-left: 0; }
-.preview-pane ul.blk-checklist > li.blk-check-item {
+.preview-pane ul.blk-checklist,
+.preview-pane ul.blk-checklist-nested {
+  list-style: none;
+  padding-left: 0;
+}
+.preview-pane .blk-check-row {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 4px 0;
-  padding: 0;
+  width: 100%;
 }
+.preview-pane li.blk-check-item,
+li.blk-check-item {
+  list-style: none !important;
+  margin: 4px 0 !important;
+  padding: 0;
+  display: block;
+}
+.preview-pane .blk-check-row input[type="checkbox"],
 .preview-pane .blk-check-item input[type="checkbox"] {
   flex: 0 0 auto;
   margin: 0;
   margin-top: 3px;
   accent-color: var(--blurple, #5865f2);
 }
+.preview-pane .blk-check-row > span,
 .preview-pane .blk-check-item > span {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.preview-pane .blk-check-item.is-checked .blk-check-row > span,
 .preview-pane .blk-check-item.is-checked > span,
-.preview-pane .blk-check-item:has(> input:checked) > span {
+.preview-pane .blk-check-item:has(> input:checked) > span,
+.preview-pane .blk-check-item:has(input:checked) .blk-check-row > span {
   text-decoration: line-through;
   opacity: 0.75;
+}
+
+/* Отменяем сдвиг -1.6em для чек-листов блоков */
+.preview-pane .blk-checklist li,
+.preview-pane .blk-checklist-nested li,
+.preview-pane li.blk-check-item {
+  margin-left: 0 !important;
 }
 
 /* --- вложенные списки и подпункты (режим чтения и превью) --- */
 .preview-pane ul.blk-list-nested,
 .preview-pane ol.blk-list-nested,
-.preview-pane ul.blk-checklist-nested {
+.preview-pane ul.blk-checklist-nested,
+.preview-pane ol.blk-checklist-nested {
   position: relative;
-  margin: 4px 0 6px 14px;
-  padding-left: 14px;
-  border-left: 1.5px solid var(--background-modifier-border, rgba(255, 255, 255, 0.15));
+  margin: 4px 0 6px 8px;
+  border-left: 2px solid var(--background-modifier-border, rgba(255, 255, 255, 0.18));
 }
+
+/* Маркированные и нумерованные подпункты: отступ слева 24px чтобы маркер не наезжал на вертикальную полосу */
+.preview-pane ul.blk-list-nested,
+.preview-pane ol.blk-list-nested,
+ul.blk-list-nested,
+ol.blk-list-nested {
+  padding-left: 24px;
+}
+
+/* Все нумерованные списки и подпункты всегда выводятся цифрами (1., 2.), без латинских букв */
+.preview-pane ol,
+.preview-pane ol ol,
+.preview-pane ol.blk-list-nested,
+.preview-pane ol.blk-ordered-nested,
+ol.blk-list-nested,
+ol.blk-ordered-nested {
+  list-style-type: decimal !important;
+}
+
+/* Чек-листы подпунктов: отступ 14px */
+.preview-pane ul.blk-checklist-nested,
+.preview-pane ol.blk-checklist-nested {
+  padding-left: 14px;
+}
+
 .theme-light .preview-pane ul.blk-list-nested,
 .theme-light .preview-pane ol.blk-list-nested,
-.theme-light .preview-pane ul.blk-checklist-nested {
-  border-left-color: rgba(0, 0, 0, 0.15);
+.theme-light .preview-pane ul.blk-checklist-nested,
+.theme-light .preview-pane ol.blk-checklist-nested {
+  border-left-color: rgba(0, 0, 0, 0.18);
 }
-.preview-pane ul.blk-checklist-nested {
-  list-style: disc;
+
+.preview-pane li.blk-ordered-item {
+  list-style: none !important;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0;
 }
-.preview-pane ul.blk-checklist-nested > li.blk-check-item {
-  list-style: none;
+.preview-pane li.blk-ordered-item .blk-item-num {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 18px;
+}
+.preview-pane li.blk-bullet-item {
+  list-style: none !important;
   display: flex;
   align-items: flex-start;
   gap: 8px;
   margin: 4px 0;
-  padding: 0;
+}
+.preview-pane li.blk-bullet-item .blk-item-bullet {
+  flex: 0 0 auto;
+  color: var(--text-muted);
 }
 
 .preview-pane .blk-table-wrap { overflow-x: auto; margin: 0 0 1em; }

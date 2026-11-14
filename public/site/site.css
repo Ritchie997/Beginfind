@@ -1611,7 +1611,8 @@ body[data-page="antropedia"] .site-main {
     max-width: 1380px;
 }
 
-.antropedia-detail-container {
+.antropedia-detail-container,
+.antropedia-view-layout {
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -10693,7 +10694,8 @@ a.site-profile-media-row:hover {
 }
 
 @media (max-width: 1024px) {
-    .antropedia-detail-container {
+    .antropedia-detail-container,
+    .antropedia-view-layout {
         display: block;
     }
 
@@ -14447,7 +14449,8 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
 /* === Адаптивные правила для мобильных и планшетов (<= 1024px) === */
 @media (max-width: 1024px) {
     /* Центрирование контейнера и карточки статьи на планшетах и мобильных */
-    .antropedia-detail-container {
+    .antropedia-detail-container,
+    .antropedia-view-layout {
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;

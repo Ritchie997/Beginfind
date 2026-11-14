@@ -1216,7 +1216,19 @@
       } else {
         controls = document.createElement('div');
         controls.className = 'eb-block-controls';
-        const dragBtn = document.createElement('button'); dragBtn.type = 'button'; dragBtn.className = 'eb-drag-handle'; dragBtn.title = 'Переместить / действия'; dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        const dragBtn = document.createElement('button');
+        dragBtn.type = 'button';
+        dragBtn.className = 'eb-drag-handle';
+        dragBtn.title = 'Переместить / действия';
+        dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        dragBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (e.shiftKey || e.ctrlKey || e.metaKey || this._selectedIds.size > 0) {
+            this.toggleBlockSelection(list, block, { range: e.shiftKey });
+            return;
+          }
+          this.openBlockActionsMenu(dragBtn, list, block);
+        });
         this.attachDragHandle(dragBtn, wrap, list, block);
         const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.title = 'Дублировать блок'; copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
         copyBtn.addEventListener('click', () => this.duplicateBlockInPlace(list, block));
@@ -1228,7 +1240,14 @@
         moreBtn.className = 'eb-block-more-btn eb-drag-handle';
         moreBtn.title = 'Действия с блоком';
         moreBtn.innerHTML = '<i class="fas fa-ellipsis-vertical"></i>';
-        moreBtn.addEventListener('click', () => this.openBlockActionsMenu(moreBtn, list, block));
+        moreBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this._selectedIds.size > 0) {
+            this.toggleBlockSelection(list, block, { range: e.shiftKey });
+            return;
+          }
+          this.openBlockActionsMenu(moreBtn, list, block);
+        });
         this.attachDragHandle(moreBtn, wrap, list, block);
       }
 
@@ -1237,6 +1256,13 @@
       tag.textContent = blockTypeTag(block);
 
       wrap.addEventListener('focusin', () => { this._active = { list, block }; });
+      wrap.addEventListener('click', (e) => {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+          if (e.target.closest('input, textarea, select, a, button:not(.eb-drag-handle):not(.eb-block-more-btn)')) return;
+          e.stopPropagation();
+          this.toggleBlockSelection(list, block, { range: e.shiftKey });
+        }
+      });
 
       const body = this.renderBlockBody(block, list, ctx) || document.createElement('div');
       wrap.append(controls, moreBtn, tag, body);
@@ -1911,17 +1937,64 @@
       });
     }
 
-    _getListOrderedMarker(items, idx) {
+    _openListStylePopover(anchorBtn, currentStyle, onSelect) {
+      document.querySelectorAll('.eb-list-style-popover').forEach((el) => el.remove());
+      const popover = document.createElement('div');
+      popover.className = 'eb-list-style-popover';
+      const options = [
+        { key: 'bullet', label: 'Маркер', icon: 'fa-list-ul' },
+        { key: 'ordered', label: 'Нумерация', icon: 'fa-list-ol' },
+        { key: 'checklist', label: 'Чек-лист', icon: 'fa-square-check' }
+      ];
+      options.forEach((opt) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'eb-list-style-opt' + (currentStyle === opt.key ? ' active' : '');
+        btn.innerHTML = `<i class="fas ${opt.icon}"></i> <span>${opt.label}</span>`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          popover.remove();
+          onSelect(opt.key);
+        });
+        popover.appendChild(btn);
+      });
+      document.body.appendChild(popover);
+      const rect = anchorBtn.getBoundingClientRect();
+      popover.style.position = 'fixed';
+      popover.style.top = `${rect.bottom + 4}px`;
+      popover.style.left = `${Math.max(10, Math.min(window.innerWidth - 140, rect.right - 130))}px`;
+
+      const close = (e) => {
+        if (!popover.contains(e.target) && e.target !== anchorBtn) {
+          popover.remove();
+          document.removeEventListener('pointerdown', close);
+          document.removeEventListener('keydown', onKey);
+        }
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') {
+          popover.remove();
+          document.removeEventListener('pointerdown', close);
+          document.removeEventListener('keydown', onKey);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener('pointerdown', close);
+        document.addEventListener('keydown', onKey);
+      }, 0);
+    }
+
+    _getListOrderedMarker(items, idx, defaultStyle) {
       const curIndent = Math.max(0, Math.min(5, parseInt(items[idx].indent, 10) || 0));
       let count = 1;
+      const defStyle = defaultStyle || 'ordered';
       for (let i = idx - 1; i >= 0; i--) {
         const prevIndent = Math.max(0, Math.min(5, parseInt(items[i].indent, 10) || 0));
         if (prevIndent < curIndent) break;
-        if (prevIndent === curIndent) count++;
+        const itStyle = items[i].style || defStyle;
+        if (prevIndent === curIndent && itStyle === 'ordered') count++;
       }
-      if (curIndent % 2 === 0) return `${count}.`;
-      const letters = 'abcdefghijklmnopqrstuvwxyz';
-      return `${letters[(count - 1) % 26] || count}.`;
+      return `${count}.`;
     }
 
     renderListItem(block, item, idx, list) {
@@ -1936,8 +2009,8 @@
         row.classList.add('is-checked');
       }
 
-      const isBlockChecklist = block.data.style === 'checklist';
-      const isItemCheck = (isBlockChecklist && item.style !== 'bullet') || item.style === 'checklist';
+      const effectiveStyle = item.style || block.data.style || 'bullet';
+      const isItemCheck = effectiveStyle === 'checklist';
 
       if (isItemCheck) {
         const cb = document.createElement('input');
@@ -1952,25 +2025,24 @@
         row.appendChild(cb);
       } else {
         const marker = document.createElement('span');
-        marker.className = 'eb-list-marker';
-        if (block.data.style === 'ordered') {
-          marker.textContent = this._getListOrderedMarker(block.data.items, idx);
+        marker.className = 'eb-list-marker eb-list-type-toggle';
+        marker.title = 'Нажмите, чтобы сменить стиль пункта (маркер / нумерация / чек-лист)';
+        if (effectiveStyle === 'ordered') {
+          marker.textContent = this._getListOrderedMarker(block.data.items, idx, block.data.style);
         } else {
           const bullets = ['•', '◦', '▪'];
           marker.textContent = bullets[indent % bullets.length] || '•';
         }
-        if (isBlockChecklist) {
-          marker.title = 'Нажмите, чтобы переключить на чекбокс';
-          marker.classList.add('eb-list-type-toggle');
-          marker.addEventListener('click', () => {
-            item.style = 'checklist';
-            this._pendingFocusBlockId = block.id;
-            this._pendingFocusItemIdx = idx;
-            this.renderAll();
-            this.scheduleRenderPreview();
-            this.recordHistory(true);
-          });
-        }
+        marker.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nextStyleMap = { bullet: 'ordered', ordered: 'checklist', checklist: 'bullet' };
+          item.style = nextStyleMap[effectiveStyle] || 'bullet';
+          this._pendingFocusBlockId = block.id;
+          this._pendingFocusItemIdx = idx;
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
         row.appendChild(marker);
       }
 
@@ -2111,22 +2183,32 @@
         this.recordHistory(true);
       });
 
-      if (isBlockChecklist) {
-        const toggleStyleBtn = document.createElement('button');
-        toggleStyleBtn.type = 'button';
-        toggleStyleBtn.className = 'eb-icon-btn eb-list-shift-btn';
-        toggleStyleBtn.title = isItemCheck ? 'Сменить чекбокс на маркер' : 'Сменить маркер на чекбокс';
-        toggleStyleBtn.innerHTML = isItemCheck ? '<i class="fas fa-circle-dot"></i>' : '<i class="fas fa-square-check"></i>';
-        toggleStyleBtn.addEventListener('click', () => {
-          item.style = isItemCheck ? 'bullet' : 'checklist';
+      const styleBtn = document.createElement('button');
+      styleBtn.type = 'button';
+      styleBtn.className = 'eb-icon-btn eb-list-style-btn';
+      const styleIcons = {
+        bullet: 'fa-list-ul',
+        ordered: 'fa-list-ol',
+        checklist: 'fa-square-check'
+      };
+      const styleTitles = {
+        bullet: 'Маркер',
+        ordered: 'Нумерация',
+        checklist: 'Чек-лист'
+      };
+      styleBtn.title = `Стиль пункта: ${styleTitles[effectiveStyle] || 'Маркер'}`;
+      styleBtn.innerHTML = `<i class="fas ${styleIcons[effectiveStyle] || 'fa-list-ul'}"></i>`;
+      styleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._openListStylePopover(styleBtn, effectiveStyle, (newStyle) => {
+          item.style = newStyle;
           this._pendingFocusBlockId = block.id;
           this._pendingFocusItemIdx = idx;
           this.renderAll();
           this.scheduleRenderPreview();
           this.recordHistory(true);
         });
-        actions.appendChild(toggleStyleBtn);
-      }
+      });
 
       const del = document.createElement('button');
       del.type = 'button';
@@ -2144,7 +2226,7 @@
         this.recordHistory(true);
       });
 
-      actions.append(outdentBtn, indentBtn, del);
+      actions.append(outdentBtn, indentBtn, styleBtn, del);
       row.append(ta, actions);
       return row;
     }

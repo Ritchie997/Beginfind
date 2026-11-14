@@ -3397,7 +3397,10 @@
       var sb = document.getElementById('antropediaViewSidebar');
       var btn = document.getElementById('antropediaSidebarToggleBtn');
       var backdrop = document.getElementById('antropediaSidebarBackdrop');
-      if (sb) sb.classList.add('is-open');
+      if (sb) {
+        sb.hidden = false;
+        sb.classList.add('is-open');
+      }
       if (btn) {
         btn.classList.add('is-open');
         btn.setAttribute('aria-expanded', 'true');
@@ -3675,6 +3678,16 @@
       if (sb) sb.hidden = false;
       if (toggleBtn) toggleBtn.hidden = false;
 
+      function safeEscape(str) {
+        if (typeof escapeHtml === 'function') return escapeHtml(str);
+        return String(str || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       panel.innerHTML = '<ul class="antropedia-toc-list">' + headings.map(function (h, idx) {
         var level = parseInt(h.tagName.slice(1), 10) || 2;
         var blockId = h.getAttribute('data-block-id') || h.id;
@@ -3683,8 +3696,8 @@
           h.setAttribute('data-block-id', blockId);
         }
         return '<li class="antropedia-toc-item antropedia-toc-level-' + level + '">' +
-          '<a href="javascript:void(0)" data-block-id="' + escapeHtml(blockId) + '">' +
-          escapeHtml(h.textContent.trim()) + '</a></li>';
+          '<a href="javascript:void(0)" data-block-id="' + safeEscape(blockId) + '">' +
+          safeEscape(h.textContent.trim()) + '</a></li>';
       }).join('') + '</ul>';
 
       function setActiveHeading(blockId) {
@@ -3806,12 +3819,41 @@
         }
       }
 
+      if (typeof IntersectionObserver !== 'undefined' && headings.length) {
+        try {
+          tocObserver = new IntersectionObserver(function (entries) {
+            if (isClickLocked) return;
+            var visible = entries.filter(function (entry) { return entry.isIntersecting; });
+            if (!visible.length) return;
+            visible.sort(function (a, b) {
+              return a.boundingClientRect.top - b.boundingClientRect.top;
+            });
+            var topEntry = visible[0];
+            var blockId = topEntry.target.getAttribute('data-block-id') || topEntry.target.id;
+            if (blockId) {
+              setActiveHeading(blockId);
+            }
+          }, {
+            rootMargin: '-80px 0px -60% 0px',
+            threshold: 0
+          });
+
+          headings.forEach(function (h) {
+            tocObserver.observe(h);
+          });
+        } catch (_) {}
+      }
+
       window.addEventListener('scroll', onScroll, { passive: true });
       window.addEventListener('wheel', onUserScroll, { passive: true });
       window.addEventListener('touchmove', onUserScroll, { passive: true });
       window.addEventListener('keydown', onUserScroll, { passive: true });
 
       tocCleanup = function () {
+        if (tocObserver) {
+          tocObserver.disconnect();
+          tocObserver = null;
+        }
         window.removeEventListener('scroll', onScroll);
         window.removeEventListener('wheel', onUserScroll);
         window.removeEventListener('touchmove', onUserScroll);
@@ -3851,6 +3893,7 @@
       listView.hidden = true;
       if (detailContainer) detailContainer.hidden = false;
       detail.hidden = false;
+      if (sidebar) sidebar.hidden = false;
       detail.replaceChildren();
       updateAdminLinks(article.slug);
 

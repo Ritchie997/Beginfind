@@ -349,8 +349,8 @@
     moreBtn.innerHTML = '<i class="fas fa-ellipsis-vertical"></i>';
     moreBtn.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (opts.onSelect && opts.hasSelection) {
-        opts.onSelect();
+      if (opts.onSelect && (e.shiftKey || e.ctrlKey || e.metaKey || opts.hasSelection)) {
+        opts.onSelect({ range: e.shiftKey });
         return;
       }
       openBlockActionMenu(moreBtn, opts);
@@ -442,17 +442,64 @@
         });
       }
 
-      function getEbOrderedMarker(items, idx) {
+      function openEbListStylePopover(anchorBtn, currentStyle, onSelect) {
+        document.querySelectorAll('.eb-list-style-popover').forEach(function (el) { el.remove(); });
+        const popover = document.createElement('div');
+        popover.className = 'eb-list-style-popover';
+        const options = [
+          { key: 'bullet', label: 'Маркер', icon: 'fa-list-ul' },
+          { key: 'ordered', label: 'Нумерация', icon: 'fa-list-ol' },
+          { key: 'checklist', label: 'Чек-лист', icon: 'fa-square-check' }
+        ];
+        options.forEach(function (opt) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'eb-list-style-opt' + (currentStyle === opt.key ? ' active' : '');
+          btn.innerHTML = '<i class="fas ' + opt.icon + '"></i> <span>' + opt.label + '</span>';
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            popover.remove();
+            onSelect(opt.key);
+          });
+          popover.appendChild(btn);
+        });
+        document.body.appendChild(popover);
+        const rect = anchorBtn.getBoundingClientRect();
+        popover.style.position = 'fixed';
+        popover.style.top = (rect.bottom + 4) + 'px';
+        popover.style.left = Math.max(10, Math.min(window.innerWidth - 140, rect.right - 130)) + 'px';
+
+        function close(e) {
+          if (!popover.contains(e.target) && e.target !== anchorBtn) {
+            popover.remove();
+            document.removeEventListener('pointerdown', close);
+            document.removeEventListener('keydown', onKey);
+          }
+        }
+        function onKey(e) {
+          if (e.key === 'Escape') {
+            popover.remove();
+            document.removeEventListener('pointerdown', close);
+            document.removeEventListener('keydown', onKey);
+          }
+        }
+        setTimeout(function () {
+          document.addEventListener('pointerdown', close);
+          document.addEventListener('keydown', onKey);
+        }, 0);
+      }
+
+      function getEbOrderedMarker(items, idx, defaultStyle) {
         const curIndent = Math.max(0, Math.min(5, parseInt(items[idx].indent, 10) || 0));
         let count = 1;
+        const defStyle = defaultStyle || 'ordered';
         for (let i = idx - 1; i >= 0; i--) {
           const prevIndent = Math.max(0, Math.min(5, parseInt(items[i].indent, 10) || 0));
           if (prevIndent < curIndent) break;
-          if (prevIndent === curIndent) count++;
+          const itStyle = items[i].style || defStyle;
+          if (prevIndent === curIndent && itStyle === 'ordered') count++;
         }
-        if (curIndent % 2 === 0) return count + '.';
-        const letters = 'abcdefghijklmnopqrstuvwxyz';
-        return (letters[(count - 1) % 26] || count) + '.';
+        return count + '.';
       }
 
       const itemsEl = document.createElement('div');
@@ -462,8 +509,6 @@
         block.data.items.push({ id: genBlockId(), markdown: '', checked: false, indent: 0 });
       }
       normalizeEbItemsIndent(block.data.items);
-
-      const isBlockChecklist = block.data.style === 'checklist';
 
       block.data.items.forEach(function (item, idx) {
         const row = document.createElement('div');
@@ -477,7 +522,8 @@
           row.classList.add('is-checked');
         }
 
-        const isItemCheck = (isBlockChecklist && item.style !== 'bullet') || item.style === 'checklist';
+        const effectiveStyle = item.style || block.data.style || 'bullet';
+        const isItemCheck = effectiveStyle === 'checklist';
 
         if (isItemCheck) {
           const cb = document.createElement('input');
@@ -491,21 +537,20 @@
           row.appendChild(cb);
         } else {
           const marker = document.createElement('span');
-          marker.className = 'eb-list-marker';
-          if (block.data.style === 'ordered') {
-            marker.textContent = getEbOrderedMarker(block.data.items, idx);
+          marker.className = 'eb-list-marker eb-list-type-toggle';
+          marker.title = 'Нажмите, чтобы сменить стиль пункта (маркер / нумерация / чек-лист)';
+          if (effectiveStyle === 'ordered') {
+            marker.textContent = getEbOrderedMarker(block.data.items, idx, block.data.style);
           } else {
             const bullets = ['•', '◦', '▪'];
             marker.textContent = bullets[indent % bullets.length] || '•';
           }
-          if (isBlockChecklist) {
-            marker.title = 'Нажмите, чтобы переключить на чекбокс';
-            marker.classList.add('eb-list-type-toggle');
-            marker.addEventListener('click', function () {
-              item.style = 'checklist';
-              notifyStructure(block);
-            });
-          }
+          marker.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const nextStyleMap = { bullet: 'ordered', ordered: 'checklist', checklist: 'bullet' };
+            item.style = nextStyleMap[effectiveStyle] || 'bullet';
+            notifyStructure(block);
+          });
           row.appendChild(marker);
         }
 
@@ -605,19 +650,28 @@
           notifyStructure(block);
         });
 
-        if (isBlockChecklist) {
-          const toggleStyleBtn = document.createElement('button');
-          toggleStyleBtn.type = 'button';
-          toggleStyleBtn.className = 'eb-icon-btn eb-list-shift-btn';
-          toggleStyleBtn.title = isItemCheck ? 'Сменить чекбокс на маркер' : 'Сменить маркер на чекбокс';
-          toggleStyleBtn.innerHTML = isItemCheck ? '<i class="fas fa-circle-dot"></i>' : '<i class="fas fa-square-check"></i>';
-          toggleStyleBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            item.style = isItemCheck ? 'bullet' : 'checklist';
+        const styleBtn = document.createElement('button');
+        styleBtn.type = 'button';
+        styleBtn.className = 'eb-icon-btn eb-list-style-btn';
+        const styleIcons = {
+          bullet: 'fa-list-ul',
+          ordered: 'fa-list-ol',
+          checklist: 'fa-square-check'
+        };
+        const styleTitles = {
+          bullet: 'Маркер',
+          ordered: 'Нумерация',
+          checklist: 'Чек-лист'
+        };
+        styleBtn.title = 'Стиль пункта: ' + (styleTitles[effectiveStyle] || 'Маркер');
+        styleBtn.innerHTML = '<i class="fas ' + (styleIcons[effectiveStyle] || 'fa-list-ul') + '"></i>';
+        styleBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openEbListStylePopover(styleBtn, effectiveStyle, function (newStyle) {
+            item.style = newStyle;
             notifyStructure(block);
           });
-          actions.appendChild(toggleStyleBtn);
-        }
+        });
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -632,7 +686,7 @@
           notifyStructure(block);
         });
 
-        actions.append(outdentBtn, indentBtn, del);
+        actions.append(outdentBtn, indentBtn, styleBtn, del);
         row.appendChild(actions);
 
         itemsEl.appendChild(row);

@@ -452,15 +452,50 @@
   }
 
   function renderListBlock(d, marked, renderInline) {
-    const isBlockChecklist = d.style === 'checklist';
-    const isOrdered = d.style === 'ordered';
-    const rootTag = isOrdered ? 'ol' : 'ul';
-    const rootClass = isBlockChecklist ? 'blk-checklist' : 'blk-list';
+    const defaultStyle = d.style || 'bullet';
     const items = Array.isArray(d.items) ? d.items : [];
     if (!items.length) return '';
 
+    function getItemStyle(it) {
+      if (it.style && ['bullet', 'ordered', 'checklist'].includes(it.style)) return it.style;
+      return defaultStyle;
+    }
+
+    function getOrderedNum(idx) {
+      const it = items[idx];
+      const curIndent = Math.max(0, Math.min(5, parseInt(it.indent, 10) || 0));
+      let count = 1;
+      for (let i = idx - 1; i >= 0; i--) {
+        const prev = items[i];
+        const prevIndent = Math.max(0, Math.min(5, parseInt(prev.indent, 10) || 0));
+        if (prevIndent < curIndent) break;
+        if (prevIndent === curIndent) {
+          if (getItemStyle(prev) === 'ordered') count++;
+        }
+      }
+      return count;
+    }
+
+    function getSubTag(it) {
+      return getItemStyle(it) === 'ordered' ? 'ol' : 'ul';
+    }
+
+    function getSubClass(it, isNested) {
+      const st = getItemStyle(it);
+      if (st === 'checklist') {
+        return isNested ? 'blk-checklist blk-checklist-nested' : 'blk-checklist';
+      }
+      if (st === 'ordered') {
+        return isNested ? 'blk-list-nested blk-ordered-nested' : 'blk-list';
+      }
+      return isNested ? 'blk-list-nested' : 'blk-list';
+    }
+
     let html = '';
     let currentIndent = 0;
+    const firstStyle = getItemStyle(items[0]);
+    const rootTag = firstStyle === 'ordered' ? 'ol' : 'ul';
+    const rootClass = getSubClass(items[0], false);
     const tagStack = [rootTag];
     html += `<${rootTag} class="${rootClass}">`;
 
@@ -473,8 +508,8 @@
       if (targetIndent > currentIndent) {
         while (currentIndent < targetIndent) {
           currentIndent++;
-          const subTag = isOrdered ? 'ol' : 'ul';
-          const subClass = isBlockChecklist ? 'blk-checklist blk-checklist-nested' : 'blk-list-nested';
+          const subTag = getSubTag(it);
+          const subClass = getSubClass(it, true);
           tagStack.push(subTag);
           html += `<${subTag} class="${subClass}">`;
         }
@@ -489,13 +524,25 @@
         if (i > 0) html += '</li>';
       }
 
-      const itemIsCheck = (isBlockChecklist && it.style !== 'bullet') || it.style === 'checklist';
-      if (itemIsCheck) {
+      const itStyle = getItemStyle(it);
+      if (itStyle === 'checklist') {
         const checkedAttr = it.checked ? ' checked' : '';
         const checkedCls = it.checked ? ' is-checked' : '';
-        html += `<li class="blk-check-item${checkedCls}"><input type="checkbox" disabled${checkedAttr}> <span>${renderInline(marked, it.markdown)}</span>`;
+        html += `<li class="blk-check-item${checkedCls}"><div class="blk-check-row"><input type="checkbox" disabled${checkedAttr}> <span>${renderInline(marked, it.markdown)}</span></div>`;
+      } else if (itStyle === 'ordered') {
+        const currentTag = tagStack[tagStack.length - 1];
+        if (currentTag === 'ol') {
+          html += `<li><span>${renderInline(marked, it.markdown)}</span>`;
+        } else {
+          html += `<li class="blk-ordered-item"><span class="blk-item-num">${getOrderedNum(i)}.</span> <span>${renderInline(marked, it.markdown)}</span>`;
+        }
       } else {
-        html += `<li><span>${renderInline(marked, it.markdown)}</span>`;
+        const currentTag = tagStack[tagStack.length - 1];
+        if (currentTag === 'ul') {
+          html += `<li><span>${renderInline(marked, it.markdown)}</span>`;
+        } else {
+          html += `<li class="blk-bullet-item"><span class="blk-item-bullet">•</span> <span>${renderInline(marked, it.markdown)}</span>`;
+        }
       }
     }
 
