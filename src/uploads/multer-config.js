@@ -152,7 +152,7 @@ const avatarStorage = multer.diskStorage({
 const uploadAvatar = multer({
   storage: avatarStorage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB — аватарке больше не нужно
+    fileSize: 20 * 1024 * 1024 // 20MB — технический потолок multer; настраиваемый лимит проверяется в auth.routes.js
   },
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();

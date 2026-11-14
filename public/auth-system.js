@@ -735,6 +735,52 @@ function showStatusBlocker(status, reason) {
   });
 }
 
+// ===== Единая система системных лимитов (синхронизирована с настройками админ-панели) =====
+window.SystemLimits = {
+  _cache: null,
+  _promise: null,
+  async getMaxImageSize() {
+    if (this._cache) return this._cache;
+    if (this._promise) return this._promise;
+    this._promise = (async () => {
+      try {
+        const fetcher = window.originalFetch || window.fetch;
+        const res = await fetcher('/api/upload-limits');
+        if (res.ok) {
+          const data = await res.json();
+          const mb = Number(data.maxImageSizeMb || data.maxFileSize);
+          if (mb && mb > 0) {
+            this._cache = {
+              mb,
+              bytes: data.maxImageSizeBytes || data.maxFileSizeBytes || (mb * 1024 * 1024)
+            };
+            return this._cache;
+          }
+        }
+      } catch (e) {}
+      // При ошибке связи используем 20 МБ потолок, чтобы клиент не блокировал файл раньше времени
+      return { mb: 20, bytes: 20 * 1024 * 1024 };
+    })();
+    try {
+      return await this._promise;
+    } finally {
+      this._promise = null;
+    }
+  },
+  getMaxImageSizeMbSync() {
+    return this._cache ? this._cache.mb : 20;
+  },
+  getMaxImageSizeBytesSync() {
+    return this._cache ? this._cache.bytes : 20 * 1024 * 1024;
+  },
+  setCache(mb) {
+    const num = Number(mb);
+    if (num > 0) {
+      this._cache = { mb: num, bytes: num * 1024 * 1024 };
+    }
+  }
+};
+
 // Экспорт
 window.authManager = authManager;
 window.showModalLogin = showModalLogin;

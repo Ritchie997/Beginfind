@@ -253,6 +253,35 @@
 - `GET /public/articles/:slug/comments`
 - `GET /public/articles/:slug/backlinks`
 
+## `radio.routes.js`
+
+- `GET /radio/tracks`
+- `GET /radio/tracks/:id`
+- `POST /radio/tracks`
+- `DELETE /radio/tracks/:id`
+- `GET /radio/favorites`
+- `GET /radio/favorites/ids`
+- `POST /radio/favorites/:trackId/toggle`
+- `POST /radio/favorites/:trackId`
+- `DELETE /radio/favorites/:trackId`
+- `GET /radio/playlists`
+- `GET /radio/playlists/mine`
+- `GET /radio/playlists/:id`
+- `POST /radio/playlists`
+- `PUT /radio/playlists/:id`
+- `DELETE /radio/playlists/:id`
+- `POST /radio/playlists/:id/tracks`
+- `DELETE /radio/playlists/:id/tracks/:trackId`
+- `GET /radio/stations`
+- `POST /radio/stations`
+- `GET /radio/stations/:id`
+- `PUT /radio/stations/:id`
+- `DELETE /radio/stations/:id`
+- `GET /radio/stations/:id/live`
+- `GET /radio/stations/:id/timeline`
+- `PUT /radio/stations/:id/timeline`
+- `DELETE /radio/stations/:id/timeline`
+
 ## `servers.routes.js`
 
 - `GET /servers`
@@ -289,6 +318,7 @@
 - `GET /system-settings`
 - `PUT /system-settings`
 - `GET /maintenance-status`
+- `GET /system-settings/public`
 - `POST /maintenance-continue`
 - `POST /maintenance-logout`
 
@@ -333,5 +363,7 @@
 
 ## `uploads.routes.js`
 
+- `GET /upload-limits`
 - `POST /upload-image`
 - `POST /upload-images`
+- `POST /upload-audio`

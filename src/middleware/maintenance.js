@@ -11,7 +11,9 @@ const ALWAYS_ALLOWED_API = new Set([
   '/api/login',
   '/api/maintenance-status',
   '/api/maintenance-continue',
-  '/api/maintenance-logout'
+  '/api/maintenance-logout',
+  '/api/system-settings/public',
+  '/api/upload-limits'
 ]);
 
 function maintenancePageForPath(pathname) {

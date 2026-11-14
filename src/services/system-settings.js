@@ -72,7 +72,18 @@ function writeSettings(settings) {
   const merged = { ...readSettings(), ...settings };
   merged.maintenancePages = normalizeMaintenancePages(merged.maintenancePages);
   delete merged.maintenanceMode;
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2));
+  const tmpPath = `${SETTINGS_PATH}.${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), 'utf8');
+  try {
+    fs.renameSync(tmpPath, SETTINGS_PATH);
+  } catch (_) {
+    try {
+      fs.copyFileSync(tmpPath, SETTINGS_PATH);
+      fs.unlinkSync(tmpPath);
+    } catch (e) {
+      fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2), 'utf8');
+    }
+  }
   return merged;
 }
 

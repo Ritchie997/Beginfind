@@ -5,6 +5,23 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-14 — единая система лимитов на загрузку изображений и синхронизация обложек с настройками админ-панели
+
+- **Интеграция лимитов загрузки обложек и изображений с админ-панелью (`src/routes/settings.routes.js`, `src/routes/uploads.routes.js`, `src/middleware/maintenance.js`, `src/uploads/multer-config.js`):**
+  - Устранён рассинхрон между настройкой «Максимальный размер загружаемого файла» (до 20 МБ в админ-панели) и валидацией на клиенте.
+  - Добавлены публичные эндпоинты `GET /api/upload-limits` и `GET /api/system-settings/public`, отдающие актуальный настраиваемый лимит в МБ и байтах для всех клиентских модулей без необходимости обладать правами root.
+  - В `src/middleware/maintenance.js` добавлены маршруты `/api/upload-limits` и `/api/system-settings/public` в список разрешённых при техобслуживании (`ALWAYS_ALLOWED_API`).
+  - В `src/uploads/multer-config.js` технический потолок multer для аватарок (`uploadAvatar`) поднят с 5 МБ до 20 МБ, чтобы загрузки до 20 МБ не отклонялись multer до проверки в `auth.routes.js`.
+  - В `src/services/system-settings.js` реализована атомарная запись `system-settings.json` через временный файл, исключающая повреждение JSON при параллельном чтении.
+- **Клиентская система единых лимитов (`public/auth-system.js`, `public/spa-router.js`, `public/site/antropedia-editor-client.js`, `public/editor-manager.js`, `public/views/settings.html`):**
+  - В `public/auth-system.js` создан глобальный менеджер `window.SystemLimits` с кэшированием, асинхронным получением лимитов и синхронным fallback.
+  - В `public/spa-router.js` при выборе обложки статьи (`handleCoverFileSelect` и `uploadImage`) жёсткий лимит `5 * 1024 * 1024` заменён на динамическую проверку через `window.SystemLimits`. При сохранении настроек в админ-панели кэш `SystemLimits` синхронизируется мгновенно.
+  - В `public/site/antropedia-editor-client.js` загрузка обложки (`uploadCoverImage`) переведена на `window.SystemLimits`, что позволяет авторам устанавливать обложки до 20 МБ (согласно настройкам сервера).
+  - В `public/editor-manager.js` загрузка картинок (`uploadImageFile`) переведена на динамический лимит `window.SystemLimits`.
+  - В `public/views/settings.html` обновлена подсказка к полю максимального размера, явно указывающая действие на обложки, статьи и аватарки.
+- **Тестирование:**
+  - Создан тестовый файл `src/routes/upload-limits.test.js`, проверяющий динамическую отдачу лимитов при изменении настроек (5 МБ → 20 МБ). Все 31 тестов проходят успешно.
+
 ## 2026-11-14 — вкладка «Радио»: пользовательская медиатека, виртуальные частоты, интерактивный таймлайн эфира
 
 - **Хранение и база данных (`radio.db`, `src/db/connections.js`, `src/services/radio-store.js`):**

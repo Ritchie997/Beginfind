@@ -11,6 +11,23 @@ const { convertToMp3, decodeOriginalName } = require('../services/audio-converte
 
 const router = express.Router();
 
+// GET /api/upload-limits — актуальные системные лимиты на загрузку файлов (изображения, аудио)
+router.get('/upload-limits', (req, res) => {
+  try {
+    const maxFileSizeMb = readSettings().maxFileSize;
+    res.json({
+      maxFileSize: maxFileSizeMb,
+      maxFileSizeBytes: maxFileSizeMb * 1024 * 1024,
+      maxImageSizeMb: maxFileSizeMb,
+      maxImageSizeBytes: maxFileSizeMb * 1024 * 1024,
+      maxAudioSizeMb: 100,
+      maxAudioSizeBytes: 100 * 1024 * 1024
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadImage.single('image'), (req, res) => {
   try {
     if (!req.file) {

@@ -2503,7 +2503,13 @@
 
     async uploadImageFile(file) {
       if (!file.type.startsWith('image/')) { window.showMessage?.('Пожалуйста, выберите файл изображения', 'error'); return null; }
-      if (file.size > 5 * 1024 * 1024) { window.showMessage?.('Размер файла превышает допустимый лимит (5MB)', 'error'); return null; }
+      const limits = window.SystemLimits
+        ? await window.SystemLimits.getMaxImageSize()
+        : { mb: 20, bytes: 20 * 1024 * 1024 };
+      if (file.size > limits.bytes) {
+        window.showMessage?.(`Размер файла превышает допустимый лимит (${limits.mb}MB)`, 'error');
+        return null;
+      }
       try {
         const result = await window.apiClient.uploadImage(file);
         if (!result.success) { window.showMessage?.('Ошибка при загрузке изображения: ' + result.error, 'error'); return null; }

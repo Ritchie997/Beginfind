@@ -930,9 +930,12 @@
         return;
       }
 
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (file.size > maxSize) {
-        showMessage('Размер файла превышает допустимый лимит (5MB)', 'error');
+      // Проверяем размер файла по единым системным настройкам из админ-панели
+      const limits = window.SystemLimits
+        ? await window.SystemLimits.getMaxImageSize()
+        : { mb: 20, bytes: 20 * 1024 * 1024 };
+      if (file.size > limits.bytes) {
+        showMessage(`Размер файла превышает допустимый лимит (${limits.mb}MB)`, 'error');
         return;
       }
 

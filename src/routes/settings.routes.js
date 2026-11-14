@@ -82,6 +82,20 @@ router.get('/maintenance-status', (req, res) => {
   }
 });
 
+// GET /api/system-settings/public — безопасные системные настройки для всех клиентов (лимиты загрузки и др.)
+router.get('/system-settings/public', (req, res) => {
+  try {
+    const settings = readSettings();
+    res.json({
+      maxFileSize: settings.maxFileSize,
+      maxFileSizeBytes: settings.maxFileSize * 1024 * 1024,
+      allowRegistration: settings.allowRegistration
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/maintenance-continue', auth.authenticateToken, auth.checkApproved, (req, res) => {
   const { page } = req.body || {};
   if (!MAINTENANCE_PAGE_KEYS.includes(page)) {

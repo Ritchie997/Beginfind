@@ -2010,7 +2010,7 @@ class SPARouter {
     fileInput.click();
   }
 
-  handleCoverFileSelect(inputElement) {
+  async handleCoverFileSelect(inputElement) {
     const file = inputElement.files[0];
     if (!file) {
       return;
@@ -2022,10 +2022,12 @@ class SPARouter {
       return;
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      showMessage('Размер файла превышает допустимый лимит (5MB)', 'error');
+    // Проверяем размер файла по единым системным настройкам из админ-панели
+    const limits = window.SystemLimits
+      ? await window.SystemLimits.getMaxImageSize()
+      : { mb: 20, bytes: 20 * 1024 * 1024 };
+    if (file.size > limits.bytes) {
+      showMessage(`Размер файла превышает допустимый лимит (${limits.mb}MB)`, 'error');
       return;
     }
 
@@ -2136,8 +2138,17 @@ class SPARouter {
     const fileInput = document.getElementById('articleCoverInput');
     if (!fileInput || !fileInput.files[0]) return;
 
+    const file = fileInput.files[0];
+    const limits = window.SystemLimits
+      ? await window.SystemLimits.getMaxImageSize()
+      : { mb: 20, bytes: 20 * 1024 * 1024 };
+    if (file.size > limits.bytes) {
+      showMessage(`Размер файла превышает допустимый лимит (${limits.mb}MB)`, 'error');
+      return;
+    }
+
     const formData = new FormData();
-    formData.append('image', fileInput.files[0]);
+    formData.append('image', file);
 
     try {
         // ИСПРАВЛЕНО: Используем правильный URL для загрузки изображений
@@ -5811,6 +5822,9 @@ class SPARouter {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Ошибка сохранения настроек');
+      if (settings.maxFileSize != null) {
+        window.SystemLimits?.setCache(settings.maxFileSize);
+      }
       showMessage('Настройки успешно сохранены!', 'success');
     } catch (error) {
       showMessage(`Ошибка сохранения настроек: ${error.message}`, 'error');
@@ -5867,6 +5881,7 @@ class SPARouter {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Ошибка сброса настроек');
+      window.SystemLimits?.setCache(5);
       await this.initSettingsForm();
       showMessage('Настройки сброшены к значениям по умолчанию!', 'success');
     } catch (error) {
@@ -5882,7 +5897,10 @@ class SPARouter {
       const data = await res.json();
       const settings = data.settings || {};
 
-      if (settings.maxFileSize != null) document.getElementById('maxFileSize').value = settings.maxFileSize;
+      if (settings.maxFileSize != null) {
+        document.getElementById('maxFileSize').value = settings.maxFileSize;
+        window.SystemLimits?.setCache(settings.maxFileSize);
+      }
       if (settings.allowRegistration !== undefined) document.getElementById('allowRegistration').checked = settings.allowRegistration;
       if (settings.sessionDurationHours != null) document.getElementById('sessionDurationHours').value = settings.sessionDurationHours;
       const maintenancePages = settings.maintenancePages || {};
