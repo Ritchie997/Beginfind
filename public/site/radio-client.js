@@ -448,7 +448,7 @@
             type: btn.dataset.type || 'track'
           };
           addSlotToEditor(slot);
-          alert(`Запись "${slot.title}" добавлена в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
+          showToast(`Запись «${slot.title}» добавлена в сетку вещания`, 'success');
         });
       });
     } catch (e) {
@@ -536,7 +536,7 @@
       window.history.pushState(null, '', `/radio/track/${track.id}`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      alert('Ошибка открытия страницы трека: ' + err.message);
+      showToast('Ошибка открытия страницы трека: ' + err.message, 'error');
     }
   }
 
@@ -828,7 +828,48 @@
     }
   }
 
-  // ===== Вспомогательные функции для модальных окон =====
+  // ===== Вспомогательные функции для всплывающих и модальных окон AllTell =====
+  function showToast(text, type = 'info', duration = 4000) {
+    if (window.toast && typeof window.toast.show === 'function') {
+      return window.toast.show(text, type, duration);
+    }
+    if (typeof window.showToast === 'function') {
+      return window.showToast(text, type, duration);
+    }
+    console.log(`[Toast ${type}]: ${text}`);
+  }
+
+  async function showConfirm(message, opts = {}) {
+    if (typeof window.showConfirm === 'function') {
+      return await window.showConfirm(message, opts);
+    }
+    if (window.confirmDialog && typeof window.confirmDialog.open === 'function') {
+      return await window.confirmDialog.open({ message, ...opts });
+    }
+    return window.confirm(message);
+  }
+
+  function showAlert(message, opts = {}) {
+    if (typeof window.showAlert === 'function') {
+      return window.showAlert(message, opts);
+    }
+    if (window.confirmDialog && typeof window.confirmDialog.alert === 'function') {
+      return window.confirmDialog.alert({ message, ...opts });
+    }
+    showToast(message, 'info');
+  }
+
+  function showPrompt(message, defaultValue = '', opts = {}) {
+    if (typeof window.showPrompt === 'function') {
+      return window.showPrompt(message, defaultValue, opts);
+    }
+    if (window.confirmDialog && typeof window.confirmDialog.prompt === 'function') {
+      return window.confirmDialog.prompt({ message, defaultValue, ...opts });
+    }
+    return window.prompt(message, defaultValue);
+  }
+
+  // ===== Вспомогательные функции для модальных окон страницы =====
   function showModal(modal) {
     if (typeof modal === 'string') modal = document.getElementById(modal);
     if (!modal) return;
@@ -847,7 +888,7 @@
   function openUploadModal() {
     const user = window.authManager && window.authManager.getUser();
     if (!user) {
-      alert('Для загрузки аудиозаписей необходимо войти в аккаунт AllTell');
+      showToast('Для загрузки аудиозаписей необходимо войти в аккаунт AllTell', 'warning');
       return;
     }
     showModal('modalUploadTrack');
@@ -856,7 +897,7 @@
   function openCreateStationModal() {
     const user = window.authManager && window.authManager.getUser();
     if (!user) {
-      alert('Для занятия радиочастоты необходимо войти в аккаунт AllTell');
+      showToast('Для занятия радиочастоты необходимо войти в аккаунт AllTell', 'warning');
       return;
     }
     showModal('modalCreateStation');
@@ -871,7 +912,7 @@
     window.RadioClient._mounted = true;
 
     // Скрываем все модальные окна при старте страницы
-    document.querySelectorAll('.radio-modal-backdrop').forEach((m) => hideModal(m));
+    document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((m) => hideModal(m));
 
     dom = queryDom();
     if (!dom.deckPlayBtn) {
@@ -1050,9 +1091,12 @@
 
     dom.btnClearTimelineBtn?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) return;
-      if (!confirm(`Вы действительно хотите очистить всю сетку вещания радиостанции "${state.selectedStationForEdit.name}"? Эфир будет освобожден.`)) {
-        return;
-      }
+      const ok = await showConfirm(`Очистить всю сетку вещания радиостанции «${state.selectedStationForEdit.name}»? Эфир будет освобожден.`, {
+        title: 'Очистить сетку вещания?',
+        confirmLabel: 'Очистить эфир',
+        danger: true
+      });
+      if (!ok) return;
 
       try {
         await api(`/api/radio/stations/${state.selectedStationForEdit.id}/timeline`, {
@@ -1060,39 +1104,42 @@
         });
         state.editorSlots = [];
         renderEditorSlots();
-        alert('Сетка вещания радиостанции очищена. Эфир освобожден.');
+        showToast('Сетка вещания радиостанции очищена. Эфир освобожден.', 'info');
         loadStations();
       } catch (err) {
-        alert('Ошибка при очистке сетки: ' + err.message);
+        showToast('Ошибка при очистке сетки: ' + err.message, 'error');
       }
     });
 
     dom.btnReleaseStationBtn?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) return;
       const st = state.selectedStationForEdit;
-      if (!confirm(`Вы действительно хотите освободить частоту ${st.frequency} FM? Радиостанция "${st.name}" и вся сетка вещания будут удалены навсегда, а частота станет доступна для всех пользователей.`)) {
-        return;
-      }
+      const ok = await showConfirm(`Освободить частоту ${st.frequency} FM? Радиостанция «${st.name}» и вся сетка вещания будут удалены навсегда, а частота станет доступна для всех пользователей.`, {
+        title: 'Освободить частоту?',
+        confirmLabel: 'Удалить станцию и освободить',
+        danger: true
+      });
+      if (!ok) return;
 
       try {
         await api(`/api/radio/stations/${st.id}`, { method: 'DELETE' });
-        alert(`Частота ${st.frequency} FM успешно освобождена!`);
+        showToast(`Частота ${st.frequency} FM успешно освобождена!`, 'success');
         state.selectedStationForEdit = null;
         state.editorSlots = [];
         loadStations();
         document.querySelector('.radio-nav-tab[data-tab="live"]')?.click();
       } catch (err) {
-        alert('Ошибка при освобождении частоты: ' + err.message);
+        showToast('Ошибка при освобождении частоты: ' + err.message, 'error');
       }
     });
 
     dom.btnSaveTimeline?.addEventListener('click', async () => {
       if (!state.selectedStationForEdit) {
-        alert('Выберите радиостанцию');
+        showToast('Пожалуйста, выберите радиостанцию', 'warning');
         return;
       }
       if (state.editorSlots.length === 0) {
-        alert('Сетка пуста. Добавьте хотя бы один трек.');
+        showToast('Сетка пуста. Добавьте хотя бы один трек.', 'warning');
         return;
       }
 
@@ -1109,10 +1156,10 @@
           })
         });
 
-        alert('Сетка вещания успешно опубликована на 24 часа! Эфир обновлен.');
+        showToast('Сетка вещания успешно опубликована на 24 часа! Эфир обновлен.', 'success');
         loadStations();
       } catch (e) {
-        alert('Ошибка сохранения сетки: ' + e.message);
+        showToast('Ошибка сохранения сетки: ' + e.message, 'error');
       } finally {
         if (dom.btnSaveTimeline) {
           dom.btnSaveTimeline.disabled = false;
@@ -1125,7 +1172,7 @@
     dom.btnUploadPlaylist?.addEventListener('click', () => {
       const user = window.authManager && window.authManager.getUser();
       if (!user) {
-        alert('Для загрузки плейлиста в эфир необходимо войти в аккаунт AllTell');
+        showToast('Для загрузки плейлиста в эфир необходимо войти в аккаунт AllTell', 'warning');
         return;
       }
 
@@ -1178,7 +1225,7 @@
 
         if (progressFill) progressFill.style.width = '100%';
         hideModal(progressModal);
-        alert(`Плейлист из ${addedCount} треков успешно добавлен в сетку! Вы можете поменять их порядок или вставить слова, а затем нажать "Опубликовать в эфир".`);
+        showToast(`Плейлист из ${addedCount} треков успешно добавлен в сетку!`, 'success');
       };
 
       fileInput.click();
@@ -1212,7 +1259,7 @@
             });
           });
         } catch (e) {
-          alert('Ошибка загрузки файла: ' + e.message);
+          showToast('Ошибка загрузки файла: ' + e.message, 'error');
         }
       };
       fileInput.click();
@@ -1266,7 +1313,7 @@
               });
             });
           } catch (uploadErr) {
-            alert('Не удалось загрузить аудиозапись с микрофона: ' + uploadErr.message);
+            showToast('Не удалось загрузить аудиозапись с микрофона: ' + uploadErr.message, 'error');
           } finally {
             if (dom.btnToggleRecord) {
               dom.btnToggleRecord.disabled = false;
@@ -1290,7 +1337,7 @@
         }, 500);
 
       } catch (err) {
-        alert('Ошибка доступа к микрофону: ' + err.message);
+        showToast('Ошибка доступа к микрофону: ' + err.message, 'error');
       }
     });
 
@@ -1428,7 +1475,7 @@
               insertWordsContext.audioUrl = btn.dataset.url;
               insertWordsContext.duration = parseFloat(btn.dataset.dur) || 10;
               document.getElementById('speechSlotTitleInput').value = btn.dataset.title;
-              alert(`Выбрана запись: ${btn.dataset.title}`);
+              showToast(`Выбрана запись: ${btn.dataset.title}`, 'info');
             });
           });
         } catch (e) {
@@ -1490,7 +1537,7 @@
           if (timer) timer.textContent = formatDuration(sec);
         }, 500);
       } catch (err) {
-        alert('Ошибка доступа к микрофону: ' + err.message);
+        showToast('Ошибка доступа к микрофону: ' + err.message, 'error');
       }
     });
 
@@ -1533,7 +1580,7 @@
         }
 
         if (!finalAudioUrl) {
-          alert('Пожалуйста, запишите голос с микрофона, выберите аудиофайл или запись из медиатеки.');
+          showToast('Пожалуйста, запишите голос с микрофона, выберите аудиофайл или запись из медиатеки', 'warning');
           return;
         }
 
@@ -1546,9 +1593,9 @@
         }, calc.insertIndex);
 
         hideModal('modalInsertWordsByTime');
-        alert(`Слова ведущего успешно установлены в сетку вещания сразу после трека №${calc.priorSlotIndex || 1}!`);
+        showToast(`Слова ведущего установлены в сетку после трека №${calc.priorSlotIndex || 1}`, 'success');
       } catch (err) {
-        alert('Ошибка добавления слов: ' + err.message);
+        showToast('Ошибка добавления слов: ' + err.message, 'error');
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
@@ -1601,9 +1648,9 @@
       if (!currentViewingTrack) return;
       const url = `${window.location.origin}/radio/track/${currentViewingTrack.id}`;
       navigator.clipboard.writeText(url).then(() => {
-        alert('Ссылка на трек скопирована в буфер обмена!');
+        showToast('Ссылка на трек скопирована в буфер обмена!', 'success');
       }).catch(() => {
-        prompt('Ссылка на трек:', url);
+        showPrompt('Ссылка на трек:', url);
       });
     });
 
@@ -1616,19 +1663,25 @@
         duration: Number(currentViewingTrack.duration) || 180,
         type: currentViewingTrack.type || 'track'
       });
-      alert(`Трек "${currentViewingTrack.title}" успешно добавлен в сетку вещания! Перейдите во вкладку "Редактор эфира" для публикации.`);
+      showToast(`Трек «${currentViewingTrack.title}» добавлен в сетку вещания`, 'success');
     });
 
     dom.trackPageDeleteBtn?.addEventListener('click', async () => {
       if (!currentViewingTrack) return;
-      if (!confirm(`Вы действительно хотите удалить аудиозапись "${currentViewingTrack.title}"?`)) return;
+      const ok = await showConfirm(`Удалить аудиозапись «${currentViewingTrack.title}»? Действие необратимо.`, {
+        title: 'Удалить аудиозапись?',
+        confirmLabel: 'Удалить',
+        danger: true
+      });
+      if (!ok) return;
+
       try {
         await api('/api/radio/tracks/' + currentViewingTrack.id, { method: 'DELETE' });
-        alert('Аудиозапись успешно удалена.');
+        showToast('Аудиозапись успешно удалена.', 'info');
         dom.btnBackFromTrackView?.click();
         loadTracks();
       } catch (err) {
-        alert('Ошибка при удалении трека: ' + err.message);
+        showToast('Ошибка при удалении трека: ' + err.message, 'error');
       }
     });
 
@@ -1640,7 +1693,7 @@
       });
     });
 
-    document.querySelectorAll('.radio-modal-backdrop').forEach((backdrop) => {
+    document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
           hideModal(backdrop);
@@ -1650,7 +1703,7 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.radio-modal-backdrop').forEach((backdrop) => {
+        document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((backdrop) => {
           hideModal(backdrop);
         });
       }
@@ -1736,7 +1789,7 @@
           })
         });
 
-        alert('Аудиозапись успешно опубликована!');
+        showToast('Аудиозапись успешно опубликована!', 'success');
         dom.formUploadTrack?.reset();
         const previewBox = document.getElementById('trackCoverPreviewBox');
         if (previewBox) previewBox.style.display = 'none';
@@ -1744,7 +1797,7 @@
         hideModal('modalUploadTrack');
         loadTracks();
       } catch (err) {
-        alert('Ошибка публикации аудиозаписи: ' + err.message);
+        showToast('Ошибка публикации аудиозаписи: ' + err.message, 'error');
       } finally {
         isUploadingTrack = false;
         if (submitBtn) {
@@ -1783,13 +1836,13 @@
           })
         });
 
-        alert(`Поздравляем! Частота ${newStation.frequency} FM успешно занята вашей радиостанцией "${newStation.name}".`);
+        showToast(`Частота ${newStation.frequency} FM успешно занята радиостанцией «${newStation.name}»!`, 'success');
         dom.formCreateStation?.reset();
         hideModal('modalCreateStation');
         loadStations();
         document.getElementById('tabEditorBtn')?.click();
       } catch (err) {
-        alert('Ошибка создания радиостанции: ' + err.message);
+        showToast('Ошибка создания радиостанции: ' + err.message, 'error');
       } finally {
         isCreatingStation = false;
         if (submitBtn) {
