@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Радио AllTell — пользовательская музыка, подкасты и частоты эфира</title>
+<link rel="stylesheet" href="/global-styles.css">
+<link rel="stylesheet" href="/site/site.css">
+<link rel="stylesheet" href="/site/radio.css">
+<link rel="stylesheet" href="/image-lightbox.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/user-notifications.css">
+<script src="/user-notifications.js"></script>
+</head>
+<body data-page="radio">
+
+<header class="site-header" id="siteHeader">
+  <div class="site-header-inner">
+    <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
+    <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+    <nav class="site-nav" id="siteNav">
+      <a href="/" class="site-nav-link" data-page="home">Главная</a>
+      <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
+      <a href="/alltell?view=feed" class="site-nav-link" data-page="alltell">AllTell</a>
+      <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+      <a href="/radio" class="site-nav-link" data-page="radio">Радио</a>
+    </nav>
+    <div class="site-header-actions">
+      <div class="site-search"><i class="fas fa-search"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
+      <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
+      <div class="notif-bell" id="notif-bell">
+        <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
+        <div class="notif-bell-dropdown" hidden>
+          <div class="notif-bell-head">
+            <b>Уведомления</b>
+            <button type="button" class="notif-bell-readall" data-notif="read-all">Прочитать все</button>
+          </div>
+          <div class="notif-bell-list"></div>
+        </div>
+      </div>
+      <div class="site-user" id="siteUserMenu" hidden>
+        <button type="button" class="site-user-trigger" id="siteUserTrigger" aria-haspopup="true" aria-expanded="false" aria-controls="siteUserDropdown">
+          <span class="site-user-avatar" id="siteUserAvatar"></span>
+          <span class="site-user-name" id="siteUserName"></span>
+          <i class="fas fa-chevron-down site-user-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="site-user-dropdown" id="siteUserDropdown" role="menu">
+          <a href="/profile" role="menuitem"><i class="fas fa-user"></i> Профиль</a>
+          <a href="/stickers" role="menuitem"><i class="fas fa-icons"></i> Стикеры</a>
+          <button type="button" id="siteLogout" role="menuitem"><i class="fas fa-right-from-bracket"></i> Выход</button>
+        </div>
+      </div>
+      <div class="site-auth-actions" id="siteGuestActions">
+        <button type="button" class="site-auth-button" data-auth-tab="login">Войти</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="site-nav-overlay" id="siteNavOverlay"></div>
+
+<section class="site-hero site-hero-small radio-hero-section">
+  <div class="radio-hero-glow" aria-hidden="true"></div>
+  <span class="site-hero-badge"><i class="fas fa-tower-broadcast"></i> Эфир AllTell</span>
+  <h1>Радиоволны, авторская музыка и подкасты</h1>
+  <p>Занимайте свои частоты, формируйте 24-часовую сетку вещания со словами и треками, или слушайте живой эфир сообщества с полным контролем времени.</p>
+  <div class="site-hero-actions">
+    <button type="button" class="btn btn-primary btn-lg" id="btnOpenUploadTrack"><i class="fas fa-cloud-arrow-up"></i> Опубликовать аудио</button>
+    <button type="button" class="btn btn-secondary btn-lg" id="btnOpenCreateStation"><i class="fas fa-plus-circle"></i> Занять частоту</button>
+  </div>
+</section>
+
+<main class="site-main">
+  <section class="site-section">
+    <!-- Навигационные вкладки радио -->
+    <div class="radio-nav-tabs">
+      <button type="button" class="radio-nav-tab is-active" data-tab="live">
+        <i class="fas fa-radio"></i> Живой эфир и частоты
+      </button>
+      <button type="button" class="radio-nav-tab" data-tab="feed">
+        <i class="fas fa-compact-disc"></i> Лента треков и подкастов
+      </button>
+      <button type="button" class="radio-nav-tab" data-tab="editor" id="tabEditorBtn">
+        <i class="fas fa-sliders"></i> Редактор эфира (24ч)
+      </button>
+    </div>
+
+    <!-- 1. РАЗДЕЛ: ЭФИР И ЧАСТОТЫ -->
+    <div class="radio-tab-content is-active" id="tabContentLive">
+      <!-- Главная эфирная дека (Плеер радио) -->
+      <div class="radio-deck" id="radioMainDeck">
+        <div class="radio-deck-header">
+          <div class="radio-station-badge">
+            <div class="radio-station-avatar" id="deckStationAvatar">
+              <i class="fas fa-broadcast-tower"></i>
+            </div>
+            <div class="radio-station-info">
+              <h2 id="deckStationTitle">
+                <span>Выберите станцию</span>
+                <span class="radio-freq-pill" id="deckStationFreq">--- FM</span>
+              </h2>
+              <div class="radio-station-owner" id="deckStationOwner">Вещание не запущено</div>
+            </div>
+          </div>
+          <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
+        </div>
+
+        <div class="radio-deck-body">
+          <div class="radio-track-display">
+            <div class="radio-track-meta">
+              <span class="radio-track-type-badge type-track" id="deckTrackType">Музыка</span>
+              <div class="radio-current-track-title" id="deckTrackTitle">Тишина в эфире</div>
+              <div class="radio-current-track-sub" id="deckTrackSub">Настройтесь на активную частоту ниже</div>
+            </div>
+            <div class="radio-visualizer" id="deckVisualizer">
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+              <div class="radio-visualizer-bar"></div>
+            </div>
+          </div>
+
+          <div class="radio-progress-container">
+            <div class="radio-progress-bar" id="deckProgressBar">
+              <div class="radio-progress-fill" id="deckProgressFill"></div>
+            </div>
+            <div class="radio-time-row">
+              <span id="deckTimeCurrent">00:00</span>
+              <span id="deckTimeRemaining">--:--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="radio-deck-controls">
+          <div class="radio-controls-main">
+            <button type="button" class="radio-btn-play" id="deckPlayBtn" title="Воспроизведение / Пауза">
+              <i class="fas fa-play"></i>
+            </button>
+            <button type="button" class="radio-action-btn btn-unfreeze" id="deckUnfreezeBtn" title="Слушать текущий трек с самого начала, отменив фиксацию по времени">
+              <i class="fas fa-rotate-left"></i> Слушать с начала
+            </button>
+            <button type="button" class="radio-action-btn btn-live" id="deckLiveSyncBtn" title="Вернуться к синхронному живому эфиру">
+              <i class="fas fa-satellite-dish"></i> В эфир (Live)
+            </button>
+            <button type="button" class="radio-action-btn" id="deckSkipBtn" title="Пропустить этот трек и перейти к следующему">
+              <i class="fas fa-forward-step"></i> Пропустить
+            </button>
+          </div>
+
+          <div class="radio-volume-control">
+            <button type="button" class="radio-action-btn" id="deckMuteBtn" title="Звук">
+              <i class="fas fa-volume-high"></i>
+            </button>
+            <input type="range" class="radio-volume-slider" id="deckVolumeSlider" min="0" max="1" step="0.05" value="1" title="Громкость">
+          </div>
+        </div>
+      </div>
+
+      <!-- Каталог частот и станций -->
+      <div class="radio-feed-toolbar">
+        <h3><i class="fas fa-wave-square"></i> Доступные частоты эфира</h3>
+        <button type="button" class="btn btn-secondary" id="btnRefreshStations"><i class="fas fa-rotate"></i> Обновить</button>
+      </div>
+
+      <div class="radio-stations-grid" id="stationsGrid">
+        <p class="alltell-state">Загружаем список радиостанций…</p>
+      </div>
+    </div>
+
+    <!-- 2. РАЗДЕЛ: ЛЕНТА ТРЕКОВ И ПОДКАСТОВ -->
+    <div class="radio-tab-content" id="tabContentFeed" hidden>
+      <div class="radio-feed-toolbar">
+        <div class="radio-type-filters" id="trackTypeFilters">
+          <button type="button" class="radio-filter-btn is-active" data-type="all">Все записи</button>
+          <button type="button" class="radio-filter-btn" data-type="track">🎵 Треки</button>
+          <button type="button" class="radio-filter-btn" data-type="podcast">🎙️ Подкасты</button>
+          <button type="button" class="radio-filter-btn" data-type="speech">🗣️ Слова / Записи</button>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <input type="text" class="radio-form-input" id="tracksSearchInput" placeholder="Поиск по названию или автору..." style="max-width:280px;">
+          <button type="button" class="btn btn-primary" id="btnUploadTrackFromFeed"><i class="fas fa-plus"></i> Опубликовать</button>
+        </div>
+      </div>
+
+      <div class="radio-tracks-list" id="tracksFeedList">
+        <p class="alltell-state">Загружаем аудиозаписи…</p>
+      </div>
+    </div>
+
+    <!-- 3. РАЗДЕЛ: РЕДАКТОР СЕТКИ ВЕЩАНИЯ (24 ЧАСА) -->
+    <div class="radio-tab-content" id="tabContentEditor" hidden>
+      <div class="radio-editor-container">
+        <div class="radio-editor-header">
+          <div>
+            <h2 style="margin:0 0 6px 0;">Сетка вещания вашей радиостанции</h2>
+            <p style="margin:0; color:#94a3b8; font-size:0.9rem;">
+              Составьте расписание треков, подкастов и слов на 24 часа. Сетка будет доступна в эфире на протяжении 32 часов.
+            </p>
+          </div>
+          <div class="radio-editor-capacity">
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#cbd5e1;">
+              <span>Заполнено времени:</span>
+              <strong id="editorCapacityText">00:00:00 / 24:00:00</strong>
+            </div>
+            <div class="radio-capacity-bar">
+              <div class="radio-capacity-fill" id="editorCapacityFill"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Виджет быстрой записи слов с микрофона -->
+        <div class="radio-record-box">
+          <div>
+            <strong style="color:#fff; display:block; margin-bottom:4px;"><i class="fas fa-microphone"></i> Записать голос ведущего (слова в эфир)</strong>
+            <span style="font-size:0.85rem; color:#94a3b8;">Запишите подводку, новость или обращение прямо с микрофона.</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span id="recordTimer" style="font-family:monospace; font-weight:700; color:#ff4757; display:none;">00:00</span>
+            <button type="button" class="radio-record-btn" id="btnToggleRecord">
+              <i class="fas fa-circle"></i> Начать запись
+            </button>
+          </div>
+        </div>
+
+        <!-- Панель добавления слотов -->
+        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="btnPickFromMyTracks">
+            <i class="fas fa-list-music"></i> Добавить из медиатеки
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnUploadNewSlot">
+            <i class="fas fa-file-arrow-up"></i> Загрузить файл аудио
+          </button>
+          <button type="button" class="btn btn-primary" style="margin-left:auto;" id="btnSaveTimeline">
+            <i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)
+          </button>
+        </div>
+
+        <!-- Конструктор элементов ленты -->
+        <div class="radio-slots-builder" id="editorSlotsList">
+          <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, подкасты или слова выше.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- МОДАЛЬНОЕ ОКНО: ЗАГРУЗКА АУДИОЗАПИСИ В МЕДИАТЕКУ -->
+<div class="radio-modal-backdrop" id="modalUploadTrack" hidden>
+  <div class="radio-modal">
+    <div class="radio-modal-head">
+      <h3>Опубликовать аудиозапись</h3>
+      <button type="button" class="radio-modal-close" data-close="modalUploadTrack">×</button>
+    </div>
+    <form id="formUploadTrack">
+      <div class="radio-form-group">
+        <label>Аудиофайл (.mp3, .wav, .ogg, .flac, .m4a, до 100 МБ)</label>
+        <input type="file" id="trackFileInput" class="radio-form-input" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,.wma" required>
+      </div>
+      <div class="radio-form-group">
+        <label>Название трека / эпизода</label>
+        <input type="text" id="trackTitleInput" class="radio-form-input" placeholder="Название..." required>
+      </div>
+      <div class="radio-form-group">
+        <label>Тип записи</label>
+        <select id="trackTypeSelect" class="radio-form-select">
+          <option value="track">🎵 Музыкальный трек</option>
+          <option value="podcast">🎙️ Подкаст / Передача</option>
+          <option value="speech">🗣️ Разговор / Слова ведущего</option>
+        </select>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px;">
+        <button type="button" class="btn btn-secondary" data-close="modalUploadTrack">Отмена</button>
+        <button type="submit" class="btn btn-primary" id="btnSubmitUploadTrack">Опубликовать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ РАДИОСТАНЦИИ / ЗАНЯТИЕ ЧАСТОТЫ -->
+<div class="radio-modal-backdrop" id="modalCreateStation" hidden>
+  <div class="radio-modal">
+    <div class="radio-modal-head">
+      <h3>Занять частоту и создать радио</h3>
+      <button type="button" class="radio-modal-close" data-close="modalCreateStation">×</button>
+    </div>
+    <form id="formCreateStation">
+      <div class="radio-form-group">
+        <label>Номер частоты (произвольное число, например: 101.5, 42.0, 777.0)</label>
+        <input type="number" step="0.1" min="1" max="9999" id="stationFreqInput" class="radio-form-input" placeholder="101.5" required>
+      </div>
+      <div class="radio-form-group">
+        <label>Название радиостанции</label>
+        <input type="text" id="stationNameInput" class="radio-form-input" placeholder="Например: Радио Хроники" required>
+      </div>
+      <div class="radio-form-group">
+        <label>Краткое описание формата эфира</label>
+        <textarea id="stationDescInput" class="radio-form-textarea" rows="3" placeholder="О чем ваша волна..."></textarea>
+      </div>
+      <div class="radio-form-group">
+        <label>Поведение при пустом эфире (когда сетка закончилась)</label>
+        <select id="stationFallbackSelect" class="radio-form-select">
+          <option value="loop">🔄 Зацикливать составленную сетку вещания</option>
+          <option value="noise">📻 Звук радиопомех / белый шум</option>
+          <option value="silence">🔇 Тишина / Офлайн</option>
+        </select>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px;">
+        <button type="button" class="btn btn-secondary" data-close="modalCreateStation">Отмена</button>
+        <button type="submit" class="btn btn-primary" id="btnSubmitCreateStation">Занять частоту</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО: ВЫБОР ИЗ МЕДИАТЕКИ В РЕДАКТОР -->
+<div class="radio-modal-backdrop" id="modalPickTrack" hidden>
+  <div class="radio-modal" style="max-width:650px;">
+    <div class="radio-modal-head">
+      <h3>Добавить запись в сетку вещания</h3>
+      <button type="button" class="radio-modal-close" data-close="modalPickTrack">×</button>
+    </div>
+    <div style="max-height:400px; overflow-y:auto; margin-bottom:16px;" id="modalPickTrackList">
+      <p class="alltell-state">Загружаем треки...</p>
+    </div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" class="btn btn-secondary" data-close="modalPickTrack">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <div class="site-logo"><span class="site-logo-mark">✶</span> AllTell</div>
+      <p>Энциклопедия, ролевые сообщества, галерея творчества и радиовещание вселенной AllTell — всё в одном пространстве.</p>
+    </div>
+    <div><h5>Разделы</h5><div class="site-footer-links">
+      <a href="/antropedia">Antropedia</a>
+      <a href="/alltell?view=feed">AllTell</a>
+      <a href="/site/gallery.html">Галерея</a>
+      <a href="/radio">Радио</a>
+      <a href="/stickers">Стикеры</a>
+    </div></div>
+    <div><h5>Сообщество</h5><div class="site-footer-links">
+      <a href="#">Правила</a>
+      <a href="#">Помощь</a>
+    </div></div>
+    <div><h5>Аккаунт</h5><div class="site-footer-links">
+      <a href="/admin-panel">Админ-панель</a>
+    </div></div>
+  </div>
+  <div class="site-footer-bottom">
+    <span>© AllTell. Энциклопедия, сообщества, творчество и радио.</span>
+    <span>Вещание доступно всем, а загрузка аудио и занятие частот требуют входа.</span>
+  </div>
+</footer>
+
+<script src="/auth-system.js"></script>
+<script src="/audio-player.js"></script>
+<script src="/site/site-header.js"></script>
+<script src="/site/site.js"></script>
+<script src="/site/router.js"></script>
+<script src="/site/radio-client.js"></script>
+</body>
+</html>

@@ -21,7 +21,9 @@
       normalizedPath === '/gallery' ||
       normalizedPath === '/site/gallery.html' ||
       normalizedPath === '/stickers' ||
-      normalizedPath === '/site/stickers.html';
+      normalizedPath === '/site/stickers.html' ||
+      normalizedPath === '/radio' ||
+      normalizedPath === '/site/radio.html';
   }
 
   function syncHead(parsedDocument) {

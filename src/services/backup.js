@@ -17,7 +17,8 @@ const DATABASE_FILES = [
   'stickers.db', // наборы стикеров, подписки, избранное — см. src/db/connections.js
   'drafts.db', // черновики статей редактора, привязанные к профилю — см. src/db/connections.js
   'feedback.db', // обращения (баги/предложения) и кейсы модерации — см. src/services/feedback-store.js
-  'gallery.db' // галерея: работы, вариации, страницы, лайки/просмотры/комментарии — см. src/services/gallery-store.js
+  'gallery.db', // галерея: работы, вариации, страницы, лайки/просмотры/комментарии — см. src/services/gallery-store.js
+  'radio.db' // радио: пользовательская медиатека, станции, сетка вещания — см. src/services/radio-store.js
 ];
 
 // Файлы настроек сайта (Настройки → владелец). backup-settings.json сюда

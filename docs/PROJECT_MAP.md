@@ -51,6 +51,7 @@ src/server.js
 | Карты и миры | `maps.routes.js`, `maps-store.js`, `worlds-store.js`, `map-access.js`, `map-tiler.js` | `maps/map-core.js`, `map-editor.js`, `maps-ui.js`, `map-calendar.js` |
 | Галерея | `gallery.routes.js`, `gallery-store.js` | Админка: `gallery.js`, `gallery.css`, `views/gallery.html`; публичный экран: `site/gallery.html`, `site/gallery-client.js`, `site/gallery.css` |
 | Стикеры | `stickers.routes.js`, `stickers-store.js` | `stickers-manager.js`, `sticker-store.js`, `sticker-pack-view.js`, `views/stickers.html` |
+| Радио и медиатека | `radio.routes.js`, `radio-store.js` | Публичный экран: `site/radio.html`, `site/radio-client.js`, `site/radio.css` |
 | Черновики статей | `drafts.routes.js`, `drafts-store.js` | `spa-router.js`, `editor-manager.js` |
 | Закладки и социальные действия | `bookmarks.routes.js`, `bookmarks-store.js`, `social-store.js` | `spa-router.js`, `antropedia.js` |
 | Обращения и уведомления | `feedback.routes.js`, `feedback-store.js`, `notifications.routes.js`, `user-notifications.js` | `feedback-manager.js`, `user-notifications.js`, `views/feedback.html` |
@@ -75,7 +76,7 @@ src/server.js
 | Карты и настройки миров | `content/maps/*.json`, `content/worlds/*.json` | `maps-store.js`, `worlds-store.js` |
 | Исходные изображения карт | `map-sources/` | `map-tiler.js`, `maps.routes.js` |
 | Тайлы карт и пользовательские файлы | `public/uploads/` | `map-tiler.js`, доменные services/routes |
-| Сообщения, пользователи, франшизы, хабы, публикации и прочие домены | SQLite в корне проекта: `messenger.db`, `users.db`, `servers.db`, `articles.db`, `bookmarks.db`, `drafts.db`, `social.db`, `stickers.db`, `feedback.db`, `gallery.db` | `src/db/connections.js`, миграции, соответствующие stores/routes |
+| Сообщения, пользователи, франшизы, хабы, публикации и прочие домены | SQLite в корне проекта: `messenger.db`, `users.db`, `servers.db`, `articles.db`, `bookmarks.db`, `drafts.db`, `social.db`, `stickers.db`, `feedback.db`, `gallery.db`, `radio.db` | `src/db/connections.js`, миграции, соответствующие stores/routes |
 | Настройки сервера | JSON-файлы в корне, создаваемые по необходимости | соответствующие `*-settings.js` и `src/server.js` |
 | Резервные копии | `backups/` | `src/services/backup.js` |
 

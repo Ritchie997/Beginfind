@@ -40,7 +40,8 @@ const {
   serversSchemaReady,
   galleryDb,
   feedbackDb,
-  articlesDb
+  articlesDb,
+  radioDb
 } = require('../db/connections');
 const articlesStore = require('./articles-store');
 const feedbackStore = require('./feedback-store');
@@ -257,6 +258,23 @@ async function collectUsedUploadNames() {
     try { data = JSON.parse(r.proposed_data); } catch (_) { data = r.proposed_data; }
     forEachString(data, (str) => extractFlatUploadNamesFromText(str).forEach((n) => used.add(n)));
   });
+
+  // Радио: треки медиатеки, обложки, аватарки станций и слоты сетки вещания (radio.db)
+  try {
+    const radioTracks = await dbAll(radioDb, 'SELECT audio_url, cover_url FROM radio_tracks', []).catch(() => []);
+    radioTracks.forEach((t) => {
+      add(t.audio_url);
+      add(t.cover_url);
+    });
+
+    const radioStations = await dbAll(radioDb, 'SELECT avatar_url FROM radio_stations WHERE avatar_url IS NOT NULL', []).catch(() => []);
+    radioStations.forEach((s) => add(s.avatar_url));
+
+    const radioSlots = await dbAll(radioDb, 'SELECT audio_url FROM radio_timeline_slots', []).catch(() => []);
+    radioSlots.forEach((s) => add(s.audio_url));
+  } catch (e) {
+    console.error('[Cleanup] Ошибка сбора загрузок Радио из radio.db:', e.message);
+  }
 
   return used;
 }

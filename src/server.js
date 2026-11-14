@@ -49,6 +49,8 @@ const notificationsRoutes = require('./routes/notifications.routes');
 const mapsRoutes = require('./routes/maps.routes');
 const feedbackRoutes = require('./routes/feedback.routes');
 const galleryRoutes = require('./routes/gallery.routes');
+const radioRoutes = require('./routes/radio.routes');
+const radioStore = require('./services/radio-store');
 const mapTiler = require('./services/map-tiler');
 const avatars = require('./services/avatars');
 
@@ -161,6 +163,7 @@ app.use('/api', notificationsRoutes);
 app.use('/api', mapsRoutes);
 app.use('/api', feedbackRoutes);
 app.use('/api', galleryRoutes);
+app.use('/api', radioRoutes);
 
 // Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между
@@ -285,6 +288,21 @@ function initializeAutoCleanup() {
   console.log('[Cleanup] Система автоматической очистки мусора инициализирована');
 }
 
+/**
+ * Инициализация автоматической очистки ленты времени радио:
+ * удаление слотов старше 32 часов каждые 15 минут.
+ */
+function initializeRadioCleanup() {
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      await radioStore.cleanupOldTimelineSlots();
+    } catch (error) {
+      console.error('[Radio Cleanup] Ошибка очистки слотов:', error.message);
+    }
+  });
+  console.log('[Radio Cleanup] Система ротации ленты времени радио (32ч) инициализирована');
+}
+
 // Сущность "Категории" удалена — вычищаем устаревшее поле categories из
 // файлов статей (идемпотентно: уже чистые файлы не трогаются).
 try {
@@ -302,6 +320,7 @@ app.listen(PORT, HOST, () => {
 
   initializeAutoBackup();
   initializeAutoCleanup();
+  initializeRadioCleanup();
 
   // Подложки карт, не дорезанные до перезапуска или оставшиеся без тайлов
   // после восстановления из бэкапа, — снова в очередь нарезки.

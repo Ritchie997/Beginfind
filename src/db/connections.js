@@ -976,4 +976,63 @@ function createGalleryTables(legacy) {
   });
 }
 
-module.exports = { messengerDb, articlesDb, serversDb, serversSchemaReady, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb, galleryDb };
+const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
+  if (err) {
+    console.error('Error opening radio database', err);
+  } else {
+    console.log('Connected to radio SQLite database');
+    radioDb.run("PRAGMA encoding = 'UTF-8'");
+    radioDb.serialize(() => {
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_tracks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        audio_url TEXT NOT NULL,
+        duration REAL NOT NULL DEFAULT 0,
+        size INTEGER NOT NULL DEFAULT 0,
+        format TEXT NOT NULL DEFAULT 'mp3',
+        type TEXT NOT NULL DEFAULT 'track',
+        cover_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_tracks_user ON radio_tracks(user_id)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_tracks_created ON radio_tracks(created_at DESC)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_tracks_type ON radio_tracks(type)');
+
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_stations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        frequency REAL NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT,
+        owner_id INTEGER NOT NULL,
+        owner_name TEXT NOT NULL,
+        avatar_url TEXT,
+        fallback_mode TEXT NOT NULL DEFAULT 'loop',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_stations_freq ON radio_stations(frequency)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_stations_owner ON radio_stations(owner_id)');
+
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_timeline_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        station_id INTEGER NOT NULL,
+        track_id INTEGER,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'track',
+        audio_url TEXT NOT NULL,
+        duration REAL NOT NULL,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_slots_schedule ON radio_timeline_slots(station_id, start_time, end_time)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_slots_end ON radio_timeline_slots(end_time)');
+    });
+  }
+});
+
+module.exports = { messengerDb, articlesDb, serversDb, serversSchemaReady, bookmarksDb, socialDb, stickersDb, draftsDb, feedbackDb, galleryDb, radioDb };
