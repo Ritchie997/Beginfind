@@ -239,9 +239,14 @@
     state.station = null;
     state.track = null;
     state.currentSlot = null;
+    state.playlist = [];
+    state.currentIndex = -1;
     if (domBar && domBar.bar) domBar.bar.hidden = true;
     const bar = document.getElementById('alltellGlobalAudioBar');
     if (bar) bar.hidden = true;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (_) {}
     notify();
   }
 
@@ -292,7 +297,7 @@
             <a href="/radio" class="alltell-global-link-btn" id="globalAudioRadioLink" title="Открыть раздел Радио">
               <i class="fas fa-radio"></i> <span>В Радио</span>
             </a>
-            <button type="button" class="alltell-global-tool-btn" id="globalAudioCloseBtn" title="Остановить воспроизведение">
+            <button type="button" class="alltell-global-tool-btn alltell-global-close-btn" id="globalAudioCloseBtn" title="Закрыть плеер" aria-label="Закрыть плеер">
               <i class="fas fa-xmark"></i>
             </button>
           </div>
@@ -368,10 +373,12 @@
     }
 
     // Проверяем: если находимся на странице /radio и играет радио-дека,
-    // нижняя глобальная панель может скрываться, так как на экране уже видна большая дека.
-    // Плеер виден везде только если что-то реально воспроизводится (isPlaying = true):
+    // нижняя глобальная панель скрывается, так как на экране уже видна большая дека.
+    // На всех остальных страницах (или в режиме воспроизведения отдельного трека)
+    // плеер остаётся виден как при воспроизведении, так и на паузе.
+    // Скрывается он только при явном нажатии на кнопку закрытия (stop()).
     const isRadioPage = window.location.pathname === '/radio' || window.location.pathname.startsWith('/radio/track/');
-    const shouldShow = Boolean(state.isPlaying && state.mode && !(isRadioPage && state.mode === 'radio'));
+    const shouldShow = Boolean(state.mode && !(isRadioPage && state.mode === 'radio'));
     domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
@@ -443,7 +450,6 @@
       audio.muted = state.muted;
 
       ensureBarDom();
-      updateBarUI();
 
       if (saved.isPlaying) {
         if (state.mode === 'radio' && state.station) {
@@ -457,6 +463,8 @@
             updateBarUI();
             notify();
           }).catch(() => {
+            state.isPlaying = false;
+            updateBarUI();
             // Если браузер заблокировал автовоспроизведение до первого клика
             const unlock = () => {
               audio.play().then(() => {
@@ -469,7 +477,13 @@
           });
         }
       } else {
-        if (domBar && domBar.bar) domBar.bar.hidden = true;
+        // На паузе: сохраняем готовность трека и оставляем бар видимым с кнопкой Play
+        state.isPlaying = false;
+        if (state.track && state.track.audio_url) {
+          audio.src = state.track.audio_url;
+          audio.currentTime = saved.currentTime || 0;
+        }
+        updateBarUI();
       }
     } catch (e) {
       console.error('[GlobalRadio] Restore error:', e);

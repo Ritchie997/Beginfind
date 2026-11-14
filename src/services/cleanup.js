@@ -272,6 +272,9 @@ async function collectUsedUploadNames() {
 
     const radioSlots = await dbAll(radioDb, 'SELECT audio_url FROM radio_timeline_slots', []).catch(() => []);
     radioSlots.forEach((s) => add(s.audio_url));
+
+    const radioPlaylists = await dbAll(radioDb, 'SELECT cover_url FROM radio_playlists WHERE cover_url IS NOT NULL', []).catch(() => []);
+    radioPlaylists.forEach((p) => add(p.cover_url));
   } catch (e) {
     console.error('[Cleanup] Ошибка сбора загрузок Радио из radio.db:', e.message);
   }

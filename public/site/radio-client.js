@@ -42,6 +42,9 @@
     pollTimer: null,
     feedFilter: 'all',
     feedSearch: '',
+    favoriteTrackIds: new Set(),
+    mySection: 'favorites',
+    userPlaylists: [],
     myStations: [],
     selectedStationForEdit: null,
     editorSlots: [],
@@ -62,7 +65,12 @@
       tabs: document.querySelectorAll('.radio-nav-tab'),
       tabLive: document.getElementById('tabContentLive'),
       tabFeed: document.getElementById('tabContentFeed'),
+      tabMy: document.getElementById('tabContentMy'),
       tabEditor: document.getElementById('tabContentEditor'),
+      mySectionFilters: document.getElementById('mySectionFilters'),
+      mySectionContent: document.getElementById('mySectionContent'),
+      btnOpenCreatePlaylist: document.getElementById('btnOpenCreatePlaylist'),
+      btnUploadTrackFromMy: document.getElementById('btnUploadTrackFromMy'),
 
       // Страница отдельного трека
       trackView: document.getElementById('radioTrackView'),
@@ -84,7 +92,9 @@
       trackPageLoopBtn: document.getElementById('trackPageLoopBtn'),
       trackPageMuteBtn: document.getElementById('trackPageMuteBtn'),
       trackPageVolumeSlider: document.getElementById('trackPageVolumeSlider'),
-      trackPageAddToEditorBtn: document.getElementById('trackPageAddToEditorBtn'),
+      trackPageFavoriteBtn: document.getElementById('trackPageFavoriteBtn'),
+      trackPageFavoriteText: document.getElementById('trackPageFavoriteText'),
+      trackPageAddToPlaylistBtn: document.getElementById('trackPageAddToPlaylistBtn'),
       trackPageDownloadBtn: document.getElementById('trackPageDownloadBtn'),
       trackPageShareBtn: document.getElementById('trackPageShareBtn'),
       trackPageDeleteBtn: document.getElementById('trackPageDeleteBtn'),
@@ -140,6 +150,24 @@
       modalPickTrack: document.getElementById('modalPickTrack'),
       modalInsertWordsByTime: document.getElementById('modalInsertWordsByTime'),
       modalPlaylistProgress: document.getElementById('modalPlaylistProgress'),
+      modalCreatePlaylist: document.getElementById('modalCreatePlaylist'),
+      formCreatePlaylist: document.getElementById('formCreatePlaylist'),
+      modalCreatePlaylistTitle: document.getElementById('modalCreatePlaylistTitle'),
+      editPlaylistId: document.getElementById('editPlaylistId'),
+      playlistTitleInput: document.getElementById('playlistTitleInput'),
+      playlistDescInput: document.getElementById('playlistDescInput'),
+      playlistPublicSelect: document.getElementById('playlistPublicSelect'),
+      playlistCoverInput: document.getElementById('playlistCoverInput'),
+      playlistCoverPreviewBox: document.getElementById('playlistCoverPreviewBox'),
+      playlistCoverPreviewImg: document.getElementById('playlistCoverPreviewImg'),
+      btnSubmitCreatePlaylist: document.getElementById('btnSubmitCreatePlaylist'),
+      modalPickPlaylistForTrack: document.getElementById('modalPickPlaylistForTrack'),
+      pickPlaylistForTrackList: document.getElementById('pickPlaylistForTrackList'),
+      btnCreateNewPlaylistFromPick: document.getElementById('btnCreateNewPlaylistFromPick'),
+      modalPlaylistView: document.getElementById('modalPlaylistView'),
+      playlistViewModalTitle: document.getElementById('playlistViewModalTitle'),
+      playlistViewHeader: document.getElementById('playlistViewHeader'),
+      playlistViewTracksList: document.getElementById('playlistViewTracksList'),
       formUploadTrack: document.getElementById('formUploadTrack'),
       formCreateStation: document.getElementById('formCreateStation'),
       modalPickTrackList: document.getElementById('modalPickTrackList'),
@@ -353,11 +381,249 @@
     }
   }
 
-  // ===== 3. Лента треков и подкастов =====
+  // ===== 3. Избранное («Моё») и Плейлисты =====
+
+  async function loadFavoriteIds() {
+    const user = window.authManager && window.authManager.getUser();
+    if (!user) {
+      state.favoriteTrackIds.clear();
+      return;
+    }
+    try {
+      const res = await api('/api/radio/favorites/ids');
+      if (res && Array.isArray(res.ids)) {
+        state.favoriteTrackIds = new Set(res.ids);
+      }
+    } catch (_) {}
+  }
+
+  function renderTrackItemHtml(t, idx, tracksArray, isFavoriteView = false) {
+    const globalAudio = getGlobalAudio();
+    const gState = globalAudio ? globalAudio.getState() : {};
+    const isThisPlaying = gState.isPlaying && gState.track && gState.track.id === t.id;
+    const isFav = state.favoriteTrackIds.has(t.id);
+
+    return `
+      <div class="radio-track-item ${isThisPlaying ? 'is-playing-now' : ''}" data-id="${t.id}" data-index="${idx}">
+        <div class="radio-track-left">
+          <button type="button" class="radio-track-play-btn" data-index="${idx}" title="Воспроизвести">
+            <i class="fas ${isThisPlaying ? 'fa-pause' : 'fa-play'}"></i>
+          </button>
+          <div class="radio-track-cover-mini btn-open-track-detail" data-id="${t.id}" style="width:40px; height:40px; border-radius:8px; overflow:hidden; background:#12141a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            ${t.cover_url ? `<img src="${escapeHtml(t.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-music" style="color:#64748b;"></i>'}
+          </div>
+          <div class="radio-track-info">
+            <div class="radio-track-title btn-open-track-detail" data-id="${t.id}" style="cursor:pointer;" title="Открыть страницу трека">${escapeHtml(t.title)}</div>
+            <div class="radio-track-author">
+              <i class="fas fa-user-circle"></i> ${escapeHtml(t.author_name)} • 
+              <span class="radio-track-type-badge type-${t.type}">${t.type === 'podcast' ? 'Подкаст' : t.type === 'speech' ? 'Слова' : 'Музыка'}</span> • 
+              <span>${escapeHtml(String(t.format || 'mp3').toUpperCase())}</span>
+            </div>
+          </div>
+        </div>
+        <div class="radio-track-right">
+          <span class="radio-track-duration">${formatDuration(t.duration)}</span>
+          <button type="button" class="radio-action-btn btn-favorite-toggle ${isFav ? 'is-added' : ''}" data-id="${t.id}" title="${isFav ? 'Удалить из «Моё»' : 'Добавить в «Моё»'}">
+            <i class="fas ${isFav ? 'fa-xmark' : 'fa-plus'}"></i>
+          </button>
+          <button type="button" class="radio-action-btn btn-add-to-playlist" data-id="${t.id}" title="Добавить в плейлист">
+            <i class="fas fa-list-ul"></i>
+          </button>
+          <button type="button" class="radio-action-btn btn-open-track-detail" data-id="${t.id}" title="Страница трека">
+            <i class="fas fa-arrow-up-right-from-square"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function attachTrackItemListeners(container, tracksArray, onFavoriteChange = null) {
+    container.querySelectorAll('.radio-track-play-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        const t = tracksArray[idx];
+        if (!t) return;
+
+        const gAudio = getGlobalAudio();
+        if (!gAudio) return;
+        const curr = gAudio.getState();
+
+        if (curr.isPlaying && curr.track && curr.track.id === t.id) {
+          gAudio.pause();
+        } else {
+          gAudio.playTrack(t, tracksArray, idx);
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-open-track-detail').forEach((el) => {
+      el.addEventListener('click', () => {
+        openTrackPage(el.dataset.id);
+      });
+    });
+
+    container.querySelectorAll('.btn-favorite-toggle').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const user = window.authManager && window.authManager.getUser();
+        if (!user) {
+          showToast('Войдите в аккаунт AllTell, чтобы сохранять треки в «Моё»', 'warning');
+          return;
+        }
+        const id = parseInt(btn.dataset.id, 10);
+        try {
+          const res = await api(`/api/radio/favorites/${id}/toggle`, { method: 'POST' });
+          if (res.favorited) {
+            state.favoriteTrackIds.add(id);
+            btn.classList.add('is-added');
+            btn.title = 'Удалить из «Моё»';
+            btn.innerHTML = '<i class="fas fa-xmark"></i>';
+            showToast('Трек добавлен в «Моё»', 'success');
+          } else {
+            state.favoriteTrackIds.delete(id);
+            btn.classList.remove('is-added');
+            btn.title = 'Добавить в «Моё»';
+            btn.innerHTML = '<i class="fas fa-plus"></i>';
+            showToast('Трек удален из «Моё»', 'info');
+          }
+          if (typeof onFavoriteChange === 'function') onFavoriteChange(id, res.favorited);
+        } catch (err) {
+          showToast('Ошибка: ' + err.message, 'error');
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-add-to-playlist').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id, 10);
+        openAddToPlaylistModal(id);
+      });
+    });
+  }
+
+  function renderPlaylistsGrid(container, playlists, isMine = false) {
+    container.innerHTML = `
+      <div class="radio-playlists-grid">
+        ${playlists.map((p) => `
+          <div class="radio-playlist-card" data-id="${p.id}">
+            <div class="radio-playlist-cover-wrap btn-open-playlist" data-id="${p.id}">
+              ${p.cover_url ? `<img src="${escapeHtml(p.cover_url)}" alt="">` : `<i class="fas fa-list-ul radio-playlist-cover-fallback"></i>`}
+              <button type="button" class="radio-playlist-play-overlay btn-play-playlist" data-id="${p.id}" title="Слушать плейлист">
+                <i class="fas fa-play"></i>
+              </button>
+            </div>
+            <div class="radio-playlist-body">
+              <div class="radio-playlist-title btn-open-playlist" data-id="${p.id}">${escapeHtml(p.title)}</div>
+              <div class="radio-playlist-desc">${escapeHtml(p.description || 'Без описания')}</div>
+              <div class="radio-playlist-meta">
+                <span>${p.trackCount || 0} треков • ${formatDuration(p.totalDuration || 0)}</span>
+                ${p.is_public ? '<span class="playlist-badge-public"><i class="fas fa-globe"></i> Публичный</span>' : '<span class="playlist-badge-private"><i class="fas fa-lock"></i> Свой</span>'}
+              </div>
+              ${isMine ? `
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);">
+                  <button type="button" class="btn btn-secondary btn-sm btn-edit-playlist" data-id="${p.id}" title="Редактировать"><i class="fas fa-pen"></i></button>
+                  <button type="button" class="btn btn-outline-danger btn-sm btn-delete-playlist" data-id="${p.id}" title="Удалить"><i class="fas fa-trash"></i></button>
+                </div>
+              ` : `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:#94a3b8;">
+                  <span>Автор: <a href="/profile/${p.user_id}" style="color:#cbd5e1; text-decoration:none;">${escapeHtml(p.author_name)}</a></span>
+                  <button type="button" class="btn btn-secondary btn-sm btn-open-playlist" data-id="${p.id}">Открыть</button>
+                </div>
+              `}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    container.querySelectorAll('.btn-open-playlist').forEach((el) => {
+      el.addEventListener('click', () => openPlaylistView(el.dataset.id));
+    });
+
+    container.querySelectorAll('.btn-play-playlist').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        try {
+          const pl = await api(`/api/radio/playlists/${id}`);
+          if (!pl.tracks || pl.tracks.length === 0) {
+            showToast('В этом плейлисте пока нет треков', 'warning');
+            return;
+          }
+          const gAudio = getGlobalAudio();
+          if (gAudio) {
+            gAudio.playTrack(pl.tracks[0], pl.tracks, 0);
+            showToast(`Воспроизведение плейлиста «${pl.title}»`, 'success');
+          }
+        } catch (err) {
+          showToast('Ошибка запуска плейлиста: ' + err.message, 'error');
+        }
+      });
+    });
+
+    if (isMine) {
+      container.querySelectorAll('.btn-edit-playlist').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          try {
+            const pl = await api(`/api/radio/playlists/${id}`);
+            openCreatePlaylistModal(pl);
+          } catch (err) {
+            showToast('Ошибка: ' + err.message, 'error');
+          }
+        });
+      });
+
+      container.querySelectorAll('.btn-delete-playlist').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          const ok = await showConfirm('Удалить этот плейлист? Аудиозаписи останутся в медиатеке.', {
+            title: 'Удалить плейлист?',
+            confirmLabel: 'Удалить',
+            danger: true
+          });
+          if (!ok) return;
+          try {
+            await api(`/api/radio/playlists/${id}`, { method: 'DELETE' });
+            showToast('Плейлист удален', 'success');
+            loadMySection();
+          } catch (err) {
+            showToast('Ошибка удаления плейлиста: ' + err.message, 'error');
+          }
+        });
+      });
+    }
+  }
+
+  // ===== Лента треков и подкастов =====
   async function loadTracks() {
     if (!dom.tracksList) return;
-    dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем аудиозаписи…</p>';
+    dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем данные…</p>';
     try {
+      if (state.feedFilter === 'playlists') {
+        const query = new URLSearchParams();
+        query.set('isPublic', '1');
+        if (state.feedSearch) query.set('search', state.feedSearch);
+        const pData = await api(`/api/radio/playlists?${query.toString()}`);
+        if (!pData.playlists || pData.playlists.length === 0) {
+          dom.tracksList.innerHTML = `
+            <div style="text-align:center; padding:40px; color:#94a3b8;">
+              <i class="fas fa-list-ul" style="font-size:2rem; margin-bottom:12px; display:block; color:#64748b;"></i>
+              Публичные плейлисты пока не созданы. Создайте первый плейлист в разделе «Моё»!
+            </div>
+          `;
+          return;
+        }
+        renderPlaylistsGrid(dom.tracksList, pData.playlists, false);
+        return;
+      }
+
+      await loadFavoriteIds();
+
       const query = new URLSearchParams();
       if (state.feedFilter && state.feedFilter !== 'all') query.set('type', state.feedFilter);
       if (state.feedSearch) query.set('search', state.feedSearch);
@@ -373,88 +639,330 @@
         return;
       }
 
-      const globalAudio = getGlobalAudio();
-      const gState = globalAudio ? globalAudio.getState() : {};
+      dom.tracksList.innerHTML = data.tracks.map((t, idx) => renderTrackItemHtml(t, idx, data.tracks)).join('');
+      attachTrackItemListeners(dom.tracksList, data.tracks);
+    } catch (e) {
+      if (dom.tracksList) {
+        dom.tracksList.innerHTML = `<p class="alltell-error">Ошибка загрузки: ${escapeHtml(e.message)}</p>`;
+      }
+    }
+  }
 
-      dom.tracksList.innerHTML = data.tracks.map((t, idx) => {
-        const isThisPlaying = gState.isPlaying && gState.track && gState.track.id === t.id;
-        return `
-          <div class="radio-track-item ${isThisPlaying ? 'is-playing-now' : ''}" data-id="${t.id}" data-index="${idx}">
-            <div class="radio-track-left">
-              <button type="button" class="radio-track-play-btn" data-index="${idx}" title="Воспроизвести">
-                <i class="fas ${isThisPlaying ? 'fa-pause' : 'fa-play'}"></i>
+  // ===== Раздел «Моё» (Понравившееся, плейлисты, мои треки) =====
+  async function loadMySection() {
+    if (!dom.mySectionContent) return;
+    const user = window.authManager && window.authManager.getUser();
+    if (!user) {
+      dom.mySectionContent.innerHTML = `
+        <div style="text-align:center; padding:60px 20px; background:rgba(18,20,27,0.6); border-radius:16px; border:1px dashed rgba(255,255,255,0.15);">
+          <div style="font-size:3rem; color:#ff4757; margin-bottom:16px;"><i class="fas fa-heart"></i></div>
+          <h3 style="margin-bottom:8px;">Ваша коллекция музыки и плейлистов</h3>
+          <p style="color:#94a3b8; max-width:480px; margin:0 auto 20px auto;">
+            Войдите в аккаунт AllTell, чтобы сохранять понравившиеся аудиозаписи, создавать свои плейлисты и настраивать их приватность.
+          </p>
+          <button type="button" class="btn btn-primary btn-lg" onclick="document.querySelector('[data-auth-tab=\\'login\\']')?.click()">
+            <i class="fas fa-right-to-bracket"></i> Войти в аккаунт
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    dom.mySectionContent.innerHTML = '<p class="alltell-state">Загружаем данные раздела «Моё»…</p>';
+
+    if (state.mySection === 'favorites') {
+      try {
+        await loadFavoriteIds();
+        const data = await api('/api/radio/favorites?limit=100');
+        if (!data.tracks || data.tracks.length === 0) {
+          dom.mySectionContent.innerHTML = `
+            <div style="text-align:center; padding:50px 20px; color:#94a3b8;">
+              <i class="fas fa-heart-crack" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#475569;"></i>
+              В «Моё» пока нет сохранённых треков.<br>
+              Нажмите <strong>+</strong> рядом с любым треком в ленте, чтобы сохранить его сюда.
+            </div>
+          `;
+          return;
+        }
+        dom.mySectionContent.innerHTML = data.tracks.map((t, idx) => renderTrackItemHtml(t, idx, data.tracks, true)).join('');
+        attachTrackItemListeners(dom.mySectionContent, data.tracks, (id, favorited) => {
+          if (!favorited) {
+            loadMySection();
+          }
+        });
+      } catch (err) {
+        dom.mySectionContent.innerHTML = `<p class="alltell-state is-error">Ошибка загрузки избранного: ${escapeHtml(err.message)}</p>`;
+      }
+    } else if (state.mySection === 'playlists') {
+      try {
+        const data = await api('/api/radio/playlists/mine');
+        if (!data.playlists || data.playlists.length === 0) {
+          dom.mySectionContent.innerHTML = `
+            <div style="text-align:center; padding:50px 20px; color:#94a3b8;">
+              <i class="fas fa-list-ul" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#475569;"></i>
+              У вас пока нет созданных плейлистов.<br><br>
+              <button type="button" class="btn btn-primary" onclick="window.RadioClient.openCreatePlaylistModal()">
+                <i class="fas fa-plus"></i> Создать первый плейлист
               </button>
-              <div class="radio-track-cover-mini btn-open-track-detail" data-id="${t.id}" style="width:40px; height:40px; border-radius:8px; overflow:hidden; background:#12141a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                ${t.cover_url ? `<img src="${escapeHtml(t.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-music" style="color:#64748b;"></i>'}
+            </div>
+          `;
+          return;
+        }
+        renderPlaylistsGrid(dom.mySectionContent, data.playlists, true);
+      } catch (err) {
+        dom.mySectionContent.innerHTML = `<p class="alltell-state is-error">Ошибка загрузки плейлистов: ${escapeHtml(err.message)}</p>`;
+      }
+    } else if (state.mySection === 'mytracks') {
+      try {
+        await loadFavoriteIds();
+        const data = await api(`/api/radio/tracks?userId=${user.id}&limit=100`);
+        if (!data.tracks || data.tracks.length === 0) {
+          dom.mySectionContent.innerHTML = `
+            <div style="text-align:center; padding:50px 20px; color:#94a3b8;">
+              <i class="fas fa-music" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#475569;"></i>
+              Вы ещё не опубликовали ни одной аудиозаписи.<br><br>
+              <button type="button" class="btn btn-primary" onclick="window.RadioClient.openUploadModal()">
+                <i class="fas fa-cloud-arrow-up"></i> Опубликовать аудио
+              </button>
+            </div>
+          `;
+          return;
+        }
+        dom.mySectionContent.innerHTML = data.tracks.map((t, idx) => renderTrackItemHtml(t, idx, data.tracks)).join('');
+        attachTrackItemListeners(dom.mySectionContent, data.tracks);
+      } catch (err) {
+        dom.mySectionContent.innerHTML = `<p class="alltell-state is-error">Ошибка загрузки записей: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+  }
+
+  // ===== Модальные окна плейлистов =====
+
+  function openCreatePlaylistModal(playlistToEdit = null) {
+    const user = window.authManager && window.authManager.getUser();
+    if (!user) {
+      showToast('Войдите в аккаунт AllTell, чтобы создавать плейлисты', 'warning');
+      return;
+    }
+
+    const modal = document.getElementById('modalCreatePlaylist');
+    const title = document.getElementById('modalCreatePlaylistTitle');
+    const editId = document.getElementById('editPlaylistId');
+    const titleInput = document.getElementById('playlistTitleInput');
+    const descInput = document.getElementById('playlistDescInput');
+    const pubSelect = document.getElementById('playlistPublicSelect');
+    const coverInput = document.getElementById('playlistCoverInput');
+    const previewBox = document.getElementById('playlistCoverPreviewBox');
+    const previewImg = document.getElementById('playlistCoverPreviewImg');
+
+    if (playlistToEdit) {
+      if (title) title.textContent = 'Редактировать плейлист';
+      if (editId) editId.value = playlistToEdit.id;
+      if (titleInput) titleInput.value = playlistToEdit.title;
+      if (descInput) descInput.value = playlistToEdit.description || '';
+      if (pubSelect) pubSelect.value = playlistToEdit.is_public ? '1' : '0';
+      if (playlistToEdit.cover_url && previewBox && previewImg) {
+        previewImg.src = playlistToEdit.cover_url;
+        previewBox.style.display = 'block';
+      } else if (previewBox) {
+        previewBox.style.display = 'none';
+      }
+    } else {
+      if (title) title.textContent = 'Создать плейлист';
+      if (editId) editId.value = '';
+      if (titleInput) titleInput.value = '';
+      if (descInput) descInput.value = '';
+      if (pubSelect) pubSelect.value = '1';
+      if (coverInput) coverInput.value = '';
+      if (previewBox) previewBox.style.display = 'none';
+    }
+
+    showModal(modal);
+  }
+
+  async function openAddToPlaylistModal(trackId) {
+    const user = window.authManager && window.authManager.getUser();
+    if (!user) {
+      showToast('Войдите в аккаунт AllTell, чтобы сохранять треки в плейлисты', 'warning');
+      return;
+    }
+
+    const modal = document.getElementById('modalPickPlaylistForTrack');
+    const list = document.getElementById('pickPlaylistForTrackList');
+    showModal(modal);
+
+    if (list) list.innerHTML = '<p class="alltell-state">Загружаем ваши плейлисты…</p>';
+
+    try {
+      const data = await api('/api/radio/playlists/mine');
+      if (!data.playlists || data.playlists.length === 0) {
+        if (list) {
+          list.innerHTML = `
+            <div style="text-align:center; padding:30px; color:#94a3b8;">
+              <p>У вас пока нет плейлистов.</p>
+              <button type="button" class="btn btn-primary" id="btnCreateFromPickInline">
+                <i class="fas fa-plus"></i> Создать плейлист
+              </button>
+            </div>
+          `;
+          document.getElementById('btnCreateFromPickInline')?.addEventListener('click', () => {
+            hideModal(modal);
+            openCreatePlaylistModal();
+          });
+        }
+        return;
+      }
+
+      if (list) {
+        list.innerHTML = data.playlists.map((p) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#12141a; border-radius:10px; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:36px; height:36px; border-radius:8px; overflow:hidden; background:#1a1d26; display:flex; align-items:center; justify-content:center;">
+                ${p.cover_url ? `<img src="${escapeHtml(p.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-list-ul" style="color:#64748b;"></i>'}
               </div>
-              <div class="radio-track-info">
-                <div class="radio-track-title btn-open-track-detail" data-id="${t.id}" style="cursor:pointer;" title="Открыть страницу трека">${escapeHtml(t.title)}</div>
-                <div class="radio-track-author">
-                  <i class="fas fa-user-circle"></i> ${escapeHtml(t.author_name)} • 
-                  <span class="radio-track-type-badge type-${t.type}">${t.type === 'podcast' ? 'Подкаст' : t.type === 'speech' ? 'Слова' : 'Музыка'}</span> • 
-                  <span>${escapeHtml(String(t.format || 'mp3').toUpperCase())}</span>
-                </div>
+              <div>
+                <strong style="color:#fff; display:block;">${escapeHtml(p.title)}</strong>
+                <span style="font-size:0.8rem; color:#94a3b8;">${p.trackCount || 0} треков • ${p.is_public ? 'Публичный' : 'Свой'}</span>
               </div>
             </div>
-            <div class="radio-track-right">
-              <span class="radio-track-duration">${formatDuration(t.duration)}</span>
-              <button type="button" class="radio-action-btn btn-open-track-detail" data-id="${t.id}" title="Страница трека">
-                <i class="fas fa-arrow-up-right-from-square"></i>
-              </button>
-              <button type="button" class="radio-action-btn btn-add-to-timeline" data-id="${t.id}" data-url="${escapeHtml(t.audio_url)}" data-title="${escapeHtml(t.title)}" data-duration="${t.duration}" data-type="${t.type}" title="Добавить в сетку эфира">
-                <i class="fas fa-calendar-plus"></i> В эфир
+            <button type="button" class="btn btn-primary btn-sm btn-pick-pl-target" data-id="${p.id}">
+              <i class="fas fa-plus"></i> Добавить
+            </button>
+          </div>
+        `).join('');
+
+        list.querySelectorAll('.btn-pick-pl-target').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const plId = btn.dataset.id;
+            try {
+              btn.disabled = true;
+              btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+              const res = await api(`/api/radio/playlists/${plId}/tracks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_id: trackId })
+              });
+              if (res.alreadyExists) {
+                showToast('Трек уже есть в этом плейлисте', 'info');
+              } else {
+                showToast('Трек успешно добавлен в плейлист!', 'success');
+              }
+              hideModal(modal);
+            } catch (err) {
+              showToast('Ошибка добавления: ' + err.message, 'error');
+              btn.disabled = false;
+              btn.innerHTML = '<i class="fas fa-plus"></i> Добавить';
+            }
+          });
+        });
+      }
+    } catch (err) {
+      if (list) list.innerHTML = `<p class="alltell-state is-error">Ошибка: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  async function openPlaylistView(playlistId) {
+    const modal = document.getElementById('modalPlaylistView');
+    const header = document.getElementById('playlistViewHeader');
+    const list = document.getElementById('playlistViewTracksList');
+    showModal(modal);
+
+    if (header) header.innerHTML = '<p class="alltell-state">Загружаем плейлист…</p>';
+    if (list) list.innerHTML = '';
+
+    try {
+      const pl = await api(`/api/radio/playlists/${playlistId}`);
+      if (!pl) throw new Error('Плейлист не найден');
+
+      const currentUser = window.authManager && window.authManager.getUser();
+      const isOwnerOrAdmin = currentUser && (currentUser.id === pl.user_id || currentUser.is_root || currentUser.admin_level > 0);
+
+      if (header) {
+        header.innerHTML = `
+          <div style="display:flex; gap:18px; align-items:center;">
+            <div style="width:110px; height:110px; border-radius:12px; overflow:hidden; background:#12141a; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              ${pl.cover_url ? `<img src="${escapeHtml(pl.cover_url)}" style="width:100%; height:100%; object-fit:cover;">` : '<i class="fas fa-list-ul" style="font-size:2.5rem; color:#64748b;"></i>'}
+            </div>
+            <div style="flex:1;">
+              <div style="margin-bottom:6px;">
+                ${pl.is_public ? '<span class="playlist-badge-public"><i class="fas fa-globe"></i> Публичный</span>' : '<span class="playlist-badge-private"><i class="fas fa-lock"></i> Свой</span>'}
+              </div>
+              <h2 style="margin:0 0 6px 0; font-size:1.35rem; color:#fff;">${escapeHtml(pl.title)}</h2>
+              <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:8px;">
+                Автор: <a href="/profile/${pl.user_id}" style="color:#cbd5e1; text-decoration:none;">${escapeHtml(pl.author_name)}</a> • ${pl.trackCount || 0} треков • ${formatDuration(pl.totalDuration || 0)}
+              </div>
+              ${pl.description ? `<p style="font-size:0.85rem; color:#cbd5e1; margin:0 0 10px 0;">${escapeHtml(pl.description)}</p>` : ''}
+              <button type="button" class="btn btn-primary btn-sm btn-play-all-playlist" ${!pl.tracks || pl.tracks.length === 0 ? 'disabled' : ''}>
+                <i class="fas fa-play"></i> Слушать плейлист
               </button>
             </div>
           </div>
         `;
-      }).join('');
 
-      // Клик по Play: воспроизводит трек через глобальный плеер AllTell
-      dom.tracksList.querySelectorAll('.radio-track-play-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = parseInt(btn.dataset.index, 10);
-          const t = data.tracks[idx];
-          if (!t) return;
-
-          const gAudio = getGlobalAudio();
-          if (!gAudio) return;
-          const curr = gAudio.getState();
-
-          if (curr.isPlaying && curr.track && curr.track.id === t.id) {
-            gAudio.pause();
-          } else {
-            gAudio.playTrack(t, data.tracks, idx);
+        header.querySelector('.btn-play-all-playlist')?.addEventListener('click', () => {
+          if (pl.tracks && pl.tracks.length > 0) {
+            const gAudio = getGlobalAudio();
+            if (gAudio) {
+              gAudio.playTrack(pl.tracks[0], pl.tracks, 0);
+              showToast(`Воспроизведение плейлиста «${pl.title}»`, 'success');
+            }
           }
         });
-      });
-
-      // Клик по названию или обложке: открывает отдельную страницу трека
-      dom.tracksList.querySelectorAll('.btn-open-track-detail').forEach((el) => {
-        el.addEventListener('click', () => {
-          openTrackPage(el.dataset.id);
-        });
-      });
-
-      // Добавить в эфир
-      dom.tracksList.querySelectorAll('.btn-add-to-timeline').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const slot = {
-            track_id: btn.dataset.id,
-            title: btn.dataset.title,
-            audio_url: btn.dataset.url,
-            duration: parseFloat(btn.dataset.duration) || 180,
-            type: btn.dataset.type || 'track'
-          };
-          addSlotToEditor(slot);
-          showToast(`Запись «${slot.title}» добавлена в сетку вещания`, 'success');
-        });
-      });
-    } catch (e) {
-      if (dom.tracksList) {
-        dom.tracksList.innerHTML = `<p class="alltell-error">Ошибка загрузки треков: ${escapeHtml(e.message)}</p>`;
       }
+
+      if (list) {
+        if (!pl.tracks || pl.tracks.length === 0) {
+          list.innerHTML = '<p style="text-align:center; color:#94a3b8; padding:30px;">В плейлисте пока нет треков. Добавьте треки из ленты!</p>';
+        } else {
+          list.innerHTML = pl.tracks.map((t, idx) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#12141a; border-radius:10px; margin-bottom:8px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="color:#64748b; font-weight:700; width:22px; text-align:center;">${idx + 1}</span>
+                <button type="button" class="radio-track-play-btn btn-play-pl-track" data-index="${idx}" title="Воспроизвести">
+                  <i class="fas fa-play"></i>
+                </button>
+                <div>
+                  <strong style="color:#fff; display:block;">${escapeHtml(t.title)}</strong>
+                  <span style="font-size:0.8rem; color:#94a3b8;">${escapeHtml(t.author_name)} • ${formatDuration(t.duration)}</span>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                ${isOwnerOrAdmin ? `
+                  <button type="button" class="btn btn-outline-danger btn-sm btn-remove-track-from-pl" data-id="${t.id}" title="Удалить из плейлиста">
+                    <i class="fas fa-xmark"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `).join('');
+
+          list.querySelectorAll('.btn-play-pl-track').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const idx = parseInt(btn.dataset.index, 10);
+              const gAudio = getGlobalAudio();
+              if (gAudio) gAudio.playTrack(pl.tracks[idx], pl.tracks, idx);
+            });
+          });
+
+          if (isOwnerOrAdmin) {
+            list.querySelectorAll('.btn-remove-track-from-pl').forEach((btn) => {
+              btn.addEventListener('click', async () => {
+                const trackId = btn.dataset.id;
+                try {
+                  await api(`/api/radio/playlists/${playlistId}/tracks/${trackId}`, { method: 'DELETE' });
+                  showToast('Трек удален из плейлиста', 'info');
+                  openPlaylistView(playlistId);
+                  if (state.mySection === 'playlists') loadMySection();
+                } catch (err) {
+                  showToast('Ошибка: ' + err.message, 'error');
+                }
+              });
+            });
+          }
+        }
+      }
+    } catch (err) {
+      if (header) header.innerHTML = `<p class="alltell-state is-error">Ошибка: ${escapeHtml(err.message)}</p>`;
     }
   }
 
@@ -480,6 +988,20 @@
 
   let currentViewingTrack = null;
 
+  function updateTrackPageFavoriteUI() {
+    if (!currentViewingTrack || !dom.trackPageFavoriteBtn) return;
+    const isFav = state.favoriteTrackIds.has(currentViewingTrack.id);
+    if (isFav) {
+      dom.trackPageFavoriteBtn.className = 'btn btn-outline-danger';
+      dom.trackPageFavoriteBtn.innerHTML = '<i class="fas fa-xmark"></i> <span>Удалить из «Моё»</span>';
+      dom.trackPageFavoriteBtn.title = 'Удалить из «Моё»';
+    } else {
+      dom.trackPageFavoriteBtn.className = 'btn btn-primary';
+      dom.trackPageFavoriteBtn.innerHTML = '<i class="fas fa-plus"></i> <span>В «Моё»</span>';
+      dom.trackPageFavoriteBtn.title = 'Сохранить в «Моё»';
+    }
+  }
+
   async function openTrackPage(trackId) {
     try {
       const track = await api('/api/radio/tracks/' + trackId);
@@ -490,6 +1012,7 @@
       if (dom.navTabs) { dom.navTabs.hidden = true; dom.navTabs.style.display = 'none'; }
       if (dom.tabLive) { dom.tabLive.hidden = true; dom.tabLive.style.display = 'none'; }
       if (dom.tabFeed) { dom.tabFeed.hidden = true; dom.tabFeed.style.display = 'none'; }
+      if (dom.tabMy) { dom.tabMy.hidden = true; dom.tabMy.style.display = 'none'; }
       if (dom.tabEditor) { dom.tabEditor.hidden = true; dom.tabEditor.style.display = 'none'; }
       if (dom.trackView) { dom.trackView.hidden = false; dom.trackView.style.display = 'block'; }
 
@@ -527,9 +1050,21 @@
         dom.trackPageDownloadBtn.setAttribute('download', `${track.title}.${track.format || 'mp3'}`);
       }
 
+      await loadFavoriteIds();
+      updateTrackPageFavoriteUI();
+
       const currentUser = window.authManager && window.authManager.getUser();
       const isOwnerOrAdmin = currentUser && (currentUser.id === track.user_id || currentUser.is_root || currentUser.admin_level > 0);
       if (dom.trackPageDeleteBtn) {
+        dom.trackPageDeleteBtn.style.display = isOwnerOrAdmin ? 'inline-flex' : 'none';
+      }
+
+      window.history.pushState(null, '', `/radio/track/${track.id}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      showToast('Ошибка открытия страницы трека: ' + err.message, 'error');
+    }
+  }
         dom.trackPageDeleteBtn.style.display = isOwnerOrAdmin ? 'inline-flex' : 'none';
       }
 
@@ -966,6 +1501,10 @@
           dom.tabFeed.hidden = tabName !== 'feed';
           dom.tabFeed.style.display = tabName === 'feed' ? '' : 'none';
         }
+        if (dom.tabMy) {
+          dom.tabMy.hidden = tabName !== 'my';
+          dom.tabMy.style.display = tabName === 'my' ? '' : 'none';
+        }
         if (dom.tabEditor) {
           dom.tabEditor.hidden = tabName !== 'editor';
           dom.tabEditor.style.display = tabName === 'editor' ? '' : 'none';
@@ -973,6 +1512,7 @@
 
         if (tabName === 'live') loadStations();
         if (tabName === 'feed') loadTracks();
+        if (tabName === 'my') loadMySection();
         if (tabName === 'editor') initEditor();
       });
     });
@@ -1658,16 +2198,31 @@
       });
     });
 
-    dom.trackPageAddToEditorBtn?.addEventListener('click', () => {
+    dom.trackPageFavoriteBtn?.addEventListener('click', async () => {
       if (!currentViewingTrack) return;
-      addSlotToEditor({
-        track_id: currentViewingTrack.id,
-        title: currentViewingTrack.title,
-        audio_url: currentViewingTrack.audio_url,
-        duration: Number(currentViewingTrack.duration) || 180,
-        type: currentViewingTrack.type || 'track'
-      });
-      showToast(`Трек «${currentViewingTrack.title}» добавлен в сетку вещания`, 'success');
+      const user = window.authManager && window.authManager.getUser();
+      if (!user) {
+        showToast('Войдите в аккаунт AllTell, чтобы сохранять треки в «Моё»', 'warning');
+        return;
+      }
+      try {
+        const res = await api(`/api/radio/favorites/${currentViewingTrack.id}/toggle`, { method: 'POST' });
+        if (res.favorited) {
+          state.favoriteTrackIds.add(currentViewingTrack.id);
+          showToast('Трек добавлен в «Моё»', 'success');
+        } else {
+          state.favoriteTrackIds.delete(currentViewingTrack.id);
+          showToast('Трек удален из «Моё»', 'info');
+        }
+        updateTrackPageFavoriteUI();
+      } catch (err) {
+        showToast('Ошибка: ' + err.message, 'error');
+      }
+    });
+
+    dom.trackPageAddToPlaylistBtn?.addEventListener('click', () => {
+      if (!currentViewingTrack) return;
+      openAddToPlaylistModal(currentViewingTrack.id);
     });
 
     dom.trackPageDeleteBtn?.addEventListener('click', async () => {
@@ -1687,6 +2242,109 @@
       } catch (err) {
         showToast('Ошибка при удалении трека: ' + err.message, 'error');
       }
+    });
+
+    // Слушатели раздела "Моё"
+    dom.mySectionFilters?.querySelectorAll('.radio-filter-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        dom.mySectionFilters?.querySelectorAll('.radio-filter-btn').forEach((b) => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        state.mySection = btn.dataset.mySection;
+        loadMySection();
+      });
+    });
+
+    dom.btnOpenCreatePlaylist?.addEventListener('click', () => openCreatePlaylistModal());
+    dom.btnUploadTrackFromMy?.addEventListener('click', openUploadModal);
+
+    // Слушатель формы создания/редактирования плейлиста
+    dom.formCreatePlaylist?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editId = dom.editPlaylistId?.value;
+      const title = dom.playlistTitleInput?.value?.trim();
+      const description = dom.playlistDescInput?.value?.trim();
+      const isPublic = parseInt(dom.playlistPublicSelect?.value || '1', 10);
+      const coverFile = dom.playlistCoverInput?.files[0];
+
+      if (!title) {
+        showToast('Укажите название плейлиста', 'warning');
+        return;
+      }
+
+      try {
+        if (dom.btnSubmitCreatePlaylist) {
+          dom.btnSubmitCreatePlaylist.disabled = true;
+          dom.btnSubmitCreatePlaylist.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохраняем…';
+        }
+
+        let coverUrl = null;
+        if (coverFile) {
+          const formData = new FormData();
+          formData.append('image', coverFile);
+          const uploadRes = await fetch('/api/upload-image', {
+            method: 'POST',
+            headers: window.authManager && window.authManager.getToken() ? { 'Authorization': 'Bearer ' + window.authManager.getToken() } : {},
+            body: formData
+          });
+          if (uploadRes.ok) {
+            const upData = await uploadRes.json();
+            coverUrl = upData.url || upData.imageUrl;
+          }
+        }
+
+        if (editId) {
+          await api(`/api/radio/playlists/${editId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              description,
+              is_public: isPublic,
+              ...(coverUrl ? { cover_url: coverUrl } : {})
+            })
+          });
+          showToast('Плейлист обновлен', 'success');
+        } else {
+          await api('/api/radio/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              description,
+              is_public: isPublic,
+              cover_url: coverUrl
+            })
+          });
+          showToast('Плейлист успешно создан!', 'success');
+        }
+
+        hideModal('modalCreatePlaylist');
+        if (state.mySection === 'playlists') {
+          loadMySection();
+        } else if (state.feedFilter === 'playlists') {
+          loadTracks();
+        }
+      } catch (err) {
+        showToast('Ошибка сохранения плейлиста: ' + err.message, 'error');
+      } finally {
+        if (dom.btnSubmitCreatePlaylist) {
+          dom.btnSubmitCreatePlaylist.disabled = false;
+          dom.btnSubmitCreatePlaylist.innerHTML = 'Сохранить';
+        }
+      }
+    });
+
+    dom.playlistCoverInput?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && dom.playlistCoverPreviewBox && dom.playlistCoverPreviewImg) {
+        dom.playlistCoverPreviewImg.src = URL.createObjectURL(file);
+        dom.playlistCoverPreviewBox.style.display = 'block';
+      }
+    });
+
+    dom.btnCreateNewPlaylistFromPick?.addEventListener('click', () => {
+      hideModal('modalPickPlaylistForTrack');
+      openCreatePlaylistModal();
     });
 
     // 7. Модальные окна: открытие и закрытие
@@ -1913,7 +2571,10 @@
       }
       window.RadioClient._mounted = false;
     },
-    openTrackPage
+    openTrackPage,
+    openCreatePlaylistModal,
+    openUploadModal,
+    loadMySection
   };
 
   // Автозапуск при прямой загрузке страницы /radio (без SPA перехода)

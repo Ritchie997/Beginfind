@@ -137,3 +137,77 @@ test('radio cleanup & backup protection: audio files are tracked and protected',
 
   await radioStore.deleteTrack(dummyTrack.id, 999, true);
 });
+
+test('radio-store: favorites ("Моё") and playlists (private and public)', async () => {
+  const userId = 777;
+  const track = await radioStore.createTrack({
+    userId,
+    authorName: 'PlaylistCreator',
+    title: 'Favorite Track 1',
+    audioUrl: '/uploads/track-fav-1.mp3',
+    duration: 120,
+    size: 2000,
+    format: 'mp3'
+  });
+
+  // 1. Favorites
+  assert.equal(await radioStore.isFavorite(userId, track.id), false);
+  const toggledOn = await radioStore.toggleFavorite(userId, track.id);
+  assert.equal(toggledOn.favorited, true);
+  assert.equal(await radioStore.isFavorite(userId, track.id), true);
+
+  const favIds = await radioStore.getUserFavoriteTrackIds(userId);
+  assert.ok(favIds.includes(track.id));
+
+  const userFavs = await radioStore.getUserFavorites(userId);
+  assert.equal(userFavs.total, 1);
+  assert.equal(userFavs.tracks[0].id, track.id);
+
+  const toggledOff = await radioStore.toggleFavorite(userId, track.id);
+  assert.equal(toggledOff.favorited, false);
+  assert.equal(await radioStore.isFavorite(userId, track.id), false);
+
+  // 2. Playlists
+  const publicPlaylist = await radioStore.createPlaylist({
+    userId,
+    authorName: 'PlaylistCreator',
+    title: 'Top Hits Public',
+    description: 'Best community tracks',
+    isPublic: 1
+  });
+  assert.ok(publicPlaylist.id);
+  assert.equal(publicPlaylist.is_public, 1);
+
+  const privatePlaylist = await radioStore.createPlaylist({
+    userId,
+    authorName: 'PlaylistCreator',
+    title: 'Secret Gems Private',
+    description: 'Personal collection',
+    isPublic: 0
+  });
+  assert.equal(privatePlaylist.is_public, 0);
+
+  // Add track to playlist
+  await radioStore.addTrackToPlaylist(publicPlaylist.id, track.id, userId, false);
+  const reloaded = await radioStore.getPlaylistById(publicPlaylist.id, userId, false);
+  assert.equal(reloaded.trackCount, 1);
+  assert.equal(reloaded.tracks[0].id, track.id);
+
+  // Remove track
+  await radioStore.removeTrackFromPlaylist(publicPlaylist.id, track.id, userId, false);
+  const emptyPl = await radioStore.getPlaylistById(publicPlaylist.id, userId, false);
+  assert.equal(emptyPl.trackCount, 0);
+
+  // Other user access to private playlist
+  const otherUserView = await radioStore.getPlaylistById(privatePlaylist.id, 9999, false);
+  assert.equal(otherUserView, null, 'Private playlist should be inaccessible by other users');
+
+  // List public playlists
+  const publicList = await radioStore.listPlaylists({ isPublic: true });
+  assert.ok(publicList.playlists.some(p => p.id === publicPlaylist.id));
+
+  // Cleanup
+  await radioStore.deletePlaylist(publicPlaylist.id, userId, false);
+  await radioStore.deletePlaylist(privatePlaylist.id, userId, false);
+  await radioStore.deleteTrack(track.id, userId, true);
+});

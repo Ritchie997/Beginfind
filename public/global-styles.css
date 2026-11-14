@@ -4221,7 +4221,7 @@ body.articles-page .content-body {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 99999;
+  z-index: 1500;
   background: rgba(18, 20, 27, 0.96);
   backdrop-filter: blur(14px);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -4451,9 +4451,36 @@ body.articles-page .content-body {
   color: #fff;
 }
 
+.alltell-global-close-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.alltell-global-close-btn:hover {
+  background: rgba(255, 71, 87, 0.25);
+  border-color: rgba(255, 71, 87, 0.5);
+  color: #ff4757;
+}
+
 @media (max-width: 900px) {
+  .alltell-global-vol-slider,
+  .alltell-global-link-btn,
+  #globalAudioMuteBtn {
+    display: none !important;
+  }
   .alltell-global-audio-actions {
-    display: none;
+    display: flex !important;
   }
 }
 

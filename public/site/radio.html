@@ -129,8 +129,11 @@
           </div>
 
           <div class="radio-track-actions-row">
-            <button type="button" class="btn btn-primary" id="trackPageAddToEditorBtn">
-              <i class="fas fa-tower-broadcast"></i> В эфир
+            <button type="button" class="btn btn-primary" id="trackPageFavoriteBtn">
+              <i class="fas fa-plus"></i> <span id="trackPageFavoriteText">В «Моё»</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="trackPageAddToPlaylistBtn">
+              <i class="fas fa-list-ul"></i> В плейлист
             </button>
             <a href="#" class="btn btn-secondary" id="trackPageDownloadBtn" download>
               <i class="fas fa-download"></i> Скачать
@@ -153,6 +156,9 @@
       </button>
       <button type="button" class="radio-nav-tab" data-tab="feed">
         <i class="fas fa-compact-disc"></i> Лента треков и подкастов
+      </button>
+      <button type="button" class="radio-nav-tab" data-tab="my" id="tabMyBtn">
+        <i class="fas fa-heart"></i> Моё
       </button>
       <button type="button" class="radio-nav-tab" data-tab="editor" id="tabEditorBtn">
         <i class="fas fa-sliders"></i> Редактор эфира (24ч)
@@ -252,6 +258,7 @@
           <button type="button" class="radio-filter-btn" data-type="track">🎵 Треки</button>
           <button type="button" class="radio-filter-btn" data-type="podcast">🎙️ Подкасты</button>
           <button type="button" class="radio-filter-btn" data-type="speech">🗣️ Слова / Записи</button>
+          <button type="button" class="radio-filter-btn" data-type="playlists">📑 Плейлисты</button>
         </div>
         <div style="display:flex; gap:10px;">
           <input type="text" class="radio-form-input" id="tracksSearchInput" placeholder="Поиск по названию или автору..." style="max-width:280px;">
@@ -264,7 +271,38 @@
       </div>
     </div>
 
-    <!-- 3. РАЗДЕЛ: РЕДАКТОР СЕТКИ ВЕЩАНИЯ (24 ЧАСА) -->
+    <!-- 3. РАЗДЕЛ: МОЁ (ПОНРАВИВШЕЕСЯ И ПЛЕЙЛИСТЫ) -->
+    <div class="radio-tab-content" id="tabContentMy" hidden style="display: none;">
+      <div class="radio-my-container">
+        <div class="radio-feed-toolbar">
+          <div class="radio-type-filters" id="mySectionFilters">
+            <button type="button" class="radio-filter-btn is-active" data-my-section="favorites">
+              <i class="fas fa-heart"></i> Понравившееся
+            </button>
+            <button type="button" class="radio-filter-btn" data-my-section="playlists">
+              <i class="fas fa-list-ul"></i> Мои плейлисты
+            </button>
+            <button type="button" class="radio-filter-btn" data-my-section="mytracks">
+              <i class="fas fa-music"></i> Загруженное мной
+            </button>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-primary" id="btnOpenCreatePlaylist">
+              <i class="fas fa-plus"></i> Создать плейлист
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnUploadTrackFromMy">
+              <i class="fas fa-cloud-arrow-up"></i> Опубликовать аудио
+            </button>
+          </div>
+        </div>
+
+        <div class="radio-my-content" id="mySectionContent" style="margin-top: 20px;">
+          <p class="alltell-state">Загружаем раздел «Моё»…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. РАЗДЕЛ: РЕДАКТОР СЕТКИ ВЕЩАНИЯ (24 ЧАСА) -->
     <div class="radio-tab-content" id="tabContentEditor" hidden style="display: none;">
       <div class="radio-editor-container">
         <div class="radio-editor-header">
@@ -522,6 +560,92 @@
           <div class="radio-capacity-fill" id="playlistProgressFill" style="width:0%; background:#ff4757;"></div>
         </div>
         <p style="font-size:0.8rem; color:#64748b; margin: 0;">Файлы загружаются, конвертируются и формируют сетку вещания.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ / РЕДАКТИРОВАНИЕ ПЛЕЙЛИСТА -->
+  <div class="modal-overlay" id="modalCreatePlaylist" hidden style="display: none;">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-header">
+        <h3 id="modalCreatePlaylistTitle">Создать плейлист</h3>
+        <button type="button" class="modal-close" data-close="modalCreatePlaylist" aria-label="Закрыть">&times;</button>
+      </div>
+      <form id="formCreatePlaylist">
+        <div class="modal-body">
+          <input type="hidden" id="editPlaylistId" value="">
+          <div class="radio-form-group">
+            <label>Название плейлиста *</label>
+            <input type="text" id="playlistTitleInput" class="radio-form-input form-input" placeholder="Например: Любимая музыка..." required>
+          </div>
+          <div class="radio-form-group">
+            <label>Краткое описание</label>
+            <textarea id="playlistDescInput" class="radio-form-textarea form-textarea" rows="2" placeholder="О чем эта подборка..."></textarea>
+          </div>
+          <div class="radio-form-group">
+            <label>Доступность плейлиста</label>
+            <select id="playlistPublicSelect" class="radio-form-select form-select">
+              <option value="1">🌐 Публичный (виден всем слушателям)</option>
+              <option value="0">🔒 Свой (приватный, виден только мне)</option>
+            </select>
+            <p style="font-size:0.82rem; color:#94a3b8; margin:6px 0 0 0;">
+              Публичные плейлисты отображаются в общей ленте и доступны другим пользователям для прослушивания.
+            </p>
+          </div>
+          <div class="radio-form-group">
+            <label>Обложка плейлиста (необязательно)</label>
+            <input type="file" id="playlistCoverInput" class="radio-form-input form-input" accept="image/*">
+            <div id="playlistCoverPreviewBox" style="display:none; margin-top:8px;">
+              <img id="playlistCoverPreviewImg" src="" alt="Превью" style="width:70px; height:70px; object-fit:cover; border-radius:8px;">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalCreatePlaylist">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitCreatePlaylist">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ДОБАВЛЕНИЕ ТРЕКА В ПЛЕЙЛИСТ -->
+  <div class="modal-overlay" id="modalPickPlaylistForTrack" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Добавить в плейлист</h3>
+        <button type="button" class="modal-close" data-close="modalPickPlaylistForTrack" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="pickPlaylistForTrackList" style="max-height: 320px; overflow-y: auto;">
+          <p class="alltell-state">Загружаем ваши плейлисты…</p>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between;">
+        <button type="button" class="btn btn-primary btn-sm" id="btnCreateNewPlaylistFromPick">
+          <i class="fas fa-plus"></i> Новый плейлист
+        </button>
+        <button type="button" class="btn btn-secondary" data-close="modalPickPlaylistForTrack">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ПРОСМОТР ПЛЕЙЛИСТА -->
+  <div class="modal-overlay" id="modalPlaylistView" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 id="playlistViewModalTitle">Плейлист</h3>
+        <button type="button" class="modal-close" data-close="modalPlaylistView" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="playlistViewHeader">
+          <!-- Заполняется JS -->
+        </div>
+        <div id="playlistViewTracksList" style="max-height: 380px; overflow-y: auto; margin-top: 14px;">
+          <!-- Список треков -->
+        </div>
+      </div>
+      <div class="modal-footer" id="playlistViewFooter">
+        <button type="button" class="btn btn-secondary" data-close="modalPlaylistView">Закрыть</button>
       </div>
     </div>
   </div>

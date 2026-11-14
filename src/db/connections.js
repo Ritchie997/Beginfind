@@ -1031,6 +1031,40 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
       )`);
       radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_slots_schedule ON radio_timeline_slots(station_id, start_time, end_time)');
       radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_slots_end ON radio_timeline_slots(end_time)');
+
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        track_id INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, track_id)
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_favorites_user ON radio_favorites(user_id)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_favorites_track ON radio_favorites(track_id)');
+
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_playlists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        author_name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        is_public INTEGER NOT NULL DEFAULT 1,
+        cover_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_playlists_user ON radio_playlists(user_id)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_playlists_public ON radio_playlists(is_public)');
+
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_playlist_tracks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        playlist_id INTEGER NOT NULL,
+        track_id INTEGER NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(playlist_id, track_id)
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_playlist_tracks ON radio_playlist_tracks(playlist_id, position)');
     });
   }
 });

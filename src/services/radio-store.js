@@ -172,6 +172,8 @@ async function deleteTrack(id, actingUserId, isRootOrAdmin = false) {
     throw new Error('Недостаточно прав для удаления трека');
   }
 
+  await run('DELETE FROM radio_favorites WHERE track_id = ?', [id]);
+  await run('DELETE FROM radio_playlist_tracks WHERE track_id = ?', [id]);
   await run('DELETE FROM radio_tracks WHERE id = ?', [id]);
   return true;
 }
@@ -496,6 +498,216 @@ async function getStationLiveState(stationId) {
   };
 }
 
+// ===== Управление избранным ("Моё") =====
+
+async function getUserFavoriteTrackIds(userId) {
+  if (!userId) return [];
+  const rows = await all('SELECT track_id FROM radio_favorites WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+  return rows.map((r) => r.track_id);
+}
+
+async function getUserFavorites(userId, { page = 1, limit = 50 } = {}) {
+  if (!userId) return { tracks: [], total: 0, page: 1, limit, totalPages: 1 };
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+  const offset = (p - 1) * l;
+
+  const countRow = await get(
+    'SELECT COUNT(*) AS total FROM radio_favorites f JOIN radio_tracks t ON f.track_id = t.id WHERE f.user_id = ?',
+    [userId]
+  );
+  const total = countRow ? countRow.total : 0;
+
+  const tracks = await all(
+    `SELECT t.*, f.created_at AS favorited_at
+     FROM radio_favorites f
+     JOIN radio_tracks t ON f.track_id = t.id
+     WHERE f.user_id = ?
+     ORDER BY f.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [userId, l, offset]
+  );
+
+  return { tracks, total, page: p, limit: l, totalPages: Math.ceil(total / l) || 1 };
+}
+
+async function addFavorite(userId, trackId) {
+  if (!userId || !trackId) return false;
+  await run('INSERT OR IGNORE INTO radio_favorites (user_id, track_id) VALUES (?, ?)', [userId, trackId]);
+  return true;
+}
+
+async function removeFavorite(userId, trackId) {
+  if (!userId || !trackId) return false;
+  await run('DELETE FROM radio_favorites WHERE user_id = ? AND track_id = ?', [userId, trackId]);
+  return true;
+}
+
+async function toggleFavorite(userId, trackId) {
+  if (!userId || !trackId) return { favorited: false };
+  const existing = await get('SELECT id FROM radio_favorites WHERE user_id = ? AND track_id = ?', [userId, trackId]);
+  if (existing) {
+    await run('DELETE FROM radio_favorites WHERE id = ?', [existing.id]);
+    return { favorited: false };
+  } else {
+    await run('INSERT INTO radio_favorites (user_id, track_id) VALUES (?, ?)', [userId, trackId]);
+    return { favorited: true };
+  }
+}
+
+async function isFavorite(userId, trackId) {
+  if (!userId || !trackId) return false;
+  const row = await get('SELECT id FROM radio_favorites WHERE user_id = ? AND track_id = ?', [userId, trackId]);
+  return Boolean(row);
+}
+
+// ===== Управление плейлистами (своими и публичными) =====
+
+async function createPlaylist({ userId, authorName, title, description = '', isPublic = 1, coverUrl = null }) {
+  const cleanTitle = String(title || '').trim() || 'Новый плейлист';
+  const pub = (isPublic === 0 || isPublic === '0' || isPublic === false) ? 0 : 1;
+  const res = await run(
+    `INSERT INTO radio_playlists (user_id, author_name, title, description, is_public, cover_url)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [userId, authorName, cleanTitle, description || '', pub, coverUrl || null]
+  );
+  return getPlaylistById(res.lastID, userId, true);
+}
+
+async function getPlaylistById(id, requestingUserId = null, isAdmin = false) {
+  const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
+  if (!pl) return null;
+  if (!pl.is_public && pl.user_id !== requestingUserId && !isAdmin) {
+    return null;
+  }
+  const tracks = await all(
+    `SELECT t.*, pt.position, pt.created_at AS added_to_playlist_at
+     FROM radio_playlist_tracks pt
+     JOIN radio_tracks t ON pt.track_id = t.id
+     WHERE pt.playlist_id = ?
+     ORDER BY pt.position ASC, pt.id ASC`,
+    [id]
+  );
+  pl.tracks = tracks;
+  pl.trackCount = tracks.length;
+  pl.totalDuration = tracks.reduce((acc, t) => acc + (parseFloat(t.duration) || 0), 0);
+  return pl;
+}
+
+async function listPlaylists({ userId = null, requestingUserId = null, isAdmin = false, isPublic = null, search = '', page = 1, limit = 30 } = {}) {
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+  const offset = (p - 1) * l;
+
+  const conditions = [];
+  const params = [];
+
+  if (userId) {
+    conditions.push('p.user_id = ?');
+    params.push(userId);
+    if (userId !== requestingUserId && !isAdmin) {
+      conditions.push('p.is_public = 1');
+    }
+  } else if (isPublic !== null) {
+    conditions.push('p.is_public = ?');
+    params.push(isPublic ? 1 : 0);
+  } else if (!isAdmin) {
+    if (requestingUserId) {
+      conditions.push('(p.is_public = 1 OR p.user_id = ?)');
+      params.push(requestingUserId);
+    } else {
+      conditions.push('p.is_public = 1');
+    }
+  }
+
+  if (search && search.trim()) {
+    conditions.push('(p.title LIKE ? OR p.author_name LIKE ?)');
+    const term = `%${search.trim()}%`;
+    params.push(term, term);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countRow = await get(`SELECT COUNT(*) AS total FROM radio_playlists p ${whereClause}`, params);
+  const total = countRow ? countRow.total : 0;
+
+  const playlists = await all(
+    `SELECT p.*,
+            (SELECT COUNT(*) FROM radio_playlist_tracks pt WHERE pt.playlist_id = p.id) AS trackCount,
+            (SELECT COALESCE(SUM(t.duration), 0) FROM radio_playlist_tracks pt JOIN radio_tracks t ON pt.track_id = t.id WHERE pt.playlist_id = p.id) AS totalDuration
+     FROM radio_playlists p
+     ${whereClause}
+     ORDER BY p.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, l, offset]
+  );
+
+  return { playlists, total, page: p, limit: l, totalPages: Math.ceil(total / l) || 1 };
+}
+
+async function updatePlaylist(id, userId, isAdmin, { title, description, isPublic, coverUrl }) {
+  const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
+  if (!pl) return null;
+  if (pl.user_id !== userId && !isAdmin) {
+    throw new Error('Вы не являетесь владельцем этого плейлиста');
+  }
+  const cleanTitle = title !== undefined ? String(title).trim() || pl.title : pl.title;
+  const cleanDesc = description !== undefined ? description : pl.description;
+  const cleanPublic = isPublic !== undefined ? ((isPublic === 0 || isPublic === '0' || isPublic === false) ? 0 : 1) : pl.is_public;
+  const cleanCover = coverUrl !== undefined ? coverUrl : pl.cover_url;
+
+  await run(
+    `UPDATE radio_playlists
+     SET title = ?, description = ?, is_public = ?, cover_url = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [cleanTitle, cleanDesc, cleanPublic, cleanCover, id]
+  );
+  return getPlaylistById(id, userId, true);
+}
+
+async function deletePlaylist(id, userId, isAdmin) {
+  const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
+  if (!pl) return false;
+  if (pl.user_id !== userId && !isAdmin) {
+    throw new Error('Вы не являетесь владельцем этого плейлиста');
+  }
+  await run('DELETE FROM radio_playlist_tracks WHERE playlist_id = ?', [id]);
+  await run('DELETE FROM radio_playlists WHERE id = ?', [id]);
+  return true;
+}
+
+async function addTrackToPlaylist(playlistId, trackId, userId, isAdmin) {
+  const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [playlistId]);
+  if (!pl) throw new Error('Плейлист не найден');
+  if (pl.user_id !== userId && !isAdmin) {
+    throw new Error('У вас нет прав на редактирование этого плейлиста');
+  }
+  const track = await getTrackById(trackId);
+  if (!track) throw new Error('Трек не найден');
+
+  const existing = await get('SELECT id FROM radio_playlist_tracks WHERE playlist_id = ? AND track_id = ?', [playlistId, trackId]);
+  if (existing) return { added: true, alreadyExists: true };
+
+  const maxPosRow = await get('SELECT MAX(position) AS maxPos FROM radio_playlist_tracks WHERE playlist_id = ?', [playlistId]);
+  const nextPos = (maxPosRow && maxPosRow.maxPos !== null ? maxPosRow.maxPos : -1) + 1;
+
+  await run(
+    'INSERT INTO radio_playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)',
+    [playlistId, trackId, nextPos]
+  );
+  return { added: true, alreadyExists: false };
+}
+
+async function removeTrackFromPlaylist(playlistId, trackId, userId, isAdmin) {
+  const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [playlistId]);
+  if (!pl) throw new Error('Плейлист не найден');
+  if (pl.user_id !== userId && !isAdmin) {
+    throw new Error('У вас нет прав на редактирование этого плейлиста');
+  }
+  await run('DELETE FROM radio_playlist_tracks WHERE playlist_id = ? AND track_id = ?', [playlistId, trackId]);
+  return { removed: true };
+}
+
 // ===== Очистка устаревших слотов сетки (хранение до 32 часов) =====
 
 async function cleanupOldTimelineSlots() {
@@ -515,6 +727,19 @@ module.exports = {
   createTrack,
   deleteTrack,
   ensureTracksConvertedToMp3,
+  getUserFavoriteTrackIds,
+  getUserFavorites,
+  addFavorite,
+  removeFavorite,
+  toggleFavorite,
+  isFavorite,
+  createPlaylist,
+  getPlaylistById,
+  listPlaylists,
+  updatePlaylist,
+  deletePlaylist,
+  addTrackToPlaylist,
+  removeTrackFromPlaylist,
   listStations,
   getStationById,
   getStationByFrequency,
