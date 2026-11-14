@@ -6275,6 +6275,7 @@
     if (page === 'alltell' && window.AllTellClient) currentRouteCleanup = window.AllTellClient.init();
     if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
     if (page === 'stickers' && window.SiteStickers) currentRouteCleanup = window.SiteStickers.init();
+    if (page === 'radio' && window.RadioClient) currentRouteCleanup = window.RadioClient.init();
     if (page === 'maintenance') currentRouteCleanup = initMaintenancePage();
     var articleMatch = page === 'antropedia' && window.location.pathname.match(/^\/antropedia\/([^/]+)\/?$/);
     var articleSlug = null;
