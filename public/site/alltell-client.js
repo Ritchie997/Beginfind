@@ -4388,6 +4388,9 @@
         }
         var formData = new FormData();
         formData.append('audio', file);
+        if (file && file.name) {
+          formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+        }
         try {
           var res = await fetch('/api/upload-audio', {
             method: 'POST',

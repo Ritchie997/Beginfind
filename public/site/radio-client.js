@@ -1743,6 +1743,9 @@
           try {
             const formData = new FormData();
             formData.append('audio', file);
+            if (file && file.name) {
+              formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+            }
             const uploadRes = await api('/api/upload-audio', {
               method: 'POST',
               body: formData
@@ -1785,6 +1788,9 @@
 
         const formData = new FormData();
         formData.append('audio', file);
+        if (file && file.name) {
+          formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+        }
 
         try {
           const uploadRes = await api('/api/upload-audio', {
@@ -2422,6 +2428,11 @@
 
         const formData = new FormData();
         formData.append('audio', file);
+        if (title) {
+          formData.append('title', title);
+        } else if (file && file.name) {
+          formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+        }
 
         const uploadRes = await api('/api/upload-audio', {
           method: 'POST',

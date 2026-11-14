@@ -358,6 +358,36 @@
 
   // ===== EditorManager =====
 
+  const WIN1252_REVERSE = {
+    8364: 0x80, 8218: 0x82, 402: 0x83, 8222: 0x84, 8230: 0x85, 8224: 0x86, 8225: 0x87,
+    710: 0x88, 8240: 0x89, 352: 0x8A, 8249: 0x8B, 338: 0x8C, 381: 0x8E, 8216: 0x91,
+    8217: 0x92, 8220: 0x93, 8221: 0x94, 8226: 0x95, 8211: 0x96, 8212: 0x97, 732: 0x98,
+    8482: 0x99, 353: 0x9A, 8250: 0x9B, 339: 0x9C, 382: 0x9E, 376: 0x9F
+  };
+
+  function repairCyrillicMojibake(str) {
+    if (!str || typeof str !== 'string') return '';
+    if (!/[ÐÑ]/.test(str)) return str;
+    try {
+      const bytes = [];
+      for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code <= 255) {
+          bytes.push(code);
+        } else if (WIN1252_REVERSE[code]) {
+          bytes.push(WIN1252_REVERSE[code]);
+        } else {
+          return str;
+        }
+      }
+      const decoded = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
+      if (!decoded.includes('\uFFFD') && /[а-яёА-ЯЁ]/.test(decoded)) {
+        return decoded;
+      }
+    } catch (_) {}
+    return str;
+  }
+
   class EditorManager {
     constructor() {
       this.container = null;
@@ -2001,6 +2031,16 @@
       const fields = document.createElement('div');
       fields.className = 'eb-audio-fields';
 
+      // Автоматическое исправление mojibake при открытии статьи или черновика
+      if (block.data.title) {
+        const cleanT = repairCyrillicMojibake(block.data.title);
+        if (cleanT && cleanT !== block.data.title) block.data.title = cleanT;
+      }
+      if (block.data.artist) {
+        const cleanA = repairCyrillicMojibake(block.data.artist);
+        if (cleanA && cleanA !== block.data.artist) block.data.artist = cleanA;
+      }
+
       const titleInput = document.createElement('input');
       titleInput.type = 'text';
       titleInput.placeholder = 'Название композиции';
@@ -2502,9 +2542,12 @@
             this.renderAll();
             return;
           }
+          const clientTitle = file.name ? file.name.replace(/\.[^/.]+$/, '') : '';
+          const rawServerTitle = uploadResult.title ? repairCyrillicMojibake(uploadResult.title) : '';
+          const finalTitle = block.data.title || rawServerTitle || clientTitle;
           block.data = Object.assign({}, block.data, {
             src: uploadResult.url,
-            title: block.data.title || uploadResult.title || file.name.replace(/\.[^/.]+$/, ''),
+            title: finalTitle,
             artist: block.data.artist || '',
             format: uploadResult.format || '',
             size: uploadResult.size || file.size
@@ -2533,6 +2576,9 @@
         } else {
           const formData = new FormData();
           formData.append('audio', file);
+          if (file && file.name) {
+            formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+          }
           const token = (typeof window.authManager?.getToken === 'function') ? window.authManager.getToken() : null;
           const headers = token ? { Authorization: `Bearer ${token}` } : {};
           const res = await fetch('/api/upload-audio', { method: 'POST', headers, body: formData });
@@ -2550,9 +2596,11 @@
           this.notifyUser('Не получен URL загруженного аудиофайла', 'error');
           return null;
         }
+        const fallbackTitle = file && file.name ? file.name.replace(/\.[^/.]+$/, '') : '';
+        const rawTitle = data.title || (data.data && data.data.title) || fallbackTitle;
         return {
           url: url,
-          title: data.title || '',
+          title: repairCyrillicMojibake(rawTitle),
           format: data.format || '',
           size: data.size || file.size
         };

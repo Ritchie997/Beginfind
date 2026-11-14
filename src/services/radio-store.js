@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { radioDb } = require('../db/connections');
 const { UPLOADS_DIR } = require('../config/paths');
-const { convertToMp3 } = require('./audio-converter');
+const { convertToMp3, decodeOriginalName } = require('./audio-converter');
 
 // ===== Promise-обертки над sqlite3 =====
 
@@ -137,7 +137,7 @@ async function getTrackById(id) {
 }
 
 async function createTrack({ userId, authorName, title, audioUrl, duration = 0, size = 0, format = 'mp3', type = 'track', coverUrl = null }) {
-  const cleanTitle = String(title || '').trim() || 'Без названия';
+  const cleanTitle = decodeOriginalName(String(title || '').trim()) || 'Без названия';
   const cleanType = ['track', 'podcast', 'speech'].includes(type) ? type : 'track';
   let cleanFormat = 'mp3';
   let cleanUrl = audioUrl;

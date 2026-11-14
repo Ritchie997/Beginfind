@@ -155,3 +155,33 @@ test('posts and articles: audio attachments are verified and converted to mp3', 
     if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
   }
 });
+
+test('audio title: decodeOriginalName repairs Cyrillic filenames and block normalization handles mojibake', () => {
+  const { decodeOriginalName } = require('./audio-converter');
+
+  // 1. Проверяем восстановление кириллицы, поврежденной latin1 перекодировкой multer/busboy
+  const originalCyrillic = 'Виктор Цой - Звезда по имени Солнце (Remaster 2026).mp3';
+  const multerCorrupted = Buffer.from(originalCyrillic, 'utf8').toString('latin1');
+  assert.equal(decodeOriginalName(multerCorrupted), originalCyrillic);
+
+  // 2. Проверяем восстановление mojibake Windows-1252
+  assert.equal(decodeOriginalName('ÐœÐ¾Ð¹ Ñ‚Ñ€ÐµÐº (2026)'), 'Мой трек (2026)');
+
+  // 3. Чистый русский текст и чистый английский текст не должны изменяться
+  assert.equal(decodeOriginalName('Чистый трек.mp3'), 'Чистый трек.mp3');
+  assert.equal(decodeOriginalName('Track 01 - Rock Anthem.flac'), 'Track 01 - Rock Anthem.flac');
+
+  // 4. Проверяем авто-восстановление в модели блоков Antropedia (blocks.js normalizeBlock)
+  const blockWithBrokenTitle = blocks.normalizeBlock({
+    id: 'b-audio',
+    type: 'audio',
+    data: {
+      src: '/uploads/audio-test.mp3',
+      title: multerCorrupted.replace('.mp3', ''),
+      artist: Buffer.from('Кино', 'utf8').toString('latin1')
+    }
+  });
+
+  assert.equal(blockWithBrokenTitle.data.title, 'Виктор Цой - Звезда по имени Солнце (Remaster 2026)');
+  assert.equal(blockWithBrokenTitle.data.artist, 'Кино');
+});

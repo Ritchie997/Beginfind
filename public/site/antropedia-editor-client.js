@@ -64,6 +64,9 @@
       async uploadAudio(file) {
         const formData = new FormData();
         formData.append('audio', file);
+        if (file && file.name) {
+          formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+        }
         return this.makeAuthenticatedRequest('/api/upload-audio', 'POST', formData);
       }
     };
@@ -86,6 +89,9 @@
     window.apiClient.uploadAudio = async function (file) {
       const formData = new FormData();
       formData.append('audio', file);
+      if (file && file.name) {
+        formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+      }
       if (typeof window.apiClient.makeAuthenticatedRequest === 'function') {
         return window.apiClient.makeAuthenticatedRequest('/api/upload-audio', 'POST', formData);
       }

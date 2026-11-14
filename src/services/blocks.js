@@ -19,6 +19,7 @@
 // старых "рамок"/{width=...} костылей.
 
 const crypto = require('crypto');
+const { decodeOriginalName } = require('./audio-converter');
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'list', 'quote', 'code', 'table', 'divider',
@@ -280,8 +281,8 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
     case 'audio':
       return {
         src: sanitizeAudioPath(data.src),
-        title: str(data.title),
-        artist: str(data.artist),
+        title: decodeOriginalName(str(data.title)),
+        artist: decodeOriginalName(str(data.artist)),
         duration: num(data.duration, null),
         size: num(data.size, null),
         format: str(data.format)

@@ -124,7 +124,49 @@ async function convertToMp3(inputPath) {
   });
 }
 
+const WIN1252_REVERSE = {
+  8364: 0x80, 8218: 0x82, 402: 0x83, 8222: 0x84, 8230: 0x85, 8224: 0x86, 8225: 0x87,
+  710: 0x88, 8240: 0x89, 352: 0x8A, 8249: 0x8B, 338: 0x8C, 381: 0x8E, 8216: 0x91,
+  8217: 0x92, 8220: 0x93, 8221: 0x94, 8226: 0x95, 8211: 0x96, 8212: 0x97, 732: 0x98,
+  8482: 0x99, 353: 0x9A, 8250: 0x9B, 339: 0x9C, 382: 0x9E, 376: 0x9F
+};
+
+/**
+ * Восстанавливает оригинальное имя файла / заголовок, если оно было повреждено
+ * latin1/windows-1252 перекодировкой в multipart-заголовках multer/busboy.
+ *
+ * @param {string} str - Исходная строка имени файла или заголовка
+ * @returns {string} - Декодированная UTF-8 строка
+ */
+function decodeOriginalName(str) {
+  if (!str || typeof str !== 'string') return '';
+  const hasHighBytes = Array.from(str).some((c) => c.charCodeAt(0) >= 128);
+  if (!hasHighBytes) return str;
+  if (!/[ÐÑ]/.test(str)) {
+    return str;
+  }
+  try {
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (code <= 255) {
+        bytes.push(code);
+      } else if (WIN1252_REVERSE[code]) {
+        bytes.push(WIN1252_REVERSE[code]);
+      } else {
+        return str;
+      }
+    }
+    const candidate = Buffer.from(bytes).toString('utf8');
+    if (!candidate.includes('\uFFFD') && /[а-яёА-ЯЁ]/.test(candidate)) {
+      return candidate;
+    }
+  } catch (_) {}
+  return str;
+}
+
 module.exports = {
   convertToMp3,
-  isFfmpegAvailable
+  isFfmpegAvailable,
+  decodeOriginalName
 };

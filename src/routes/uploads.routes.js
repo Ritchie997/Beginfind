@@ -7,7 +7,7 @@ const auth = require('../middleware/auth');
 const { uploadImage, uploadAudio } = require('../uploads/multer-config');
 const { UPLOADS_DIR } = require('../config/paths');
 const { readSettings } = require('../services/system-settings');
-const { convertToMp3 } = require('../services/audio-converter');
+const { convertToMp3, decodeOriginalName } = require('../services/audio-converter');
 
 const router = express.Router();
 
@@ -84,15 +84,19 @@ router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadA
     // mp3 в mp3 не переделываем, а не-mp3 конвертируем и удаляем исходный тяжелый файл
     const conv = await convertToMp3(filePath);
 
-    const originalNameWithoutExt = path.basename(req.file.originalname, path.extname(req.file.originalname));
+    // Восстанавливаем оригинальное имя и заголовок с корректной кириллицей (устраняем сбой latin1 в multipart)
+    const cleanOriginalName = decodeOriginalName(req.file.originalname);
+    const bodyTitle = req.body && typeof req.body.title === 'string' ? decodeOriginalName(req.body.title.trim()) : '';
+    const originalNameWithoutExt = path.basename(cleanOriginalName, path.extname(cleanOriginalName));
+    const title = bodyTitle || originalNameWithoutExt;
 
     res.setHeader('Content-Type', 'application/json');
     res.status(201).json({
       success: true,
       url: `/uploads/${conv.filename}`,
       filename: conv.filename,
-      originalname: req.file.originalname,
-      title: originalNameWithoutExt,
+      originalname: cleanOriginalName,
+      title: title,
       size: conv.size,
       format: conv.format
     });
