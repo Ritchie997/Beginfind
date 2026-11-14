@@ -151,16 +151,16 @@
 
     <!-- Навигационные вкладки радио -->
     <div class="radio-nav-tabs" id="radioNavTabs">
-      <button type="button" class="radio-nav-tab is-active" data-tab="live">
+      <button type="button" class="radio-nav-tab is-active" data-tab="live" onclick="window.RadioClient && window.RadioClient.switchTab('live')">
         <i class="fas fa-radio"></i> Живой эфир и частоты
       </button>
-      <button type="button" class="radio-nav-tab" data-tab="feed">
+      <button type="button" class="radio-nav-tab" data-tab="feed" onclick="window.RadioClient && window.RadioClient.switchTab('feed')">
         <i class="fas fa-compact-disc"></i> Лента треков и подкастов
       </button>
-      <button type="button" class="radio-nav-tab" data-tab="my" id="tabMyBtn">
+      <button type="button" class="radio-nav-tab" data-tab="my" id="tabMyBtn" onclick="window.RadioClient && window.RadioClient.switchTab('my')">
         <i class="fas fa-heart"></i> Моё
       </button>
-      <button type="button" class="radio-nav-tab" data-tab="editor" id="tabEditorBtn">
+      <button type="button" class="radio-nav-tab" data-tab="editor" id="tabEditorBtn" onclick="window.RadioClient && window.RadioClient.switchTab('editor')">
         <i class="fas fa-sliders"></i> Редактор эфира (24ч)
       </button>
     </div>

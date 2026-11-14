@@ -1065,15 +1065,6 @@
       showToast('Ошибка открытия страницы трека: ' + err.message, 'error');
     }
   }
-        dom.trackPageDeleteBtn.style.display = isOwnerOrAdmin ? 'inline-flex' : 'none';
-      }
-
-      window.history.pushState(null, '', `/radio/track/${track.id}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err) {
-      showToast('Ошибка открытия страницы трека: ' + err.message, 'error');
-    }
-  }
 
   // ===== 5. Редактор сетки вещания (24 часа) =====
 
@@ -1442,6 +1433,57 @@
     showModal('modalCreateStation');
   }
 
+  // ===== Переключение навигационных вкладок радио =====
+  function switchTab(tabName) {
+    if (!tabName) return;
+
+    const trackView = document.getElementById('radioTrackView');
+    const navTabs = document.getElementById('radioNavTabs');
+    if (trackView) {
+      trackView.hidden = true;
+      trackView.style.display = 'none';
+    }
+    if (navTabs) {
+      navTabs.hidden = false;
+      navTabs.style.display = '';
+    }
+
+    document.querySelectorAll('.radio-nav-tab').forEach((t) => {
+      if (t.dataset.tab === tabName) {
+        t.classList.add('is-active');
+      } else {
+        t.classList.remove('is-active');
+      }
+    });
+
+    const tabLive = document.getElementById('tabContentLive');
+    const tabFeed = document.getElementById('tabContentFeed');
+    const tabMy = document.getElementById('tabContentMy');
+    const tabEditor = document.getElementById('tabContentEditor');
+
+    if (tabLive) {
+      tabLive.hidden = tabName !== 'live';
+      tabLive.style.display = tabName === 'live' ? '' : 'none';
+    }
+    if (tabFeed) {
+      tabFeed.hidden = tabName !== 'feed';
+      tabFeed.style.display = tabName === 'feed' ? '' : 'none';
+    }
+    if (tabMy) {
+      tabMy.hidden = tabName !== 'my';
+      tabMy.style.display = tabName === 'my' ? '' : 'none';
+    }
+    if (tabEditor) {
+      tabEditor.hidden = tabName !== 'editor';
+      tabEditor.style.display = tabName === 'editor' ? '' : 'none';
+    }
+
+    if (tabName === 'live') loadStations();
+    if (tabName === 'feed') loadTracks();
+    if (tabName === 'my') loadMySection();
+    if (tabName === 'editor') initEditor();
+  }
+
   // ===== ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ СТРАНИЦЫ =====
   function init() {
     // ЗАЩИТА ОТ ДВОЙНОГО ВЫЗОВА И ДВОЕНИЯ СЛУШАТЕЛЕЙ
@@ -1485,36 +1527,18 @@
 
     // 1. Табы
     dom.tabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        if (dom.trackView) { dom.trackView.hidden = true; dom.trackView.style.display = 'none'; }
-        if (dom.navTabs) { dom.navTabs.hidden = false; dom.navTabs.style.display = ''; }
-
-        dom.tabs.forEach((t) => t.classList.remove('is-active'));
-        tab.classList.add('is-active');
-
-        const tabName = tab.dataset.tab;
-        if (dom.tabLive) {
-          dom.tabLive.hidden = tabName !== 'live';
-          dom.tabLive.style.display = tabName === 'live' ? '' : 'none';
-        }
-        if (dom.tabFeed) {
-          dom.tabFeed.hidden = tabName !== 'feed';
-          dom.tabFeed.style.display = tabName === 'feed' ? '' : 'none';
-        }
-        if (dom.tabMy) {
-          dom.tabMy.hidden = tabName !== 'my';
-          dom.tabMy.style.display = tabName === 'my' ? '' : 'none';
-        }
-        if (dom.tabEditor) {
-          dom.tabEditor.hidden = tabName !== 'editor';
-          dom.tabEditor.style.display = tabName === 'editor' ? '' : 'none';
-        }
-
-        if (tabName === 'live') loadStations();
-        if (tabName === 'feed') loadTracks();
-        if (tabName === 'my') loadMySection();
-        if (tabName === 'editor') initEditor();
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchTab(tab.dataset.tab);
       });
+    });
+
+    dom.navTabs?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.radio-nav-tab');
+      if (btn && btn.dataset.tab) {
+        e.preventDefault();
+        switchTab(btn.dataset.tab);
+      }
     });
 
     // 2. Управление эфирной декой
@@ -1671,7 +1695,7 @@
         state.selectedStationForEdit = null;
         state.editorSlots = [];
         loadStations();
-        document.querySelector('.radio-nav-tab[data-tab="live"]')?.click();
+        switchTab('live');
       } catch (err) {
         showToast('Ошибка при освобождении частоты: ' + err.message, 'error');
       }
@@ -2582,6 +2606,7 @@
       }
       window.RadioClient._mounted = false;
     },
+    switchTab,
     openTrackPage,
     openCreatePlaylistModal,
     openUploadModal,
