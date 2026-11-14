@@ -7,6 +7,7 @@ const auth = require('../middleware/auth');
 const { uploadImage, uploadAudio } = require('../uploads/multer-config');
 const { UPLOADS_DIR } = require('../config/paths');
 const { readSettings } = require('../services/system-settings');
+const { convertToMp3 } = require('../services/audio-converter');
 
 const router = express.Router();
 
@@ -67,7 +68,7 @@ router.post('/upload-images', auth.authenticateToken, auth.checkApproved, upload
   }
 });
 
-router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadAudio.single('audio'), (req, res) => {
+router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadAudio.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Аудиофайл не загружен' });
@@ -79,18 +80,21 @@ router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadA
       return res.status(500).json({ error: 'Ошибка сохранения аудиофайла' });
     }
 
-    const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '');
+    // Автоматическая конвертация аудио в MP3 для экономии дискового пространства сервера
+    // mp3 в mp3 не переделываем, а не-mp3 конвертируем и удаляем исходный тяжелый файл
+    const conv = await convertToMp3(filePath);
+
     const originalNameWithoutExt = path.basename(req.file.originalname, path.extname(req.file.originalname));
 
     res.setHeader('Content-Type', 'application/json');
     res.status(201).json({
       success: true,
-      url: `/uploads/${req.file.filename}`,
-      filename: req.file.filename,
+      url: `/uploads/${conv.filename}`,
+      filename: conv.filename,
       originalname: req.file.originalname,
       title: originalNameWithoutExt,
-      size: req.file.size,
-      format: ext
+      size: conv.size,
+      format: conv.format
     });
   } catch (error) {
     console.error('Upload audio error:', error);

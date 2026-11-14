@@ -873,6 +873,10 @@
   function showModal(modal) {
     if (typeof modal === 'string') modal = document.getElementById(modal);
     if (!modal) return;
+    // Скрываем все остальные открытые модалки единой системы для избежания наслоения окон
+    document.querySelectorAll('.modal-overlay').forEach((m) => {
+      if (m !== modal) hideModal(m);
+    });
     modal.hidden = false;
     modal.style.display = 'flex';
   }
@@ -912,7 +916,7 @@
     window.RadioClient._mounted = true;
 
     // Скрываем все модальные окна при старте страницы
-    document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((m) => hideModal(m));
+    document.querySelectorAll('.modal-overlay').forEach((m) => hideModal(m));
 
     dom = queryDom();
     if (!dom.deckPlayBtn) {
@@ -1384,14 +1388,14 @@
             cb.addEventListener('change', updateBatchState);
           });
 
-          dom.pickTrackSelectAll?.addEventListener('change', (e) => {
+          dom.pickTrackSelectAll.onchange = (e) => {
             list.querySelectorAll('.pick-track-checkbox').forEach((cb) => {
               cb.checked = e.target.checked;
             });
             updateBatchState();
-          });
+          };
 
-          dom.btnPickTracksBatch?.addEventListener('click', () => {
+          dom.btnPickTracksBatch.onclick = () => {
             const checked = list.querySelectorAll('.pick-track-checkbox:checked');
             checked.forEach((cb) => {
               addSlotToEditor({
@@ -1403,7 +1407,7 @@
               });
             });
             hideModal(modal);
-          });
+          };
 
           list.querySelectorAll('.btn-pick-single-item').forEach((b) => {
             b.addEventListener('click', () => {
@@ -1693,7 +1697,7 @@
       });
     });
 
-    document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((backdrop) => {
+    document.querySelectorAll('.modal-overlay').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) {
           hideModal(backdrop);
@@ -1703,7 +1707,7 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-overlay, .radio-modal-backdrop').forEach((backdrop) => {
+        document.querySelectorAll('.modal-overlay').forEach((backdrop) => {
           hideModal(backdrop);
         });
       }

@@ -67,3 +67,23 @@ test('editor-blocks: audio label and createBlock structure', () => {
   assert.ok(editorBlocksContent.includes("audio: 'Аудио'"), "TYPE_LABELS must include audio: 'Аудио'");
   assert.ok(editorBlocksContent.includes("block.type === 'audio'"), "createBlock must handle block.type === 'audio'");
 });
+
+test('audio-converter: mp3 files are preserved without re-encoding', async () => {
+  const { convertToMp3 } = require('./audio-converter');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+
+  const tmpMp3 = path.join(os.tmpdir(), `test-audio-${Date.now()}.mp3`);
+  fs.writeFileSync(tmpMp3, Buffer.from('FAKE_MP3_DATA'));
+
+  try {
+    const res = await convertToMp3(tmpMp3);
+    assert.equal(res.converted, false, 'mp3 must not be re-encoded');
+    assert.equal(res.format, 'mp3');
+    assert.equal(res.outputPath, tmpMp3);
+    assert.ok(fs.existsSync(tmpMp3));
+  } finally {
+    if (fs.existsSync(tmpMp3)) fs.unlinkSync(tmpMp3);
+  }
+});

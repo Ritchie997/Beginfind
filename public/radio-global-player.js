@@ -97,12 +97,14 @@
   // Привязка событий HTML5 Audio
   audio.addEventListener('play', () => {
     state.isPlaying = true;
+    updateBarUI();
     announcePlay();
     notify();
   });
 
   audio.addEventListener('pause', () => {
     state.isPlaying = false;
+    updateBarUI();
     notify();
   });
 
@@ -123,6 +125,7 @@
       playTrackAt(state.currentIndex + 1);
     } else {
       state.isPlaying = false;
+      updateBarUI();
       notify();
     }
   });
@@ -201,6 +204,7 @@
   function pause() {
     audio.pause();
     state.isPlaying = false;
+    updateBarUI();
     notify();
   }
 
@@ -235,9 +239,10 @@
     state.station = null;
     state.track = null;
     state.currentSlot = null;
-    notify();
+    if (domBar && domBar.bar) domBar.bar.hidden = true;
     const bar = document.getElementById('alltellGlobalAudioBar');
     if (bar) bar.hidden = true;
+    notify();
   }
 
   // ===== Рендеринг глобальной панели на любой странице =====
@@ -364,14 +369,10 @@
 
     // Проверяем: если находимся на странице /radio и играет радио-дека,
     // нижняя глобальная панель может скрываться, так как на экране уже видна большая дека.
-    // Но если мы перешли на ДРУГУЮ страницу (antropedia, alltell, gallery, profile, admin-panel),
-    // панель ВСЕГДА отображается!
+    // Плеер виден везде только если что-то реально воспроизводится (isPlaying = true):
     const isRadioPage = window.location.pathname === '/radio' || window.location.pathname.startsWith('/radio/track/');
-    if (isRadioPage && state.mode === 'radio') {
-      domBar.bar.hidden = true;
-    } else {
-      domBar.bar.hidden = false;
-    }
+    const shouldShow = Boolean(state.isPlaying && state.mode && !(isRadioPage && state.mode === 'radio'));
+    domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
       if (domBar.badge) domBar.badge.textContent = `${state.station ? state.station.frequency : '---'} FM`;
@@ -453,18 +454,22 @@
           audio.currentTime = saved.currentTime || 0;
           audio.play().then(() => {
             state.isPlaying = true;
+            updateBarUI();
             notify();
           }).catch(() => {
             // Если браузер заблокировал автовоспроизведение до первого клика
             const unlock = () => {
               audio.play().then(() => {
                 state.isPlaying = true;
+                updateBarUI();
                 notify();
               }).catch(() => {});
             };
             document.addEventListener('pointerdown', unlock, { once: true });
           });
         }
+      } else {
+        if (domBar && domBar.bar) domBar.bar.hidden = true;
       }
     } catch (e) {
       console.error('[GlobalRadio] Restore error:', e);

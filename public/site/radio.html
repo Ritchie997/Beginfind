@@ -348,11 +348,11 @@
   </section>
 
   <!-- МОДАЛЬНОЕ ОКНО: ЗАГРУЗКА АУДИОЗАПИСИ В МЕДИАТЕКУ -->
-  <div class="modal-overlay radio-modal-backdrop" id="modalUploadTrack" hidden style="display: none; z-index: 3000;">
-    <div class="modal-box radio-modal" style="max-width: 520px; width: 100%;">
-      <div class="modal-header radio-modal-head">
+  <div class="modal-overlay" id="modalUploadTrack" hidden style="display: none;">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-header">
         <h3>Опубликовать аудиозапись</h3>
-        <button type="button" class="modal-close radio-modal-close" data-close="modalUploadTrack" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-close="modalUploadTrack" aria-label="Закрыть">&times;</button>
       </div>
       <form id="formUploadTrack">
         <div class="modal-body">
@@ -390,11 +390,11 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ РАДИОСТАНЦИИ / ЗАНЯТИЕ ЧАСТОТЫ -->
-  <div class="modal-overlay radio-modal-backdrop" id="modalCreateStation" hidden style="display: none; z-index: 3000;">
-    <div class="modal-box radio-modal" style="max-width: 520px; width: 100%;">
-      <div class="modal-header radio-modal-head">
+  <div class="modal-overlay" id="modalCreateStation" hidden style="display: none;">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-header">
         <h3>Занять частоту и создать радио</h3>
-        <button type="button" class="modal-close radio-modal-close" data-close="modalCreateStation" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-close="modalCreateStation" aria-label="Закрыть">&times;</button>
       </div>
       <form id="formCreateStation">
         <div class="modal-body">
@@ -428,11 +428,11 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: ВЫБОР ИЗ МЕДИАТЕКИ В РЕДАКТОР -->
-  <div class="modal-overlay radio-modal-backdrop" id="modalPickTrack" hidden style="display: none; z-index: 3000;">
-    <div class="modal-box modal-box-wide radio-modal" style="max-width: 650px; width: 100%;">
-      <div class="modal-header radio-modal-head">
+  <div class="modal-overlay" id="modalPickTrack" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 650px;">
+      <div class="modal-header">
         <h3>Добавить запись в сетку вещания</h3>
-        <button type="button" class="modal-close radio-modal-close" data-close="modalPickTrack" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-close="modalPickTrack" aria-label="Закрыть">&times;</button>
       </div>
       <div class="modal-body">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:0 4px;">
@@ -454,11 +454,11 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: ВСТАВКА СЛОВ ПО ВРЕМЕНИ -->
-  <div class="modal-overlay radio-modal-backdrop" id="modalInsertWordsByTime" hidden style="display: none; z-index: 3000;">
-    <div class="modal-box modal-box-wide radio-modal" style="max-width: 560px; width: 100%;">
-      <div class="modal-header radio-modal-head">
+  <div class="modal-overlay" id="modalInsertWordsByTime" hidden style="display: none;">
+    <div class="modal-box modal-box-wide">
+      <div class="modal-header">
         <h3>Вставить слова / джингл по времени</h3>
-        <button type="button" class="modal-close radio-modal-close" data-close="modalInsertWordsByTime" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-close="modalInsertWordsByTime" aria-label="Закрыть">&times;</button>
       </div>
       <form id="formInsertWordsByTime">
         <div class="modal-body">
@@ -511,15 +511,17 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: ПРОГРЕСС ЗАГРУЗКИ ПЛЕЙЛИСТА -->
-  <div class="modal-overlay radio-modal-backdrop" id="modalPlaylistProgress" hidden style="display: none; z-index: 3000;">
-    <div class="modal-box radio-modal" style="max-width: 440px; width: 100%; text-align: center;">
+  <div class="modal-overlay" id="modalPlaylistProgress" hidden style="display: none;">
+    <div class="modal-box" style="max-width: 440px; text-align: center;">
+      <div class="modal-header">
+        <h3 style="margin: 0 auto;"><i class="fas fa-spinner fa-spin"></i> Загрузка в эфир</h3>
+      </div>
       <div class="modal-body" style="padding: 24px;">
-        <h3 style="margin-bottom:12px;"><i class="fas fa-spinner fa-spin"></i> Загрузка плейлиста в эфир</h3>
         <p id="playlistProgressText" style="color:#94a3b8; font-size:0.95rem; margin-bottom:16px;">Загружаем аудиофайлы...</p>
         <div class="radio-capacity-bar" style="margin-bottom:16px;">
           <div class="radio-capacity-fill" id="playlistProgressFill" style="width:0%; background:#ff4757;"></div>
         </div>
-        <p style="font-size:0.8rem; color:#64748b; margin: 0;">Файлы загружаются и последовательно формируют сетку вещания.</p>
+        <p style="font-size:0.8rem; color:#64748b; margin: 0;">Файлы загружаются, конвертируются и формируют сетку вещания.</p>
       </div>
     </div>
   </div>

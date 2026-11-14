@@ -744,59 +744,9 @@
   background: rgba(255, 71, 87, 0.15);
 }
 
-/* Модальные окна */
-.radio-modal-backdrop[hidden],
+/* Модальные окна радио используют единую модульную систему AllTell (.modal-overlay, .modal-box, .modal-header, .modal-body, .modal-footer) */
 .modal-overlay[hidden] {
   display: none !important;
-}
-
-.radio-modal-backdrop,
-.modal-overlay.radio-modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(6px);
-  z-index: 3000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.radio-modal {
-  background: #181b24;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  width: 100%;
-  max-width: 520px;
-  padding: 28px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.radio-modal-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.radio-modal-head h3 {
-  margin: 0;
-  color: #fff;
-  font-size: 1.25rem;
-}
-
-.radio-modal-close {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  font-size: 1.2rem;
-  cursor: pointer;
 }
 
 .radio-form-group {
