@@ -1,7 +1,16 @@
 // audio-converter.js — автоматическая конвертация загружаемых аудиозаписей в MP3 для экономии памяти сервера
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+
+function isFfmpegAvailable() {
+  try {
+    const res = spawnSync('ffmpeg', ['-version'], { timeout: 3000 });
+    return res.status === 0;
+  } catch (e) {
+    return false;
+  }
+}
 
 /**
  * Конвертирует аудиофайл в MP3 с использованием ffmpeg.
@@ -27,6 +36,18 @@ async function convertToMp3(inputPath) {
       filename: path.basename(inputPath),
       size: stat.size,
       format: 'mp3'
+    };
+  }
+
+  if (!isFfmpegAvailable()) {
+    console.warn('[AudioConverter] ⚠️ ffmpeg не найден в PATH на сервере! Для работы конвертации аудио в MP3 установите ffmpeg: sudo apt install -y ffmpeg');
+    return {
+      converted: false,
+      outputPath: inputPath,
+      filename: path.basename(inputPath),
+      size: stat.size,
+      format: ext.replace('.', ''),
+      ffmpegMissing: true
     };
   }
 
@@ -104,5 +125,6 @@ async function convertToMp3(inputPath) {
 }
 
 module.exports = {
-  convertToMp3
+  convertToMp3,
+  isFfmpegAvailable
 };

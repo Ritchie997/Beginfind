@@ -21,8 +21,11 @@ const userNotifications = require('../services/user-notifications');
 const articleCollabStore = require('../services/article-collab-store');
 const mentions = require('../services/mentions');
 const { PORT, HOST } = require('../config/env');
-const { dbPath } = require('../config/paths');
+const { dbPath, UPLOADS_DIR } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
+const fs = require('fs');
+const path = require('path');
+const { convertToMp3 } = require('../services/audio-converter');
 
 const router = express.Router();
 
@@ -670,6 +673,49 @@ router.post('/articles/:id/view', auth.authenticateToken, auth.checkApproved, as
   }
 });
 
+async function ensureContentAudioConvertedToMp3(content) {
+  if (!content) return content;
+  let doc = content;
+  let isStr = false;
+  if (typeof doc === 'string') {
+    isStr = true;
+    try { doc = JSON.parse(doc); } catch (e) { return content; }
+  }
+  if (!doc || !Array.isArray(doc.blocks)) return content;
+
+  async function checkBlock(b) {
+    if (!b) return;
+    if (b.type === 'audio' && b.data && typeof b.data.src === 'string') {
+      const src = b.data.src.trim();
+      if (src.startsWith('/uploads/')) {
+        const audioName = src.slice('/uploads/'.length);
+        const audioPath = path.join(UPLOADS_DIR, audioName);
+        if (fs.existsSync(audioPath)) {
+          const conv = await convertToMp3(audioPath);
+          b.data.src = `/uploads/${conv.filename}`;
+          b.data.format = conv.format;
+          b.data.size = conv.size;
+        }
+      }
+    }
+    if (b.type === 'columns' && Array.isArray(b.data?.columns)) {
+      for (const col of b.data.columns) {
+        if (Array.isArray(col.blocks)) {
+          for (const cb of col.blocks) await checkBlock(cb);
+        }
+      }
+    }
+    if (b.type === 'spoiler-section' && Array.isArray(b.data?.blocks)) {
+      for (const sb of b.data.blocks) await checkBlock(sb);
+    }
+  }
+
+  for (const b of doc.blocks) {
+    await checkBlock(b);
+  }
+  return isStr ? JSON.stringify(doc) : doc;
+}
+
 router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
     const { title, content, views, locked, role, roles, tags, image, attachments, server, hub_id, layers } = req.body;
@@ -704,8 +750,10 @@ router.post('/articles', auth.authenticateToken, auth.checkApproved, auth.checkN
       return res.status(400).json({ error: LOCKED_WITHOUT_ROLES_ERROR });
     }
 
+    const finalContent = await ensureContentAudioConvertedToMp3(content);
+
     const article = store.createArticle({
-      title, content, views, locked, role, roles, tags, image, attachments,
+      title, content: finalContent, views, locked, role, roles, tags, image, attachments,
       layers: createLayers,
       // Автор — всегда реальный создатель (из токена), а не то, что прислал
       // клиент — поле "Автор" в форме вырезано именно поэтому.
@@ -861,6 +909,10 @@ router.put('/articles/:id', auth.authenticateToken, auth.checkApproved, auth.che
       layers: bodyFields.layers !== undefined ? bodyFields.layers : existing.layers
     })) {
       return res.status(400).json({ error: LOCKED_WITHOUT_ROLES_ERROR });
+    }
+
+    if (bodyFields.content !== undefined) {
+      bodyFields.content = await ensureContentAudioConvertedToMp3(bodyFields.content);
     }
 
     const updated = store.updateArticle(req.params.id, {

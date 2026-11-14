@@ -2,7 +2,11 @@
 // Управляет треками/подкастами (radio_tracks), станциями/частотами (radio_stations)
 // и 24/32-часовой сеткой вещания (radio_timeline_slots).
 
+const path = require('path');
+const fs = require('fs');
 const { radioDb } = require('../db/connections');
+const { UPLOADS_DIR } = require('../config/paths');
+const { convertToMp3 } = require('./audio-converter');
 
 // ===== Promise-обертки над sqlite3 =====
 
@@ -29,7 +33,63 @@ function run(sql, params = []) {
 
 // ===== Управление треками и медиатекой =====
 
+/**
+ * Автоматически находит любые треки не в MP3 и конвертирует их в MP3,
+ * обновляя записи в БД radio_tracks и radio_timeline_slots.
+ */
+async function ensureTracksConvertedToMp3() {
+  try {
+    const nonMp3Tracks = await all(
+      "SELECT id, audio_url, format, size FROM radio_tracks WHERE format != 'mp3' OR audio_url NOT LIKE '%.mp3'"
+    );
+    if (!nonMp3Tracks || nonMp3Tracks.length === 0) return;
+
+    for (const track of nonMp3Tracks) {
+      if (track.audio_url && track.audio_url.startsWith('/uploads/')) {
+        const fileName = path.basename(track.audio_url);
+        const filePath = path.join(UPLOADS_DIR, fileName);
+        if (fs.existsSync(filePath)) {
+          const conv = await convertToMp3(filePath);
+          const newUrl = `/uploads/${conv.filename}`;
+          await run(
+            'UPDATE radio_tracks SET audio_url = ?, format = ?, size = ? WHERE id = ?',
+            [newUrl, 'mp3', conv.size, track.id]
+          );
+          await run(
+            'UPDATE radio_timeline_slots SET audio_url = ? WHERE track_id = ? OR audio_url = ?',
+            [newUrl, track.id, track.audio_url]
+          );
+        } else {
+          const mp3Name = fileName.replace(/\.[^.]+$/, '.mp3');
+          const mp3Path = path.join(UPLOADS_DIR, mp3Name);
+          if (fs.existsSync(mp3Path)) {
+            const stat = await fs.promises.stat(mp3Path);
+            const newUrl = `/uploads/${mp3Name}`;
+            await run(
+              'UPDATE radio_tracks SET audio_url = ?, format = ?, size = ? WHERE id = ?',
+              [newUrl, 'mp3', stat.size, track.id]
+            );
+            await run(
+              'UPDATE radio_timeline_slots SET audio_url = ? WHERE track_id = ? OR audio_url = ?',
+              [newUrl, track.id, track.audio_url]
+            );
+          } else {
+            await run('UPDATE radio_tracks SET format = ? WHERE id = ?', ['mp3', track.id]);
+          }
+        }
+      } else {
+        await run('UPDATE radio_tracks SET format = ? WHERE id = ?', ['mp3', track.id]);
+      }
+    }
+  } catch (err) {
+    console.warn('[radio-store] Error auto-converting existing tracks to mp3:', err.message);
+  }
+}
+
 async function listTracks({ type = null, search = '', page = 1, limit = 30, userId = null } = {}) {
+  // Гарантируем, что любые ранее добавленные не-mp3 треки будут сконвертированы в mp3
+  await ensureTracksConvertedToMp3();
+
   const p = Math.max(1, parseInt(page, 10) || 1);
   const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
   const offset = (p - 1) * l;
@@ -79,12 +139,26 @@ async function getTrackById(id) {
 async function createTrack({ userId, authorName, title, audioUrl, duration = 0, size = 0, format = 'mp3', type = 'track', coverUrl = null }) {
   const cleanTitle = String(title || '').trim() || 'Без названия';
   const cleanType = ['track', 'podcast', 'speech'].includes(type) ? type : 'track';
-  const cleanFormat = String(format || 'mp3').toLowerCase().replace('.', '');
+  let cleanFormat = 'mp3';
+  let cleanUrl = audioUrl;
+  let cleanSize = Number(size) || 0;
+
+  // Автоматическая конвертация любого загруженного аудиофайла в MP3 при публикации
+  if (cleanUrl && cleanUrl.startsWith('/uploads/')) {
+    const fileName = path.basename(cleanUrl);
+    const filePath = path.join(UPLOADS_DIR, fileName);
+    if (fs.existsSync(filePath)) {
+      const conv = await convertToMp3(filePath);
+      cleanUrl = `/uploads/${conv.filename}`;
+      cleanFormat = conv.format;
+      cleanSize = conv.size;
+    }
+  }
 
   const result = await run(
     `INSERT INTO radio_tracks (user_id, author_name, title, audio_url, duration, size, format, type, cover_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [userId, authorName, cleanTitle, audioUrl, Number(duration) || 0, Number(size) || 0, cleanFormat, cleanType, coverUrl || null]
+    [userId, authorName, cleanTitle, cleanUrl, Number(duration) || 0, cleanSize, cleanFormat, cleanType, coverUrl || null]
   );
 
   return getTrackById(result.lastID);
@@ -440,6 +514,7 @@ module.exports = {
   getTrackById,
   createTrack,
   deleteTrack,
+  ensureTracksConvertedToMp3,
   listStations,
   getStationById,
   getStationByFrequency,

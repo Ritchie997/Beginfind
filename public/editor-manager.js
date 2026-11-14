@@ -2562,11 +2562,17 @@
       }
     }
 
-    promptAudioUrl(block) {
+    async promptAudioUrl(block) {
       const current = block.data.src || '';
-      const url = window.prompt('Введите URL аудиофайла (MP3, WAV, OGG, FLAC и др.):', current);
-      if (url === null) return;
-      const cleanUrl = url.trim();
+      const url = window.confirmDialog
+        ? await window.confirmDialog.prompt({
+            title: 'Указать URL аудиофайла',
+            message: 'Введите URL аудиозаписи (MP3, WAV, OGG, FLAC и др.):',
+            defaultValue: current
+          })
+        : window.prompt('Введите URL аудиофайла (MP3, WAV, OGG, FLAC и др.):', current);
+      if (url === null || url === undefined) return;
+      const cleanUrl = String(url).trim();
       if (!cleanUrl) return;
       block.data.src = cleanUrl;
       if (!block.data.title) {

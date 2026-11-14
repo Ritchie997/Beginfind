@@ -87,3 +87,71 @@ test('audio-converter: mp3 files are preserved without re-encoding', async () =>
     if (fs.existsSync(tmpMp3)) fs.unlinkSync(tmpMp3);
   }
 });
+
+test('radio-store: createTrack auto-converts wav in uploads to mp3', async () => {
+  const { spawnSync } = require('node:child_process');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { UPLOADS_DIR } = require('../config/paths');
+  const radioStore = require('./radio-store');
+
+  const testWavName = `test-convert-${Date.now()}.wav`;
+  const testWavPath = path.join(UPLOADS_DIR, testWavName);
+
+  // Генерируем 0.5 сек синусоиды в wav через ffmpeg
+  spawnSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.5', testWavPath]);
+  assert.ok(fs.existsSync(testWavPath), 'Wav file should be created');
+
+  try {
+    const track = await radioStore.createTrack({
+      userId: 999,
+      authorName: 'Tester',
+      title: 'WAV Test Track',
+      audioUrl: `/uploads/${testWavName}`,
+      duration: 1,
+      size: fs.statSync(testWavPath).size,
+      format: 'wav',
+      type: 'track'
+    });
+
+    assert.equal(track.format, 'mp3', 'Track format must be converted to mp3 in DB');
+    assert.ok(track.audio_url.endsWith('.mp3'), 'Track URL must end with .mp3');
+    assert.equal(fs.existsSync(testWavPath), false, 'Original wav file must be deleted');
+
+    const mp3Path = path.join(UPLOADS_DIR, path.basename(track.audio_url));
+    assert.ok(fs.existsSync(mp3Path), 'Converted mp3 file must exist on disk');
+
+    // Чистим за собой
+    if (fs.existsSync(mp3Path)) fs.unlinkSync(mp3Path);
+    await radioStore.deleteTrack(track.id, 999, true);
+  } finally {
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+  }
+});
+
+test('posts and articles: audio attachments are verified and converted to mp3', async () => {
+  const { convertToMp3 } = require('./audio-converter');
+  const { spawnSync } = require('node:child_process');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { UPLOADS_DIR } = require('../config/paths');
+
+  const testWavName = `test-post-audio-${Date.now()}.wav`;
+  const testWavPath = path.join(UPLOADS_DIR, testWavName);
+
+  spawnSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=520:duration=0.4', testWavPath]);
+  assert.ok(fs.existsSync(testWavPath));
+
+  try {
+    const conv = await convertToMp3(testWavPath);
+    assert.equal(conv.converted, true);
+    assert.equal(conv.format, 'mp3');
+    assert.ok(conv.filename.endsWith('.mp3'));
+    assert.equal(fs.existsSync(testWavPath), false, 'Original non-mp3 must be unlinked');
+    assert.ok(fs.existsSync(conv.outputPath), 'Converted mp3 must exist');
+
+    if (fs.existsSync(conv.outputPath)) fs.unlinkSync(conv.outputPath);
+  } finally {
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+  }
+});

@@ -17,6 +17,7 @@ const social = require('../services/social-store');
 const stickers = require('../services/stickers-store');
 const mentions = require('../services/mentions');
 const { getAvatarUrl } = require('../services/avatars');
+const { convertToMp3 } = require('../services/audio-converter');
 
 const router = express.Router();
 const POST_TYPES = new Set(['news', 'announcement', 'event']);
@@ -182,24 +183,33 @@ async function validatePostInput(body, franchiseId, user, canManage) {
     const size = typeof item === 'object' && Number.isFinite(item.size) ? item.size : null;
     const format = typeof item === 'object' && item.format ? String(item.format).trim().toLowerCase() : path.extname(url).replace('.', '').toLowerCase();
 
-    if (url.startsWith('/uploads/')) {
-      const audioName = url.slice('/uploads/'.length);
+    let finalUrl = url;
+    let finalFormat = format;
+    let finalSize = size;
+
+    if (finalUrl.startsWith('/uploads/')) {
+      const audioName = finalUrl.slice('/uploads/'.length);
       const audioPath = path.join(UPLOADS_DIR, audioName);
       if (!fs.existsSync(audioPath)) {
         throw Object.assign(new Error('Прикреплённый аудиофайл не найден на сервере'), { status: 400 });
       }
-    } else if (!/^https?:\/\//i.test(url)) {
+      // Единая система: автоматическая конвертация аудио в MP3
+      const conv = await convertToMp3(audioPath);
+      finalUrl = `/uploads/${conv.filename}`;
+      finalFormat = conv.format;
+      finalSize = conv.size;
+    } else if (!/^https?:\/\//i.test(finalUrl)) {
       throw Object.assign(new Error('Некорректная ссылка на аудиофайл'), { status: 400 });
     }
 
     audioTracks.push({
-      url,
-      src: url,
-      title: title || path.basename(url, path.extname(url)),
+      url: finalUrl,
+      src: finalUrl,
+      title: title || path.basename(finalUrl, path.extname(finalUrl)),
       artist: artist || '',
       duration,
-      size,
-      format
+      size: finalSize,
+      format: finalFormat
     });
   }
 
