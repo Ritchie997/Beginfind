@@ -797,8 +797,10 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
     border-bottom: 1px dashed var(--background-accent);
   }
   .eb-infobox-row .eb-infobox-grip { grid-area: grip; }
+  .eb-infobox-row .eb-infobox-label,
   .eb-infobox-row input.eb-input { grid-area: label; }
   .eb-infobox-row .eb-icon-btn { grid-area: del; justify-self: end; }
+  .eb-infobox-row .eb-infobox-value,
   .eb-infobox-row textarea.eb-input { grid-area: value; }
   .eb-infobox-divider {
     opacity: 0.25;

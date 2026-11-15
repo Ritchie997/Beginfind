@@ -65,6 +65,11 @@ test('infobox: editor-manager implements hover dividers, drag handles and row in
 
   // 4. Ctrl+Enter / Cmd+Enter shortcut
   assert.ok(editorJs.includes("e.key === 'Enter' && (e.ctrlKey || e.metaKey)"), 'Must support Ctrl+Enter shortcut to insert row below');
+
+  // 5. Both label and value fields must be auto-expanding textareas
+  assert.ok(editorJs.includes("label.className = 'eb-input eb-input-auto eb-infobox-label'"), 'Label must be auto-expanding textarea');
+  assert.ok(editorJs.includes("value.className = 'eb-input eb-input-auto eb-infobox-value'"), 'Value must be auto-expanding textarea');
+  assert.ok(editorJs.includes('autosizeLabel'), 'Label must have autosize handler attached');
 });
 
 test('infobox: editor-blocks.css contains styling for Variant A grip, dividers and mobile layout', () => {
@@ -86,4 +91,6 @@ test('infobox: editor-blocks.css contains styling for Variant A grip, dividers a
   // 4. Mobile responsive layout
   assert.ok(css.includes('@media (max-width: 640px)'), 'Must include responsive breakpoint for infobox');
   assert.ok(css.includes('grid-template-areas:'), 'Mobile infobox row should use template areas for compact layout');
+  assert.ok(css.includes('.eb-infobox-label'), 'Mobile layout must map .eb-infobox-label to label area');
+  assert.ok(css.includes('.eb-infobox-value'), 'Mobile layout must map .eb-infobox-value to value area');
 });

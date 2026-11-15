@@ -3283,13 +3283,17 @@
         grip.innerHTML = '<i class="fas fa-grip-vertical"></i>';
         this.attachInfoboxRowDrag(grip, rowEl, rowsContainer, block, idx);
 
-        const label = document.createElement('input');
-        label.type = 'text';
-        label.className = 'eb-input';
+        // Поле — textarea, автоматически растёт по высоте вместе со значением
+        const label = document.createElement('textarea');
+        label.className = 'eb-input eb-input-auto eb-infobox-label';
+        label.rows = 1;
         label.placeholder = 'Поле';
         label.value = row.label;
+        const autosizeLabel = () => autosizeField(label);
+        requestAnimationFrame(autosizeLabel);
         label.addEventListener('input', () => {
           row.label = label.value;
+          autosizeLabel();
           this.scheduleRenderPreview();
           this.recordHistory(false);
         });
@@ -3297,7 +3301,7 @@
 
         // Значение — textarea, сама растёт по высоте
         const value = document.createElement('textarea');
-        value.className = 'eb-input eb-input-auto';
+        value.className = 'eb-input eb-input-auto eb-infobox-value';
         value.rows = 1;
         value.placeholder = 'Значение';
         value.value = row.value;
@@ -3312,7 +3316,21 @@
         this.wireWikilinkField(value, list, block);
 
         // Быстрое создание строки ниже через Ctrl+Enter / Cmd+Enter
-        const onKeydown = (e) => {
+        label.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            block.data.rows.splice(idx + 1, 0, { label: '', value: '' });
+            this._focusInfoboxRow = { blockId: block.id, rowIndex: idx + 1, field: 'label' };
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+          } else if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            value.focus();
+          }
+        });
+
+        value.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             block.data.rows.splice(idx + 1, 0, { label: '', value: '' });
@@ -3321,9 +3339,7 @@
             this.scheduleRenderPreview();
             this.recordHistory(true);
           }
-        };
-        label.addEventListener('keydown', onKeydown);
-        value.addEventListener('keydown', onKeydown);
+        });
 
         const del = document.createElement('button');
         del.type = 'button';
