@@ -3242,33 +3242,222 @@
       const rowsLabel = document.createElement('span'); rowsLabel.className = 'eb-field-label'; rowsLabel.textContent = 'Характеристики';
       wrap.appendChild(rowsLabel);
 
+      const rowsContainer = document.createElement('div');
+      rowsContainer.className = 'eb-infobox-rows';
+
+      const createDivider = (insertIdx) => {
+        const divider = document.createElement('div');
+        divider.className = 'eb-infobox-divider';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'eb-infobox-divider-btn';
+        addBtn.title = 'Вставить строку';
+        addBtn.setAttribute('aria-label', 'Вставить строку');
+        addBtn.innerHTML = '<i class="fas fa-plus"></i>';
+        addBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          block.data.rows.splice(insertIdx, 0, { label: '', value: '' });
+          this._focusInfoboxRow = { blockId: block.id, rowIndex: insertIdx, field: 'label' };
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
+        divider.appendChild(addBtn);
+        return divider;
+      };
+
       block.data.rows.forEach((row, idx) => {
-        const rowEl = document.createElement('div'); rowEl.className = 'eb-infobox-row';
-        const label = document.createElement('input'); label.type = 'text'; label.className = 'eb-input'; label.placeholder = 'Поле'; label.value = row.label;
-        label.addEventListener('input', () => { row.label = label.value; this.scheduleRenderPreview(); this.recordHistory(false); });
+        // Тонкий разделитель перед каждой строкой (Notion-style)
+        rowsContainer.appendChild(createDivider(idx));
+
+        const rowEl = document.createElement('div');
+        rowEl.className = 'eb-infobox-row';
+        rowEl.dataset.rowIndex = String(idx);
+
+        // Ручка перетаскивания (Grip слева — Вариант А)
+        const grip = document.createElement('button');
+        grip.type = 'button';
+        grip.className = 'eb-infobox-grip';
+        grip.title = 'Переместить строку внутри инфобокса';
+        grip.setAttribute('aria-label', 'Переместить строку');
+        grip.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+        this.attachInfoboxRowDrag(grip, rowEl, rowsContainer, block, idx);
+
+        const label = document.createElement('input');
+        label.type = 'text';
+        label.className = 'eb-input';
+        label.placeholder = 'Поле';
+        label.value = row.label;
+        label.addEventListener('input', () => {
+          row.label = label.value;
+          this.scheduleRenderPreview();
+          this.recordHistory(false);
+        });
         this.wireWikilinkField(label, list, block);
 
-        // Значение — как обычные текстовые блоки (eb-text): textarea, сама
-        // растёт по высоте, а не однострочный input, где длинный текст
-        // просто уезжает за край и не виден целиком (см. запрос "сделай
-        // расширяемой, как обычные блоки с текстом").
+        // Значение — textarea, сама растёт по высоте
         const value = document.createElement('textarea');
-        value.className = 'eb-input eb-input-auto'; value.rows = 1; value.placeholder = 'Значение'; value.value = row.value;
+        value.className = 'eb-input eb-input-auto';
+        value.rows = 1;
+        value.placeholder = 'Значение';
+        value.value = row.value;
         const autosizeValue = () => autosizeField(value);
         requestAnimationFrame(autosizeValue);
-        value.addEventListener('input', () => { row.value = value.value; autosizeValue(); this.scheduleRenderPreview(); this.recordHistory(false); });
+        value.addEventListener('input', () => {
+          row.value = value.value;
+          autosizeValue();
+          this.scheduleRenderPreview();
+          this.recordHistory(false);
+        });
         this.wireWikilinkField(value, list, block);
 
-        const del = document.createElement('button'); del.type = 'button'; del.className = 'eb-icon-btn'; del.innerHTML = '<i class="fas fa-xmark"></i>';
-        del.addEventListener('click', () => { if (block.data.rows.length <= 1) return; block.data.rows.splice(idx, 1); this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
-        rowEl.append(label, value, del);
-        wrap.appendChild(rowEl);
+        // Быстрое создание строки ниже через Ctrl+Enter / Cmd+Enter
+        const onKeydown = (e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            block.data.rows.splice(idx + 1, 0, { label: '', value: '' });
+            this._focusInfoboxRow = { blockId: block.id, rowIndex: idx + 1, field: 'label' };
+            this.renderAll();
+            this.scheduleRenderPreview();
+            this.recordHistory(true);
+          }
+        };
+        label.addEventListener('keydown', onKeydown);
+        value.addEventListener('keydown', onKeydown);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'eb-icon-btn';
+        del.title = 'Удалить строку';
+        del.setAttribute('aria-label', 'Удалить строку');
+        del.innerHTML = '<i class="fas fa-xmark"></i>';
+        del.addEventListener('click', () => {
+          if (block.data.rows.length <= 1) return;
+          block.data.rows.splice(idx, 1);
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
+        });
+
+        rowEl.append(grip, label, value, del);
+        rowsContainer.appendChild(rowEl);
+
+        // Автофокус при создании новой строки
+        if (this._focusInfoboxRow && this._focusInfoboxRow.blockId === block.id && this._focusInfoboxRow.rowIndex === idx) {
+          requestAnimationFrame(() => {
+            if (this._focusInfoboxRow?.field === 'value') value.focus();
+            else label.focus();
+            this._focusInfoboxRow = null;
+          });
+        }
       });
 
-      const addRowBtn = document.createElement('button'); addRowBtn.type = 'button'; addRowBtn.className = 'eb-mini-btn'; addRowBtn.innerHTML = '<i class="fas fa-plus"></i> Строка';
-      addRowBtn.addEventListener('click', () => { block.data.rows.push({ label: '', value: '' }); this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
+      // Разделитель после последней строки
+      rowsContainer.appendChild(createDivider(block.data.rows.length));
+      wrap.appendChild(rowsContainer);
+
+      const addRowBtn = document.createElement('button');
+      addRowBtn.type = 'button';
+      addRowBtn.className = 'eb-mini-btn';
+      addRowBtn.innerHTML = '<i class="fas fa-plus"></i> Строка';
+      addRowBtn.addEventListener('click', () => {
+        block.data.rows.push({ label: '', value: '' });
+        this._focusInfoboxRow = { blockId: block.id, rowIndex: block.data.rows.length - 1, field: 'label' };
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      });
       wrap.appendChild(addRowBtn);
       return wrap;
+    }
+
+    // Перемещение строк инфобокса через pointer-events (мышь и тач)
+    attachInfoboxRowDrag(grip, rowEl, rowsContainer, block, rowIdx) {
+      grip.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || block.data.rows.length <= 1) return;
+        e.stopPropagation();
+        if (e.pointerType === 'mouse') e.preventDefault();
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const pointerId = e.pointerId;
+        let isDragging = false;
+        let currentDropTarget = null;
+
+        const clearHighlights = () => {
+          rowsContainer.querySelectorAll('.eb-infobox-row').forEach((r) => {
+            r.classList.remove('drag-over-top', 'drag-over-bottom', 'is-dragging');
+          });
+          rowsContainer.querySelectorAll('.eb-infobox-divider').forEach((d) => {
+            d.classList.remove('drag-over');
+          });
+        };
+
+        const onMove = (ev) => {
+          if (ev.pointerId !== pointerId) return;
+          if (!isDragging) {
+            if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+            isDragging = true;
+            rowEl.classList.add('is-dragging');
+            try { grip.setPointerCapture(pointerId); } catch (_) {}
+          }
+
+          if (ev.cancelable) ev.preventDefault();
+
+          const allRows = Array.from(rowsContainer.querySelectorAll('.eb-infobox-row'));
+          clearHighlights();
+          rowEl.classList.add('is-dragging');
+
+          currentDropTarget = null;
+          for (let i = 0; i < allRows.length; i++) {
+            const otherRow = allRows[i];
+            if (otherRow === rowEl) continue;
+            const rect = otherRow.getBoundingClientRect();
+            if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+              const isBottom = (ev.clientY - rect.top) > (rect.height / 2);
+              if (isBottom) otherRow.classList.add('drag-over-bottom');
+              else otherRow.classList.add('drag-over-top');
+              currentDropTarget = { index: i, isBottom };
+              break;
+            } else if (i === 0 && ev.clientY < rect.top) {
+              otherRow.classList.add('drag-over-top');
+              currentDropTarget = { index: 0, isBottom: false };
+              break;
+            } else if (i === allRows.length - 1 && ev.clientY > rect.bottom) {
+              otherRow.classList.add('drag-over-bottom');
+              currentDropTarget = { index: i, isBottom: true };
+              break;
+            }
+          }
+        };
+
+        const onUp = (ev) => {
+          if (ev.pointerId !== pointerId) return;
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          try { grip.releasePointerCapture(pointerId); } catch (_) {}
+
+          if (isDragging) {
+            clearHighlights();
+            if (currentDropTarget) {
+              let targetIdx = currentDropTarget.index + (currentDropTarget.isBottom ? 1 : 0);
+              if (rowIdx < targetIdx) targetIdx--;
+              if (targetIdx !== rowIdx && targetIdx >= 0 && targetIdx < block.data.rows.length) {
+                const [moved] = block.data.rows.splice(rowIdx, 1);
+                block.data.rows.splice(targetIdx, 0, moved);
+                this.renderAll();
+                this.scheduleRenderPreview();
+                this.recordHistory(true);
+              }
+            }
+          }
+        };
+
+        document.addEventListener('pointermove', onMove, { passive: false });
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      });
     }
 
     // ===== Плашка-примечание (callout) =====

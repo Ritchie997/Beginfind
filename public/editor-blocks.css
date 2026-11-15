@@ -676,31 +676,136 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 .eb-infobox-editor { max-width: 320px; border: 1px solid var(--background-accent); border-radius: 8px; padding: 12px; background: var(--background-floating); }
 .eb-infobox-cover { display: flex; align-items: center; gap: 10px; }
 .eb-infobox-cover img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
-/* align-items: start, не center — "Значение" теперь растягивается по высоте
-   (textarea), а "Поле" остаётся однострочным, центрировать их друг
-   относительно друга при разной высоте смотрелось бы криво. Кнопку
-   удаления всё равно поднимаем к линии текста через margin-top. */
-.eb-infobox-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: start; }
+.eb-infobox-rows { display: flex; flex-direction: column; gap: 2px; }
+/* Вариант А: [grip] [Поле] [Значение] [✕] */
+.eb-infobox-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 1fr auto;
+  gap: 6px;
+  align-items: start;
+  position: relative;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  border-radius: 6px;
+}
 .eb-infobox-row .eb-icon-btn { margin-top: 1px; }
 
-/* На телефоне вся карточка редактора инфобокса и так узкая (~300px), а тут
-   ещё "Поле" и "Значение" делят её пополам грид-колонками — по ~90px на
-   инпут, что реально помещает от силы 10 символов, не видно, что вписал.
-   Складываем в колонку: оба поля получают почти всю ширину карточки, а не
-   половину. */
+/* Ручка перетаскивания строки инфобокса */
+.eb-infobox-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  cursor: grab;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  padding: 0;
+  margin-top: 1px;
+  touch-action: none;
+  user-select: none;
+}
+.eb-infobox-row:hover .eb-infobox-grip {
+  opacity: 0.8;
+}
+.eb-infobox-grip:hover {
+  opacity: 1;
+  color: var(--interactive-accent, #6366f1);
+}
+.eb-infobox-grip:active {
+  cursor: grabbing;
+}
+
+/* Состояния перетаскивания строк инфобокса */
+.eb-infobox-row.is-dragging {
+  opacity: 0.35;
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.05));
+}
+.eb-infobox-row.drag-over-top {
+  border-top: 2px solid var(--interactive-accent, #6366f1) !important;
+}
+.eb-infobox-row.drag-over-bottom {
+  border-bottom: 2px solid var(--interactive-accent, #6366f1) !important;
+}
+
+/* Тонкий интерактивный разделитель между строками с кнопкой "+" */
+.eb-infobox-divider {
+  position: relative;
+  height: 12px;
+  margin: -5px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.eb-infobox-divider::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: var(--interactive-accent, #6366f1);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.eb-infobox-divider:hover,
+.eb-infobox-divider:focus-within,
+.eb-infobox-divider.drag-over {
+  opacity: 1;
+}
+.eb-infobox-divider.drag-over::before {
+  height: 2px;
+}
+.eb-infobox-divider-btn {
+  position: relative;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--interactive-accent, #6366f1);
+  color: #fff;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, background 0.12s ease;
+  padding: 0;
+}
+.eb-infobox-divider-btn:hover {
+  transform: scale(1.18);
+  background: var(--interactive-hover, #4f46e5);
+}
+
+/* На телефоне сохраняем компактность и доступность всех контролов */
 @media (max-width: 640px) {
   .eb-infobox-row {
-    /* Одна колонка — label/value-инпуты естественно занимают по строке
-       каждый (обычный порядок в разметке), кнопку удаления просто прижимаем
-       вправо своей строкой ниже. */
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    grid-template-areas:
+      "grip label del"
+      "value value value";
     gap: 4px;
     padding-bottom: 8px;
     margin-bottom: 4px;
     border-bottom: 1px dashed var(--background-accent);
   }
-  .eb-infobox-row .eb-icon-btn {
-    justify-self: end;
+  .eb-infobox-row .eb-infobox-grip { grid-area: grip; }
+  .eb-infobox-row input.eb-input { grid-area: label; }
+  .eb-infobox-row .eb-icon-btn { grid-area: del; justify-self: end; }
+  .eb-infobox-row textarea.eb-input { grid-area: value; }
+  .eb-infobox-divider {
+    opacity: 0.25;
+  }
+  .eb-infobox-divider:hover,
+  .eb-infobox-divider:focus-within {
+    opacity: 1;
   }
 }
 
