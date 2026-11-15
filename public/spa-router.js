@@ -2201,7 +2201,7 @@ class SPARouter {
 
     // 2. РЕШАЕМ: КУДА И КАК ШЛЕМ
     const method = articleId ? 'PUT' : 'POST';
-    const url = articleId ? `/api/articles/${articleId}` : '/api/articles';
+    const url = articleId ? `/api/articles/${encodeURIComponent(articleId)}` : '/api/articles';
 
     try {
         const response = await fetch(url, {
@@ -2709,15 +2709,27 @@ class SPARouter {
   // Открыть черновик: несинхронизированная локальная копия (это самая
   // свежая правка на этом устройстве) важнее серверной версии; нет
   // копии — берём с сервера.
-  async loadDraft(draftId, { silent = false } = {}) {
-    if (this._editingArticleId || this._pendingEditArticleId) {
-      console.warn('[Draft] loadDraft skipped because article edit is in progress');
-      return false;
-    }
-    const currentEditing = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
-    if (currentEditing) {
-      console.warn('[Draft] loadDraft skipped because an existing article is open for editing');
-      return false;
+  async loadDraft(draftId, { silent = false, force = false } = {}) {
+    if (!force) {
+      if (this._editingArticleId || this._pendingEditArticleId) {
+        console.warn('[Draft] loadDraft skipped because article edit is in progress');
+        return false;
+      }
+      const currentEditing = !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id');
+      if (currentEditing) {
+        console.warn('[Draft] loadDraft skipped because an existing article is open for editing');
+        return false;
+      }
+    } else {
+      this._editingArticleId = null;
+      this._pendingEditArticleId = null;
+      const saveBtn = document.getElementById('saveArticleBtn');
+      if (saveBtn) {
+        saveBtn.removeAttribute('data-article-id');
+        saveBtn.textContent = 'Опубликовать';
+      }
+      const formTitle = document.getElementById('article-form-title');
+      if (formTitle) formTitle.textContent = 'Создать новую статью';
     }
     try {
       let draft = null;
@@ -2746,7 +2758,7 @@ class SPARouter {
       }
       // Форма могла исчезнуть, пока шёл запрос (ушли на другую страницу).
       if (!document.getElementById('articleTitle')) return false;
-      if (this._editingArticleId || this._pendingEditArticleId || !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id')) {
+      if (!force && (this._editingArticleId || this._pendingEditArticleId || !!document.getElementById('saveArticleBtn')?.getAttribute('data-article-id'))) {
         console.warn('[Draft] loadDraft aborted after fetch because article edit is active');
         return false;
       }
@@ -2938,8 +2950,27 @@ class SPARouter {
     }
   }
 
-  // Reset article form to empty state
+  // Reset article form to empty state (or revert to original loaded article if editing)
   async resetArticle() {
+    const saveBtn = document.getElementById('saveArticleBtn');
+    const articleId = saveBtn ? saveBtn.getAttribute('data-article-id') : null;
+    if (articleId) {
+      const ok = window.confirmDialog
+        ? await window.confirmDialog.open({
+            title: "Сбросить изменения?",
+            message: "Сбросить все внесённые изменения к исходному варианту статьи?",
+            confirmLabel: "Сбросить изменения",
+            cancelLabel: "Отмена",
+            danger: true
+          })
+        : confirm("Сбросить все внесённые изменения к исходному варианту статьи?");
+      if (ok) {
+        await this.editArticle(articleId);
+        showMessage('Изменения сброшены к исходной статье', 'info');
+      }
+      return;
+    }
+
     const ok = window.confirmDialog
       ? await window.confirmDialog.open({
           title: "Сбросить форму статьи?",
@@ -3953,7 +3984,7 @@ class SPARouter {
         : confirm('Текущее содержимое редактора будет заменено. Продолжить?');
       if (!ok) return;
     }
-    const loaded = await this.loadDraft(draftId);
+    const loaded = await this.loadDraft(draftId, { force: true });
     if (loaded) this.closeDraftsModal();
   }
 

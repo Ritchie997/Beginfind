@@ -172,13 +172,20 @@
       this._draftsSelected = new Set();
       this._draftsSelectMode = false;
       this._initialized = false;
+      this._boundEditorRoot = null;
+      this._draftSyncListenersBound = false;
       this.articleAuthorsAdmin = null;
       this._articleAuthorsOutsideClickBound = false;
     }
 
-    init() {
-      if (this._initialized) return;
+    init(force = false) {
+      const editorRoot = document.getElementById('publicArticleEditor');
+      if (!editorRoot) return;
+      if (this._initialized && this._boundEditorRoot === editorRoot && !force) return;
+
+      this.stopDraftAutosave();
       this._initialized = true;
+      this._boundEditorRoot = editorRoot;
 
       // Инициализация ChipField
       this.initChipFields();
@@ -258,6 +265,16 @@
         this.editorManager.cleanup();
       }
       this.closeDraftsModal();
+      this._boundEditorRoot = null;
+      this._initialized = false;
+    }
+
+    cleanup() {
+      this.closeEditor();
+      this.rolesField = null;
+      this.tagsField = null;
+      this.layerRolesField = null;
+      this.articleAuthorsAdmin = null;
     }
 
     updateAuthorChip() {
@@ -501,7 +518,7 @@
       if (!state) return {};
       return {
         ...(state.author && state.author.id ? { author_id: state.author.id } : {}),
-        co_author_ids: state.coAuthors.map((c) => c.id)
+        co_author_ids: state.coAuthors.map((c) => c.id).filter((id) => id != null)
       };
     }
 
@@ -637,192 +654,259 @@
 
     setupFormEvents() {
       // Кнопка «К статьям» (назад)
-      document.getElementById('editorBackBtn')?.addEventListener('click', async () => {
-        if (this.hasUnsavedChanges()) {
-          const ok = window.confirmDialog
-            ? await window.confirmDialog.open({
-                title: 'Несохранённые изменения',
-                message: 'У вас есть несохранённые изменения. Вернуться к статьям? Черновик сохранён на этом устройстве.',
-                confirmLabel: 'Вернуться',
-                cancelLabel: 'Остаться',
-                danger: false
-              })
-            : true;
-          if (!ok) return;
-        }
-        if (window.PublicAntropedia && typeof window.PublicAntropedia.showListView === 'function') {
-          window.PublicAntropedia.showListView();
-        }
-      });
+      const backBtn = document.getElementById('editorBackBtn');
+      if (backBtn && !backBtn._editorBound) {
+        backBtn._editorBound = true;
+        backBtn.addEventListener('click', async () => {
+          if (this.hasUnsavedChanges()) {
+            const ok = window.confirmDialog
+              ? await window.confirmDialog.open({
+                  title: 'Несохранённые изменения',
+                  message: 'У вас есть несохранённые изменения. Вернуться к статьям? Черновик сохранён на этом устройстве.',
+                  confirmLabel: 'Вернуться',
+                  cancelLabel: 'Остаться',
+                  danger: false
+                })
+              : true;
+            if (!ok) return;
+          }
+          if (window.PublicAntropedia && typeof window.PublicAntropedia.showListView === 'function') {
+            window.PublicAntropedia.showListView();
+          }
+        });
+      }
 
       // Сохранить черновик вручную
-      document.getElementById('saveDraftBtn')?.addEventListener('click', async () => {
-        await this.saveDraft(true);
-      });
+      const saveDraftBtn = document.getElementById('saveDraftBtn');
+      if (saveDraftBtn && !saveDraftBtn._editorBound) {
+        saveDraftBtn._editorBound = true;
+        saveDraftBtn.addEventListener('click', async () => {
+          await this.saveDraft(true);
+        });
+      }
 
       // Открыть окно черновиков
-      document.getElementById('loadDraftBtn')?.addEventListener('click', () => {
-        this.openDraftsModal();
-      });
+      const loadDraftBtn = document.getElementById('loadDraftBtn');
+      if (loadDraftBtn && !loadDraftBtn._editorBound) {
+        loadDraftBtn._editorBound = true;
+        loadDraftBtn.addEventListener('click', () => {
+          this.openDraftsModal();
+        });
+      }
 
       // Сбросить форму (или вернуть к исходному состоянию статьи)
-      document.getElementById('resetArticleBtn')?.addEventListener('click', async () => {
-        const saveBtn = document.getElementById('saveArticleBtn');
-        const articleId = saveBtn ? saveBtn.getAttribute('data-article-id') : null;
-        if (articleId) {
+      const resetArticleBtn = document.getElementById('resetArticleBtn');
+      if (resetArticleBtn && !resetArticleBtn._editorBound) {
+        resetArticleBtn._editorBound = true;
+        resetArticleBtn.addEventListener('click', async () => {
+          const saveBtn = document.getElementById('saveArticleBtn');
+          const articleId = saveBtn ? saveBtn.getAttribute('data-article-id') : null;
+          if (articleId) {
+            const ok = window.confirmDialog
+              ? await window.confirmDialog.open({
+                  title: 'Сбросить изменения?',
+                  message: 'Сбросить все внесённые изменения к исходному варианту статьи?',
+                  confirmLabel: 'Сбросить изменения',
+                  cancelLabel: 'Отмена',
+                  danger: true
+                })
+              : confirm('Сбросить все внесённые изменения к исходному варианту статьи?');
+            if (!ok) return;
+            await this.loadArticleForEdit(this.loadedArticleSlug || articleId);
+            showMessage('Изменения сброшены к исходной статье', 'info');
+            return;
+          }
+
           const ok = window.confirmDialog
             ? await window.confirmDialog.open({
-                title: 'Сбросить изменения?',
-                message: 'Сбросить все внесённые изменения к исходному варианту статьи?',
-                confirmLabel: 'Сбросить изменения',
+                title: 'Очистить форму статьи?',
+                message: 'Очистить форму статьи? Все введённые данные будут сброшены.',
+                confirmLabel: 'Сбросить',
                 cancelLabel: 'Отмена',
                 danger: true
               })
-            : confirm('Сбросить все внесённые изменения к исходному варианту статьи?');
+            : true;
           if (!ok) return;
-          await this.loadArticleForEdit(this.loadedArticleSlug || articleId);
-          showMessage('Изменения сброшены к исходной статье', 'info');
-          return;
-        }
+          this.clearForm();
+          showMessage('Форма очищена', 'info');
+        });
+      }
 
-        const ok = window.confirmDialog
-          ? await window.confirmDialog.open({
-              title: 'Очистить форму статьи?',
-              message: 'Очистить форму статьи? Все введённые данные будут сброшены.',
-              confirmLabel: 'Сбросить',
-              cancelLabel: 'Отмена',
-              danger: true
-            })
-          : true;
-        if (!ok) return;
-        this.clearForm();
-        showMessage('Форма очищена', 'info');
-      });
-
-      // Опубликовать
-      document.getElementById('saveArticleBtn')?.addEventListener('click', async (e) => {
-        const btn = e.currentTarget;
-        if (btn.disabled) return;
-        btn.disabled = true;
-        try {
-          await this.saveArticle();
-        } finally {
-          btn.disabled = false;
-        }
-      });
+      // Опубликовать / Обновить
+      const saveArticleBtn = document.getElementById('saveArticleBtn');
+      if (saveArticleBtn && !saveArticleBtn._editorBound) {
+        saveArticleBtn._editorBound = true;
+        saveArticleBtn.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          if (btn.disabled) return;
+          btn.disabled = true;
+          try {
+            await this.saveArticle();
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      }
 
       // Выбор франшизы
-      document.getElementById('articleServer')?.addEventListener('change', (e) => {
-        const serverId = e.target.value;
-        if (this.rolesField) this.rolesField.setValues([]);
-        this.loadRolesForFranchise(serverId);
-        this.loadHubsForFranchise(serverId);
-        if (this.articleLayersEnabled && this.layerRolesField) {
-          this.layerRolesField.setValues([]);
-          this.loadRolesForFranchise(serverId, true);
-        }
-      });
+      const serverSelect = document.getElementById('articleServer');
+      if (serverSelect && !serverSelect._editorBound) {
+        serverSelect._editorBound = true;
+        serverSelect.addEventListener('change', (e) => {
+          const serverId = e.target.value;
+          if (this.rolesField) this.rolesField.setValues([]);
+          this.loadRolesForFranchise(serverId);
+          this.loadHubsForFranchise(serverId);
+          if (this.articleLayersEnabled && this.layerRolesField) {
+            this.layerRolesField.setValues([]);
+            this.loadRolesForFranchise(serverId, true);
+          }
+        });
+      }
 
-      document.getElementById('articleHub')?.addEventListener('change', () => this.updateFranchisePath());
+      const hubSelect = document.getElementById('articleHub');
+      if (hubSelect && !hubSelect._editorBound) {
+        hubSelect._editorBound = true;
+        hubSelect.addEventListener('change', () => this.updateFranchisePath());
+      }
 
       // Обложка: Выбрать файл
       const fileInput = document.getElementById('articleImageFileInput');
-      document.getElementById('editorCoverFileBtn')?.addEventListener('click', () => {
-        if (fileInput) fileInput.click();
-      });
+      const coverFileBtn = document.getElementById('editorCoverFileBtn');
+      if (coverFileBtn && !coverFileBtn._editorBound) {
+        coverFileBtn._editorBound = true;
+        coverFileBtn.addEventListener('click', () => {
+          if (fileInput) fileInput.click();
+        });
+      }
 
-      fileInput?.addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        await this.uploadCoverImage(file);
-      });
+      if (fileInput && !fileInput._editorBound) {
+        fileInput._editorBound = true;
+        fileInput.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          await this.uploadCoverImage(file);
+        });
+      }
 
       // Обложка: Вставить URL
-      document.getElementById('editorCoverUrlBtn')?.addEventListener('click', async () => {
-        const url = window.confirmDialog
-          ? await window.confirmDialog.prompt({
-              title: 'Обложка по ссылке',
-              message: 'Введите прямую ссылку на изображение обложки (URL):',
-              placeholder: 'https://example.com/cover.jpg',
-              confirmLabel: 'Вставить'
-            })
-          : null;
-        if (url && url.trim()) {
-          this.setCoverImage(url.trim());
-        }
-      });
+      const coverUrlBtn = document.getElementById('editorCoverUrlBtn');
+      if (coverUrlBtn && !coverUrlBtn._editorBound) {
+        coverUrlBtn._editorBound = true;
+        coverUrlBtn.addEventListener('click', async () => {
+          const url = window.confirmDialog
+            ? await window.confirmDialog.prompt({
+                title: 'Обложка по ссылке',
+                message: 'Введите прямую ссылку на изображение обложки (URL):',
+                placeholder: 'https://example.com/cover.jpg',
+                confirmLabel: 'Вставить'
+              })
+            : null;
+          if (url && url.trim()) {
+            this.setCoverImage(url.trim());
+          }
+        });
+      }
 
       // Обложка: Удалить
-      document.getElementById('editorCoverRemoveBtn')?.addEventListener('click', () => {
-        this.removeCoverImage();
-      });
+      const coverRemoveBtn = document.getElementById('editorCoverRemoveBtn');
+      if (coverRemoveBtn && !coverRemoveBtn._editorBound) {
+        coverRemoveBtn._editorBound = true;
+        coverRemoveBtn.addEventListener('click', () => {
+          this.removeCoverImage();
+        });
+      }
 
       // Многослойность
-      document.getElementById('articleLayersToggle')?.addEventListener('change', (e) => {
-        this.setLayersMode(e.target.checked);
-      });
-
-      document.getElementById('articleLayersAddBtn')?.addEventListener('click', () => {
-        this.snapshotActiveLayer();
-        this.articleLayers.push({ roles: [], public: false, title: '', tags: [], content: { version: 1, blocks: [] } });
-        this.loadLayerIntoForm(this.articleLayers.length - 1);
-      });
-
-      document.getElementById('articleLayersDuplicateBtn')?.addEventListener('click', () => {
-        this.snapshotActiveLayer();
-        const source = this.articleLayers[this.activeLayerIndex];
-        if (!source) return;
-        this.articleLayers.push({
-          roles: source.roles.map((r) => ({ ...r })),
-          public: !!source.public,
-          title: source.title ? `${source.title} (копия)` : '',
-          tags: [...(source.tags || [])],
-          content: JSON.parse(JSON.stringify(source.content))
+      const layersToggle = document.getElementById('articleLayersToggle');
+      if (layersToggle && !layersToggle._editorBound) {
+        layersToggle._editorBound = true;
+        layersToggle.addEventListener('change', (e) => {
+          this.setLayersMode(e.target.checked);
         });
-        this.loadLayerIntoForm(this.articleLayers.length - 1);
-      });
+      }
 
-      document.getElementById('articleLayersList')?.addEventListener('click', (e) => {
-        const moveBtn = e.target.closest('.article-layer-pill-move');
-        if (moveBtn) {
-          this.moveArticleLayer(parseInt(moveBtn.dataset.index, 10), parseInt(moveBtn.dataset.move, 10));
-          return;
-        }
-        const removeBtn = e.target.closest('.article-layer-pill-remove');
-        if (removeBtn) {
-          const idx = parseInt(removeBtn.dataset.index, 10);
-          if (this.articleLayers.length <= 1) return;
-          this.articleLayers.splice(idx, 1);
-          const nextIndex = Math.min(this.activeLayerIndex >= idx ? Math.max(0, this.activeLayerIndex - 1) : this.activeLayerIndex, this.articleLayers.length - 1);
-          this.loadLayerIntoForm(nextIndex);
-          return;
-        }
-        const pill = e.target.closest('.article-layer-pill');
-        if (pill) {
-          const idx = parseInt(pill.dataset.index, 10);
-          if (idx === this.activeLayerIndex) return;
+      const layersAddBtn = document.getElementById('articleLayersAddBtn');
+      if (layersAddBtn && !layersAddBtn._editorBound) {
+        layersAddBtn._editorBound = true;
+        layersAddBtn.addEventListener('click', () => {
           this.snapshotActiveLayer();
-          this.loadLayerIntoForm(idx);
-        }
-      });
+          this.articleLayers.push({ roles: [], public: false, title: '', tags: [], content: { version: 1, blocks: [] } });
+          this.loadLayerIntoForm(this.articleLayers.length - 1);
+        });
+      }
+
+      const layersDupBtn = document.getElementById('articleLayersDuplicateBtn');
+      if (layersDupBtn && !layersDupBtn._editorBound) {
+        layersDupBtn._editorBound = true;
+        layersDupBtn.addEventListener('click', () => {
+          this.snapshotActiveLayer();
+          const source = this.articleLayers[this.activeLayerIndex];
+          if (!source) return;
+          this.articleLayers.push({
+            roles: source.roles.map((r) => ({ ...r })),
+            public: !!source.public,
+            title: source.title ? `${source.title} (копия)` : '',
+            tags: [...(source.tags || [])],
+            content: JSON.parse(JSON.stringify(source.content))
+          });
+          this.loadLayerIntoForm(this.articleLayers.length - 1);
+        });
+      }
+
+      const layersList = document.getElementById('articleLayersList');
+      if (layersList && !layersList._editorBound) {
+        layersList._editorBound = true;
+        layersList.addEventListener('click', (e) => {
+          const moveBtn = e.target.closest('.article-layer-pill-move');
+          if (moveBtn) {
+            this.moveArticleLayer(parseInt(moveBtn.dataset.index, 10), parseInt(moveBtn.dataset.move, 10));
+            return;
+          }
+          const removeBtn = e.target.closest('.article-layer-pill-remove');
+          if (removeBtn) {
+            const idx = parseInt(removeBtn.dataset.index, 10);
+            if (this.articleLayers.length <= 1) return;
+            this.articleLayers.splice(idx, 1);
+            const nextIndex = Math.min(this.activeLayerIndex >= idx ? Math.max(0, this.activeLayerIndex - 1) : this.activeLayerIndex, this.articleLayers.length - 1);
+            this.loadLayerIntoForm(nextIndex);
+            return;
+          }
+          const pill = e.target.closest('.article-layer-pill');
+          if (pill) {
+            const idx = parseInt(pill.dataset.index, 10);
+            if (idx === this.activeLayerIndex) return;
+            this.snapshotActiveLayer();
+            this.loadLayerIntoForm(idx);
+          }
+        });
+      }
 
       // Динамическое обновление заголовка активного слоя при вводе
-      document.getElementById('articleTitle')?.addEventListener('input', (e) => {
-        if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
-          this.articleLayers[this.activeLayerIndex].title = e.target.value;
-          const hint = document.getElementById('articleLayerEditingHint');
-          if (hint) hint.textContent = `(Слой ${this.activeLayerIndex + 1}: ${e.target.value || 'без названия'})`;
-          this.renderArticleLayersList();
-        }
-      });
+      const titleInput = document.getElementById('articleTitle');
+      if (titleInput && !titleInput._editorBound) {
+        titleInput._editorBound = true;
+        titleInput.addEventListener('input', (e) => {
+          if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
+            this.articleLayers[this.activeLayerIndex].title = e.target.value;
+            const hint = document.getElementById('articleLayerEditingHint');
+            if (hint) hint.textContent = `(Слой ${this.activeLayerIndex + 1}: ${e.target.value || 'без названия'})`;
+            this.renderArticleLayersList();
+          }
+        });
+      }
 
       // Переключение публичности активного слоя
-      document.getElementById('articleLayerPublicCheckbox')?.addEventListener('change', (e) => {
-        if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
-          this.articleLayers[this.activeLayerIndex].public = e.target.checked;
-          this.renderArticleLayersList();
-        }
-      });
+      const layerPubCheckbox = document.getElementById('articleLayerPublicCheckbox');
+      if (layerPubCheckbox && !layerPubCheckbox._editorBound) {
+        layerPubCheckbox._editorBound = true;
+        layerPubCheckbox.addEventListener('change', (e) => {
+          if (this.articleLayersEnabled && this.articleLayers[this.activeLayerIndex]) {
+            this.articleLayers[this.activeLayerIndex].public = e.target.checked;
+            this.renderArticleLayersList();
+          }
+        });
+      }
 
       this.setupArticleAuthorsAdmin();
     }
@@ -1513,6 +1597,8 @@
     }
 
     bindDraftSyncListeners() {
+      if (this._draftSyncListenersBound) return;
+      this._draftSyncListenersBound = true;
       window.addEventListener('online', () => this.flushPendingDrafts());
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.flushPendingDrafts();
@@ -1723,7 +1809,8 @@
           const layersRes = await fetch(`/api/articles/${encodeURIComponent(article.id)}/layers`, { headers });
           if (layersRes.ok) {
             const layersData = await layersRes.json();
-            if (layersData.layersEnabled && Array.isArray(layersData.layers) && layersData.layers.length) {
+            const hasLayers = (layersData.usingLayers || layersData.layersEnabled) && Array.isArray(layersData.layers) && layersData.layers.length;
+            if (hasLayers) {
               this.articleLayers = layersData.layers;
               const toggle = document.getElementById('articleLayersToggle');
               if (toggle) toggle.checked = true;

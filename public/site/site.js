@@ -6557,6 +6557,13 @@
       }
     }
     currentRouteCleanup = null;
+    if (window.antropediaEditor && typeof window.antropediaEditor.cleanup === 'function') {
+      try {
+        window.antropediaEditor.cleanup();
+      } catch (err) {
+        console.warn('[SPA] Editor cleanup error:', err);
+      }
+    }
     if (currentMountedPage === 'profile' && window.PublicProfile && typeof window.PublicProfile.cleanup === 'function') {
       try {
         window.PublicProfile.cleanup();
