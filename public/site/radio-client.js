@@ -283,7 +283,7 @@
       state.prevSlots = live.prevSlots || [];
 
       const globalAudio = getGlobalAudio();
-      if (globalAudio) {
+      if (globalAudio && autoPlay) {
         if (state.currentSlot && state.currentSlot.audioUrl) {
           globalAudio.playRadio(station, state.currentSlot, live.offset || 0);
         } else {
@@ -1015,6 +1015,8 @@
       if (dom.tabMy) { dom.tabMy.hidden = true; dom.tabMy.style.display = 'none'; }
       if (dom.tabEditor) { dom.tabEditor.hidden = true; dom.tabEditor.style.display = 'none'; }
       if (dom.trackView) { dom.trackView.hidden = false; dom.trackView.style.display = 'block'; }
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.syncBar();
 
       // Заполняем данные
       if (dom.trackPageTitle) dom.trackPageTitle.textContent = track.title;
@@ -1494,6 +1496,11 @@
     if (tabName === 'feed') loadTracks();
     if (tabName === 'my') loadMySection();
     if (tabName === 'editor') initEditor();
+
+    const gAudio = getGlobalAudio();
+    if (gAudio) {
+      gAudio.syncBar();
+    }
   }
 
   // ===== ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ СТРАНИЦЫ =====
@@ -1565,10 +1572,12 @@
       }
 
       const curr = gAudio.getState();
-      if (curr.isPlaying) {
+      if (curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
         gAudio.pause();
-      } else {
+      } else if (!curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
         gAudio.resume();
+      } else {
+        tuneStation(state.currentStation, true);
       }
     });
 
@@ -2205,6 +2214,8 @@
       const curr = gAudio.getState();
       if (curr.isPlaying && curr.track && curr.track.id === currentViewingTrack.id) {
         gAudio.pause();
+      } else if (!curr.isPlaying && curr.track && curr.track.id === currentViewingTrack.id) {
+        gAudio.resume();
       } else {
         gAudio.playTrack(currentViewingTrack, [currentViewingTrack], 0);
       }
@@ -2581,13 +2592,31 @@
       loadTracks();
     }
 
-    // Синхронизация прямого эфира каждые 30 секунд
+    // Фоновое обновление сетки вещания без прерывания играющего аудио
     clearInterval(state.pollTimer);
-    state.pollTimer = setInterval(() => {
+    state.pollTimer = setInterval(async () => {
       if (state.currentStation && state.isLiveMode && !state.isTimeshift) {
         const gAudio = getGlobalAudio();
         const gState = gAudio ? gAudio.getState() : {};
-        tuneStation(state.currentStation, gState.isPlaying);
+        if (gState.mode === 'track') return;
+
+        try {
+          const live = await api(`/api/radio/stations/${state.currentStation.id}/live`);
+          const prevSlotId = state.currentSlot ? state.currentSlot.id : null;
+          state.currentSlot = live.currentSlot;
+          state.nextSlots = live.nextSlots || [];
+          state.prevSlots = live.prevSlots || [];
+
+          updateDeckUI();
+
+          // Переключаем эфир на новый слот ТОЛЬКО если:
+          // прямо сейчас играет радио этой станции, и слот действительно сменился на сервере
+          if (gAudio && gState.isPlaying && gState.mode === 'radio' && gState.station && gState.station.id === state.currentStation.id) {
+            if (live.currentSlot && live.currentSlot.audioUrl && live.currentSlot.id !== prevSlotId) {
+              gAudio.playRadio(state.currentStation, live.currentSlot, live.offset || 0);
+            }
+          }
+        } catch (_) {}
       }
     }, 30000);
 

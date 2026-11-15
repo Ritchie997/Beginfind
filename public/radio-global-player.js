@@ -26,111 +26,309 @@
   const audio = new Audio();
   audio.preload = 'auto';
 
+  let isAudioLeader = false;
+  let isPageUnloading = false;
+  let remoteLeaderTabId = null;
+
   const state = {
-    mode: null, // 'radio' | 'track' | 'feed'
+    mode: null, // 'radio' | 'track'
     isPlaying: false,
     station: null,
     currentSlot: null,
     track: null,
     playlist: [],
     currentIndex: -1,
+    currentTime: 0,
+    duration: 0,
     volume: 0.9,
     muted: false,
     isLoop: false,
-    lastSaved: 0
+    savedAt: 0
   };
 
   const listeners = new Set();
-  function notify() {
+
+  function notifyListeners() {
     listeners.forEach((fn) => {
       try { fn(state); } catch (e) { console.error(e); }
     });
+  }
+
+  function notify() {
+    notifyListeners();
+    updateMediaSession();
     updateBarUI();
+    updateProgressUI();
     saveState();
   }
 
-  function saveState() {
-    if (!state.mode) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-    const data = {
+  function getSerializableState() {
+    return {
       mode: state.mode,
-      isPlaying: state.isPlaying,
+      isPlaying: isAudioLeader ? (!audio.paused && state.isPlaying) : state.isPlaying,
       station: state.station,
       currentSlot: state.currentSlot,
       track: state.track,
       playlist: state.playlist,
       currentIndex: state.currentIndex,
-      currentTime: audio.currentTime || 0,
-      duration: audio.duration || (state.track ? state.track.duration : 0),
+      currentTime: isAudioLeader ? (audio.currentTime || 0) : (state.currentTime || 0),
+      duration: isAudioLeader ? (audio.duration || 0) : (state.duration || 0),
       volume: state.volume,
       muted: state.muted,
       isLoop: state.isLoop,
-      savedAt: Date.now()
+      savedAt: Date.now(),
+      leaderTabId: isAudioLeader ? tabId : remoteLeaderTabId
     };
+  }
+
+  function applyState(data) {
+    if (!data || !data.mode) return;
+    state.mode = data.mode;
+    state.isPlaying = Boolean(data.isPlaying);
+    state.station = data.station || null;
+    state.currentSlot = data.currentSlot || null;
+    state.track = data.track || null;
+    state.playlist = Array.isArray(data.playlist) ? data.playlist : [];
+    state.currentIndex = data.currentIndex !== undefined ? data.currentIndex : -1;
+    state.currentTime = Number.isFinite(data.currentTime) ? data.currentTime : 0;
+    state.duration = Number.isFinite(data.duration) ? data.duration : 0;
+    if (data.volume !== undefined) state.volume = Math.max(0, Math.min(1, data.volume));
+    if (data.muted !== undefined) state.muted = Boolean(data.muted);
+    if (data.isLoop !== undefined) state.isLoop = Boolean(data.isLoop);
+
+    if (!isAudioLeader) {
+      audio.volume = state.volume;
+      audio.muted = state.muted;
+    }
+    updateMediaSession();
+    updateBarUI();
+    updateProgressUI();
+    notifyListeners();
+  }
+
+  function saveState() {
+    if (!state.mode) {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+      return;
+    }
+    const data = getSerializableState();
+    // При выгрузке страницы лидером сохраняем статус активного воспроизведения
+    if (isPageUnloading && isAudioLeader) {
+      data.isPlaying = true;
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (_) {}
   }
 
-  // Прием сообщений от других вкладок браузера (чтобы звук не двоился в разных вкладках)
+  function announcePlay() {
+    if (broadcast) {
+      broadcast.postMessage({ type: 'PLAY_START', tabId, state: getSerializableState() });
+    }
+  }
+
+  function announceState() {
+    if (broadcast) {
+      broadcast.postMessage({ type: 'STATE_UPDATE', tabId, state: getSerializableState() });
+    }
+  }
+
+  // Прием сообщений от других вкладок браузера
   if (broadcast) {
     broadcast.onmessage = (event) => {
       const msg = event.data;
-      if (msg && msg.type === 'PLAY_START' && msg.tabId !== tabId) {
-        if (state.isPlaying) {
-          audio.pause();
-          state.isPlaying = false;
-          notify();
+      if (!msg || typeof msg !== 'object') return;
+
+      if (msg.type === 'QUERY_LEADER') {
+        if (isAudioLeader && state.isPlaying && !audio.paused) {
+          broadcast.postMessage({
+            type: 'LEADER_ACK',
+            tabId,
+            state: getSerializableState()
+          });
+        }
+      } else if (msg.type === 'LEADER_ACK') {
+        if (msg.tabId !== tabId) {
+          remoteLeaderTabId = msg.tabId;
+          isAudioLeader = false;
+          if (!audio.paused) {
+            audio.pause();
+          }
+          applyState(msg.state);
+        }
+      } else if (msg.type === 'PLAY_START') {
+        if (msg.tabId !== tabId) {
+          remoteLeaderTabId = msg.tabId;
+          if (isAudioLeader || !audio.paused) {
+            audio.pause();
+            isAudioLeader = false;
+          }
+          applyState(msg.state);
+        }
+      } else if (msg.type === 'STATE_UPDATE') {
+        if (msg.tabId !== tabId && !isAudioLeader) {
+          remoteLeaderTabId = msg.tabId;
+          applyState(msg.state);
+        }
+      } else if (msg.type === 'CMD_PAUSE') {
+        if (isAudioLeader) {
+          pause();
+        }
+      } else if (msg.type === 'CMD_RESUME') {
+        if (isAudioLeader) {
+          resume();
+        }
+      } else if (msg.type === 'CMD_SEEK') {
+        if (isAudioLeader && Number.isFinite(msg.ratio)) {
+          seek(msg.ratio);
+        }
+      } else if (msg.type === 'CMD_STOP') {
+        stop();
+      } else if (msg.type === 'CMD_TRACK_AT') {
+        if (isAudioLeader && Number.isFinite(msg.index)) {
+          playTrackAt(msg.index);
+        }
+      } else if (msg.type === 'LEADER_LEAVING') {
+        if (msg.tabId === remoteLeaderTabId) {
+          remoteLeaderTabId = null;
+          if (msg.state) {
+            state.currentTime = msg.state.currentTime || state.currentTime;
+            state.isPlaying = false;
+            updateBarUI();
+            notifyListeners();
+          }
         }
       }
     };
   }
 
-  function announcePlay() {
-    if (broadcast) {
-      broadcast.postMessage({ type: 'PLAY_START', tabId });
+  // Синхронизация через storage event на случай вкладок без BroadcastChannel
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY && !isAudioLeader) {
+      try {
+        const data = JSON.parse(e.newValue);
+        if (data) applyState(data);
+      } catch (_) {}
     }
-  }
+  });
+
+  // Защита от сброса воспроизведения при перезагрузке страницы
+  window.addEventListener('beforeunload', () => {
+    isPageUnloading = true;
+    if (isAudioLeader) {
+      saveState();
+      if (broadcast) {
+        broadcast.postMessage({ type: 'LEADER_LEAVING', tabId, state: getSerializableState() });
+      }
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    isPageUnloading = true;
+    if (isAudioLeader) {
+      saveState();
+    }
+  });
 
   // Привязка событий HTML5 Audio
   audio.addEventListener('play', () => {
+    isAudioLeader = true;
+    remoteLeaderTabId = null;
     state.isPlaying = true;
+    updateMediaSession();
     updateBarUI();
     announcePlay();
     notify();
   });
 
   audio.addEventListener('pause', () => {
+    // Если пауза произошла из-за выгрузки вкладки, не сбрасываем состояние в localStorage
+    if (isPageUnloading) return;
     state.isPlaying = false;
+    updateMediaSession();
     updateBarUI();
+    announceState();
     notify();
   });
 
   audio.addEventListener('timeupdate', () => {
+    state.currentTime = audio.currentTime || 0;
+    state.duration = audio.duration || state.duration;
     updateProgressUI();
   });
 
   audio.addEventListener('ended', () => {
     if (state.mode === 'radio') {
-      // В режиме радио обновляем эфир
+      // В режиме радио обновляем эфир со следующим слотом
       if (state.station) {
         syncRadioStationLive(state.station, true);
       }
     } else if (state.isLoop) {
       audio.currentTime = 0;
-      audio.play();
+      audio.play().catch(() => {});
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
       playTrackAt(state.currentIndex + 1);
     } else {
       state.isPlaying = false;
+      updateMediaSession();
       updateBarUI();
       notify();
+      announceState();
     }
   });
 
-  // ===== Синхронизация радио прямого эфира =====
+  // Интеграция MediaSession API для бесперебойной работы в фоне и системных медиа-клавиш
+  function updateMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      if (state.mode === 'radio') {
+        const title = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');
+        const artist = state.station ? `Волна «${state.station.name}» (${state.station.frequency} FM)` : 'AllTell Radio';
+        const album = state.station ? `Ведущий: ${state.station.owner_name}` : 'Прямой эфир AllTell';
+        const artwork = state.station && state.station.avatar_url
+          ? [{ src: state.station.avatar_url, sizes: '512x512', type: 'image/png' }]
+          : [];
+
+        navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork });
+      } else if (state.mode === 'track' && state.track) {
+        const title = state.track.title || 'Аудиозапись';
+        const artist = state.track.author_name || 'AllTell';
+        const album = state.track.type === 'podcast' ? 'Подкасты AllTell' : state.track.type === 'speech' ? 'Слова' : 'Музыка AllTell';
+        const artwork = state.track.cover_url
+          ? [{ src: state.track.cover_url, sizes: '512x512', type: 'image/png' }]
+          : [];
+
+        navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork });
+      } else {
+        navigator.mediaSession.metadata = null;
+      }
+
+      navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+    } catch (_) {}
+  }
+
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.setActionHandler('play', () => resume());
+      navigator.mediaSession.setActionHandler('pause', () => pause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        if (state.currentIndex > 0) playTrackAt(state.currentIndex - 1);
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        if (state.currentIndex < state.playlist.length - 1) playTrackAt(state.currentIndex + 1);
+      });
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined && Number.isFinite(details.seekTime)) {
+          const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
+          if (dur > 0) {
+            seek(details.seekTime / dur);
+          }
+        }
+      });
+    } catch (_) {}
+  }
+
+  // ===== Синхронизация прямого эфира радиостанции =====
   async function syncRadioStationLive(station, autoPlay = true) {
     try {
       const res = await fetch(`/api/radio/stations/${station.id}/live`);
@@ -139,25 +337,67 @@
 
       state.mode = 'radio';
       state.station = station;
-      state.currentSlot = live.currentSlot;
 
-      if (live.currentSlot && live.currentSlot.audioUrl) {
-        audio.src = live.currentSlot.audioUrl;
-        const offset = live.offset || 0;
-        audio.currentTime = offset;
+      let targetSlot = live.currentSlot;
+      let targetOffset = live.offset || 0;
+
+      // Если слот, вернувшийся с сервера, это тот самый слот, который только что завершился
+      if (state.currentSlot && targetSlot && state.currentSlot.id === targetSlot.id && audio.ended) {
+        if (live.nextSlots && live.nextSlots.length > 0) {
+          targetSlot = live.nextSlots[0];
+          targetOffset = 0;
+        }
+      }
+
+      state.currentSlot = targetSlot;
+
+      if (targetSlot && targetSlot.audioUrl) {
+        const currentSrc = audio.src || '';
+        const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);
+        if (!isSameSrc) {
+          audio.src = targetSlot.audioUrl;
+          audio.currentTime = targetOffset;
+        }
         if (autoPlay) {
+          isAudioLeader = true;
+          remoteLeaderTabId = null;
           audio.play().then(() => {
             state.isPlaying = true;
+            updateMediaSession();
+            updateBarUI();
             notify();
+            announcePlay();
           }).catch(() => {
             state.isPlaying = false;
+            updateMediaSession();
+            updateBarUI();
             notify();
+            // Разблокировка автовоспроизведения при первом клике или нажатии клавиши
+            const unlock = () => {
+              document.removeEventListener('pointerdown', unlock);
+              document.removeEventListener('keydown', unlock);
+              audio.play().then(() => {
+                state.isPlaying = true;
+                updateMediaSession();
+                updateBarUI();
+                notify();
+                announcePlay();
+              }).catch(() => {});
+            };
+            document.addEventListener('pointerdown', unlock, { once: true });
+            document.addEventListener('keydown', unlock, { once: true });
           });
+        } else {
+          state.isPlaying = false;
+          updateBarUI();
+          notify();
         }
       } else {
         audio.pause();
         audio.src = '';
         state.isPlaying = false;
+        updateMediaSession();
+        updateBarUI();
         notify();
       }
     } catch (e) {
@@ -166,22 +406,45 @@
   }
 
   function playRadio(station, slot = null, offset = 0) {
+    isAudioLeader = true;
+    remoteLeaderTabId = null;
     state.mode = 'radio';
     state.station = station;
     state.currentSlot = slot;
     state.track = null;
 
     if (slot && slot.audioUrl) {
-      audio.src = slot.audioUrl;
-      audio.currentTime = offset || 0;
-      audio.play().catch(() => {});
+      const currentSrc = audio.src || '';
+      const isSameSrc = currentSrc === slot.audioUrl || currentSrc.endsWith(slot.audioUrl);
+      if (!isSameSrc) {
+        audio.src = slot.audioUrl;
+        audio.currentTime = offset || 0;
+      }
+      audio.play().then(() => {
+        state.isPlaying = true;
+        updateMediaSession();
+        updateBarUI();
+        notify();
+        announcePlay();
+      }).catch(() => {
+        state.isPlaying = false;
+        updateBarUI();
+        notify();
+      });
     } else {
       syncRadioStationLive(station, true);
     }
-    notify();
   }
 
   function playTrack(track, playlist = [], index = -1) {
+    if (!track) return;
+    isAudioLeader = true;
+    remoteLeaderTabId = null;
+
+    const isSameTrack = state.mode === 'track' && state.track && state.track.id === track.id;
+    const currentSrc = audio.src || '';
+    const isSameSrc = isSameTrack && (currentSrc === track.audio_url || currentSrc.endsWith(track.audio_url));
+
     state.mode = 'track';
     state.track = track;
     state.station = null;
@@ -189,33 +452,101 @@
     state.playlist = playlist && playlist.length ? playlist : [track];
     state.currentIndex = index >= 0 ? index : state.playlist.findIndex((t) => t.id === track.id);
 
-    audio.src = track.audio_url;
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-    notify();
+    if (!isSameSrc) {
+      audio.src = track.audio_url;
+      audio.currentTime = 0;
+    }
+
+    audio.play().then(() => {
+      state.isPlaying = true;
+      updateMediaSession();
+      updateBarUI();
+      notify();
+      announcePlay();
+    }).catch(() => {
+      state.isPlaying = false;
+      updateBarUI();
+      notify();
+    });
   }
 
   function playTrackAt(index) {
     if (index >= 0 && index < state.playlist.length) {
-      playTrack(state.playlist[index], state.playlist, index);
+      if (isAudioLeader) {
+        playTrack(state.playlist[index], state.playlist, index);
+      } else if (broadcast) {
+        broadcast.postMessage({ type: 'CMD_TRACK_AT', index });
+      }
     }
   }
 
   function pause() {
-    audio.pause();
-    state.isPlaying = false;
-    updateBarUI();
-    notify();
+    if (isAudioLeader) {
+      audio.pause();
+      state.isPlaying = false;
+      updateMediaSession();
+      updateBarUI();
+      notify();
+      announceState();
+    } else if (broadcast) {
+      broadcast.postMessage({ type: 'CMD_PAUSE' });
+      state.isPlaying = false;
+      updateBarUI();
+      notifyListeners();
+    }
   }
 
   function resume() {
-    audio.play().catch(() => {});
+    isAudioLeader = true;
+    remoteLeaderTabId = null;
+
+    if (state.mode === 'radio') {
+      if (state.currentSlot && state.currentSlot.audioUrl) {
+        const currentSrc = audio.src || '';
+        const isSameSrc = currentSrc === state.currentSlot.audioUrl || currentSrc.endsWith(state.currentSlot.audioUrl);
+        if (!isSameSrc) {
+          audio.src = state.currentSlot.audioUrl;
+        }
+        audio.play().then(() => {
+          state.isPlaying = true;
+          updateMediaSession();
+          updateBarUI();
+          notify();
+          announcePlay();
+        }).catch(() => {});
+      } else if (state.station) {
+        syncRadioStationLive(state.station, true);
+      }
+    } else if (state.mode === 'track' && state.track) {
+      if (state.track.audio_url) {
+        const currentSrc = audio.src || '';
+        const isSameSrc = currentSrc === state.track.audio_url || currentSrc.endsWith(state.track.audio_url);
+        if (!isSameSrc) {
+          audio.src = state.track.audio_url;
+          audio.currentTime = state.currentTime || 0;
+        }
+        audio.play().then(() => {
+          state.isPlaying = true;
+          updateMediaSession();
+          updateBarUI();
+          notify();
+          announcePlay();
+        }).catch(() => {});
+      }
+    }
   }
 
   function seek(ratio) {
-    const dur = audio.duration || (state.track ? state.track.duration : 0);
-    if (dur > 0) {
-      audio.currentTime = ratio * dur;
+    if (isAudioLeader) {
+      const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
+      if (dur > 0 && Number.isFinite(ratio)) {
+        audio.currentTime = Math.max(0, Math.min(dur, ratio * dur));
+        state.currentTime = audio.currentTime;
+        updateProgressUI();
+        announceState();
+      }
+    } else if (broadcast) {
+      broadcast.postMessage({ type: 'CMD_SEEK', ratio });
     }
   }
 
@@ -241,12 +572,18 @@
     state.currentSlot = null;
     state.playlist = [];
     state.currentIndex = -1;
+    isAudioLeader = false;
+    remoteLeaderTabId = null;
     if (domBar && domBar.bar) domBar.bar.hidden = true;
     const bar = document.getElementById('alltellGlobalAudioBar');
     if (bar) bar.hidden = true;
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch (_) {}
+    if (broadcast) {
+      broadcast.postMessage({ type: 'CMD_STOP' });
+    }
+    updateMediaSession();
     notify();
   }
 
@@ -352,14 +689,46 @@
   }
 
   function updateProgressUI() {
-    if (!domBar) return;
-    const cur = audio.currentTime || 0;
-    const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
-    if (domBar.timeCurrent) domBar.timeCurrent.textContent = formatTime(cur);
-    if (domBar.timeDuration) domBar.timeDuration.textContent = formatTime(dur);
-    if (domBar.progressFill && dur > 0) {
-      const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-      domBar.progressFill.style.width = `${pct}%`;
+    const cur = isAudioLeader ? (audio.currentTime || 0) : (state.currentTime || 0);
+    const dur = isAudioLeader
+      ? (audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0)))
+      : (state.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0)));
+
+    if (domBar) {
+      if (domBar.timeCurrent) domBar.timeCurrent.textContent = formatTime(cur);
+      if (domBar.timeDuration) domBar.timeDuration.textContent = formatTime(dur);
+      if (domBar.progressFill && dur > 0) {
+        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+        domBar.progressFill.style.width = `${pct}%`;
+      }
+    }
+
+    // Обновляем эфирную деку, если элемент присутствует в документе
+    const deckFill = document.getElementById('deckProgressFill');
+    const deckCur = document.getElementById('deckTimeCurrent');
+    const deckRem = document.getElementById('deckTimeRemaining');
+    if (deckFill || deckCur || deckRem) {
+      if (deckCur) deckCur.textContent = formatTime(cur);
+      if (deckRem) {
+        const rem = Math.max(0, dur - cur);
+        deckRem.textContent = rem > 0 ? `-${formatTime(rem)}` : formatTime(dur);
+      }
+      if (deckFill && dur > 0) {
+        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+        deckFill.style.width = `${pct}%`;
+      }
+    }
+
+    // Обновляем прогресс на странице отдельного трека
+    const trackFill = document.getElementById('trackPageProgressFill');
+    const trackCur = document.getElementById('trackPageCurrentTime');
+    const trackDur = document.getElementById('trackPageTotalDuration');
+    if (trackFill || trackCur || trackDur) {
+      if (trackCur) trackCur.textContent = formatTime(cur);
+      if (trackDur) trackDur.textContent = formatTime(dur);
+      if (trackFill && dur > 0) {
+        trackFill.style.width = `${Math.min(100, Math.max(0, (cur / dur) * 100))}%`;
+      }
     }
   }
 
@@ -372,13 +741,14 @@
       return;
     }
 
-    // Проверяем: если находимся на странице /radio и играет радио-дека,
-    // нижняя глобальная панель скрывается, так как на экране уже видна большая дека.
-    // На всех остальных страницах (или в режиме воспроизведения отдельного трека)
-    // плеер остаётся виден как при воспроизведении, так и на паузе.
-    // Скрывается он только при явном нажатии на кнопку закрытия (stop()).
-    const isRadioPage = window.location.pathname === '/radio' || window.location.pathname.startsWith('/radio/track/');
-    const shouldShow = Boolean(state.mode && !(isRadioPage && state.mode === 'radio'));
+    // Проверяем: если находимся на странице /radio, активна вкладка "Эфир" с декой
+    // и играет именно радио-станция, нижняя полоса убирается.
+    // Если же пользователь переключился на "Медиатеку", "Моё", "Сетку вещания",
+    // открыл отдельный трек или играет обычная музыкальная дорожка, нижний бар всегда виден!
+    const tabLive = document.getElementById('tabContentLive');
+    const isLiveDeckVisible = Boolean(tabLive && !tabLive.hidden && tabLive.style.display !== 'none');
+    const isRadioPageWithDeck = (window.location.pathname === '/radio') && isLiveDeckVisible;
+    const shouldShow = Boolean(state.mode && !(isRadioPageWithDeck && state.mode === 'radio'));
     domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
@@ -434,9 +804,8 @@
       const saved = JSON.parse(raw);
       if (!saved || !saved.mode) return;
 
-      // Если сохранено менее 15 минут назад
       const elapsedMs = Date.now() - (saved.savedAt || 0);
-      if (elapsedMs > 15 * 60 * 1000) return;
+      if (elapsedMs > 60 * 60 * 1000) return;
 
       state.mode = saved.mode;
       state.station = saved.station;
@@ -444,6 +813,8 @@
       state.track = saved.track;
       state.playlist = saved.playlist || [];
       state.currentIndex = saved.currentIndex || -1;
+      state.currentTime = saved.currentTime || 0;
+      state.duration = saved.duration || 0;
       state.volume = saved.volume !== undefined ? saved.volume : 0.9;
       state.muted = Boolean(saved.muted);
       audio.volume = state.volume;
@@ -451,42 +822,76 @@
 
       ensureBarDom();
 
+      // Если в другой вкладке уже играет этот звук, ведомо подключаемся к ней
+      if (remoteLeaderTabId && remoteLeaderTabId !== tabId) {
+        state.isPlaying = Boolean(saved.isPlaying);
+        updateBarUI();
+        updateProgressUI();
+        notifyListeners();
+        return;
+      }
+
       if (saved.isPlaying) {
+        isAudioLeader = true;
         if (state.mode === 'radio' && state.station) {
-          // Воспроизводим прямой эфир со свежим смещением
           syncRadioStationLive(state.station, true);
         } else if (state.track && state.track.audio_url) {
           audio.src = state.track.audio_url;
           audio.currentTime = saved.currentTime || 0;
           audio.play().then(() => {
             state.isPlaying = true;
+            updateMediaSession();
             updateBarUI();
             notify();
+            announcePlay();
           }).catch(() => {
             state.isPlaying = false;
             updateBarUI();
-            // Если браузер заблокировал автовоспроизведение до первого клика
+            notify();
             const unlock = () => {
+              document.removeEventListener('pointerdown', unlock);
+              document.removeEventListener('keydown', unlock);
               audio.play().then(() => {
                 state.isPlaying = true;
+                updateMediaSession();
                 updateBarUI();
                 notify();
+                announcePlay();
               }).catch(() => {});
             };
             document.addEventListener('pointerdown', unlock, { once: true });
+            document.addEventListener('keydown', unlock, { once: true });
           });
         }
       } else {
         // На паузе: сохраняем готовность трека и оставляем бар видимым с кнопкой Play
         state.isPlaying = false;
-        if (state.track && state.track.audio_url) {
+        if (state.mode === 'track' && state.track && state.track.audio_url) {
           audio.src = state.track.audio_url;
           audio.currentTime = saved.currentTime || 0;
+        } else if (state.mode === 'radio' && state.station) {
+          syncRadioStationLive(state.station, false);
         }
         updateBarUI();
+        updateProgressUI();
+        notifyListeners();
       }
     } catch (e) {
       console.error('[GlobalRadio] Restore error:', e);
+    }
+  }
+
+  function initPlayer() {
+    ensureBarDom();
+    if (broadcast) {
+      broadcast.postMessage({ type: 'QUERY_LEADER', tabId });
+      setTimeout(() => {
+        if (!remoteLeaderTabId) {
+          tryRestorePlayback();
+        }
+      }, 80);
+    } else {
+      tryRestorePlayback();
     }
   }
 
@@ -511,12 +916,8 @@
 
   // Автозапуск при инициализации страницы
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      ensureBarDom();
-      tryRestorePlayback();
-    });
+    document.addEventListener('DOMContentLoaded', initPlayer);
   } else {
-    ensureBarDom();
-    tryRestorePlayback();
+    initPlayer();
   }
 })();

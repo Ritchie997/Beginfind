@@ -106,3 +106,40 @@ test('maintenance mode: radio page and API gating', async () => {
     writeSettings(prevSettings);
   }
 });
+
+test('global audio player: background playback, MediaSession, cross-tab leader and non-destructive sync', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const playerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  // 1. Background playback & MediaSession
+  assert.ok(playerJs.includes('mediaSession'), 'Must integrate navigator.mediaSession');
+  assert.ok(playerJs.includes('MediaMetadata'), 'Must instantiate MediaMetadata');
+  assert.ok(playerJs.includes("'play'"), 'Must handle mediaSession play');
+  assert.ok(playerJs.includes("'pause'"), 'Must handle mediaSession pause');
+  assert.ok(playerJs.includes("'previoustrack'"), 'Must handle mediaSession previoustrack');
+  assert.ok(playerJs.includes("'nexttrack'"), 'Must handle mediaSession nexttrack');
+
+  // 2. Cross-tab leader coordination & unload protection
+  assert.ok(playerJs.includes('isAudioLeader'), 'Must track audio leader across tabs');
+  assert.ok(playerJs.includes('QUERY_LEADER'), 'Must query leader to prevent duplicate audio');
+  assert.ok(playerJs.includes('LEADER_ACK'), 'Must acknowledge leader to follower tabs');
+  assert.ok(playerJs.includes('isPageUnloading'), 'Must track page unloading state');
+  assert.ok(playerJs.includes('beforeunload'), 'Must handle beforeunload');
+  assert.ok(playerJs.includes('pagehide'), 'Must handle pagehide');
+
+  // 3. Audio reload prevention (isSameSrc)
+  assert.ok(playerJs.includes('isSameSrc'), 'Must check isSameSrc to avoid resetting media element');
+
+  // 4. Deck and track UI progress synchronization
+  assert.ok(playerJs.includes('deckProgressFill'), 'Must update deckProgressFill');
+  assert.ok(playerJs.includes('deckTimeCurrent'), 'Must update deckTimeCurrent');
+  assert.ok(playerJs.includes('deckTimeRemaining'), 'Must update deckTimeRemaining');
+  assert.ok(playerJs.includes('trackPageProgressFill'), 'Must update trackPageProgressFill');
+
+  // 5. Radio client: non-destructive poll timer and autoPlay respect
+  assert.ok(!radioClientJs.includes('tuneStation(state.currentStation, gState.isPlaying)'), 'Poll timer must not unconditionally call tuneStation');
+  assert.ok(radioClientJs.includes('autoPlay'), 'tuneStation must support and respect autoPlay parameter');
+  assert.ok(radioClientJs.includes('syncBar'), 'switchTab must synchronize player bar visibility');
+});
