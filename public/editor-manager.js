@@ -136,9 +136,13 @@
     return copy;
   }
 
-  // Типы, разрешённые ВНУТРИ columns/spoiler-section — без вложенности
-  // контейнеров друг в друга (см. CONTAINER_TYPES в src/services/blocks.js).
-  const NESTED_ALLOWED_TYPES = ['paragraph', 'heading', 'list', 'quote', 'image', 'audio', 'table', 'code', 'divider'];
+  // Типы, разрешённые ВНУТРИ columns/spoiler-section — вложенность ограничена:
+  // колонки могут содержать любые блоки (включая инфобокс, плашку, карту и спойлер-секцию),
+  // но не другие колонки; спойлер-секция не может содержать спойлеры или колонки.
+  const NESTED_ALLOWED_TYPES = [
+    'paragraph', 'heading', 'list', 'quote', 'code', 'table', 'divider',
+    'image', 'audio', 'infobox', 'callout', 'map', 'spoiler-section'
+  ];
 
   // Иконки для меню "+ добавить блок" (renderNestedAddButton/openBlockTypeMenu)
   // — те же, что и на кнопках основного тулбара (см. data-block-command в
@@ -147,8 +151,33 @@
   const NESTED_TYPE_ICONS = {
     paragraph: 'fa-paragraph', heading: 'fa-heading', list: 'fa-list-ul',
     quote: 'fa-quote-right', image: 'fa-image', audio: 'fa-music', table: 'fa-table',
-    code: 'fa-file-code', divider: 'fa-minus'
+    code: 'fa-file-code', divider: 'fa-minus',
+    infobox: 'fa-rectangle-list', callout: 'fa-circle-info', map: 'fa-map-location-dot',
+    'spoiler-section': 'fa-square-caret-down'
   };
+
+  function canListHostBlocks(listEl, movingBlocks) {
+    if (!listEl || !listEl._ebList) return false;
+    if (!listEl._ebNested) return true; // Верхний уровень принимает любые блоки
+    const isInsideSpoiler = !!listEl.closest('.eb-spoiler-section-editor');
+    return (movingBlocks || []).every((b) => {
+      if (b.type === 'columns') return false; // колонки не вкладываются в колонки/секции
+      if (b.type === 'spoiler-section') return !isInsideSpoiler; // спойлер можно в колонку, но не в спойлер
+      return NESTED_ALLOWED_TYPES.includes(b.type);
+    });
+  }
+
+  function closestColInWrap(colsWrap, x) {
+    const colEls = Array.from(colsWrap.children).filter((c) => c.classList.contains('eb-column'));
+    let minDist = Infinity;
+    let closest = null;
+    for (const c of colEls) {
+      const r = c.getBoundingClientRect();
+      const dist = (x < r.left) ? (r.left - x) : (x > r.right) ? (x - r.right) : 0;
+      if (dist < minDist) { minDist = dist; closest = c; }
+    }
+    return closest;
+  }
 
   // Обход всех блоков документа, включая вложенные в columns/spoiler-section.
   function walkBlocks(list, fn) {
@@ -672,9 +701,15 @@
     pasteBlockInto(list, index) {
       const src = readBlockClipboard();
       if (!src) { this.showEditorToast('Буфер пуст — сначала скопируйте блок'); return; }
-      if (list !== this.doc.blocks && !NESTED_ALLOWED_TYPES.includes(src.type)) {
-        this.showEditorToast(`«${blockTypeTag(src)}» нельзя вставить внутрь колонки или секции`);
-        return;
+      if (list !== this.doc.blocks) {
+        if (src.type === 'columns') {
+          this.showEditorToast('«Колонки» нельзя вставить внутрь колонки или секции');
+          return;
+        }
+        if (!NESTED_ALLOWED_TYPES.includes(src.type)) {
+          this.showEditorToast(`«${blockTypeTag(src)}» нельзя вставить внутрь колонки или секции`);
+          return;
+        }
       }
       const block = cloneBlockWithNewIds(src);
       list.splice(Math.max(0, Math.min(index, list.length)), 0, block);
@@ -974,16 +1009,27 @@
       const target = this.findDropTarget(d.x, d.y);
       if (target) d.target = target;
       const t = d.target;
+
+      this.container.querySelectorAll('.eb-column-drop-target').forEach((c) => c.classList.remove('eb-column-drop-target'));
+
       if (!t || !t.listEl.isConnected) { d.indicator.hidden = true; return; }
+
+      const activeCol = t.listEl.closest('.eb-column');
+      if (activeCol) activeCol.classList.add('eb-column-drop-target');
 
       // Линия вставки — посередине зазора между блоками или в пустом списке.
       const blocks = Array.from(t.listEl.children).filter((c) => c.classList.contains('eb-block'));
       const listRect = t.listEl.getBoundingClientRect();
       let y;
-      if (!blocks.length) y = listRect.top + Math.min(listRect.height, 30) / 2;
-      else if (t.index <= 0) y = blocks[0].getBoundingClientRect().top - 3;
-      else if (t.index >= blocks.length) y = blocks[blocks.length - 1].getBoundingClientRect().bottom + 3;
-      else y = (blocks[t.index - 1].getBoundingClientRect().bottom + blocks[t.index].getBoundingClientRect().top) / 2;
+      if (!blocks.length) {
+        y = listRect.top + Math.max(20, Math.min(listRect.height, 48)) / 2;
+      } else if (t.index <= 0) {
+        y = blocks[0].getBoundingClientRect().top - 3;
+      } else if (t.index >= blocks.length) {
+        y = blocks[blocks.length - 1].getBoundingClientRect().bottom + 3;
+      } else {
+        y = (blocks[t.index - 1].getBoundingClientRect().bottom + blocks[t.index].getBoundingClientRect().top) / 2;
+      }
       d.indicator.hidden = false;
       d.indicator.style.left = `${listRect.left}px`;
       d.indicator.style.width = `${listRect.width}px`;
@@ -1004,16 +1050,46 @@
         if (!el || !this.container.contains(el)) return null;
       }
       if (d.wrap.contains(el)) return null;
-      if (Array.isArray(d.movingBlocks) && d.movingBlocks.some((b) => {
+      const movingBlocks = Array.isArray(d.movingBlocks) && d.movingBlocks.length ? d.movingBlocks : [d.block];
+      if (movingBlocks.some((b) => {
         const w = this.container.querySelector(`[data-block-id="${b.id}"]`);
         return w && w.contains(el);
       })) return null;
 
-      // От элемента под курсором вверх до ближайшего списка блоков, в который
-      // этот тип можно положить: колонки/секции внутрь вложенных списков не
-      // кладутся (см. NESTED_ALLOWED_TYPES) — для них цель поднимется до
-      // списка верхнего уровня.
-      const canHost = (listEl) => !listEl._ebNested || (d.movingBlocks || [d.block]).every((b) => NESTED_ALLOWED_TYPES.includes(b.type));
+      const canHost = (listEl) => canListHostBlocks(listEl, movingBlocks);
+
+      // 1. Проверяем попадание в колонку (или зазор между ними) или спойлер-секцию
+      const colsWrap = el.closest('.eb-columns-wrap');
+      const colEl = el.closest('.eb-column') || (colsWrap ? closestColInWrap(colsWrap, x) : null);
+      const spoilerEl = el.closest('.eb-spoiler-section-editor');
+
+      // Собираем списки-кандидаты от самого вложенного к внешнему
+      const candidates = [];
+      if (colEl && spoilerEl) {
+        if (colEl.contains(spoilerEl)) {
+          candidates.push(spoilerEl.querySelector('.eb-nested-blocklist'), colEl.querySelector('.eb-nested-blocklist'));
+        } else {
+          candidates.push(colEl.querySelector('.eb-nested-blocklist'), spoilerEl.querySelector('.eb-nested-blocklist'));
+        }
+      } else if (colEl) {
+        candidates.push(colEl.querySelector('.eb-nested-blocklist'));
+      } else if (spoilerEl) {
+        candidates.push(spoilerEl.querySelector('.eb-nested-blocklist'));
+      }
+
+      for (const nested of candidates) {
+        if (nested && nested._ebList && canHost(nested)) {
+          const blocks = Array.from(nested.children).filter((c) => c.classList.contains('eb-block'));
+          let index = blocks.length;
+          for (let i = 0; i < blocks.length; i++) {
+            const r = blocks[i].getBoundingClientRect();
+            if (y < r.top + r.height / 2) { index = i; break; }
+          }
+          return { listEl: nested, list: nested._ebList, index };
+        }
+      }
+
+      // 2. Стандартный поиск вверх по DOM до ближайшего подходящего списка блоков
       for (let node = el; node && node !== this.container.parentElement; node = node.parentElement) {
         if (!node._ebList || !canHost(node)) continue;
         const blocks = Array.from(node.children).filter((c) => c.classList.contains('eb-block'));
@@ -1035,6 +1111,7 @@
       d.detach();
       d.ghost.remove();
       d.indicator.remove();
+      this.container.querySelectorAll('.eb-column-drop-target').forEach((c) => c.classList.remove('eb-column-drop-target'));
 
       const movingBlocks = Array.isArray(d.movingBlocks) && d.movingBlocks.length ? d.movingBlocks : [d.block];
       movingBlocks.forEach((b) => {
@@ -3611,7 +3688,8 @@
       this._blockTypeMenuAnchor = anchorBtn;
       el.innerHTML = '';
       const clip = readBlockClipboard();
-      if (clip && NESTED_ALLOWED_TYPES.includes(clip.type)) {
+      const isInsideSpoiler = !!anchorBtn.closest('.eb-spoiler-section-editor');
+      if (clip && clip.type !== 'columns' && (clip.type !== 'spoiler-section' || !isInsideSpoiler) && NESTED_ALLOWED_TYPES.includes(clip.type)) {
         const pasteBtn = document.createElement('button');
         pasteBtn.type = 'button';
         pasteBtn.innerHTML = `<i class="fas fa-paste"></i> Вставить скопированный (${escapeHtml(blockTypeTag(clip))})`;
@@ -3623,6 +3701,7 @@
         el.appendChild(pasteBtn);
       }
       NESTED_ALLOWED_TYPES.forEach((type) => {
+        if (type === 'spoiler-section' && isInsideSpoiler) return;
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.innerHTML = `<i class="fas ${NESTED_TYPE_ICONS[type] || 'fa-square'}"></i> ${TYPE_LABELS[type] || type}`;

@@ -832,12 +832,49 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
   border-radius: 8px;
   padding: 8px;
   min-width: 180px;
+  transition: border-color .15s, background-color .15s;
+}
+.eb-column.eb-column-drop-target {
+  border-color: var(--blurple) !important;
+  background-color: rgba(88, 101, 242, 0.08) !important;
+}
+.eb-column .eb-block {
+  min-width: 0;
+  max-width: 100%;
+}
+.eb-column .eb-infobox-editor {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .eb-column-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--text-muted); }
 .eb-column-head input { width: 56px; }
 .eb-columns-toolbar { display: flex; gap: 8px; margin-top: 8px; }
 
-.eb-nested-blocklist { display: flex; flex-direction: column; gap: 6px; min-height: 30px; }
+.eb-nested-blocklist { display: flex; flex-direction: column; gap: 6px; min-height: 36px; }
+.eb-nested-blocklist:empty {
+  min-height: 48px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+}
+.eb-column .eb-nested-blocklist:empty::after {
+  content: 'Перетащите блок сюда';
+  font-size: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.eb-spoiler-section-editor .eb-nested-blocklist:empty::after {
+  content: 'Перетащите блок сюда';
+  font-size: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+body.eb-drag-active .eb-column .eb-nested-blocklist:empty {
+  border-color: rgba(88, 101, 242, 0.45);
+}
 .eb-nested-blocklist .eb-block { padding-left: 26px; }
 .eb-nested-blocklist .eb-block-controls,
 .eb-nested-blocklist .eb-block-more-btn { left: 0; }

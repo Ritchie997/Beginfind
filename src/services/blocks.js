@@ -27,10 +27,9 @@ const BLOCK_TYPES = [
 ];
 
 // Типы, которые могут содержать вложенные блоки (columns — по колонке,
-// spoiler-section — напрямую) — вложенность одна: колонка/спойлер сами не
-// могут содержать columns/spoiler-section (см. normalizeBlockData), чтобы
-// не открывать дорогу бесконечной рекурсии в редакторе ради функционала,
-// который пока никто не просил.
+// spoiler-section — напрямую) — вложенность ограничена: колонки не могут
+// содержать columns, spoiler-section не может содержать spoiler-section или
+// columns. Колонки могут содержать spoiler-section и любые контентные блоки.
 const CONTAINER_TYPES = new Set(['columns', 'spoiler-section']);
 
 // Дата блока карты — день (0 — 01.01.1970); legacy-поле time — год
@@ -79,12 +78,11 @@ function clampPct(v, fallback = 100) {
 }
 
 // Нормализует блоки внутри контейнера (columns/spoiler-section) — на один
-// уровень вложенности, без columns/spoiler-section внутри columns/
-// spoiler-section (см. CONTAINER_TYPES).
-function normalizeChildBlocks(raw, { allowContainers = false } = {}) {
+// уровень вложенности, без columns внутри columns или spoiler внутри spoiler (см. CONTAINER_TYPES).
+function normalizeChildBlocks(raw, { allowContainers = false, allowSpoiler = false } = {}) {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((b) => normalizeBlock(b, { allowContainers }))
+    .map((b) => normalizeBlock(b, { allowContainers, allowSpoiler }))
     .filter(Boolean);
 }
 
@@ -225,7 +223,7 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
       const rawCols = Array.isArray(data.columns) && data.columns.length ? data.columns : [{}, {}];
       const columns = rawCols.map((c) => ({
         widthPct: clampPct(isPlainObject(c) ? c.widthPct : null, Math.floor(100 / rawCols.length)),
-        blocks: normalizeChildBlocks(isPlainObject(c) ? c.blocks : [], { allowContainers: false })
+        blocks: normalizeChildBlocks(isPlainObject(c) ? c.blocks : [], { allowContainers: false, allowSpoiler: true })
       }));
       return { columns };
     }
@@ -309,16 +307,18 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
   }
 }
 
-function normalizeBlock(raw, { allowContainers = true } = {}) {
+function normalizeBlock(raw, { allowContainers = true, allowSpoiler = false } = {}) {
   if (!isPlainObject(raw)) return null;
   const type = str(raw.type);
   if (!type) return null;
-  if (CONTAINER_TYPES.has(type) && !allowContainers) return null; // без вложенности в глубину
+  if (type === 'columns' && !allowContainers) return null; // без вложенности колонок в колонки/секции
+  if (type === 'spoiler-section' && !allowContainers && !allowSpoiler) return null; // спойлер только на верхнем уровне или внутри колонок
+  if (CONTAINER_TYPES.has(type) && !allowContainers && !allowSpoiler) return null;
 
   return {
     id: str(raw.id) || genId(),
     type,
-    data: normalizeBlockData(type, raw.data, { allowContainers })
+    data: normalizeBlockData(type, raw.data, { allowContainers: false, allowSpoiler: false })
   };
 }
 
