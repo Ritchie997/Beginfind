@@ -197,3 +197,39 @@ test('columns: list moving simulation across columns and document', () => {
   assert.equal(docBlocks.length, 3);
   assert.equal(docBlocks[1].id, 'col1-p1');
 });
+
+test('columns: strict sizing constraints in editor-obsidian.css prevent image overflow and infobox overlap', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/editor-obsidian.css'), 'utf8');
+
+  // 1. Column rigid bounding (min-width: 0, max-width: 100%, overflow: hidden)
+  assert.ok(css.includes('.preview-pane .blk-column {'), 'Must define .preview-pane .blk-column');
+  assert.ok(css.includes('overflow: hidden;'), 'Column must isolate contents with overflow: hidden');
+  assert.ok(css.includes('min-width: 0;'), 'Column must override flex default with min-width: 0');
+  assert.ok(css.includes('max-width: 100%;'), 'Column must have max-width: 100%');
+
+  // 2. Images inside column must not float or poke out of the column
+  assert.ok(css.includes('.preview-pane .blk-column figure.blk-image'), 'Must constrain image figure in column');
+  assert.ok(css.includes('.preview-pane .blk-column figure.blk-image img'), 'Must constrain image element in column');
+  assert.ok(css.includes('float: none !important;'), 'Must cancel floats inside column');
+
+  // 3. Infobox inside column must not float right, must not have 300px fixed width or 22px margin
+  assert.ok(css.includes('.preview-pane .blk-column aside.blk-infobox'), 'Must constrain infobox in column');
+  assert.ok(css.includes('width: 100% !important;'), 'Infobox in column must take 100% of column width');
+  assert.ok(css.includes('margin: 0 0 16px 0 !important;'), 'Infobox in column must not have 22px margin');
+});
+
+test('columns: strict sizing constraints in editor-blocks.css and editor-manager.js', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/editor-blocks.css'), 'utf8');
+  const js = fs.readFileSync(path.resolve(__dirname, '../../public/editor-manager.js'), 'utf8');
+
+  // 1. Editor column bounding in CSS
+  assert.ok(css.includes('min-width: 0;'), 'Editor column must specify min-width: 0');
+  assert.ok(css.includes('.eb-column .eb-image-block img'), 'Must constrain image img in editor column');
+  assert.ok(css.includes('.eb-column .eb-infobox-row'), 'Must constrain infobox rows in editor column');
+  assert.ok(css.includes('minmax(0, 1fr)'), 'Must use minmax(0, 1fr) in editor infobox rows');
+
+  // 2. Editor columns dynamically set flex and --w based on widthPct
+  assert.ok(js.includes("colEl.style.setProperty('--w', currentPct)"), 'Must set --w variable on column element');
+  assert.ok(js.includes("colEl.style.flex = `${currentPct} 1 0%`"), 'Must set flex proportion on column element');
+  assert.ok(js.includes("colEl.style.flex = `${col.widthPct} 1 0%`"), 'Must update flex proportion on input change');
+});

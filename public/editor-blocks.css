@@ -825,13 +825,28 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 .eb-variant-warning { --c-accent: var(--yellow); }
 
 /* --- колонки / сворачиваемая секция: контейнер + вложенный eb-blocklist --- */
-.eb-columns-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.eb-columns-wrap {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
 .eb-column {
-  flex: 1 1 200px;
+  /* Жесткое ограничение размера колонки в редакторе:
+     min-width: 0 и max-width: 100% предотвращают раздувание колонки
+     из-за больших изображений (2K/4K) или длинных строк.
+     overflow: hidden изолирует содержимое колонки. */
+  flex: var(--w, 1) 1 0%;
   border: 1px dashed var(--background-accent);
   border-radius: 8px;
   padding: 8px;
-  min-width: 180px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: border-color .15s, background-color .15s;
 }
 .eb-column.eb-column-drop-target {
@@ -841,13 +856,55 @@ body.eb-has-selection .eb-toast { bottom: calc(72px + env(safe-area-inset-bottom
 .eb-column .eb-block {
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
 }
-.eb-column .eb-infobox-editor {
+.eb-column .eb-nested-blocklist {
+  min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
 }
-.eb-column-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--text-muted); }
-.eb-column-head input { width: 56px; }
+.eb-column .eb-image-block {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.eb-column .eb-image-block img {
+  display: block;
+  max-width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box;
+}
+.eb-column .eb-image-placeholder {
+  padding: 16px 8px;
+  font-size: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+.eb-column .eb-infobox-editor {
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.eb-column .eb-infobox-row {
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr) auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.eb-column .eb-infobox-row .eb-input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.eb-column .eb-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+.eb-column-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--text-muted); max-width: 100%; overflow: hidden; }
+.eb-column-head input { width: 52px; min-width: 36px; }
 .eb-columns-toolbar { display: flex; gap: 8px; margin-top: 8px; }
 
 .eb-nested-blocklist { display: flex; flex-direction: column; gap: 6px; min-height: 36px; }
@@ -1011,6 +1068,7 @@ body.eb-drag-active .eb-column .eb-nested-blocklist:empty {
      гадание и всегда даёт предсказуемый результат при редактировании,
      тот же, что и в уже готовом читательском виде (.blk-columns). */
   .eb-columns-wrap { flex-direction: column; }
+  .eb-column { width: 100% !important; flex: none !important; }
 }
 
 /* --- комфортные касания на тач-экранах --- */

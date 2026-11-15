@@ -167,13 +167,15 @@
     });
   }
 
-  function closestColInWrap(colsWrap, x) {
+  function closestColInWrap(colsWrap, x, y) {
     const colEls = Array.from(colsWrap.children).filter((c) => c.classList.contains('eb-column'));
     let minDist = Infinity;
     let closest = null;
     for (const c of colEls) {
       const r = c.getBoundingClientRect();
-      const dist = (x < r.left) ? (r.left - x) : (x > r.right) ? (x - r.right) : 0;
+      const dx = (x < r.left) ? (r.left - x) : (x > r.right) ? (x - r.right) : 0;
+      const dy = (y != null) ? ((y < r.top) ? (r.top - y) : (y > r.bottom) ? (y - r.bottom) : 0) : 0;
+      const dist = Math.hypot(dx, dy);
       if (dist < minDist) { minDist = dist; closest = c; }
     }
     return closest;
@@ -1060,7 +1062,7 @@
 
       // 1. Проверяем попадание в колонку (или зазор между ними) или спойлер-секцию
       const colsWrap = el.closest('.eb-columns-wrap');
-      const colEl = el.closest('.eb-column') || (colsWrap ? closestColInWrap(colsWrap, x) : null);
+      const colEl = el.closest('.eb-column') || (colsWrap ? closestColInWrap(colsWrap, x, y) : null);
       const spoilerEl = el.closest('.eb-spoiler-section-editor');
 
       // Собираем списки-кандидаты от самого вложенного к внешнему
@@ -3590,9 +3592,19 @@
 
       block.data.columns.forEach((col, idx) => {
         const colEl = document.createElement('div'); colEl.className = 'eb-column';
+        const defaultPct = Math.floor(100 / block.data.columns.length);
+        const currentPct = col.widthPct || defaultPct;
+        colEl.style.setProperty('--w', currentPct);
+        colEl.style.flex = `${currentPct} 1 0%`;
         const head = document.createElement('div'); head.className = 'eb-column-head';
         const widthInput = document.createElement('input'); widthInput.type = 'number'; widthInput.min = '10'; widthInput.max = '90'; widthInput.className = 'eb-input'; widthInput.value = col.widthPct;
-        widthInput.addEventListener('input', () => { col.widthPct = parseInt(widthInput.value, 10) || 50; this.scheduleRenderPreview(); this.recordHistory(false); });
+        widthInput.addEventListener('input', () => {
+          col.widthPct = parseInt(widthInput.value, 10) || 50;
+          colEl.style.setProperty('--w', col.widthPct);
+          colEl.style.flex = `${col.widthPct} 1 0%`;
+          this.scheduleRenderPreview();
+          this.recordHistory(false);
+        });
         head.append(document.createTextNode(`Колонка ${idx + 1}, `), widthInput, document.createTextNode('%'));
         colEl.appendChild(head);
 

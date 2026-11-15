@@ -659,18 +659,117 @@
   align-items: flex-start;
   margin: 1em 0;
   clear: both;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .preview-pane .blk-column {
-  /* flex-grow по widthPct, а не flex-basis в % (--w — просто число, не
-     проценты, см. blocks-renderer.js) — с flex-basis:50%+50% ряд из двух
-     колонок был на 1 gap (20px) шире контейнера и весь ряд переносился
-     целиком на новую строку (внешне — "колонки" друг под другом, как
-     обычный текст); flex-basis:0 распределяет уже вычтенное из gap
-     свободное место пропорционально, поэтому переполнения не возникает. */
+  /* Жесткое ограничение размера колонки:
+     1. flex: var(--w, 1) 1 0% задает строгую пропорцию ширины от свободной области.
+     2. min-width: 0 (критично для Flexbox!) перебивает min-width: auto браузера,
+        запрещая колонке раздуваться из-за естественных (intrinsic) размеров больших
+        картинок, таблиц или длинных строк.
+     3. max-width: 100% и box-sizing: border-box не дают колонке превысить контейнер.
+     4. overflow: hidden изолирует содержимое колонки (создает независимый BFC) и
+        гарантирует, что ни один элемент или обтекание не вылезет за пределы колонки. */
   flex: var(--w, 1) 1 0%;
-  min-width: 220px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .preview-pane .blk-column > *:first-child { margin-top: 0; }
+.preview-pane .blk-column > *:last-child { margin-bottom: 0; }
+.preview-pane .blk-column > * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Картинки внутри колонки:
+   Картинка строго ограничена шириной колонки: отменяем float: left/right и
+   внешние боковые отступы (18px), из-за которых изображение вылезало за экран. */
+.preview-pane .blk-column figure.blk-image {
+  float: none !important;
+  width: var(--w, 100%) !important;
+  max-width: 100% !important;
+  margin: .6em auto 1em !important;
+  box-sizing: border-box !important;
+  clear: both !important;
+}
+.preview-pane .blk-column figure.blk-image img {
+  display: block !important;
+  width: auto !important;
+  max-width: 100% !important;
+  max-height: 70vh;
+  height: auto !important;
+  margin: 0 auto !important;
+  border-radius: 6px;
+  box-sizing: border-box !important;
+}
+.preview-pane .blk-column figure.blk-image figcaption {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Инфобокс внутри колонки:
+   По умолчанию вне колонок инфобокс плавает справа (float: right, width: 300px,
+   margin: 0 0 16px 22px). Внутри колонки это приводило к вылезанию за пределы
+   колонки и наплыву поверх соседней колонки.
+   Внутри колонки инфобокс строго занимает 100% ширины своей колонки без float. */
+.preview-pane .blk-column aside.blk-infobox {
+  float: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 0 16px 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+.preview-pane .blk-column .blk-infobox-row {
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 10px;
+}
+.preview-pane .blk-column .blk-infobox-row dt,
+.preview-pane .blk-column .blk-infobox-row dd {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.preview-pane .blk-column .blk-infobox-art img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Таблицы и преформатированный код внутри колонок */
+.preview-pane .blk-column .blk-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+.preview-pane .blk-column pre {
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .preview-pane .blk-columns {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .preview-pane .blk-column {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+}
 
 /* --- инфобокс: карточка характеристик, вики-стиль, плавает у края текста --- */
 .preview-pane aside.blk-infobox {
