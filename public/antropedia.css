@@ -1734,10 +1734,17 @@ button.antropedia-card-pill:disabled { opacity: 0.6; cursor: default; }
   grid-template-columns: minmax(0, 1fr) 280px;
   align-items: start;
   gap: 20px;
+  max-width: 1540px;
+  margin: 0 auto;
   /* Точка отсчёта для .antropedia-bookmark-gutter — стикеры закладок должны
      торчать ЗА левым краем карточки статьи, а не внутри неё (у карточки
      overflow:hidden ради скруглённых углов обложки, он бы их обрезал). */
   position: relative;
+}
+
+.antropedia-view-article {
+  max-width: 1200px;
+  width: 100%;
 }
 
 .antropedia-view-sidebar {
@@ -2822,7 +2829,8 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
     margin: 4px 0 16px;
   }
   .antropedia-view-content .blk-infobox-art img {
-    max-height: 220px;
+    max-height: 280px;
+    max-width: var(--infobox-img-w, 100%);
   }
   .antropedia-view-content .blk-infobox-row {
     display: grid;

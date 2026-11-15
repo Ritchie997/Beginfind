@@ -1608,7 +1608,7 @@
 }
 
 body[data-page="antropedia"] .site-main {
-    max-width: 1380px;
+    max-width: min(1560px, 96vw);
 }
 
 .antropedia-detail-container,
@@ -1629,15 +1629,15 @@ body[data-page="antropedia"] .site-main {
 .public-article-detail {
     flex: 1 1 0;
     min-width: 0;
-    max-width: 960px;
+    max-width: 1200px;
     width: 100%;
     margin: 0;
 }
 
 @media (min-width: 1025px) {
     .antropedia-view-sidebar {
-        flex: 0 0 250px;
-        width: 250px;
+        flex: 0 0 260px;
+        width: 260px;
         position: sticky;
         top: 84px;
         align-self: flex-start;
@@ -14464,7 +14464,7 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
     .antropedia-detail-view {
         margin: 0 auto !important;
         width: 100% !important;
-        max-width: 960px !important;
+        max-width: 1200px !important;
         box-sizing: border-box !important;
     }
 

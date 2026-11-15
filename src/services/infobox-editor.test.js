@@ -94,3 +94,60 @@ test('infobox: editor-blocks.css contains styling for Variant A grip, dividers a
   assert.ok(css.includes('.eb-infobox-label'), 'Mobile layout must map .eb-infobox-label to label area');
   assert.ok(css.includes('.eb-infobox-value'), 'Mobile layout must map .eb-infobox-value to value area');
 });
+
+test('infobox: image size regulation and normalization', () => {
+  const rawInfoboxWithImage = {
+    id: 'info-img',
+    type: 'infobox',
+    data: {
+      title: 'Артефакт',
+      image: { src: '/uploads/artifact.png', alt: 'Меч', widthPct: 65 },
+      rows: [{ label: 'Тип', value: 'Оружие' }]
+    }
+  };
+
+  const normalized = blocks.normalizeBlock(rawInfoboxWithImage);
+  assert.equal(normalized.data.image.widthPct, 65, 'widthPct must be preserved in normalized block');
+  assert.equal(normalized.data.image.src, '/uploads/artifact.png');
+  assert.equal(normalized.data.image.alt, 'Меч');
+
+  // Clamping test
+  const clamped = blocks.normalizeBlock({
+    id: 'info-clamp',
+    type: 'infobox',
+    data: {
+      image: { src: '/uploads/artifact.png', widthPct: 250 }
+    }
+  });
+  assert.equal(clamped.data.image.widthPct, 100, 'widthPct must be clamped to 100%');
+});
+
+test('infobox: editor-manager and blocks-renderer support image sizing dialog and rendering', () => {
+  const editorJs = fs.readFileSync(path.resolve(__dirname, '../../public/editor-manager.js'), 'utf8');
+  const rendererJs = fs.readFileSync(path.resolve(__dirname, '../../public/blocks-renderer.js'), 'utf8');
+  const obsidianCss = fs.readFileSync(path.resolve(__dirname, '../../public/editor-obsidian.css'), 'utf8');
+
+  // 1. Editor image dialog methods for infobox
+  assert.ok(editorJs.includes('pickAndUploadImageForInfobox'), 'Must define pickAndUploadImageForInfobox');
+  assert.ok(editorJs.includes('editInfoboxImage'), 'Must define editInfoboxImage');
+  assert.ok(editorJs.includes('hideAlign: true'), 'Image dialog must support hiding alignment for infobox');
+
+  // 2. Blocks renderer outputs CSS variable for image width
+  assert.ok(rendererJs.includes('--infobox-img-w'), 'Renderer must set --infobox-img-w for infobox image');
+
+  // 3. Obsidian CSS styles image sizing
+  assert.ok(obsidianCss.includes('max-width: var(--infobox-img-w, 100%)'), 'CSS must use --infobox-img-w variable');
+  assert.ok(obsidianCss.includes('max-height: 280px'), 'CSS must allow larger images in infobox');
+});
+
+test('antropedia: reading view width matches editor and sidebar sits to the right', () => {
+  const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
+  const antropediaCss = fs.readFileSync(path.resolve(__dirname, '../../public/antropedia.css'), 'utf8');
+
+  // 1. Site CSS article reading container max-width: 1200px
+  assert.ok(siteCss.includes('max-width: 1200px;'), 'Article detail must expand to 1200px matching editor');
+  assert.ok(siteCss.includes('max-width: min(1560px, 96vw)'), 'Main container must expand to accommodate wider reading area and sidebar');
+
+  // 2. Admin panel antropedia.css max-width: 1200px
+  assert.ok(antropediaCss.includes('max-width: 1200px;'), 'Admin article view must expand to 1200px');
+});

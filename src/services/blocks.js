@@ -230,7 +230,11 @@ function normalizeBlockData(type, rawData, { allowContainers }) {
 
     case 'infobox': {
       const image = isPlainObject(data.image) && data.image.src
-        ? { src: toRelativeUploadPath(str(data.image.src)), alt: str(data.image.alt) }
+        ? {
+            src: toRelativeUploadPath(str(data.image.src)),
+            alt: str(data.image.alt),
+            widthPct: clampPct(data.image.widthPct != null ? data.image.widthPct : data.image.size, 100)
+          }
         : null;
       const rows = Array.isArray(data.rows)
         ? data.rows.map((r) => ({ label: str(isPlainObject(r) ? r.label : ''), value: str(isPlainObject(r) ? r.value : '') }))

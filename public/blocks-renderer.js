@@ -595,8 +595,12 @@
         return `<div class="blk-columns">${cols}</div>`;
       }
       case 'infobox': {
+        const imgSize = (d.image && (d.image.widthPct != null || d.image.size != null))
+          ? Math.min(100, Math.max(10, parseInt(d.image.widthPct != null ? d.image.widthPct : d.image.size, 10) || 100))
+          : 100;
+        const imgStyle = ` style="--infobox-img-w:${imgSize}%; max-width:${imgSize}%;"`;
         const img = d.image
-          ? `<div class="blk-infobox-art"><img src="${escapeAttr(d.image.src)}" alt="${escapeAttr(d.image.alt)}" loading="lazy"></div>`
+          ? `<div class="blk-infobox-art"><img src="${escapeAttr(d.image.src)}" alt="${escapeAttr(d.image.alt)}" loading="lazy"${imgStyle}></div>`
           : '';
         // Значения/подписи строк — тот же инлайн-markdown, что и везде
         // (жирный/курсив/вики-ссылки и т.п.), а не сырой экранированный текст —

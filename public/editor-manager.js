@@ -3213,6 +3213,16 @@
       el.querySelector('#imgDialogThumb').src = opts.src || '';
       el.querySelector('#imgDialogAlt').value = this._imgDialogState.alt;
       el.querySelectorAll('#imgDialogAlignGroup button').forEach((b) => b.classList.toggle('active', b.getAttribute('data-align') === this._imgDialogState.align));
+      const alignField = el.querySelector('#imgDialogAlignGroup')?.closest('.img-dialog-field');
+      if (alignField) alignField.hidden = !!opts.hideAlign;
+      const frameField = el.querySelector('.img-dialog-frame-field');
+      if (frameField) frameField.hidden = !!opts.hideFrame;
+      const widthLabel = el.querySelector('#imgDialogWidthField label');
+      if (widthLabel) {
+        widthLabel.innerHTML = opts.hideAlign
+          ? 'Размер: <span id="imgDialogWidthValue">' + this._imgDialogState.width + '</span>% ширины карточки'
+          : 'Размер: <span id="imgDialogWidthValue">' + this._imgDialogState.width + '</span>% ширины текста';
+      }
       el.querySelector('#imgDialogWidthRange').value = String(this._imgDialogState.width);
       el.querySelector('#imgDialogWidthValue').textContent = String(this._imgDialogState.width);
       el.querySelector('#imgDialogFrameShow').checked = this._imgDialogState.frameShow;
@@ -3279,6 +3289,71 @@
       fileInput.click();
     }
 
+    // ===== Инфобокс: загрузка и настройка изображения =====
+
+    async pickAndUploadImageForInfobox(block) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const url = await this.uploadImageFile(file);
+        if (!url) return;
+        const choice = await this.openImageDialog({
+          title: 'Изображение инфобокса',
+          src: url,
+          alt: block.data.title || '',
+          width: 100,
+          hideAlign: true,
+          hideFrame: true,
+          allowDelete: false,
+          allowReplace: true
+        });
+        if (!choice || choice.action !== 'save') return;
+        block.data.image = {
+          src: choice.replacedSrc || url,
+          alt: choice.alt || '',
+          widthPct: choice.width != null ? choice.width : 100
+        };
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+      };
+      fileInput.click();
+    }
+
+    async editInfoboxImage(block) {
+      if (!block.data.image) return;
+      const curWidth = block.data.image.widthPct != null ? block.data.image.widthPct : (block.data.image.size != null ? block.data.image.size : 100);
+      const choice = await this.openImageDialog({
+        title: 'Настройки изображения инфобокса',
+        src: block.data.image.src,
+        alt: block.data.image.alt || '',
+        width: curWidth,
+        hideAlign: true,
+        hideFrame: true,
+        allowDelete: true,
+        allowReplace: true
+      });
+      if (!choice) return;
+      if (choice.action === 'delete') {
+        block.data.image = null;
+        this.renderAll();
+        this.scheduleRenderPreview();
+        this.recordHistory(true);
+        return;
+      }
+      block.data.image = {
+        src: choice.replacedSrc || block.data.image.src,
+        alt: choice.alt || '',
+        widthPct: choice.width != null ? choice.width : 100
+      };
+      this.renderAll();
+      this.scheduleRenderPreview();
+      this.recordHistory(true);
+    }
+
     // ===== Инфобокс =====
 
     renderInfoboxBody(block, list) {
@@ -3296,24 +3371,38 @@
       const coverRow = document.createElement('div');
       coverRow.className = 'eb-infobox-cover';
       if (block.data.image) {
-        const img = document.createElement('img'); img.src = block.data.image.src;
-        const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.className = 'eb-mini-btn'; removeBtn.textContent = 'Убрать картинку';
-        removeBtn.addEventListener('click', () => { block.data.image = null; this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true); });
-        coverRow.append(img, removeBtn);
-      } else {
-        const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'eb-mini-btn';
-        addBtn.innerHTML = '<i class="fas fa-image"></i> Добавить картинку';
-        addBtn.addEventListener('click', async () => {
-          const fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.accept = 'image/*';
-          fileInput.onchange = async (e) => {
-            const file = e.target.files[0]; if (!file) return;
-            const url = await this.uploadImageFile(file);
-            if (!url) return;
-            block.data.image = { src: url, alt: block.data.title || '' };
-            this.renderAll(); this.scheduleRenderPreview(); this.recordHistory(true);
-          };
-          fileInput.click();
+        const curWidth = block.data.image.widthPct != null ? block.data.image.widthPct : (block.data.image.size != null ? block.data.image.size : 100);
+        const img = document.createElement('img');
+        img.src = block.data.image.src;
+        img.alt = block.data.image.alt || '';
+        img.title = 'Нажмите для настройки размера изображения';
+        img.style.cursor = 'pointer';
+        img.addEventListener('click', () => this.editInfoboxImage(block));
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'eb-mini-btn';
+        editBtn.innerHTML = `<i class="fas fa-gear"></i> Размер (${curWidth}%)`;
+        editBtn.title = 'Настроить размер и параметры изображения в инфобоксе';
+        editBtn.addEventListener('click', () => this.editInfoboxImage(block));
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'eb-mini-btn';
+        removeBtn.textContent = 'Убрать';
+        removeBtn.addEventListener('click', () => {
+          block.data.image = null;
+          this.renderAll();
+          this.scheduleRenderPreview();
+          this.recordHistory(true);
         });
+        coverRow.append(img, editBtn, removeBtn);
+      } else {
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'eb-mini-btn';
+        addBtn.innerHTML = '<i class="fas fa-image"></i> Добавить картинку';
+        addBtn.addEventListener('click', () => this.pickAndUploadImageForInfobox(block));
         coverRow.appendChild(addBtn);
       }
       wrap.appendChild(coverRow);
