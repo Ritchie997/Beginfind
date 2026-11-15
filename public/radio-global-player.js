@@ -3,6 +3,14 @@
 (function () {
   'use strict';
 
+  // Защита синглтона: не пересоздавать плеер и не сбрасывать аудио при повторных вызовах скрипта
+  if (window.alltellGlobalAudio) {
+    if (typeof window.alltellGlobalAudio.syncBar === 'function') {
+      window.alltellGlobalAudio.syncBar();
+    }
+    return;
+  }
+
   function formatTime(sec) {
     if (!Number.isFinite(sec) || sec < 0) return '00:00';
     const totalSec = Math.floor(sec);

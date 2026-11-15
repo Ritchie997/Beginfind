@@ -6315,7 +6315,19 @@
     var page = document.body.getAttribute('data-page');
     if (page === 'home') currentRouteCleanup = initPublicHome();
     if (page === 'antropedia') currentRouteCleanup = initPublicAntropedia();
-    if (page === 'alltell' && window.AllTellClient) currentRouteCleanup = window.AllTellClient.init();
+    if (page === 'alltell' && window.AllTellClient) {
+      var alltellResult = window.AllTellClient.init();
+      if (alltellResult && typeof alltellResult.then === 'function') {
+        readyPromise = alltellResult.then(function (cleanupFn) {
+          currentRouteCleanup = cleanupFn;
+          return cleanupFn;
+        }).catch(function (err) {
+          console.warn('[SPA] AllTellClient.init warning:', err);
+        });
+      } else {
+        currentRouteCleanup = alltellResult;
+      }
+    }
     if (page === 'gallery' && window.SiteGallery) currentRouteCleanup = window.SiteGallery.init();
     if (page === 'stickers' && window.SiteStickers) currentRouteCleanup = window.SiteStickers.init();
     if (page === 'radio' && window.RadioClient) currentRouteCleanup = window.RadioClient.init();
@@ -6340,6 +6352,9 @@
       });
     }
     initPageControls();
+    if (window.alltellGlobalAudio && typeof window.alltellGlobalAudio.syncBar === 'function') {
+      window.alltellGlobalAudio.syncBar();
+    }
     return readyPromise;
   }
 
@@ -6534,11 +6549,21 @@
   }
 
   function cleanupPublicPage() {
-    if (currentRouteCleanup) {
-      currentRouteCleanup();
-      currentRouteCleanup = null;
+    if (typeof currentRouteCleanup === 'function') {
+      try {
+        currentRouteCleanup();
+      } catch (err) {
+        console.warn('[SPA] Cleanup error:', err);
+      }
     }
-    if (currentMountedPage === 'profile' && window.PublicProfile) window.PublicProfile.cleanup();
+    currentRouteCleanup = null;
+    if (currentMountedPage === 'profile' && window.PublicProfile && typeof window.PublicProfile.cleanup === 'function') {
+      try {
+        window.PublicProfile.cleanup();
+      } catch (err) {
+        console.warn('[SPA] Profile cleanup error:', err);
+      }
+    }
     currentMountedPage = null;
   }
 

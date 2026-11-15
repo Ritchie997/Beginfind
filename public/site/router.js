@@ -12,9 +12,12 @@
   function isPublicPath(pathname) {
     var normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
     return normalizedPath === '/' ||
+      normalizedPath === '/site/index.html' ||
       normalizedPath === '/antropedia' ||
+      normalizedPath === '/site/antropedia.html' ||
       /^\/antropedia\/[^/]+$/.test(normalizedPath) ||
       normalizedPath === '/profile' ||
+      normalizedPath === '/site/profile.html' ||
       /^\/profile\/[^/]+$/.test(normalizedPath) ||
       normalizedPath === '/alltell' ||
       normalizedPath === '/site/alltell.html' ||
@@ -89,12 +92,32 @@
   }
 
   function loadScript(source) {
-    var src = new URL(source.src, window.location.href).href;
+    var sourceUrl = new URL(source.src, window.location.href);
+    var src = sourceUrl.href;
+    var isSameOrigin = sourceUrl.origin === window.location.origin;
+
     if (scriptLoads.has(src)) return scriptLoads.get(src);
+
+    // Сопоставление с уже загруженными скриптами в DOM:
+    // Для своего origin сопоставляем по pathname (игнорируя ?v=... и другие query-параметры),
+    // чтобы исключить повторное выполнение site.js, radio-global-player.js и клиентских контроллеров.
     var existing = Array.from(document.scripts).find(function (script) {
-      return script.src === src;
+      if (!script.src) return false;
+      try {
+        var existingUrl = new URL(script.src, window.location.href);
+        if (isSameOrigin && existingUrl.origin === sourceUrl.origin) {
+          return existingUrl.pathname === sourceUrl.pathname;
+        }
+        return existingUrl.href === sourceUrl.href;
+      } catch (_) {
+        return script.src === src;
+      }
     });
-    if (existing && (!existing.dataset.publicSpaScript || existing.dataset.publicSpaLoaded === 'true')) return Promise.resolve();
+
+    if (existing && (!existing.dataset.publicSpaScript || existing.dataset.publicSpaLoaded === 'true')) {
+      return Promise.resolve();
+    }
+
     var loading = new Promise(function (resolve, reject) {
       var script = existing || document.createElement('script');
       if (!existing) {
@@ -107,7 +130,13 @@
       };
       script.onerror = function () {
         scriptLoads.delete(src);
-        reject(new Error('Не удалось загрузить модуль страницы: ' + src));
+        // Внешние CDN библиотеки (Leaflet, D3) не должны ломать роутер всего SPA и ронять плеер
+        if (!isSameOrigin) {
+          console.warn('[SPA Router] Не удалось загрузить внешний ресурс:', src);
+          resolve();
+        } else {
+          reject(new Error('Не удалось загрузить модуль страницы: ' + src));
+        }
       };
       if (!existing) document.body.appendChild(script);
     });
@@ -169,6 +198,7 @@
     if (activeRequest) activeRequest.abort();
     activeRequest = new AbortController();
     document.body.setAttribute('aria-busy', 'true');
+    var sectionsReplaced = false;
 
     try {
       var response = await fetch(url.href, {
@@ -192,17 +222,31 @@
         history.pushState({ publicSiteScrollY: 0 }, '', url.pathname + url.search + url.hash);
       }
 
-      if (window.PublicSite && typeof window.PublicSite.cleanupPage === 'function') window.PublicSite.cleanupPage();
+      if (window.PublicSite && typeof window.PublicSite.cleanupPage === 'function') {
+        try { window.PublicSite.cleanupPage(); } catch (cleanupErr) { console.warn('[SPA Router] cleanupPage error:', cleanupErr); }
+      }
       replacePageSections(parsedDocument);
+      sectionsReplaced = true;
       syncHead(parsedDocument);
       syncStyles(parsedDocument);
       await loadPageScripts(parsedDocument);
       if (id !== navigationId) return false;
-      var ready = window.PublicSite ? window.PublicSite.mountPage() : Promise.resolve();
-      await ready;
+
+      try {
+        var ready = window.PublicSite ? window.PublicSite.mountPage() : Promise.resolve();
+        await ready;
+      } catch (mountErr) {
+        console.warn('[SPA Router] mountPage warning:', mountErr);
+      }
+
       if (id !== navigationId) return false;
       if (window.SiteHeader) {
         window.SiteHeader.syncFromDom();
+      }
+
+      // Синхронизируем панель глобального аудиоплеера с новой открытой страницей
+      if (window.alltellGlobalAudio && typeof window.alltellGlobalAudio.syncBar === 'function') {
+        window.alltellGlobalAudio.syncBar();
       }
 
       if (url.hash && url.hash !== '#publicArticleListReturn') {
@@ -217,7 +261,11 @@
     } catch (error) {
       if (error.name === 'AbortError') return false;
       console.error('Не удалось выполнить переход без перезагрузки:', error);
-      if (id === navigationId) window.location.assign(url.href);
+      // Если секции страницы уже смонтированы, не выполняем жесткую перезагрузку страницы,
+      // чтобы не прерывать воспроизведение музыки/радио в фоне
+      if (id === navigationId && !sectionsReplaced) {
+        window.location.assign(url.href);
+      }
       return false;
     } finally {
       if (id === navigationId) {

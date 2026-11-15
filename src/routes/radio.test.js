@@ -143,3 +143,38 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(radioClientJs.includes('autoPlay'), 'tuneStation must support and respect autoPlay parameter');
   assert.ok(radioClientJs.includes('syncBar'), 'switchTab must synchronize player bar visibility');
 });
+
+test('SPA navigation & audio continuity: router resilience, script deduplication, and player singleton', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const routerJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/router.js'), 'utf8');
+  const headerJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/site-header.js'), 'utf8');
+  const playerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const siteJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.js'), 'utf8');
+
+  // 1. Header includes Radio in navigation
+  assert.ok(headerJs.includes('data-page="radio"'), 'SiteHeader markup must include radio link');
+  assert.ok(headerJs.includes('href="/radio"'), 'SiteHeader markup must link to /radio');
+
+  // 2. Router recognizes all public section paths
+  assert.ok(routerJs.includes("normalizedPath === '/radio'"), 'Router must recognize /radio');
+  assert.ok(routerJs.includes("normalizedPath === '/site/radio.html'"), 'Router must recognize /site/radio.html');
+  assert.ok(routerJs.includes("normalizedPath === '/site/index.html'"), 'Router must recognize /site/index.html');
+  assert.ok(routerJs.includes("normalizedPath === '/site/antropedia.html'"), 'Router must recognize /site/antropedia.html');
+
+  // 3. Router deduplicates same-origin scripts by pathname (immune to ?v= query strings)
+  assert.ok(routerJs.includes('existingUrl.pathname === sourceUrl.pathname'), 'Router must match same-origin scripts by pathname');
+
+  // 4. Router handles external CDN errors gracefully without aborting SPA navigation
+  assert.ok(routerJs.includes('!isSameOrigin'), 'Router must distinguish same-origin vs external CDN scripts');
+
+  // 5. Router protects background playback from forced reload if sections already mounted
+  assert.ok(routerJs.includes('sectionsReplaced'), 'Router must track sectionsReplaced to avoid full page reload when audio is playing');
+
+  // 6. Global audio player singleton protection
+  assert.ok(playerJs.includes('if (window.alltellGlobalAudio)'), 'radio-global-player must guard against duplicate instantiation');
+
+  // 7. Safe cleanup and async handling in site.js
+  assert.ok(siteJs.includes("typeof currentRouteCleanup === 'function'"), 'cleanupPublicPage must safely check function type');
+  assert.ok(siteJs.includes('alltellResult.then'), 'mountPublicPage must handle async AllTellClient.init');
+});

@@ -14,6 +14,7 @@
         <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
         <a href="/alltell?view=feed" class="site-nav-link" data-page="alltell">AllTell</a>
         <a href="/site/gallery.html" class="site-nav-link" data-page="gallery">Галерея</a>
+        <a href="/radio" class="site-nav-link" data-page="radio">Радио</a>
       </nav>
       <div class="site-header-actions">
         <div class="site-search"><i class="fas fa-search" aria-hidden="true"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
