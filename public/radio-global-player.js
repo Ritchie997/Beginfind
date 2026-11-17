@@ -102,7 +102,10 @@
     state.duration = Number.isFinite(data.duration) ? data.duration : 0;
     if (data.volume !== undefined) state.volume = Math.max(0, Math.min(1, data.volume));
     if (data.muted !== undefined) state.muted = Boolean(data.muted);
-    if (data.isLoop !== undefined) state.isLoop = Boolean(data.isLoop);
+    if (data.isLoop !== undefined) {
+      state.isLoop = Boolean(data.isLoop);
+      if (audio) audio.loop = state.isLoop;
+    }
 
     if (!isAudioLeader) {
       audio.volume = state.volume;
@@ -275,25 +278,34 @@
     updateProgressUI();
   });
 
+  audio.addEventListener('seeked', () => {
+    state.currentTime = audio.currentTime || 0;
+    updateProgressUI();
+  });
+
   audio.addEventListener('ended', () => {
+    if (state.isLoop) {
+      // Зацикливание включенного трека/слота: повторяем текущую дорожку с начала
+      audio.currentTime = 0;
+      audio.play().then(() => {
+        state.isPlaying = true;
+        updateMediaSession();
+        updateBarUI();
+        updateProgressUI();
+        notify();
+        announcePlay();
+      }).catch(() => {
+        state.isPlaying = false;
+        updateBarUI();
+        notify();
+      });
+      return;
+    }
+
     if (state.mode === 'radio') {
-      // В режиме радио обновляем эфир со следующим слотом (или повторяем при зацикливании)
+      // В режиме радио обновляем эфир со следующим слотом
       if (state.station) {
-        if (state.isLoop && state.currentSlot) {
-          audio.currentTime = 0;
-          audio.play().catch(() => {});
-        } else {
-          syncRadioStationLive(state.station, true);
-        }
-      }
-    } else if (state.isLoop) {
-      if (state.playlist.length <= 1) {
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
-      } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
-        playTrackAt(state.currentIndex + 1);
-      } else {
-        playTrackAt(0);
+        syncRadioStationLive(state.station, true);
       }
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
       playTrackAt(state.currentIndex + 1);
@@ -410,6 +422,7 @@
         if (!isSameSrc) {
           audio.src = targetSlot.audioUrl;
         }
+        audio.loop = Boolean(state.isLoop);
         applyAudioOffset(targetOffset);
 
         if (autoPlay) {
@@ -477,6 +490,7 @@
       if (!isSameSrc) {
         audio.src = slot.audioUrl;
       }
+      audio.loop = Boolean(state.isLoop);
       applyAudioOffset(offset);
 
       audio.play().then(() => {
@@ -525,6 +539,7 @@
       audio.src = track.audio_url;
       audio.currentTime = 0;
     }
+    audio.loop = Boolean(state.isLoop);
 
     audio.play().then(() => {
       state.isPlaying = true;
@@ -610,6 +625,9 @@
 
   function setLoop(val) {
     state.isLoop = Boolean(val);
+    if (audio) {
+      audio.loop = state.isLoop;
+    }
     if (!isAudioLeader && broadcast) {
       broadcast.postMessage({ type: 'CMD_SET_LOOP', isLoop: state.isLoop });
     }
@@ -648,6 +666,7 @@
         if (!isSameSrc) {
           audio.src = state.currentSlot.audioUrl;
         }
+        audio.loop = Boolean(state.isLoop);
         audio.play().then(() => {
           state.isPlaying = true;
           updateMediaSession();
@@ -666,6 +685,7 @@
           audio.src = state.track.audio_url;
           audio.currentTime = state.currentTime || 0;
         }
+        audio.loop = Boolean(state.isLoop);
         audio.play().then(() => {
           state.isPlaying = true;
           updateMediaSession();
@@ -966,8 +986,10 @@
       state.duration = saved.duration || 0;
       state.volume = saved.volume !== undefined ? saved.volume : 0.9;
       state.muted = Boolean(saved.muted);
+      state.isLoop = Boolean(saved.isLoop);
       audio.volume = state.volume;
       audio.muted = state.muted;
+      audio.loop = state.isLoop;
 
       ensureBarDom();
 

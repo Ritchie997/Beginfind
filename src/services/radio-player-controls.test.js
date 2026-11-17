@@ -73,3 +73,27 @@ test('radio player: styles define is-active visual states for loop and media con
   assert.ok(radioCss.includes('.radio-action-btn.is-active'), 'Must style active state for deck loop');
   assert.ok(radioCss.includes('.standalone-action-btn.is-active'), 'Must style active state for track loop');
 });
+
+test('radio player: looping repeats active playing track instead of skipping to next playlist track', () => {
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const audioPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/audio-player.js'), 'utf8');
+
+  // 1. audio.loop synchronisation on HTML5 Audio element
+  assert.ok(globalPlayerJs.includes('audio.loop = state.isLoop'), 'setLoop must assign audio.loop');
+  assert.ok(globalPlayerJs.includes('audio.loop = Boolean(state.isLoop)'), 'playTrack and resume must synchronize audio.loop');
+  assert.ok(audioPlayerJs.includes('this.audio.loop = this.isLooping'), 'audio-player.js must synchronize native audio.loop');
+
+  // 2. ended event repeats active track when isLoop is true
+  assert.ok(globalPlayerJs.includes('if (state.isLoop) {'), 'ended handler must check isLoop');
+  assert.ok(globalPlayerJs.includes('audio.currentTime = 0;'), 'ended handler must rewind currentTime on loop');
+
+  // Ensure it does NOT skip to playTrackAt(state.currentIndex + 1) when isLoop is true
+  const loopBlockRegex = /if\s*\(\s*state\.isLoop\s*\)\s*\{[\s\S]*?return;\s*\}/;
+  assert.ok(loopBlockRegex.test(globalPlayerJs), 'ended handler must return after replaying current track without advancing playlist');
+
+  // 3. UI feedback and sync across deck, track page, and feed
+  assert.ok(radioClientJs.includes('Зацикливание трека включено'), 'User must receive toast confirmation when loop is toggled');
+  assert.ok(radioClientJs.includes('dom.deckLoopBtn.classList.toggle(\'is-active\', isLoopActive)'), 'deckLoopBtn must sync active state');
+  assert.ok(radioClientJs.includes('dom.trackPageLoopBtn.classList.toggle(\'is-active\', isLoopActive)'), 'trackPageLoopBtn must sync active state');
+});

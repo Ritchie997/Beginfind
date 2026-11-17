@@ -162,6 +162,7 @@
       if (!track || !track.url) return;
 
       this.audio.src = track.url;
+      this.audio.loop = Boolean(this.isLooping);
       this.audio.load();
 
       if (this.titleEl) this.titleEl.textContent = track.title || 'Аудиозапись';
@@ -336,6 +337,7 @@
       // Loop
       this.loopBtn?.addEventListener('click', () => {
         this.isLooping = !this.isLooping;
+        if (this.audio) this.audio.loop = this.isLooping;
         this.loopBtn.classList.toggle('is-active', this.isLooping);
         this.loopBtn.title = this.isLooping ? 'Повтор включён' : 'Повтор трека';
       });

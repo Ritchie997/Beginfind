@@ -327,9 +327,19 @@
         dom.deckUnfreezeBtn.title = 'Слушать трек с начала';
       }
 
+      const isLoopActive = Boolean(gState.isLoop);
+      const loopTitle = isLoopActive ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
       if (dom.deckLoopBtn) {
-        dom.deckLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
-        dom.deckLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+        dom.deckLoopBtn.classList.toggle('is-active', isLoopActive);
+        dom.deckLoopBtn.title = loopTitle;
+      }
+      if (dom.trackPageLoopBtn) {
+        dom.trackPageLoopBtn.classList.toggle('is-active', isLoopActive);
+        dom.trackPageLoopBtn.title = loopTitle;
+      }
+      if (dom.feedPlayerLoopBtn) {
+        dom.feedPlayerLoopBtn.classList.toggle('is-active', isLoopActive);
+        dom.feedPlayerLoopBtn.title = loopTitle;
       }
 
       return;
@@ -441,9 +451,19 @@
       dom.deckPrevBtn.title = 'Предыдущий трек из эфира / С начала';
     }
 
+    const isLoopActive = Boolean(gState.isLoop);
+    const loopTitle = isLoopActive ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
     if (dom.deckLoopBtn) {
-      dom.deckLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
-      dom.deckLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+      dom.deckLoopBtn.classList.toggle('is-active', isLoopActive);
+      dom.deckLoopBtn.title = loopTitle;
+    }
+    if (dom.trackPageLoopBtn) {
+      dom.trackPageLoopBtn.classList.toggle('is-active', isLoopActive);
+      dom.trackPageLoopBtn.title = loopTitle;
+    }
+    if (dom.feedPlayerLoopBtn) {
+      dom.feedPlayerLoopBtn.classList.toggle('is-active', isLoopActive);
+      dom.feedPlayerLoopBtn.title = loopTitle;
     }
   }
 
@@ -3674,6 +3694,8 @@
       if (gAudio) {
         gAudio.toggleLoop();
         updateDeckUI();
+        const isL = gAudio.getState().isLoop;
+        showToast(isL ? 'Зацикливание трека включено' : 'Зацикливание выключено', 'info');
       }
     });
 
@@ -4464,11 +4486,9 @@
       const gAudio = getGlobalAudio();
       if (gAudio) {
         gAudio.toggleLoop();
-        if (dom.trackPageLoopBtn) {
-          const isL = gAudio.getState().isLoop;
-          dom.trackPageLoopBtn.classList.toggle('is-active', Boolean(isL));
-          dom.trackPageLoopBtn.title = isL ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
-        }
+        updateDeckUI();
+        const isL = gAudio.getState().isLoop;
+        showToast(isL ? 'Зацикливание трека включено' : 'Зацикливание выключено', 'info');
       }
     });
 
@@ -4494,11 +4514,9 @@
       const gAudio = getGlobalAudio();
       if (gAudio) {
         gAudio.toggleLoop();
-        if (dom.feedPlayerLoopBtn) {
-          const isL = gAudio.getState().isLoop;
-          dom.feedPlayerLoopBtn.classList.toggle('is-active', Boolean(isL));
-          dom.feedPlayerLoopBtn.title = isL ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
-        }
+        updateDeckUI();
+        const isL = gAudio.getState().isLoop;
+        showToast(isL ? 'Зацикливание трека включено' : 'Зацикливание выключено', 'info');
       }
     });
 
