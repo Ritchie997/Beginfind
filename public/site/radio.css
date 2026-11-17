@@ -1534,3 +1534,649 @@
   border-radius: 6px;
   padding: 2px 7px;
 }
+
+/* ========================================================
+   ВИДЕО-РЕДАКТОР ЭФИРА (NLE TIMELINE RIBBON & BLOCK EDITOR)
+   ======================================================== */
+
+.radio-timeline-nle-wrapper {
+  background: #0b0d13;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.radio-timeline-nle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.radio-timeline-nle-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.radio-timeline-badge {
+  font-size: 0.75rem;
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: monospace;
+}
+
+.radio-timeline-nle-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  flex-wrap: wrap;
+}
+
+.radio-timeline-meta-item strong {
+  color: #f1f5f9;
+  font-family: monospace;
+  font-size: 0.92rem;
+  margin-left: 4px;
+}
+
+.radio-timeline-nle-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.radio-timeline-zoom-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.radio-timeline-zoom-btn:hover {
+  background: var(--brand-accent, #6366f1);
+  color: #fff;
+  border-color: var(--brand-accent, #6366f1);
+}
+
+.radio-timeline-track-scroll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  padding: 10px 16px 18px 16px;
+}
+
+.radio-timeline-track-inner {
+  position: relative;
+  min-width: 100%;
+  width: max-content;
+}
+
+.radio-timeline-ruler {
+  position: relative;
+  height: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 8px;
+}
+
+.radio-timeline-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: #94a3b8;
+  padding-left: 4px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.radio-timeline-clips-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.radio-timeline-empty-hint {
+  color: #64748b;
+  font-size: 0.85rem;
+  padding: 14px;
+  text-align: center;
+  width: 100%;
+}
+
+.radio-timeline-clip {
+  position: relative;
+  height: 44px;
+  border-radius: 8px;
+  padding: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.radio-timeline-clip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  filter: brightness(1.15);
+  z-index: 2;
+}
+
+.radio-timeline-clip .clip-title {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radio-timeline-clip .clip-dur {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  font-family: monospace;
+}
+
+/* Цветовая кодировка типов клипов (как в Premiere / DaVinci) */
+.radio-timeline-clip.clip-track {
+  background: linear-gradient(135deg, #1e40af, #2563eb);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.radio-timeline-clip.clip-playlist {
+  background: linear-gradient(135deg, #5b21b6, #7c3aed);
+  border-color: rgba(139, 92, 246, 0.55);
+}
+
+.radio-timeline-clip.clip-speech {
+  background: linear-gradient(135deg, #9a3412, #ea580c);
+  border-color: rgba(249, 115, 22, 0.6);
+}
+
+.radio-timeline-clip.clip-jingle {
+  background: linear-gradient(135deg, #065f46, #059669);
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+.radio-timeline-clip.clip-anchor {
+  background: linear-gradient(135deg, #9f1239, #e11d48);
+  border-color: rgba(244, 63, 94, 0.65);
+}
+
+.radio-timeline-clip.clip-gap {
+  background: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.08) 8px, rgba(245, 158, 11, 0.18) 8px, rgba(245, 158, 11, 0.18) 16px);
+  border: 1px dashed #f59e0b;
+  color: #fbbf24;
+}
+
+.radio-timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff4757;
+  pointer-events: none;
+  z-index: 10;
+  transition: left 0.3s linear;
+}
+
+.radio-timeline-playhead-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ff4757;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.6);
+  letter-spacing: 0.04em;
+}
+
+.radio-timeline-playhead-line {
+  width: 2px;
+  height: 100%;
+  background: #ff4757;
+  box-shadow: 0 0 8px #ff4757;
+}
+
+/* ========================================================
+   БЛОЧНЫЙ РЕДАКТОР СТАТЕЙНОГО ТИПА (АНТРОПЕДИЯ СТИЛЬ)
+   ======================================================== */
+
+.radio-eb-blocklist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.radio-eb-block {
+  position: relative;
+  background: rgba(18, 20, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px 12px 42px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.radio-eb-block:hover,
+.radio-eb-block:focus-within {
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(22, 25, 34, 0.95);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.radio-eb-block.is-drag-over {
+  border: 2px dashed var(--brand-accent, #6366f1);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.radio-eb-drag-handle {
+  position: absolute;
+  left: 10px;
+  top: 14px;
+  width: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  cursor: grab;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.radio-eb-drag-handle:hover {
+  color: var(--brand-accent, #6366f1);
+}
+
+.radio-eb-drag-handle:active {
+  cursor: grabbing;
+}
+
+.radio-eb-order-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.radio-eb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.radio-eb-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.eb-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.eb-type-badge.type-track {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.eb-type-badge.type-playlist {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.eb-type-badge.type-speech {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.eb-type-badge.type-jingle {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.eb-type-badge.type-anchor {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.radio-eb-time-range {
+  font-size: 0.8rem;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+.radio-eb-duration-badge {
+  font-size: 0.8rem;
+  font-family: monospace;
+  font-weight: 700;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.radio-eb-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.radio-eb-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radio-eb-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.radio-eb-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.radio-eb-body {
+  font-size: 0.9rem;
+  color: #e2e8f0;
+}
+
+/* Аккордеон треков плейлиста */
+.radio-playlist-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  padding: 6px 0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.radio-playlist-tracks-nested {
+  margin-top: 10px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(139, 92, 246, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radio-playlist-nested-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 0.84rem;
+}
+
+.radio-nested-insert-btn {
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #a5b4fc;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.radio-nested-insert-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: #818cf8;
+  color: #fff;
+}
+
+/* Карточка свободного интервала (Пустота) */
+.radio-gap-card {
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.radio-gap-title {
+  font-weight: 700;
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Межблочный инсертер */
+.radio-eb-insert-line {
+  position: relative;
+  height: 18px;
+  margin: -6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 5;
+}
+
+.radio-eb-insert-line:hover,
+.radio-eb-insert-line.is-active {
+  opacity: 1;
+}
+
+.radio-eb-insert-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--brand-accent, #6366f1);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+}
+
+.radio-eb-insert-btn {
+  position: relative;
+  background: var(--brand-accent, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s;
+}
+
+.radio-eb-insert-btn:hover {
+  transform: scale(1.05);
+}
+
+/* ========================================================
+   БОКОВАЯ ШТОРКА МЕДИАТЕКИ (MEDIA DRAWER)
+   ======================================================== */
+
+.radio-media-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #0f1219;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.radio-media-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.radio-media-drawer-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.radio-media-drawer-close:hover {
+  color: #fff;
+}
+
+.radio-media-drawer-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 16px;
+  gap: 8px;
+}
+
+.radio-media-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #94a3b8;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.radio-media-tab.is-active {
+  color: #fff;
+  border-bottom-color: var(--brand-accent, #6366f1);
+}
+
+.radio-media-drawer-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.radio-media-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-media-drawer-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.radio-drawer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.15s;
+}
+
+.radio-drawer-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.radio-drawer-item:active {
+  cursor: grabbing;
+}

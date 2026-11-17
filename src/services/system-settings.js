@@ -50,8 +50,20 @@ function readSettings() {
   if (!fs.existsSync(SETTINGS_PATH)) {
     return { ...DEFAULT_SETTINGS };
   }
+  let stored = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      stored = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+      break;
+    } catch (e) {
+      if (attempt === 3) {
+        console.error('[Settings] Не удалось прочитать system-settings.json, использую значения по умолчанию:', e.message);
+        return { ...DEFAULT_SETTINGS };
+      }
+    }
+  }
+  if (!stored) return { ...DEFAULT_SETTINGS };
   try {
-    const stored = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
     const settings = {
       ...DEFAULT_SETTINGS,
       ...stored,
@@ -63,7 +75,6 @@ function readSettings() {
     delete settings.maintenanceMode;
     return settings;
   } catch (e) {
-    console.error('[Settings] Не удалось прочитать system-settings.json, использую значения по умолчанию:', e.message);
     return { ...DEFAULT_SETTINGS };
   }
 }

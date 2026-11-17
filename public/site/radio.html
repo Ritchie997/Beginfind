@@ -346,6 +346,14 @@
             <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm">
             <button type="button" class="btn btn-secondary btn-sm" id="btnSetStartTimeNow" title="Синхронизировать с текущим временем">Сейчас</button>
           </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnToggleMediaDrawer" title="Открыть боковую панель медиатеки">
+              <i class="fas fa-folder-music"></i> Медиатека эфира
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnOpenSmartGapFill" title="Заполнить свободные интервалы музыкой из плейлистов">
+              <i class="fas fa-bolt"></i> Заполнить пустоту
+            </button>
+          </div>
           <div class="radio-editor-danger-actions">
             <button type="button" class="btn btn-outline-danger btn-sm" id="btnClearTimelineBtn" title="Очистить всю сетку вещания (освободить эфир)">
               <i class="fas fa-trash-can"></i> Освободить эфир
@@ -353,6 +361,55 @@
             <button type="button" class="btn btn-outline-danger btn-sm" id="btnReleaseStationBtn" title="Удалить радиостанцию и освободить частоту">
               <i class="fas fa-door-open"></i> Освободить частоту
             </button>
+          </div>
+        </div>
+
+        <!-- 1. ИНТЕРАКТИВНЫЙ ТАЙМЛАЙН-ВИДЕОРЕДАКТОР (TIMELINE RIBBON) -->
+        <div class="radio-timeline-nle-wrapper" id="radioTimelineContainer">
+          <div class="radio-timeline-nle-header">
+            <div class="radio-timeline-nle-title">
+              <i class="fas fa-sliders"></i>
+              <span>Лента вещания</span>
+              <span class="radio-timeline-badge" id="timelineScaleBadge">Шкала: 20 мин</span>
+            </div>
+            <div class="radio-timeline-nle-meta">
+              <span class="radio-timeline-meta-item">
+                <i class="fas fa-hourglass-half"></i> Эфир: <strong id="timelineTotalDuration">00:00:00</strong>
+              </span>
+              <span class="radio-timeline-meta-item">
+                <i class="far fa-flag"></i> Финал: <strong id="timelineEndTime">--:--:--</strong>
+              </span>
+            </div>
+            <div class="radio-timeline-nle-zoom">
+              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomOut" title="Уменьшить масштаб (Ctrl + Scroll down)">
+                <i class="fas fa-magnifying-glass-minus"></i>
+              </button>
+              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomReset" title="Сбросить масштаб">
+                <i class="fas fa-arrows-left-right"></i>
+              </button>
+              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomIn" title="Увеличить масштаб (Ctrl + Scroll up)">
+                <i class="fas fa-magnifying-glass-plus"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Область прокрутки таймлайна с линейкой времени и дорожкой клипов -->
+          <div class="radio-timeline-track-scroll" id="radioTimelineTrackScroll">
+            <div class="radio-timeline-track-inner" id="radioTimelineTrackInner">
+              <!-- Линейка времени с минутами и секундами -->
+              <div class="radio-timeline-ruler" id="radioTimelineRuler"></div>
+              
+              <!-- Дорожка видеомонтажных клипов треков/плейлистов -->
+              <div class="radio-timeline-clips-track" id="radioTimelineTrack">
+                <div class="radio-timeline-empty-hint">Перетащите сюда треки или плейлисты из медиатеки</div>
+              </div>
+
+              <!-- Плейхед текущего реального времени вещания -->
+              <div class="radio-timeline-playhead" id="radioTimelinePlayhead" style="display:none;">
+                <div class="radio-timeline-playhead-badge">🔴 В ЭФИРЕ</div>
+                <div class="radio-timeline-playhead-line"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -373,29 +430,59 @@
         <!-- Панель добавления слотов и загрузки плейлиста -->
         <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
           <button type="button" class="btn btn-secondary" id="btnPickFromMyTracks">
-            <i class="fas fa-list-music"></i> Из медиатеки
+            <i class="fas fa-music"></i> + Трек из медиатеки
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnOpenPickPlaylistForTimeline">
+            <i class="fas fa-list-check"></i> + Плейлист в эфир
           </button>
           <button type="button" class="btn btn-secondary" id="btnUploadPlaylist">
-            <i class="fas fa-list-ol"></i> Загрузить плейлист (файлы)
+            <i class="fas fa-folder-arrow-up"></i> Загрузить файлы плейлиста
           </button>
           <button type="button" class="btn btn-secondary" id="btnUploadNewSlot">
             <i class="fas fa-file-arrow-up"></i> 1 аудиофайл
           </button>
           <button type="button" class="btn btn-secondary" id="btnOpenInsertWordsModal">
-            <i class="fas fa-clock"></i> Вставить слова по времени
+            <i class="fas fa-clock"></i> Слова по времени (Якорь)
           </button>
           <button type="button" class="btn btn-primary" style="margin-left:auto;" id="btnSaveTimeline">
             <i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)
           </button>
         </div>
 
-        <!-- Конструктор элементов ленты с точным расписанием слотов -->
-        <div class="radio-slots-builder" id="editorSlotsList">
-          <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, подкасты или слова выше.</p>
+        <!-- БЛОЧНЫЙ КОНСТРУКТОР ЭФИРА В СТИЛЕ АНТРОПЕДИИ -->
+        <div class="radio-eb-blocklist eb-blocklist" id="editorBlocksList">
+          <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, плейлисты или слова выше.</p>
         </div>
+        <!-- Невидимый псевдо-элемент для сохранения совместимости -->
+        <div id="editorSlotsList" style="display:none;" hidden></div>
       </div>
     </div>
   </section>
+
+  <!-- БОКОВАЯ ШТОРКА: МЕДИАТЕКА ДЛЯ DRAG & DROP В ЭФИР -->
+  <div class="radio-media-drawer" id="radioMediaDrawer" hidden style="display: none;">
+    <div class="radio-media-drawer-header">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700; color:#fff;">
+        <i class="fas fa-folder-music" style="color:var(--brand-accent, #6366f1);"></i>
+        <span>Медиатека эфира</span>
+      </div>
+      <button type="button" class="radio-media-drawer-close" id="btnCloseMediaDrawer" title="Закрыть панель">&times;</button>
+    </div>
+    <div class="radio-media-drawer-tabs">
+      <button type="button" class="radio-media-tab is-active" data-drawer-tab="tracks">Треки</button>
+      <button type="button" class="radio-media-tab" data-drawer-tab="playlists">Плейлисты</button>
+      <button type="button" class="radio-media-tab" data-drawer-tab="speech">Слова / Записи</button>
+    </div>
+    <div class="radio-media-drawer-search">
+      <input type="text" id="drawerSearchInput" class="radio-form-input radio-form-input-sm" placeholder="Быстрый поиск аудио...">
+    </div>
+    <div class="radio-media-drawer-content" id="drawerContentList">
+      <p class="alltell-state">Загрузка медиатеки...</p>
+    </div>
+    <div class="radio-media-drawer-footer">
+      <small style="color:#94a3b8;"><i class="fas fa-hand-pointer"></i> Перетаскивайте элементы на ленту времени или нажимайте «+»</small>
+    </div>
+  </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: ЗАГРУЗКА АУДИОЗАПИСИ В МЕДИАТЕКУ -->
   <div class="modal-overlay" id="modalUploadTrack" hidden style="display: none;">
@@ -659,6 +746,86 @@
       <div class="modal-footer" id="playlistViewFooter">
         <button type="button" class="btn btn-secondary" data-close="modalPlaylistView">Закрыть</button>
       </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ВЫБОР ПЛЕЙЛИСТА В СЕТКУ ВЕЩАНИЯ -->
+  <div class="modal-overlay" id="modalPickPlaylistForTimeline" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3>Добавить плейлист в сетку вещания</h3>
+        <button type="button" class="modal-close" data-close="modalPickPlaylistForTimeline" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.88rem; color:#94a3b8; margin:0 0 14px 0;">
+          Плейлист вставляется как единый умный блок с автоматическим подсчетом общего времени. Внутри вы сможете легко делать врезки слов или разделять его.
+        </p>
+        <div id="pickPlaylistForTimelineList" style="max-height: 360px; overflow-y: auto;">
+          <p class="alltell-state">Загружаем плейлисты…</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modalPickPlaylistForTimeline">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: УМНОЕ ЗАПОЛНЕНИЕ ПУСТОТЫ ПЛЕЙЛИСТАМИ -->
+  <div class="modal-overlay" id="modalSmartGapFill" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 680px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="fas fa-bolt" style="color:#f59e0b;"></i>
+          <h3 style="margin:0;">Заполнить паузу плейлистами</h3>
+        </div>
+        <button type="button" class="modal-close" data-close="modalSmartGapFill" aria-label="Закрыть">&times;</button>
+      </div>
+      <form id="formSmartGapFill">
+        <div class="modal-body">
+          <div id="smartGapBanner" style="background:rgba(245, 158, 11, 0.1); border:1px solid rgba(245, 158, 11, 0.3); border-radius:12px; padding:14px; margin-bottom:16px;">
+            <div style="font-weight:700; color:#fbbf24; margin-bottom:4px;" id="smartGapTitle">Свободный интервал эфира</div>
+            <div style="font-size:0.88rem; color:#e2e8f0;" id="smartGapInfoText">Требуется заполнить музыкой паузу до фиксированного времени выхода ведущего.</div>
+          </div>
+
+          <div class="radio-form-group">
+            <label style="font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+              <span>Выберите плейлисты для автозаполнения:</span>
+              <span style="font-size:0.8rem; color:#94a3b8;" id="smartGapSelectedCount">Выбрано: 0</span>
+            </label>
+            <div id="smartGapPlaylistsList" style="max-height: 220px; overflow-y: auto; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px; background:rgba(0,0,0,0.2);">
+              <p class="alltell-state">Загружаем доступные плейлисты…</p>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+            <div class="radio-form-group" style="margin:0;">
+              <label>Порядок треков:</label>
+              <select id="smartGapOrderSelect" class="radio-form-select form-select">
+                <option value="sequential">По порядку плейлиста</option>
+                <option value="shuffle">Случайный микс (Shuffle)</option>
+              </select>
+            </div>
+            <div class="radio-form-group" style="margin:0;">
+              <label>Стыковка перед речью ведущего:</label>
+              <select id="smartGapFitStrategy" class="radio-form-select form-select">
+                <option value="smart_fit">Умный подбор по времени (Smart Fit)</option>
+                <option value="soft_transition">Плавный переход (доиграть трек до конца)</option>
+                <option value="exact_cut">Точная отсечка (продолжить трек после слов)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="smartGapCalculatedPlan" style="margin-top:16px; font-size:0.85rem; color:#2ed573; background:rgba(46,213,115,0.08); border:1px solid rgba(46,213,115,0.2); border-radius:10px; padding:10px 14px; display:none;">
+            <i class="fas fa-check-circle"></i> <span id="smartGapPlanSummary">Будет добавлено треков</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalSmartGapFill">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitSmartGapFill" disabled>
+            <i class="fas fa-magic"></i> Заполнить эфир
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
