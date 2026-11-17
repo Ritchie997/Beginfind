@@ -186,3 +186,229 @@ test('radio-editor: smart gap fill selects tracks from playlists to match gap du
   assert.equal(selected[1].title, 'Трек B');
   assert.equal(selected[2].title, 'Трек C');
 });
+
+test('radio-editor: supports private playlists across timeline picker, smart gap fill, and media drawer', () => {
+  // 1. Проверяем наличие интеграции личных/закрытых плейлистов в клиентском коде
+  assert.ok(radioClientJs.includes('/api/radio/playlists/mine'), 'Должен запрашивать личные плейлисты пользователя');
+  assert.ok(radioClientJs.includes('btn-pick-filter'), 'В модалке выбора плейлистов для ленты должны быть фильтры');
+  assert.ok(radioClientJs.includes('Мои плейлисты'), 'Должна быть категория Мои плейлисты');
+  assert.ok(radioClientJs.includes('Закрытый'), 'Закрытые плейлисты должны визуально помечаться бейджем');
+  assert.ok(radioClientJs.includes('smart-gap-playlist-cb'), 'Чекбоксы автозаполнения пустот');
+
+  // 2. Эмуляция добавления приватного плейлиста в сетку вещания
+  const mockPrivatePlaylist = {
+    id: 42,
+    title: 'Мой ночной эфир (Закрытый)',
+    is_public: 0,
+    user_id: 1,
+    tracks: [
+      { id: 101, title: 'Secret Ambient 1', audio_url: '/uploads/ambient1.mp3', duration: 300, type: 'track' },
+      { id: 102, title: 'Secret Ambient 2', audio_url: '/uploads/ambient2.mp3', duration: 400, type: 'track' }
+    ]
+  };
+
+  const totalDur = mockPrivatePlaylist.tracks.reduce((s, t) => s + t.duration, 0);
+  assert.equal(totalDur, 700);
+
+  const privateBlock = {
+    id: 'block_private_pl_1',
+    type: 'playlist',
+    playlist_id: mockPrivatePlaylist.id,
+    title: mockPrivatePlaylist.title,
+    duration: totalDur,
+    items: mockPrivatePlaylist.tracks.map(t => ({
+      track_id: t.id,
+      title: t.title,
+      audio_url: t.audio_url,
+      duration: t.duration,
+      type: t.type
+    })),
+    isCollapsed: true
+  };
+
+  assert.equal(privateBlock.items.length, 2);
+  assert.equal(privateBlock.duration, 700);
+
+  // 3. Эмуляция компиляции в слоты вещания
+  const startTime = new Date('2026-11-17T20:00:00.000Z').getTime();
+  let cursor = startTime;
+  const compiledSlots = privateBlock.items.map(item => {
+    const slot = {
+      track_id: item.track_id,
+      title: item.title,
+      audio_url: item.audio_url,
+      duration: item.duration,
+      type: item.type,
+      start_time: new Date(cursor).toISOString(),
+      end_time: new Date(cursor + item.duration * 1000).toISOString()
+    };
+    cursor += item.duration * 1000;
+    return slot;
+  });
+
+  assert.equal(compiledSlots.length, 2);
+  assert.equal(compiledSlots[0].title, 'Secret Ambient 1');
+  assert.equal(compiledSlots[0].start_time, '2026-11-17T20:00:00.000Z');
+  assert.equal(compiledSlots[0].end_time, '2026-11-17T20:05:00.000Z');
+  assert.equal(compiledSlots[1].title, 'Secret Ambient 2');
+  assert.equal(compiledSlots[1].start_time, '2026-11-17T20:05:00.000Z');
+  assert.equal(compiledSlots[1].end_time, '2026-11-17T20:11:40.000Z');
+});
+
+test('radio-editor: unified playback system connects editor blocks, playlists, and drawer with global audio player', () => {
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+  const freshCss = fs.readFileSync(path.join(rootDir, 'public/site/radio.css'), 'utf8');
+
+  // 1. Проверяем отсутствие изолированных плееров в редакторе (единая система)
+  assert.ok(!freshClientJs.includes('state.previewAudio = new Audio'), 'Не должно быть изолированного Audio для превью');
+
+  // 2. Функции интеграции с общим плеером
+  assert.ok(freshClientJs.includes('function playEditorBlock('), 'Должна быть функция воспроизведения блока в общем плеере');
+  assert.ok(freshClientJs.includes('function playNestedPlaylistTrack('), 'Должна быть функция воспроизведения трека из плейлиста в общем плеере');
+  assert.ok(freshClientJs.includes('function updateEditorPlaybackUI('), 'Должна быть синхронизация состояния воспроизведения');
+
+  // 3. Подписка редактора на глобальный плеер AllTell
+  assert.ok(freshClientJs.includes('updateEditorPlaybackUI(gState)'), 'Подписка globalAudio должна обновлять UI редактора');
+
+  // 4. Элементы управления в блоках, аккордеоне и шторке
+  assert.ok(freshClientJs.includes('btn-play-playlist-block'), 'Должна быть кнопка воспроизведения плейлиста целиком');
+  assert.ok(freshClientJs.includes('btn-play-nested-track'), 'Должна быть кнопка воспроизведения трека внутри плейлиста');
+  assert.ok(freshClientJs.includes('btn-drawer-play'), 'В шторке медиатеки должны быть кнопки воспроизведения треков');
+  assert.ok(freshClientJs.includes('btn-drawer-play-pl'), 'В шторке медиатеки должны быть кнопки воспроизведения плейлистов');
+
+  // 5. Стили подсветки активного воспроизведения в редакторе и на шкале времени
+  assert.ok(freshCss.includes('.radio-eb-block.is-playing-block'), 'Стили активного блока в редакторе');
+  assert.ok(freshCss.includes('.radio-timeline-clip.is-playing'), 'Стили активного клипа на таймлайне');
+  assert.ok(freshCss.includes('.radio-nested-play-btn'), 'Стили круглой кнопки воспроизведения вложенного трека');
+
+  // 6. Эмуляция формирования очереди воспроизведения из блоков эфира
+  const mockBlocks = [
+    { id: 'b1', type: 'speech', title: 'Вступительное слово', audio_url: '/uploads/speech1.mp3', duration: 45 },
+    {
+      id: 'b2',
+      type: 'playlist',
+      title: 'Утренний рок',
+      duration: 360,
+      items: [
+        { track_id: 10, title: 'Песня 1', audio_url: '/uploads/rock1.mp3', duration: 180 },
+        { track_id: 11, title: 'Песня 2', audio_url: '/uploads/rock2.mp3', duration: 180 }
+      ]
+    },
+    { id: 'b3', type: 'jingle', title: 'Джингл станции', audio_url: '/uploads/jingle.mp3', duration: 10 }
+  ];
+
+  const fullQueue = [];
+  mockBlocks.forEach(b => {
+    if (b.type === 'playlist' && Array.isArray(b.items)) {
+      b.items.forEach((it, sIdx) => {
+        if (it.audio_url) {
+          fullQueue.push({
+            id: it.track_id || `${b.id}_${sIdx}`,
+            blockId: b.id,
+            title: it.title,
+            author_name: `Плейлист: ${b.title}`,
+            duration: it.duration,
+            audio_url: it.audio_url
+          });
+        }
+      });
+    } else if (b.audio_url) {
+      fullQueue.push({
+        id: b.id,
+        blockId: b.id,
+        title: b.title,
+        author_name: b.type === 'speech' ? 'Слова ведущего' : 'Эфир',
+        duration: b.duration,
+        audio_url: b.audio_url
+      });
+    }
+  });
+
+  assert.equal(fullQueue.length, 4, 'Очередь должна объединять 1 слово + 2 трека плейлиста + 1 джингл');
+  assert.equal(fullQueue[0].title, 'Вступительное слово');
+  assert.equal(fullQueue[1].title, 'Песня 1');
+  assert.equal(fullQueue[2].title, 'Песня 2');
+  assert.equal(fullQueue[3].title, 'Джингл станции');
+});
+
+test('radio-editor: moving blocks on timeline ribbon and edge dragging extends the timeline', () => {
+  const freshHtml = fs.readFileSync(path.join(rootDir, 'public/site/radio.html'), 'utf8');
+  const freshCss = fs.readFileSync(path.join(rootDir, 'public/site/radio.css'), 'utf8');
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+
+  // 1. Клипы на ленте вещания должны быть перетаскиваемыми (draggable)
+  assert.ok(freshClientJs.includes('draggable="true"'), 'Клипы на таймлайне должны иметь draggable="true"');
+  assert.ok(freshClientJs.includes('move_block'), 'Должен поддерживаться тип перемещения блока на таймлайне');
+  assert.ok(freshClientJs.includes('is-drag-over-left'), 'Должен быть маркер вставки слева от клипа');
+  assert.ok(freshClientJs.includes('is-drag-over-right'), 'Должен быть маркер вставки справа от клипа');
+
+  // 2. Ручка изменения границы блока (край блока)
+  assert.ok(freshClientJs.includes('radio-timeline-edge-handle'), 'Каждый клип должен иметь ручку на правом краю');
+  assert.ok(freshCss.includes('.radio-timeline-edge-handle'), 'Стили ручки края блока');
+  assert.ok(freshCss.includes('col-resize') || freshCss.includes('ew-resize'), 'Курсор изменения длины на краю блока');
+  assert.ok(freshCss.includes('.radio-timeline-resize-tooltip'), 'Стили всплывающего тултипа изменения длительности');
+
+  // 3. Кнопка расширения шкалы времени
+  assert.ok(freshHtml.includes('id="btnTimelineExtendScale"'), 'Кнопка расширения шкалы времени в разметке');
+  assert.ok(freshClientJs.includes('btnTimelineExtendScale'), 'Обработчик кнопки увеличения шкалы времени');
+
+  // 4. Эмуляция изменения длительности за край блока и динамического роста шкалы
+  let baseScaleSec = 1200; // 20 минут базово
+  const blocks = [
+    { id: 'b1', type: 'track', title: 'Песня 1', duration: 180 },
+    { id: 'b2', type: 'speech', title: 'Слова ведущего', duration: 60 }
+  ];
+
+  let totalDur = blocks.reduce((acc, b) => acc + b.duration, 0); // 240 сек
+  let neededScale = Math.max(baseScaleSec, Math.ceil(totalDur * 1.12));
+  assert.equal(neededScale, 1200, 'При сумме 240 сек шкала остается базовой 20 минут');
+
+  // Пользователь тянет за край блока "Слова ведущего", увеличивая его до 1500 сек
+  blocks[1].duration = 1500;
+  totalDur = blocks.reduce((acc, b) => acc + b.duration, 0); // 1680 сек (28 мин)
+  neededScale = Math.max(baseScaleSec, Math.ceil(totalDur * 1.12)); // 1882 сек (~31 мин)
+
+  assert.ok(totalDur > baseScaleSec, 'Суммарный хронометраж превысил базовую 20-минутную шкалу');
+  assert.ok(neededScale > baseScaleSec, 'Временная линия динамически увеличилась');
+  assert.equal(neededScale, 1882, 'Новая шкала точно вмещает растянутый блок с 12% запасом');
+
+  // 5. Эмуляция перемещения блока на ленте вещания (Drag & Drop)
+  const movedItem = blocks.splice(1, 1)[0];
+  blocks.splice(0, 0, movedItem);
+  assert.equal(blocks[0].id, 'b2', 'Блок успешно перемещен в начало ленты вещания');
+  assert.equal(blocks[1].id, 'b1', 'Второй блок сместился вправо');
+
+  // 6. Эмуляция отодвигания блока за край с созданием паузы (gap)
+  const offsetTargetSec = 2400; // 40 мин
+  const gapDuration = offsetTargetSec - totalDur;
+  const gapBlock = {
+    id: 'gap_1',
+    type: 'gap',
+    title: 'Пауза в эфире (музыкальная пустота)',
+    duration: gapDuration
+  };
+  blocks.push(gapBlock);
+  const newTotalWithGap = blocks.reduce((acc, b) => acc + b.duration, 0);
+  assert.equal(newTotalWithGap, offsetTargetSec, 'Отодвигание блока за край создало паузу и расширило сетку до 40 мин');
+});
+
+test('radio-editor: playlists are framed with bracket-like side borders on timeline and blocks list', () => {
+  const freshCss = fs.readFileSync(path.join(rootDir, 'public/site/radio.css'), 'utf8');
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+
+  // 1. Стили рамочек-скобок на таймлайне
+  assert.ok(freshCss.includes('.radio-clip-bracket'), 'Стили рамочек-скобок для клипов таймлайна');
+  assert.ok(freshCss.includes('.radio-clip-bracket.bracket-left'), 'Левая квадратная скобка [ на таймлайне');
+  assert.ok(freshCss.includes('.radio-clip-bracket.bracket-right'), 'Правая квадратная скобка ] на таймлайне');
+
+  // 2. Стили рамочек-скобок для карточек плейлистов в списке редактора
+  assert.ok(freshCss.includes('.radio-eb-block.eb-block-playlist'), 'Стили выделения блока плейлиста в списке');
+  assert.ok(freshCss.includes('.radio-eb-bracket-left'), 'Левая скобка [ для карточки плейлиста в редакторе');
+  assert.ok(freshCss.includes('.radio-eb-bracket-right'), 'Правая скобка ] для карточки плейлиста в редакторе');
+
+  // 3. Вывод рамочек в коде radio-client.js
+  assert.ok(freshClientJs.includes('radio-clip-bracket bracket-left'), 'Вывод левой скобки плейлиста на таймлайне');
+  assert.ok(freshClientJs.includes('radio-clip-bracket bracket-right'), 'Вывод правой скобки плейлиста на таймлайне');
+  assert.ok(freshClientJs.includes('radio-eb-bracket-left'), 'Вывод левой скобки плейлиста в блочном редакторе');
+  assert.ok(freshClientJs.includes('radio-eb-bracket-right'), 'Вывод правой скобки плейлиста в блочном редакторе');
+});

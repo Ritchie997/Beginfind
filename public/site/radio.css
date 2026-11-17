@@ -1679,14 +1679,14 @@
   position: relative;
   height: 44px;
   border-radius: 8px;
-  padding: 4px 10px;
+  padding: 4px 14px 4px 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   font-size: 0.78rem;
   font-weight: 600;
   color: #fff;
-  cursor: pointer;
+  cursor: grab;
   transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
   overflow: hidden;
   white-space: nowrap;
@@ -1694,6 +1694,185 @@
   box-sizing: border-box;
   flex-shrink: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
+  user-select: none;
+}
+
+.radio-timeline-clip:active {
+  cursor: grabbing;
+}
+
+.radio-timeline-clip.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.97);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+  z-index: 50;
+}
+
+.radio-timeline-clip.is-drag-over-left::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -4px;
+  bottom: -4px;
+  width: 5px;
+  background: #38bdf8;
+  box-shadow: 0 0 12px #38bdf8;
+  border-radius: 3px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.radio-timeline-clip.is-drag-over-right::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: -4px;
+  bottom: -4px;
+  width: 5px;
+  background: #38bdf8;
+  box-shadow: 0 0 12px #38bdf8;
+  border-radius: 3px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+/* Ручка изменения границы/длительности блока (край блока) */
+.radio-timeline-edge-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.radio-timeline-edge-handle::after {
+  content: '';
+  width: 2px;
+  height: 55%;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+
+.radio-timeline-edge-handle:hover,
+.radio-timeline-edge-handle.is-resizing {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+.radio-timeline-edge-handle:hover::after,
+.radio-timeline-edge-handle.is-resizing::after {
+  height: 85%;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 8px #818cf8;
+}
+
+/* Всплывающая подсказка при изменении длины за край блока */
+.radio-timeline-resize-tooltip {
+  position: fixed;
+  z-index: 999999;
+  background: #0f172a;
+  border: 1px solid #6366f1;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 5px 12px;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  transform: translate(-50%, -120%);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.radio-timeline-resize-tooltip .delta-pill {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.radio-timeline-resize-tooltip .delta-pill.positive {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.radio-timeline-resize-tooltip .delta-pill.negative {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.radio-eb-block.eb-block-gap {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+}
+
+/* Выделение карточки плейлиста боковыми рамочками-скобками [ ] */
+.radio-eb-block.eb-block-playlist {
+  position: relative;
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.14), rgba(18, 20, 26, 0.95));
+  border-top: 1px solid rgba(168, 85, 247, 0.28);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.28);
+  border-left: 1px solid rgba(168, 85, 247, 0.15);
+  border-right: 1px solid rgba(168, 85, 247, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.radio-eb-bracket {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: none;
+  z-index: 5;
+  transition: all 0.2s ease;
+}
+
+.radio-eb-bracket-left {
+  left: 0;
+  border-left: 4px solid #a855f7;
+  border-top: 4px solid #a855f7;
+  border-bottom: 4px solid #a855f7;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  box-shadow: -3px 0 10px rgba(168, 85, 247, 0.4);
+}
+
+.radio-eb-bracket-right {
+  right: 0;
+  border-right: 4px solid #a855f7;
+  border-top: 4px solid #a855f7;
+  border-bottom: 4px solid #a855f7;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+  box-shadow: 3px 0 10px rgba(168, 85, 247, 0.4);
+}
+
+.radio-eb-block.eb-block-playlist:hover .radio-eb-bracket-left,
+.radio-eb-block.eb-block-playlist:hover .radio-eb-bracket-right {
+  border-color: #c084fc;
+  box-shadow: 0 0 16px rgba(192, 132, 252, 0.65);
+}
+
+.radio-eb-block.eb-block-playlist.is-playing-block .radio-eb-bracket-left,
+.radio-eb-block.eb-block-playlist.is-playing-block .radio-eb-bracket-right {
+  border-color: #f472b6 !important;
+  box-shadow: 0 0 20px rgba(244, 114, 182, 0.85) !important;
+}
+
+.eb-type-badge.type-gap {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 
 .radio-timeline-clip:hover {
@@ -1723,8 +1902,53 @@
 }
 
 .radio-timeline-clip.clip-playlist {
+  position: relative;
   background: linear-gradient(135deg, #5b21b6, #7c3aed);
   border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: inset 0 0 10px rgba(139, 92, 246, 0.25);
+  padding-left: 14px;
+  padding-right: 16px;
+}
+
+/* Рамочки-скобки [ ] по бокам клипа плейлиста на таймлайне */
+.radio-clip-bracket {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 7px;
+  pointer-events: none;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.radio-clip-bracket.bracket-left {
+  left: 3px;
+  border-left: 3px solid #c084fc;
+  border-top: 3px solid #c084fc;
+  border-bottom: 3px solid #c084fc;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  box-shadow: -2px 0 8px rgba(192, 132, 252, 0.7);
+}
+
+.radio-clip-bracket.bracket-right {
+  right: 12px;
+  border-right: 3px solid #c084fc;
+  border-top: 3px solid #c084fc;
+  border-bottom: 3px solid #c084fc;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  box-shadow: 2px 0 8px rgba(192, 132, 252, 0.7);
+}
+
+.radio-timeline-clip.clip-playlist:hover .radio-clip-bracket.bracket-left {
+  border-color: #f0abfc;
+  box-shadow: -3px 0 12px #c084fc;
+}
+
+.radio-timeline-clip.clip-playlist:hover .radio-clip-bracket.bracket-right {
+  border-color: #f0abfc;
+  box-shadow: 3px 0 12px #c084fc;
 }
 
 .radio-timeline-clip.clip-speech {
@@ -2002,6 +2226,54 @@
   background: rgba(99, 102, 241, 0.2);
   border-color: #818cf8;
   color: #fff;
+}
+
+/* Подсветка активного блока, играющего в общем плеере */
+.radio-eb-block.is-playing-block {
+  border-color: rgba(99, 102, 241, 0.8) !important;
+  box-shadow: 0 0 18px rgba(99, 102, 241, 0.3) !important;
+  background: rgba(30, 27, 75, 0.4) !important;
+}
+
+.radio-timeline-clip.is-playing {
+  outline: 2px solid #818cf8 !important;
+  box-shadow: 0 0 14px rgba(129, 140, 248, 0.8) !important;
+  animation: pulse-clip-glow 2s infinite ease-in-out;
+  z-index: 2;
+}
+
+@keyframes pulse-clip-glow {
+  0%, 100% { filter: brightness(1.2); }
+  50% { filter: brightness(1.45); }
+}
+
+.radio-nested-play-btn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a5b4fc;
+  font-size: 0.72rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.radio-nested-play-btn:hover,
+.radio-nested-play-btn.is-playing,
+.radio-eb-btn.btn-preview-block.is-playing {
+  background: var(--brand-accent, #6366f1) !important;
+  border-color: #818cf8 !important;
+  color: #fff !important;
+}
+
+.radio-playlist-nested-track.is-playing {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
 }
 
 /* Карточка свободного интервала (Пустота) */

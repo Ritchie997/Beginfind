@@ -202,12 +202,46 @@ test('radio-store: favorites ("Моё") and playlists (private and public)', asy
   const otherUserView = await radioStore.getPlaylistById(privatePlaylist.id, 9999, false);
   assert.equal(otherUserView, null, 'Private playlist should be inaccessible by other users');
 
+  // Owner access to private playlist (with both integer and string userId)
+  const ownerViewNumeric = await radioStore.getPlaylistById(privatePlaylist.id, userId, false);
+  assert.ok(ownerViewNumeric, 'Private playlist must be accessible by owner (numeric userId)');
+  assert.equal(ownerViewNumeric.id, privatePlaylist.id);
+
+  const ownerViewString = await radioStore.getPlaylistById(privatePlaylist.id, String(userId), false);
+  assert.ok(ownerViewString, 'Private playlist must be accessible by owner (string userId)');
+  assert.equal(ownerViewString.id, privatePlaylist.id);
+  assert.equal(ownerViewString.is_public, 0);
+  assert.equal(typeof ownerViewString.tracks_count, 'number');
+  assert.equal(typeof ownerViewString.total_duration, 'number');
+
+  // Add track to private playlist using string userId
+  await radioStore.addTrackToPlaylist(privatePlaylist.id, track.id, String(userId), false);
+  const privateWithTrack = await radioStore.getPlaylistById(privatePlaylist.id, String(userId), false);
+  assert.equal(privateWithTrack.trackCount, 1);
+  assert.equal(privateWithTrack.tracks_count, 1);
+  assert.equal(privateWithTrack.tracks[0].id, track.id);
+
+  // List playlists for unauthenticated guest (only public)
+  const guestList = await radioStore.listPlaylists();
+  assert.ok(guestList.playlists.some(p => p.id === publicPlaylist.id));
+  assert.ok(!guestList.playlists.some(p => p.id === privatePlaylist.id), 'Guest should not see private playlist');
+
+  // List playlists for owner (sees both public and own private playlist)
+  const ownerList = await radioStore.listPlaylists({ requestingUserId: String(userId) });
+  assert.ok(ownerList.playlists.some(p => p.id === publicPlaylist.id), 'Owner should see public playlist');
+  assert.ok(ownerList.playlists.some(p => p.id === privatePlaylist.id), 'Owner should see own private playlist in general list');
+
+  // List playlists with includeMine=true
+  const includeMineList = await radioStore.listPlaylists({ isPublic: true, includeMine: true, requestingUserId: String(userId) });
+  assert.ok(includeMineList.playlists.some(p => p.id === privatePlaylist.id), 'includeMine=true must include owner private playlist');
+
   // List public playlists
   const publicList = await radioStore.listPlaylists({ isPublic: true });
   assert.ok(publicList.playlists.some(p => p.id === publicPlaylist.id));
+  assert.ok(!publicList.playlists.some(p => p.id === privatePlaylist.id));
 
   // Cleanup
   await radioStore.deletePlaylist(publicPlaylist.id, userId, false);
-  await radioStore.deletePlaylist(privatePlaylist.id, userId, false);
+  await radioStore.deletePlaylist(privatePlaylist.id, String(userId), false);
   await radioStore.deleteTrack(track.id, userId, true);
 });

@@ -250,7 +250,8 @@ async function updateStation(id, actingUserId, isRootOrAdmin, { name, descriptio
   const station = await getStationById(id);
   if (!station) throw new Error('Станция не найдена');
 
-  if (station.owner_id !== actingUserId && !isRootOrAdmin) {
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
     throw new Error('Только владелец станции может изменять её настройки');
   }
 
@@ -292,7 +293,8 @@ async function deleteStation(id, actingUserId, isRootOrAdmin) {
   const station = await getStationById(id);
   if (!station) return false;
 
-  if (station.owner_id !== actingUserId && !isRootOrAdmin) {
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
     throw new Error('Недостаточно прав для удаления радиостанции');
   }
 
@@ -305,7 +307,8 @@ async function clearTimelineSlots(stationId, actingUserId, isRootOrAdmin) {
   const station = await getStationById(stationId);
   if (!station) throw new Error('Станция не найдена');
 
-  if (station.owner_id !== actingUserId && !isRootOrAdmin) {
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
     throw new Error('Недостаточно прав для очистки эфира');
   }
 
@@ -578,7 +581,8 @@ async function createPlaylist({ userId, authorName, title, description = '', isP
 async function getPlaylistById(id, requestingUserId = null, isAdmin = false) {
   const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
   if (!pl) return null;
-  if (!pl.is_public && pl.user_id !== requestingUserId && !isAdmin) {
+  const isOwner = requestingUserId != null && String(pl.user_id) === String(requestingUserId);
+  if (!pl.is_public && !isOwner && !isAdmin) {
     return null;
   }
   const tracks = await all(
@@ -591,11 +595,14 @@ async function getPlaylistById(id, requestingUserId = null, isAdmin = false) {
   );
   pl.tracks = tracks;
   pl.trackCount = tracks.length;
-  pl.totalDuration = tracks.reduce((acc, t) => acc + (parseFloat(t.duration) || 0), 0);
+  pl.tracks_count = tracks.length;
+  const totalDur = tracks.reduce((acc, t) => acc + (parseFloat(t.duration) || 0), 0);
+  pl.totalDuration = totalDur;
+  pl.total_duration = totalDur;
   return pl;
 }
 
-async function listPlaylists({ userId = null, requestingUserId = null, isAdmin = false, isPublic = null, search = '', page = 1, limit = 30 } = {}) {
+async function listPlaylists({ userId = null, requestingUserId = null, isAdmin = false, isPublic = null, includeMine = false, search = '', page = 1, limit = 30 } = {}) {
   const p = Math.max(1, parseInt(page, 10) || 1);
   const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
   const offset = (p - 1) * l;
@@ -603,17 +610,24 @@ async function listPlaylists({ userId = null, requestingUserId = null, isAdmin =
   const conditions = [];
   const params = [];
 
+  const isOwner = userId != null && requestingUserId != null && String(userId) === String(requestingUserId);
+
   if (userId) {
     conditions.push('p.user_id = ?');
     params.push(userId);
-    if (userId !== requestingUserId && !isAdmin) {
+    if (!isOwner && !isAdmin) {
       conditions.push('p.is_public = 1');
     }
   } else if (isPublic !== null) {
-    conditions.push('p.is_public = ?');
-    params.push(isPublic ? 1 : 0);
+    if (isPublic && includeMine && requestingUserId != null) {
+      conditions.push('(p.is_public = 1 OR p.user_id = ?)');
+      params.push(requestingUserId);
+    } else {
+      conditions.push('p.is_public = ?');
+      params.push(isPublic ? 1 : 0);
+    }
   } else if (!isAdmin) {
-    if (requestingUserId) {
+    if (requestingUserId != null) {
       conditions.push('(p.is_public = 1 OR p.user_id = ?)');
       params.push(requestingUserId);
     } else {
@@ -643,13 +657,20 @@ async function listPlaylists({ userId = null, requestingUserId = null, isAdmin =
     [...params, l, offset]
   );
 
-  return { playlists, total, page: p, limit: l, totalPages: Math.ceil(total / l) || 1 };
+  const normalizedPlaylists = playlists.map((pl) => ({
+    ...pl,
+    tracks_count: pl.trackCount,
+    total_duration: pl.totalDuration
+  }));
+
+  return { playlists: normalizedPlaylists, total, page: p, limit: l, totalPages: Math.ceil(total / l) || 1 };
 }
 
 async function updatePlaylist(id, userId, isAdmin, { title, description, isPublic, coverUrl }) {
   const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
   if (!pl) return null;
-  if (pl.user_id !== userId && !isAdmin) {
+  const isOwner = userId != null && String(pl.user_id) === String(userId);
+  if (!isOwner && !isAdmin) {
     throw new Error('Вы не являетесь владельцем этого плейлиста');
   }
   const cleanTitle = title !== undefined ? String(title).trim() || pl.title : pl.title;
@@ -669,7 +690,8 @@ async function updatePlaylist(id, userId, isAdmin, { title, description, isPubli
 async function deletePlaylist(id, userId, isAdmin) {
   const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [id]);
   if (!pl) return false;
-  if (pl.user_id !== userId && !isAdmin) {
+  const isOwner = userId != null && String(pl.user_id) === String(userId);
+  if (!isOwner && !isAdmin) {
     throw new Error('Вы не являетесь владельцем этого плейлиста');
   }
   await run('DELETE FROM radio_playlist_tracks WHERE playlist_id = ?', [id]);
@@ -680,7 +702,8 @@ async function deletePlaylist(id, userId, isAdmin) {
 async function addTrackToPlaylist(playlistId, trackId, userId, isAdmin) {
   const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [playlistId]);
   if (!pl) throw new Error('Плейлист не найден');
-  if (pl.user_id !== userId && !isAdmin) {
+  const isOwner = userId != null && String(pl.user_id) === String(userId);
+  if (!isOwner && !isAdmin) {
     throw new Error('У вас нет прав на редактирование этого плейлиста');
   }
   const track = await getTrackById(trackId);
@@ -702,7 +725,8 @@ async function addTrackToPlaylist(playlistId, trackId, userId, isAdmin) {
 async function removeTrackFromPlaylist(playlistId, trackId, userId, isAdmin) {
   const pl = await get('SELECT * FROM radio_playlists WHERE id = ?', [playlistId]);
   if (!pl) throw new Error('Плейлист не найден');
-  if (pl.user_id !== userId && !isAdmin) {
+  const isOwner = userId != null && String(pl.user_id) === String(userId);
+  if (!isOwner && !isAdmin) {
     throw new Error('У вас нет прав на редактирование этого плейлиста');
   }
   await run('DELETE FROM radio_playlist_tracks WHERE playlist_id = ? AND track_id = ?', [playlistId, trackId]);

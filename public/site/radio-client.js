@@ -56,7 +56,6 @@
     mediaDrawerTab: 'tracks',
     draggedBlockIndex: null,
     activeGapInfo: null,
-    previewAudio: null,
     // Запись с микрофона в редакторе
     mediaRecorder: null,
     recordedChunks: [],
@@ -173,6 +172,7 @@
       btnTimelineZoomOut: document.getElementById('btnTimelineZoomOut'),
       btnTimelineZoomReset: document.getElementById('btnTimelineZoomReset'),
       btnTimelineZoomIn: document.getElementById('btnTimelineZoomIn'),
+      btnTimelineExtendScale: document.getElementById('btnTimelineExtendScale'),
       radioTimelineTrackScroll: document.getElementById('radioTimelineTrackScroll'),
       radioTimelineTrackInner: document.getElementById('radioTimelineTrackInner'),
       radioTimelineRuler: document.getElementById('radioTimelineRuler'),
@@ -605,37 +605,46 @@
   }
 
   function renderPlaylistsGrid(container, playlists, isMine = false) {
+    const currentUser = window.authManager && window.authManager.getUser();
     container.innerHTML = `
       <div class="radio-playlists-grid">
-        ${playlists.map((p) => `
-          <div class="radio-playlist-card" data-id="${p.id}">
-            <div class="radio-playlist-cover-wrap btn-open-playlist" data-id="${p.id}">
-              ${p.cover_url ? `<img src="${escapeHtml(p.cover_url)}" alt="">` : `<i class="fas fa-list-ul radio-playlist-cover-fallback"></i>`}
-              <button type="button" class="radio-playlist-play-overlay btn-play-playlist" data-id="${p.id}" title="Слушать плейлист">
-                <i class="fas fa-play"></i>
-              </button>
-            </div>
-            <div class="radio-playlist-body">
-              <div class="radio-playlist-title btn-open-playlist" data-id="${p.id}">${escapeHtml(p.title)}</div>
-              <div class="radio-playlist-desc">${escapeHtml(p.description || 'Без описания')}</div>
-              <div class="radio-playlist-meta">
-                <span>${p.trackCount || 0} треков • ${formatDuration(p.totalDuration || 0)}</span>
-                ${p.is_public ? '<span class="playlist-badge-public"><i class="fas fa-globe"></i> Публичный</span>' : '<span class="playlist-badge-private"><i class="fas fa-lock"></i> Свой</span>'}
+        ${playlists.map((p) => {
+          const isOwner = isMine || Boolean(currentUser && (String(currentUser.id) === String(p.user_id) || currentUser.is_root || (currentUser.admin_level && currentUser.admin_level > 0)));
+          const trackCount = p.trackCount || p.tracks_count || 0;
+          const totalDur = p.totalDuration || p.total_duration || 0;
+          return `
+            <div class="radio-playlist-card" data-id="${p.id}">
+              <div class="radio-playlist-cover-wrap btn-open-playlist" data-id="${p.id}">
+                ${p.cover_url ? `<img src="${escapeHtml(p.cover_url)}" alt="">` : `<i class="fas fa-list-ul radio-playlist-cover-fallback"></i>`}
+                <button type="button" class="radio-playlist-play-overlay btn-play-playlist" data-id="${p.id}" title="Слушать плейлист">
+                  <i class="fas fa-play"></i>
+                </button>
               </div>
-              ${isMine ? `
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);">
-                  <button type="button" class="btn btn-secondary btn-sm btn-edit-playlist" data-id="${p.id}" title="Редактировать"><i class="fas fa-pen"></i></button>
-                  <button type="button" class="btn btn-outline-danger btn-sm btn-delete-playlist" data-id="${p.id}" title="Удалить"><i class="fas fa-trash"></i></button>
+              <div class="radio-playlist-body">
+                <div class="radio-playlist-title btn-open-playlist" data-id="${p.id}">${escapeHtml(p.title)}</div>
+                <div class="radio-playlist-desc">${escapeHtml(p.description || 'Без описания')}</div>
+                <div class="radio-playlist-meta">
+                  <span>${trackCount} треков • ${formatDuration(totalDur)}</span>
+                  ${p.is_public ? '<span class="playlist-badge-public"><i class="fas fa-globe"></i> Публичный</span>' : '<span class="playlist-badge-private"><i class="fas fa-lock"></i> Закрытый</span>'}
                 </div>
-              ` : `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:#94a3b8;">
-                  <span>Автор: <a href="/profile/${p.user_id}" style="color:#cbd5e1; text-decoration:none;">${escapeHtml(p.author_name)}</a></span>
-                  <button type="button" class="btn btn-secondary btn-sm btn-open-playlist" data-id="${p.id}">Открыть</button>
-                </div>
-              `}
+                ${isOwner ? `
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);">
+                    <button type="button" class="btn btn-secondary btn-sm btn-open-playlist" data-id="${p.id}">Открыть</button>
+                    <div style="display:flex; gap:6px;">
+                      <button type="button" class="btn btn-secondary btn-sm btn-edit-playlist" data-id="${p.id}" title="Редактировать"><i class="fas fa-pen"></i></button>
+                      <button type="button" class="btn btn-outline-danger btn-sm btn-delete-playlist" data-id="${p.id}" title="Удалить"><i class="fas fa-trash"></i></button>
+                    </div>
+                  </div>
+                ` : `
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:#94a3b8;">
+                    <span>Автор: <a href="/profile/${p.user_id}" style="color:#cbd5e1; text-decoration:none;">${escapeHtml(p.author_name)}</a></span>
+                    <button type="button" class="btn btn-secondary btn-sm btn-open-playlist" data-id="${p.id}">Открыть</button>
+                  </div>
+                `}
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     `;
 
@@ -664,40 +673,42 @@
       });
     });
 
-    if (isMine) {
-      container.querySelectorAll('.btn-edit-playlist').forEach((btn) => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.id;
-          try {
-            const pl = await api(`/api/radio/playlists/${id}`);
-            openCreatePlaylistModal(pl);
-          } catch (err) {
-            showToast('Ошибка: ' + err.message, 'error');
-          }
-        });
+    container.querySelectorAll('.btn-edit-playlist').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        try {
+          const pl = await api(`/api/radio/playlists/${id}`);
+          openCreatePlaylistModal(pl);
+        } catch (err) {
+          showToast('Ошибка: ' + err.message, 'error');
+        }
       });
+    });
 
-      container.querySelectorAll('.btn-delete-playlist').forEach((btn) => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.id;
-          const ok = await showConfirm('Удалить этот плейлист? Аудиозаписи останутся в медиатеке.', {
-            title: 'Удалить плейлист?',
-            confirmLabel: 'Удалить',
-            danger: true
-          });
-          if (!ok) return;
-          try {
-            await api(`/api/radio/playlists/${id}`, { method: 'DELETE' });
-            showToast('Плейлист удален', 'success');
-            loadMySection();
-          } catch (err) {
-            showToast('Ошибка удаления плейлиста: ' + err.message, 'error');
-          }
+    container.querySelectorAll('.btn-delete-playlist').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const ok = await showConfirm('Удалить этот плейлист? Аудиозаписи останутся в медиатеке.', {
+          title: 'Удалить плейлист?',
+          confirmLabel: 'Удалить',
+          danger: true
         });
+        if (!ok) return;
+        try {
+          await api(`/api/radio/playlists/${id}`, { method: 'DELETE' });
+          showToast('Плейлист удален', 'success');
+          if (state.mySection === 'playlists') {
+            loadMySection();
+          } else if (state.feedFilter === 'playlists') {
+            loadTracks();
+          }
+        } catch (err) {
+          showToast('Ошибка удаления плейлиста: ' + err.message, 'error');
+        }
       });
-    }
+    });
   }
 
   // ===== Лента треков и подкастов =====
@@ -707,14 +718,14 @@
     try {
       if (state.feedFilter === 'playlists') {
         const query = new URLSearchParams();
-        query.set('isPublic', '1');
+        query.set('includeMine', '1');
         if (state.feedSearch) query.set('search', state.feedSearch);
         const pData = await api(`/api/radio/playlists?${query.toString()}`);
         if (!pData.playlists || pData.playlists.length === 0) {
           dom.tracksList.innerHTML = `
             <div style="text-align:center; padding:40px; color:#94a3b8;">
               <i class="fas fa-list-ul" style="font-size:2rem; margin-bottom:12px; display:block; color:#64748b;"></i>
-              Публичные плейлисты пока не созданы. Создайте первый плейлист в разделе «Моё»!
+              Плейлисты пока не созданы. Создайте первый плейлист в разделе «Моё»!
             </div>
           `;
           return;
@@ -1322,6 +1333,21 @@
           end_time: new Date(endMs).toISOString()
         });
         cursor = endMs;
+      } else if (b.type === 'gap') {
+        const dur = Math.max(1, Number(b.duration) || 0);
+        const startMs = cursor;
+        const endMs = cursor + dur * 1000;
+        compiled.push({
+          block_id: b.id,
+          track_id: null,
+          title: b.title || 'Пауза в эфире (музыкальная пустота)',
+          type: 'gap',
+          audio_url: '',
+          duration: dur,
+          start_time: new Date(startMs).toISOString(),
+          end_time: new Date(endMs).toISOString()
+        });
+        cursor = endMs;
       }
     }
 
@@ -1457,22 +1483,29 @@
         dom.radioTimelineTrack.innerHTML = state.editorBlocks.map((block, idx) => {
           const pct = Math.max(1.8, (block.duration / effectiveScale) * 100);
           const typeClass = `clip-${block.type}`;
-          const icon = block.type === 'playlist' ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : 'fa-music';
+          const isPlaylist = block.type === 'playlist';
+          const icon = isPlaylist ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
           const titleText = escapeHtml(block.title);
           const durText = formatDuration(block.duration);
-          const subInfo = block.type === 'playlist' ? ` (${(block.items || []).length} тр)` : '';
+          const subInfo = isPlaylist ? ` (${(block.items || []).length} тр)` : '';
 
           return `
-            <div class="radio-timeline-clip ${typeClass}" data-block-id="${block.id}" data-index="${idx}" style="width: ${pct.toFixed(2)}%;" title="${titleText}${subInfo} — ${durText}">
+            <div class="radio-timeline-clip ${typeClass}" data-block-id="${block.id}" data-index="${idx}" draggable="true" style="width: ${pct.toFixed(2)}%;" title="${titleText}${subInfo} — ${durText}">
+              ${isPlaylist ? '<div class="radio-clip-bracket bracket-left" title="Начало плейлиста ["></div>' : ''}
               <div class="clip-title"><i class="fas ${icon}"></i> ${titleText}${subInfo}</div>
               <div class="clip-dur">${durText}</div>
+              ${isPlaylist ? '<div class="radio-clip-bracket bracket-right" title="] Конец плейлиста"></div>' : ''}
+              <div class="radio-timeline-edge-handle" data-index="${idx}" title="Потяните за край блока, чтобы изменить длительность и увеличить таймлайн"></div>
             </div>
           `;
         }).join('');
 
-        // Клик по клипу на таймлайне прокручивает к соответствующему блоку в редакторе
+        let isEdgeResizing = false;
+
+        // Перемещение блоков по таймлайну (Drag & Drop) и взаимодействие с клипами
         dom.radioTimelineTrack.querySelectorAll('.radio-timeline-clip').forEach((el) => {
-          el.addEventListener('click', () => {
+          el.addEventListener('click', (e) => {
+            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) return;
             const blockId = el.dataset.blockId;
             const card = document.getElementById('block_' + blockId);
             if (card) {
@@ -1480,6 +1513,211 @@
               card.style.outline = '2px solid var(--brand-accent, #6366f1)';
               setTimeout(() => { card.style.outline = ''; }, 1200);
             }
+          });
+
+          el.addEventListener('dblclick', (e) => {
+            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) return;
+            e.stopPropagation();
+            const bIdx = parseInt(el.dataset.index, 10);
+            playEditorBlock(bIdx);
+          });
+
+          el.addEventListener('dragstart', (e) => {
+            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) {
+              e.preventDefault();
+              return;
+            }
+            const bIdx = parseInt(el.dataset.index, 10);
+            state.draggedBlockIndex = bIdx;
+            el.classList.add('is-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', JSON.stringify({
+              type: 'move_block',
+              index: bIdx,
+              blockId: el.dataset.blockId
+            }));
+          });
+
+          el.addEventListener('dragend', () => {
+            state.draggedBlockIndex = null;
+            el.classList.remove('is-dragging');
+            dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip').forEach((c) => {
+              c.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
+            });
+            if (dom.radioTimelineTrack) dom.radioTimelineTrack.style.outline = '';
+          });
+
+          el.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            const rect = el.getBoundingClientRect();
+            const isRightHalf = (e.clientX - rect.left) > (rect.width / 2);
+            el.classList.toggle('is-drag-over-left', !isRightHalf);
+            el.classList.toggle('is-drag-over-right', isRightHalf);
+            el.classList.add('is-drag-over');
+          });
+
+          el.addEventListener('dragleave', (e) => {
+            if (!el.contains(e.relatedTarget)) {
+              el.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
+            }
+          });
+
+          el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            el.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
+
+            const targetIdx = parseInt(el.dataset.index, 10);
+            const rect = el.getBoundingClientRect();
+            const isRightHalf = (e.clientX - rect.left) > (rect.width / 2);
+            const insertIdx = isRightHalf ? targetIdx + 1 : targetIdx;
+
+            let fromIdx = state.draggedBlockIndex;
+            if (fromIdx === null || fromIdx === undefined) {
+              try {
+                const raw = e.dataTransfer.getData('text/plain');
+                if (raw) {
+                  const data = JSON.parse(raw);
+                  if (data && data.type === 'move_block' && data.index !== undefined) fromIdx = data.index;
+                }
+              } catch (_) {}
+            }
+
+            if (fromIdx !== null && fromIdx !== undefined && !isNaN(fromIdx)) {
+              if (fromIdx === insertIdx || fromIdx === insertIdx - 1) return;
+              const item = state.editorBlocks.splice(fromIdx, 1)[0];
+              const actualTargetIdx = fromIdx < insertIdx ? insertIdx - 1 : insertIdx;
+              state.editorBlocks.splice(actualTargetIdx, 0, item);
+              renderEditor();
+              showToast(`Блок «${item.title || 'Элемент'}» перемещен на ленте`, 'info');
+              return;
+            }
+
+            // Перетаскивание из боковой шторки
+            try {
+              const raw = e.dataTransfer.getData('text/plain');
+              if (raw) {
+                const item = JSON.parse(raw);
+                if (item && item.type) {
+                  if (item.type === 'playlist') {
+                    openPickPlaylistForTimeline(item.id, insertIdx);
+                  } else {
+                    addBlockToEditor({
+                      type: item.type === 'speech' ? 'speech' : 'track',
+                      track_id: item.id,
+                      title: item.title,
+                      audio_url: item.audio_url,
+                      duration: Number(item.duration) || 180
+                    }, insertIdx);
+                  }
+                }
+              }
+            } catch (_) {}
+          });
+        });
+
+        // Отодвигание за край блока (Edge Resize & Dynamic Timeline Expansion)
+        dom.radioTimelineTrack.querySelectorAll('.radio-timeline-edge-handle').forEach((handle) => {
+          handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isEdgeResizing = true;
+            handle.classList.add('is-resizing');
+
+            const bIdx = parseInt(handle.dataset.index, 10);
+            const block = state.editorBlocks[bIdx];
+            if (!block) { isEdgeResizing = false; return; }
+
+            const clipEl = handle.closest('.radio-timeline-clip');
+            const initialDuration = Math.max(5, Number(block.duration) || 0);
+            const startX = e.clientX;
+            const trackRect = dom.radioTimelineTrack.getBoundingClientRect();
+            const initialTotalDur = totalDurationSec;
+            const initialBaseScale = state.baseScaleSec || 1200;
+            const currentZoom = state.timelineZoom || 1.0;
+            const secPerPx = effectiveScale / Math.max(10, trackRect.width);
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'radio-timeline-resize-tooltip';
+            tooltip.innerHTML = `<span>${escapeHtml(block.title)}</span>: <strong>${formatDuration(initialDuration)}</strong>`;
+            document.body.appendChild(tooltip);
+
+            const updateTooltipPos = (clientX, clientY) => {
+              tooltip.style.left = `${clientX}px`;
+              tooltip.style.top = `${clientY}px`;
+            };
+            updateTooltipPos(e.clientX, e.clientY);
+
+            let lastCalculatedDur = initialDuration;
+            let lastTotalSec = initialTotalDur;
+
+            const onMouseMove = (ev) => {
+              const deltaX = ev.clientX - startX;
+              const deltaSec = Math.round(deltaX * secPerPx);
+              lastCalculatedDur = Math.max(5, initialDuration + deltaSec);
+              const diffSec = lastCalculatedDur - initialDuration;
+              lastTotalSec = Math.max(5, initialTotalDur + diffSec);
+
+              // Отодвигание за край блока увеличивает временную линию в реальном времени!
+              if (lastTotalSec > initialBaseScale) {
+                state.baseScaleSec = Math.max(initialBaseScale, Math.ceil(lastTotalSec * 1.15));
+                const newEffScale = Math.max(60, Math.round(state.baseScaleSec / currentZoom));
+                if (dom.timelineScaleBadge) {
+                  const min = Math.round(newEffScale / 60);
+                  dom.timelineScaleBadge.textContent = min >= 60 ? `Шкала: ${(min / 60).toFixed(1)} ч` : `Шкала: ${min} мин`;
+                }
+              }
+
+              const activeScale = Math.max(60, Math.round(Math.max(state.baseScaleSec || 1200, Math.ceil(lastTotalSec * 1.12)) / currentZoom));
+              const newPct = Math.max(1.8, (lastCalculatedDur / activeScale) * 100);
+              if (clipEl) {
+                clipEl.style.width = `${newPct.toFixed(2)}%`;
+                const durEl = clipEl.querySelector('.clip-dur');
+                if (durEl) durEl.textContent = formatDuration(lastCalculatedDur);
+              }
+
+              if (dom.timelineTotalDuration) {
+                dom.timelineTotalDuration.textContent = formatDuration(lastTotalSec);
+              }
+              if (dom.timelineEndTime) {
+                const baseStartMs = new Date(state.editorStartTime || Date.now()).getTime();
+                dom.timelineEndTime.textContent = formatClockTime(new Date(baseStartMs + lastTotalSec * 1000).toISOString());
+              }
+
+              const sign = diffSec >= 0 ? '+' : '';
+              const pillClass = diffSec >= 0 ? 'positive' : 'negative';
+              tooltip.innerHTML = `
+                <span>${escapeHtml(block.title)}</span>: 
+                <strong>${formatDuration(lastCalculatedDur)}</strong> 
+                <span class="delta-pill ${pillClass}">(${sign}${formatDuration(diffSec)})</span>
+              `;
+              updateTooltipPos(ev.clientX, ev.clientY);
+            };
+
+            const onMouseUp = () => {
+              window.removeEventListener('mousemove', onMouseMove);
+              window.removeEventListener('mouseup', onMouseUp);
+              handle.classList.remove('is-resizing');
+              if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+              setTimeout(() => { isEdgeResizing = false; }, 80);
+
+              block.duration = lastCalculatedDur;
+              if (block.type === 'playlist') {
+                block.customDuration = lastCalculatedDur;
+              }
+
+              if (lastTotalSec > initialBaseScale) {
+                state.baseScaleSec = Math.max(initialBaseScale, Math.ceil(lastTotalSec * 1.15));
+              }
+
+              renderEditor();
+              showToast(`Длительность блока увеличена: ${formatDuration(lastCalculatedDur)}. Временная линия увеличена!`, 'info');
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
           });
         });
       }
@@ -1544,8 +1782,8 @@
       `;
 
       // Карточка блока в стиле Антропедии
-      const typeLabel = block.type === 'playlist' ? 'Плейлист' : block.type === 'speech' ? 'Слова' : block.type === 'jingle' ? 'Джингл' : block.type === 'time_anchor' ? 'Якорь' : 'Трек';
-      const typeIcon = block.type === 'playlist' ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : 'fa-music';
+      const typeLabel = block.type === 'playlist' ? 'Плейлист' : block.type === 'speech' ? 'Слова' : block.type === 'jingle' ? 'Джингл' : block.type === 'time_anchor' ? 'Якорь' : block.type === 'gap' ? 'Пауза' : 'Трек';
+      const typeIcon = block.type === 'playlist' ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
 
       let bodyHtml = '';
       if (block.type === 'playlist') {
@@ -1560,6 +1798,11 @@
                 <span style="font-size:0.8rem; color:#a5b4fc;">(${items.length} треков)</span>
               </div>
               <div style="display:flex; gap:8px; align-items:center;">
+                ${items.some(t => t.audio_url) ? `
+                  <button type="button" class="btn btn-outline-primary btn-sm btn-play-playlist-block" data-index="${index}" title="Слушать плейлист в общем плеере">
+                    <i class="fas fa-play"></i> Слушать
+                  </button>
+                ` : ''}
                 <button type="button" class="btn btn-outline-secondary btn-sm btn-quick-split" data-index="${index}" title="Разрезать плейлист пополам для вставки слов/треков">
                   <i class="fas fa-scissors"></i> Разрезать
                 </button>
@@ -1570,6 +1813,11 @@
                 ${items.map((it, tIdx) => `
                   <div class="radio-playlist-nested-track" data-track-index="${tIdx}">
                     <span style="display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden; text-overflow:ellipsis;">
+                      ${it.audio_url ? `
+                        <button type="button" class="radio-nested-play-btn btn-play-nested-track" data-block-index="${index}" data-track-index="${tIdx}" title="Воспроизвести в общем плеере">
+                          <i class="fas fa-play"></i>
+                        </button>
+                      ` : ''}
                       <span style="color:#64748b; font-family:monospace; font-size:0.75rem;">${tIdx + 1}.</span>
                       <span style="color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.title)}</span>
                     </span>
@@ -1618,10 +1866,29 @@
             </div>
           </div>
         `;
+      } else if (block.type === 'gap') {
+        bodyHtml = `
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div>
+              <strong style="color:#fbbf24;"><i class="fas fa-pause-circle"></i> ${escapeHtml(block.title || 'Пауза в эфире (пустота)')}</strong>
+              <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">
+                Свободный хронометраж: ${formatDuration(durSec)}. Можно заполнить подходящей музыкой из плейлистов или оставить как тишину.
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-warning btn-sm btn-fill-gap-playlist" data-index="${index}" title="Заполнить эту паузу музыкой из плейлистов">
+                <i class="fas fa-wand-magic-sparkles"></i> Заполнить плейлистом
+              </button>
+            </div>
+          </div>
+        `;
       }
 
+      const isPlaylist = block.type === 'playlist';
+
       html += `
-        <div class="radio-eb-block" id="block_${block.id}" data-id="${block.id}" data-index="${index}" draggable="true">
+        <div class="radio-eb-block ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" draggable="true">
+          ${isPlaylist ? '<div class="radio-eb-bracket radio-eb-bracket-left" title="Начало плейлиста ["></div>' : ''}
           <div class="radio-eb-drag-handle" title="Потяните для изменения порядка в эфире">
             <i class="fas fa-grip-vertical"></i>
             <span class="radio-eb-order-num">${index + 1}</span>
@@ -1635,8 +1902,8 @@
               <span class="radio-eb-duration-badge">${formatDuration(durSec)}</span>
             </div>
             <div class="radio-eb-actions">
-              ${block.audio_url ? `
-                <button type="button" class="radio-eb-btn btn-preview-block" data-index="${index}" title="Предпрослушать фрагмент">
+              ${(block.audio_url || (isPlaylist && items.some(t => t.audio_url))) ? `
+                <button type="button" class="radio-eb-btn btn-preview-block" data-index="${index}" title="Воспроизвести в общем плеере">
                   <i class="fas fa-play"></i>
                 </button>
               ` : ''}
@@ -1657,6 +1924,7 @@
           <div class="radio-eb-body">
             ${bodyHtml}
           </div>
+          ${isPlaylist ? '<div class="radio-eb-bracket radio-eb-bracket-right" title="] Конец плейлиста"></div>' : ''}
         </div>
       `;
     });
@@ -1725,6 +1993,21 @@
       });
     });
 
+    // Заполнение свободной паузы в эфире (музыкальной пустоты)
+    listEl.querySelectorAll('.btn-fill-gap-playlist').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        const block = state.editorBlocks[idx];
+        if (block) {
+          openSmartGapFillModal({
+            durationSec: block.duration,
+            targetIndex: idx
+          });
+        }
+      });
+    });
+
     // Кнопки межблочных инсертеров
     listEl.querySelectorAll('.btn-insert-block-at').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1782,31 +2065,29 @@
       });
     });
 
-    // Предпрослушивание фрагмента
+    // Воспроизведение фрагмента / блока в общем плеере AllTell
     listEl.querySelectorAll('.btn-preview-block').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const idx = parseInt(btn.dataset.index, 10);
-        const block = state.editorBlocks[idx];
-        if (!block || !block.audio_url) return;
+        playEditorBlock(idx);
+      });
+    });
 
-        if (state.previewAudio && !state.previewAudio.paused) {
-          state.previewAudio.pause();
-          state.previewAudio = null;
-          btn.innerHTML = '<i class="fas fa-play"></i>';
-          return;
-        }
+    listEl.querySelectorAll('.btn-play-playlist-block').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        playEditorBlock(idx);
+      });
+    });
 
-        try {
-          state.previewAudio = new Audio(block.audio_url);
-          state.previewAudio.play();
-          btn.innerHTML = '<i class="fas fa-stop"></i>';
-          state.previewAudio.onended = () => {
-            btn.innerHTML = '<i class="fas fa-play"></i>';
-            state.previewAudio = null;
-          };
-        } catch (e) {
-          showToast('Не удалось воспроизвести: ' + e.message, 'error');
-        }
+    listEl.querySelectorAll('.btn-play-nested-track').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const bIdx = parseInt(btn.dataset.blockIndex, 10);
+        const tIdx = parseInt(btn.dataset.trackIndex, 10);
+        playNestedPlaylistTrack(bIdx, tIdx);
       });
     });
 
@@ -1847,11 +2128,243 @@
     });
   }
 
+  // ===== ЕДИНАЯ СИСТЕМА ВОСПРОИЗВЕДЕНИЯ: РЕДАКТОР <-> ОБЩИЙ ПЛЕЕР =====
+
+  function playEditorBlock(blockIndex) {
+    const block = state.editorBlocks[blockIndex];
+    if (!block) return;
+    const gAudio = getGlobalAudio();
+    if (!gAudio) return;
+
+    const gState = gAudio.getState();
+
+    // Если блок — плейлист
+    if (block.type === 'playlist') {
+      const items = (block.items || []).filter((t) => t.audio_url);
+      if (items.length === 0) {
+        showToast('В этом плейлисте нет треков с аудиофайлом', 'warning');
+        return;
+      }
+      const isThisPlaylistPlaying = gState.track && gState.track.blockId === block.id;
+      if (isThisPlaylistPlaying && gState.isPlaying) {
+        gAudio.pause();
+        return;
+      }
+      if (isThisPlaylistPlaying && !gState.isPlaying) {
+        gAudio.resume();
+        return;
+      }
+
+      const queue = items.map((it, subIdx) => ({
+        id: it.track_id || `${block.id}_${subIdx}`,
+        blockId: block.id,
+        title: it.title,
+        author_name: `Плейлист: ${block.title}`,
+        duration: Number(it.duration) || 180,
+        audio_url: it.audio_url,
+        type: it.type || 'track'
+      }));
+
+      gAudio.playTrack(queue[0], queue, 0);
+      showToast(`Воспроизведение плейлиста «${block.title}» в общем плеере`, 'info');
+      updateEditorPlaybackUI();
+      return;
+    }
+
+    if (!block.audio_url) {
+      showToast('У этого блока нет аудиозаписи', 'warning');
+      return;
+    }
+
+    const isThisTrackPlaying = gState.track && (gState.track.blockId === block.id || gState.track.audio_url === block.audio_url);
+    if (isThisTrackPlaying && gState.isPlaying) {
+      gAudio.pause();
+      return;
+    }
+    if (isThisTrackPlaying && !gState.isPlaying) {
+      gAudio.resume();
+      return;
+    }
+
+    // Собираем сквозную очередь воспроизведения из всех доступных аудио блоков эфира
+    const fullQueue = [];
+    state.editorBlocks.forEach((b) => {
+      if (b.type === 'playlist' && Array.isArray(b.items)) {
+        b.items.forEach((it, sIdx) => {
+          if (it.audio_url) {
+            fullQueue.push({
+              id: it.track_id || `${b.id}_${sIdx}`,
+              blockId: b.id,
+              title: it.title,
+              author_name: `Плейлист: ${b.title}`,
+              duration: Number(it.duration) || 180,
+              audio_url: it.audio_url,
+              type: it.type || 'track'
+            });
+          }
+        });
+      } else if (b.audio_url) {
+        fullQueue.push({
+          id: b.id,
+          blockId: b.id,
+          title: b.title,
+          author_name: b.type === 'speech' ? 'Слова ведущего' : (b.type === 'jingle' ? 'Джингл' : 'Трек эфира'),
+          duration: Number(b.duration) || 60,
+          audio_url: b.audio_url,
+          type: b.type || 'track'
+        });
+      }
+    });
+
+    let startIdx = fullQueue.findIndex((q) => q.blockId === block.id || q.audio_url === block.audio_url);
+    if (startIdx === -1) startIdx = 0;
+
+    const trackToPlay = fullQueue[startIdx] || {
+      id: block.id,
+      blockId: block.id,
+      title: block.title,
+      author_name: block.type === 'speech' ? 'Слова ведущего' : 'Трек эфира',
+      duration: Number(block.duration) || 60,
+      audio_url: block.audio_url,
+      type: block.type || 'track'
+    };
+
+    gAudio.playTrack(trackToPlay, fullQueue.length ? fullQueue : [trackToPlay], startIdx);
+    showToast(`Воспроизведение «${trackToPlay.title}» в общем плеере`, 'info');
+    updateEditorPlaybackUI();
+  }
+
+  function playNestedPlaylistTrack(blockIndex, trackIndex) {
+    const block = state.editorBlocks[blockIndex];
+    if (!block || !block.items || !block.items[trackIndex]) return;
+    const it = block.items[trackIndex];
+    if (!it.audio_url) {
+      showToast('У трека нет аудиофайла', 'warning');
+      return;
+    }
+    const gAudio = getGlobalAudio();
+    if (!gAudio) return;
+
+    const gState = gAudio.getState();
+    const targetId = it.track_id || `${block.id}_${trackIndex}`;
+    const isSame = gState.track && (gState.track.id === targetId || gState.track.audio_url === it.audio_url);
+    if (isSame && gState.isPlaying) {
+      gAudio.pause();
+      return;
+    }
+    if (isSame && !gState.isPlaying) {
+      gAudio.resume();
+      return;
+    }
+
+    const playlistQueue = block.items.filter((t) => t.audio_url).map((t, idx) => ({
+      id: t.track_id || `${block.id}_${idx}`,
+      blockId: block.id,
+      title: t.title,
+      author_name: `Плейлист: ${block.title}`,
+      duration: Number(t.duration) || 180,
+      audio_url: t.audio_url,
+      type: t.type || 'track'
+    }));
+
+    let startIdx = playlistQueue.findIndex((q) => q.id === targetId || q.audio_url === it.audio_url);
+    if (startIdx === -1) startIdx = 0;
+
+    gAudio.playTrack(playlistQueue[startIdx], playlistQueue, startIdx);
+    showToast(`Воспроизведение «${it.title}» в общем плеере`, 'info');
+    updateEditorPlaybackUI();
+  }
+
+  function updateEditorPlaybackUI(gState = null) {
+    const gAudio = getGlobalAudio();
+    const current = gState || (gAudio ? gAudio.getState() : {});
+    const isPlaying = Boolean(current.isPlaying);
+    const currentTrack = current.track;
+    const currentUrl = currentTrack && currentTrack.audio_url;
+    const currentBlockId = currentTrack && currentTrack.blockId;
+
+    // 1. Обновляем кнопки и подсветку блоков редактора
+    const listEl = dom.editorBlocksList || dom.editorSlotsList;
+    if (listEl) {
+      listEl.querySelectorAll('.radio-eb-block').forEach((card) => {
+        const bIdx = parseInt(card.dataset.index, 10);
+        const block = state.editorBlocks[bIdx];
+        const isThisBlockPlaying = isPlaying && block && (
+          (currentBlockId && block.id === currentBlockId) ||
+          (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
+        );
+
+        card.classList.toggle('is-playing-block', Boolean(isThisBlockPlaying));
+
+        // Кнопка предпрослушивания блока
+        const previewBtn = card.querySelector('.btn-preview-block');
+        if (previewBtn) {
+          const isBtnActive = isPlaying && block && (
+            (currentBlockId && block.id === currentBlockId) ||
+            (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
+          );
+          previewBtn.classList.toggle('is-playing', Boolean(isBtnActive));
+          previewBtn.innerHTML = `<i class="fas ${isBtnActive ? 'fa-pause' : 'fa-play'}"></i>`;
+          previewBtn.title = isBtnActive ? 'Пауза' : 'Воспроизвести в общем плеере';
+        }
+
+        // Кнопка плейлиста в аккордеоне
+        const plPlayBtn = card.querySelector('.btn-play-playlist-block');
+        if (plPlayBtn) {
+          const isPlActive = isPlaying && block && (
+            (currentBlockId && block.id === currentBlockId) ||
+            (block.items && block.items.some((it) => it.audio_url === currentUrl))
+          );
+          plPlayBtn.classList.toggle('is-playing', Boolean(isPlActive));
+          plPlayBtn.innerHTML = `<i class="fas ${isPlActive ? 'fa-pause' : 'fa-play'}"></i> ${isPlActive ? 'Пауза' : 'Слушать'}`;
+        }
+
+        // Вложенные треки плейлиста
+        card.querySelectorAll('.radio-playlist-nested-track').forEach((nTrack) => {
+          const tIdx = parseInt(nTrack.dataset.trackIndex, 10);
+          const it = block && block.items && block.items[tIdx];
+          const isTrackActive = isPlaying && it && (it.audio_url === currentUrl);
+          nTrack.classList.toggle('is-playing', Boolean(isTrackActive));
+          const nPlayBtn = nTrack.querySelector('.btn-play-nested-track');
+          if (nPlayBtn) {
+            nPlayBtn.classList.toggle('is-playing', Boolean(isTrackActive));
+            nPlayBtn.innerHTML = `<i class="fas ${isTrackActive ? 'fa-pause' : 'fa-play'}"></i>`;
+            nPlayBtn.title = isTrackActive ? 'Пауза' : 'Воспроизвести в общем плеере';
+          }
+        });
+      });
+    }
+
+    // 2. Обновляем клипы на шкале времени (Timeline Ribbon)
+    if (dom.radioTimelineTrack) {
+      dom.radioTimelineTrack.querySelectorAll('.radio-timeline-clip').forEach((clip) => {
+        const bIdx = parseInt(clip.dataset.index, 10);
+        const block = state.editorBlocks[bIdx];
+        const isClipPlaying = isPlaying && block && (
+          (currentBlockId && block.id === currentBlockId) ||
+          (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
+        );
+        clip.classList.toggle('is-playing', Boolean(isClipPlaying));
+      });
+    }
+
+    // 3. Обновляем кнопки в шторке медиатеки
+    if (dom.drawerContentList) {
+      dom.drawerContentList.querySelectorAll('.btn-drawer-play').forEach((btn) => {
+        const url = btn.dataset.url;
+        const isThisTrackPlaying = isPlaying && url && currentUrl === url;
+        btn.innerHTML = `<i class="fas ${isThisTrackPlaying ? 'fa-pause' : 'fa-play'}"></i>`;
+        btn.classList.toggle('is-playing', Boolean(isThisTrackPlaying));
+      });
+    }
+  }
+
   // Общий рендерер редактора
   function renderEditor() {
     renderTimelineRibbon();
     renderEditorBlocks();
     updateCapacityUI();
+    updateEditorPlaybackUI();
   }
 
   // Сохраняем имя renderEditorSlots для обратной совместимости
@@ -1993,10 +2506,27 @@
     if (listEl) listEl.innerHTML = '<p class="alltell-state">Загружаем плейлисты…</p>';
 
     try {
-      const data = await api('/api/radio/playlists?limit=50');
-      const playlists = (data && data.playlists) || [];
+      const myData = (window.authManager && window.authManager.getToken())
+        ? await api('/api/radio/playlists/mine').catch(() => ({ playlists: [] }))
+        : { playlists: [] };
+      const publicData = await api('/api/radio/playlists?limit=50&includeMine=1').catch(() => ({ playlists: [] }));
 
-      if (playlists.length === 0) {
+      const map = new Map();
+      (myData.playlists || []).forEach((p) => {
+        p._isMine = true;
+        map.set(p.id, p);
+      });
+      (publicData.playlists || []).forEach((p) => {
+        if (!map.has(p.id)) {
+          const curUser = window.authManager && window.authManager.getUser();
+          p._isMine = Boolean(curUser && String(curUser.id) === String(p.user_id));
+          map.set(p.id, p);
+        }
+      });
+
+      const allPlaylists = Array.from(map.values());
+
+      if (allPlaylists.length === 0) {
         if (listEl) {
           listEl.innerHTML = `
             <div style="text-align:center; padding:24px; color:#94a3b8;">
@@ -2014,23 +2544,63 @@
         return;
       }
 
-      if (listEl) {
-        listEl.innerHTML = playlists.map((pl) => `
-          <div class="radio-drawer-item" style="margin-bottom:8px; padding:10px 14px;">
-            <div style="display:flex; align-items:center; gap:12px; min-width:0;">
-              <div style="width:40px; height:40px; border-radius:8px; background:rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center; color:#c084fc; font-size:1.1rem; flex-shrink:0;">
-                <i class="fas fa-list-check"></i>
-              </div>
-              <div style="min-width:0;">
-                <strong style="color:#fff; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pl.title)}</strong>
-                <span style="font-size:0.8rem; color:#94a3b8;">${pl.tracks_count || 0} треков • ${formatDuration(pl.total_duration || 0)}</span>
-              </div>
-            </div>
-            <button type="button" class="btn btn-primary btn-sm btn-pick-playlist-for-timeline" data-id="${pl.id}">
-              <i class="fas fa-plus"></i> Вставить
-            </button>
+      let activeFilter = 'all'; // 'all', 'mine', 'public'
+
+      function renderPickList() {
+        if (!listEl) return;
+        const filtered = allPlaylists.filter((pl) => {
+          if (activeFilter === 'mine') return pl._isMine;
+          if (activeFilter === 'public') return Boolean(pl.is_public);
+          return true;
+        });
+
+        listEl.innerHTML = `
+          <div style="display:flex; gap:8px; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">
+            <button type="button" class="btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-secondary'} btn-pick-filter" data-filter="all">Все (${allPlaylists.length})</button>
+            <button type="button" class="btn btn-sm ${activeFilter === 'mine' ? 'btn-primary' : 'btn-secondary'} btn-pick-filter" data-filter="mine"><i class="fas fa-lock" style="font-size:0.75rem;"></i> Мои плейлисты (${allPlaylists.filter(p => p._isMine).length})</button>
+            <button type="button" class="btn btn-sm ${activeFilter === 'public' ? 'btn-primary' : 'btn-secondary'} btn-pick-filter" data-filter="public">Публичные (${allPlaylists.filter(p => p.is_public).length})</button>
           </div>
-        `).join('');
+          <div class="pick-playlists-items" style="display:flex; flex-direction:column; gap:8px;">
+            ${filtered.length === 0 ? '<p style="color:#94a3b8; text-align:center; padding:16px;">Нет плейлистов в этой категории</p>' : filtered.map((pl) => {
+              const trackCount = pl.trackCount || pl.tracks_count || (pl.tracks && pl.tracks.length) || 0;
+              const totalDur = pl.totalDuration || pl.total_duration || 0;
+              let badgeHtml = '';
+              if (!pl.is_public) {
+                badgeHtml = '<span style="font-size:0.72rem; color:#fca5a5; background:rgba(239,68,68,0.2); padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fas fa-lock"></i> Закрытый</span>';
+              } else if (pl._isMine) {
+                badgeHtml = '<span style="font-size:0.72rem; color:#a5b4fc; background:rgba(99,102,241,0.2); padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fas fa-user-check"></i> Мой</span>';
+              } else {
+                badgeHtml = '<span style="font-size:0.72rem; color:#6ee7b7; background:rgba(16,185,129,0.2); padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fas fa-globe"></i> Публичный</span>';
+              }
+              return `
+                <div class="radio-drawer-item" style="padding:10px 14px;">
+                  <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                    <div style="width:40px; height:40px; border-radius:8px; background:rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center; color:#c084fc; font-size:1.1rem; flex-shrink:0;">
+                      <i class="${!pl.is_public ? 'fas fa-lock' : 'fas fa-list-check'}"></i>
+                    </div>
+                    <div style="min-width:0;">
+                      <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                        <strong style="color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pl.title)}</strong>
+                        ${badgeHtml}
+                      </div>
+                      <span style="font-size:0.8rem; color:#94a3b8;">${trackCount} треков • ${formatDuration(totalDur)}</span>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm btn-pick-playlist-for-timeline" data-id="${pl.id}">
+                    <i class="fas fa-plus"></i> Вставить
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+
+        listEl.querySelectorAll('.btn-pick-filter').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            activeFilter = btn.dataset.filter;
+            renderPickList();
+          });
+        });
 
         listEl.querySelectorAll('.btn-pick-playlist-for-timeline').forEach((btn) => {
           btn.addEventListener('click', async () => {
@@ -2071,6 +2641,8 @@
           });
         });
       }
+
+      renderPickList();
     } catch (e) {
       if (listEl) listEl.innerHTML = `<p class="alltell-error">Ошибка загрузки: ${escapeHtml(e.message)}</p>`;
     }
@@ -2098,8 +2670,25 @@
     }
 
     try {
-      const data = await api('/api/radio/playlists?limit=50');
-      const playlists = (data && data.playlists) || [];
+      const myData = (window.authManager && window.authManager.getToken())
+        ? await api('/api/radio/playlists/mine').catch(() => ({ playlists: [] }))
+        : { playlists: [] };
+      const publicData = await api('/api/radio/playlists?limit=50&includeMine=1').catch(() => ({ playlists: [] }));
+
+      const map = new Map();
+      (myData.playlists || []).forEach((p) => {
+        p._isMine = true;
+        map.set(p.id, p);
+      });
+      (publicData.playlists || []).forEach((p) => {
+        if (!map.has(p.id)) {
+          const curUser = window.authManager && window.authManager.getUser();
+          p._isMine = Boolean(curUser && String(curUser.id) === String(p.user_id));
+          map.set(p.id, p);
+        }
+      });
+
+      const playlists = Array.from(map.values());
 
       if (playlists.length === 0) {
         if (dom.smartGapPlaylistsList) {
@@ -2110,18 +2699,31 @@
       }
 
       if (dom.smartGapPlaylistsList) {
-        dom.smartGapPlaylistsList.innerHTML = playlists.map((pl) => `
-          <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:8px; margin-bottom:6px; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <input type="checkbox" class="smart-gap-playlist-cb" value="${pl.id}" data-title="${escapeHtml(pl.title)}" data-tracks="${pl.tracks_count || 0}" data-dur="${pl.total_duration || 0}">
-              <div>
-                <strong style="color:#fff; font-size:0.88rem; display:block;">${escapeHtml(pl.title)}</strong>
-                <span style="font-size:0.78rem; color:#94a3b8;">${pl.tracks_count || 0} треков • ${formatDuration(pl.total_duration || 0)}</span>
+        dom.smartGapPlaylistsList.innerHTML = playlists.map((pl) => {
+          const trackCount = pl.trackCount || pl.tracks_count || (pl.tracks && pl.tracks.length) || 0;
+          const totalDur = pl.totalDuration || pl.total_duration || 0;
+          let badgeHtml = '';
+          if (!pl.is_public) {
+            badgeHtml = '<span style="font-size:0.72rem; color:#fca5a5; background:rgba(239,68,68,0.2); padding:1px 5px; border-radius:4px; margin-left:6px;"><i class="fas fa-lock"></i> Закрытый</span>';
+          } else if (pl._isMine) {
+            badgeHtml = '<span style="font-size:0.72rem; color:#a5b4fc; background:rgba(99,102,241,0.2); padding:1px 5px; border-radius:4px; margin-left:6px;"><i class="fas fa-user-check"></i> Мой</span>';
+          }
+          return `
+            <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:8px; margin-bottom:6px; cursor:pointer;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <input type="checkbox" class="smart-gap-playlist-cb" value="${pl.id}" data-title="${escapeHtml(pl.title)}" data-tracks="${trackCount}" data-dur="${totalDur}">
+                <div>
+                  <div style="display:flex; align-items:center; gap:4px;">
+                    <strong style="color:#fff; font-size:0.88rem;">${escapeHtml(pl.title)}</strong>
+                    ${badgeHtml}
+                  </div>
+                  <span style="font-size:0.78rem; color:#94a3b8;">${trackCount} треков • ${formatDuration(totalDur)}</span>
+                </div>
               </div>
-            </div>
-            <span style="font-size:0.8rem; color:#a5b4fc; font-family:monospace;">${formatDuration(pl.total_duration || 0)}</span>
-          </label>
-        `).join('');
+              <span style="font-size:0.8rem; color:#a5b4fc; font-family:monospace;">${formatDuration(totalDur)}</span>
+            </label>
+          `;
+        }).join('');
 
         const updateSelectedSummary = () => {
           const cbs = dom.smartGapPlaylistsList.querySelectorAll('.smart-gap-playlist-cb:checked');
@@ -2152,6 +2754,14 @@
         if (firstCb) {
           firstCb.checked = true;
           updateSelectedSummary();
+        }
+      }
+    } catch (e) {
+      if (dom.smartGapPlaylistsList) {
+        dom.smartGapPlaylistsList.innerHTML = `<p class="alltell-error">Ошибка: ${escapeHtml(e.message)}</p>`;
+      }
+    }
+  }
         }
       }
     } catch (e) {
@@ -2235,7 +2845,12 @@
         isCollapsed: false
       };
 
-      addBlockToEditor(compositeBlock, state.activeGapInfo.targetIndex);
+      if (state.activeGapInfo.targetIndex >= 0 && state.editorBlocks[state.activeGapInfo.targetIndex] && state.editorBlocks[state.activeGapInfo.targetIndex].type === 'gap') {
+        state.editorBlocks.splice(state.activeGapInfo.targetIndex, 1, compositeBlock);
+        renderEditor();
+      } else {
+        addBlockToEditor(compositeBlock, state.activeGapInfo.targetIndex);
+      }
       hideModal('modalSmartGapFill');
       showToast(`Пауза эфира успешно заполнена: добавлено ${selectedTracks.length} треков на ${formatDuration(accumulatedDur)}!`, 'success');
     } catch (err) {
@@ -2284,29 +2899,54 @@
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <span style="font-size:0.75rem; color:#94a3b8; font-family:monospace;">${formatDuration(t.duration)}</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm btn-drawer-play" data-id="${t.id}" data-url="${escapeHtml(t.audio_url)}" data-title="${escapeHtml(t.title)}" data-dur="${t.duration}" title="Слушать в общем плеере"><i class="fas fa-play"></i></button>
               <button type="button" class="btn btn-secondary btn-sm btn-drawer-add" title="Добавить в эфир"><i class="fas fa-plus"></i></button>
             </div>
           </div>
         `).join('');
       } else if (state.mediaDrawerTab === 'playlists') {
-        const data = await api('/api/radio/playlists?limit=50');
-        const playlists = (data && data.playlists) || [];
+        const myData = (window.authManager && window.authManager.getToken())
+          ? await api('/api/radio/playlists/mine').catch(() => ({ playlists: [] }))
+          : { playlists: [] };
+        const publicData = await api('/api/radio/playlists?limit=50&includeMine=1').catch(() => ({ playlists: [] }));
+
+        const map = new Map();
+        (myData.playlists || []).forEach((p) => {
+          p._isMine = true;
+          map.set(p.id, p);
+        });
+        (publicData.playlists || []).forEach((p) => {
+          if (!map.has(p.id)) {
+            const curUser = window.authManager && window.authManager.getUser();
+            p._isMine = Boolean(curUser && String(curUser.id) === String(p.user_id));
+            map.set(p.id, p);
+          }
+        });
+
+        const playlists = Array.from(map.values());
         if (playlists.length === 0) {
           dom.drawerContentList.innerHTML = '<p style="color:#94a3b8; text-align:center; padding:20px;">Нет плейлистов</p>';
           return;
         }
-        dom.drawerContentList.innerHTML = playlists.map((pl) => `
-          <div class="radio-drawer-item" draggable="true" data-type="playlist" data-id="${pl.id}" data-title="${escapeHtml(pl.title)}" data-dur="${pl.total_duration || 0}">
-            <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-              <i class="fas fa-list-check" style="color:#c084fc;"></i>
-              <span style="color:#fff; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pl.title)}</span>
+
+        dom.drawerContentList.innerHTML = playlists.map((pl) => {
+          const dur = pl.totalDuration || pl.total_duration || 0;
+          const isClosed = !pl.is_public;
+          return `
+            <div class="radio-drawer-item" draggable="true" data-type="playlist" data-id="${pl.id}" data-title="${escapeHtml(pl.title)}" data-dur="${dur}">
+              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                <i class="${isClosed ? 'fas fa-lock' : 'fas fa-list-check'}" style="color:${isClosed ? '#f87171' : '#c084fc'}; flex-shrink:0;"></i>
+                <span style="color:#fff; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(pl.title)}</span>
+                ${isClosed ? '<span style="font-size:0.68rem; color:#fca5a5; background:rgba(239,68,68,0.2); padding:1px 4px; border-radius:3px; flex-shrink:0;">🔒</span>' : ''}
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                <span style="font-size:0.75rem; color:#94a3b8; font-family:monospace;">${formatDuration(dur)}</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm btn-drawer-play-pl" data-id="${pl.id}" title="Слушать в общем плеере"><i class="fas fa-play"></i></button>
+                <button type="button" class="btn btn-secondary btn-sm btn-drawer-add-pl" data-id="${pl.id}" title="Добавить в эфир"><i class="fas fa-plus"></i></button>
+              </div>
             </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span style="font-size:0.75rem; color:#94a3b8; font-family:monospace;">${formatDuration(pl.total_duration || 0)}</span>
-              <button type="button" class="btn btn-secondary btn-sm btn-drawer-add-pl" data-id="${pl.id}" title="Добавить в эфир"><i class="fas fa-plus"></i></button>
-            </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       }
 
       // Drag & Drop из шторки
@@ -2320,6 +2960,55 @@
             duration: Number(item.dataset.dur) || 180
           }));
           e.dataTransfer.effectAllowed = 'copy';
+        });
+      });
+
+      // Воспроизведение треков и плейлистов из шторки в общем плеере
+      dom.drawerContentList.querySelectorAll('.btn-drawer-play').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const trId = btn.dataset.id;
+          const trUrl = btn.dataset.url;
+          const trTitle = btn.dataset.title;
+          const trDur = Number(btn.dataset.dur) || 180;
+          const gAudio = getGlobalAudio();
+          if (!gAudio) return;
+          const gState = gAudio.getState();
+          if (gState.track && gState.track.audio_url === trUrl && gState.isPlaying) {
+            gAudio.pause();
+            return;
+          }
+          if (gState.track && gState.track.audio_url === trUrl && !gState.isPlaying) {
+            gAudio.resume();
+            return;
+          }
+          const tr = { id: trId, title: trTitle, audio_url: trUrl, duration: trDur, author_name: 'Медиатека' };
+          gAudio.playTrack(tr, [tr], 0);
+          showToast(`Воспроизведение «${trTitle}» в общем плеере`, 'info');
+        });
+      });
+
+      dom.drawerContentList.querySelectorAll('.btn-drawer-play-pl').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const plId = btn.dataset.id;
+          try {
+            btn.disabled = true;
+            const fullPl = await api(`/api/radio/playlists/${plId}`);
+            if (!fullPl || !fullPl.tracks || fullPl.tracks.length === 0) {
+              showToast('В этом плейлисте нет треков', 'warning');
+              return;
+            }
+            const gAudio = getGlobalAudio();
+            if (gAudio) {
+              gAudio.playTrack(fullPl.tracks[0], fullPl.tracks, 0);
+              showToast(`Воспроизведение плейлиста «${fullPl.title}» в общем плеере`, 'success');
+            }
+          } catch (err) {
+            showToast('Ошибка запуска: ' + err.message, 'error');
+          } finally {
+            btn.disabled = false;
+          }
         });
       });
 
@@ -2657,6 +3346,9 @@
             openTrackPage(gState.track.id);
           }
         }
+
+        // Обновление состояния воспроизведения в редакторе радиоэфира
+        updateEditorPlaybackUI(gState);
       });
     }
 
@@ -2897,23 +3589,98 @@
       dom.radioTimelineTrack.style.outline = '';
     });
 
+    // Кнопка увеличения шкалы времени (+15м)
+    dom.btnTimelineExtendScale?.addEventListener('click', () => {
+      state.baseScaleSec = (state.baseScaleSec || 1200) + 900;
+      renderTimelineRibbon();
+      showToast(`Временная линия увеличена на 15 мин (Шкала: ${Math.round(state.baseScaleSec / 60)} мин)`, 'info');
+    });
+
     dom.radioTimelineTrack?.addEventListener('drop', (e) => {
       e.preventDefault();
       dom.radioTimelineTrack.style.outline = '';
+      if (e.target.closest('.radio-timeline-clip')) return;
+
+      const trackRect = dom.radioTimelineTrack.getBoundingClientRect();
+      const clickX = Math.max(0, e.clientX - trackRect.left);
+      const { totalDurationSec } = syncCompiledSlots();
+      const baseScale = state.baseScaleSec || 1200;
+      const currentZoom = state.timelineZoom || 1.0;
+      const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
+      const effectiveScale = Math.max(60, Math.round(neededScale / currentZoom));
+      const targetSec = Math.round((clickX / Math.max(10, trackRect.width)) * effectiveScale);
+
+      // 1. Проверяем, перемещается ли существующий блок по таймлайну
+      let fromIdx = state.draggedBlockIndex;
+      if (fromIdx === null || fromIdx === undefined) {
+        try {
+          const raw = e.dataTransfer.getData('text/plain');
+          if (raw) {
+            const data = JSON.parse(raw);
+            if (data && data.type === 'move_block' && data.index !== undefined) fromIdx = data.index;
+          }
+        } catch (_) {}
+      }
+
+      if (fromIdx !== null && fromIdx !== undefined && !isNaN(fromIdx)) {
+        const item = state.editorBlocks.splice(fromIdx, 1)[0];
+        if (!item) return;
+
+        // Если блок отодвинут далеко вправо за край существующих треков:
+        if (targetSec > totalDurationSec + 30) {
+          const gapSec = targetSec - totalDurationSec;
+          const gapBlock = {
+            id: genBlockId(),
+            type: 'gap',
+            title: 'Пауза в эфире (музыкальная пустота)',
+            duration: Math.max(30, gapSec)
+          };
+          state.editorBlocks.push(gapBlock);
+          state.editorBlocks.push(item);
+          if (targetSec + item.duration > baseScale) {
+            state.baseScaleSec = Math.max(state.baseScaleSec, Math.ceil((targetSec + item.duration) * 1.15));
+          }
+          renderEditor();
+          showToast(`Блок отодвинут за край. Создана пауза ${formatDuration(gapSec)}, временная линия увеличена!`, 'info');
+        } else {
+          state.editorBlocks.push(item);
+          renderEditor();
+          showToast(`Блок «${item.title}» перемещен в конец эфира`, 'info');
+        }
+        return;
+      }
+
+      // 2. Иначе это перетаскивание из боковой шторки
       try {
         const raw = e.dataTransfer.getData('text/plain');
         if (raw) {
           const item = JSON.parse(raw);
           if (item && item.type) {
-            addBlockToEditor({
-              id: genBlockId(),
-              type: item.type === 'playlist' ? 'playlist' : 'track',
-              track_id: item.id || null,
-              title: item.title || 'Новая запись',
-              audio_url: item.audio_url || null,
-              duration: Number(item.duration) || 180
-            });
-            showToast(`«${item.title}» добавлен в ленту эфира!`, 'success');
+            if (targetSec > totalDurationSec + 30) {
+              const gapSec = targetSec - totalDurationSec;
+              state.editorBlocks.push({
+                id: genBlockId(),
+                type: 'gap',
+                title: 'Пауза в эфире (музыкальная пустота)',
+                duration: Math.max(30, gapSec)
+              });
+              if (targetSec + (Number(item.duration) || 180) > baseScale) {
+                state.baseScaleSec = Math.max(state.baseScaleSec, Math.ceil((targetSec + (Number(item.duration) || 180)) * 1.15));
+              }
+            }
+            if (item.type === 'playlist') {
+              openPickPlaylistForTimeline(item.id);
+            } else {
+              addBlockToEditor({
+                id: genBlockId(),
+                type: item.type === 'speech' ? 'speech' : 'track',
+                track_id: item.id || null,
+                title: item.title || 'Новая запись',
+                audio_url: item.audio_url || null,
+                duration: Number(item.duration) || 180
+              });
+              showToast(`«${item.title}» добавлен в ленту эфира!`, 'success');
+            }
           }
         }
       } catch (err) {

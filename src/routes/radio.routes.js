@@ -163,7 +163,7 @@ router.delete('/radio/favorites/:trackId', auth.authenticateToken, auth.checkApp
 // GET /api/radio/playlists — каталог плейлистов
 router.get('/radio/playlists', optionalUser, async (req, res) => {
   try {
-    const { userId, isPublic, search, page, limit } = req.query;
+    const { userId, isPublic, search, page, limit, includeMine } = req.query;
     const reqUserId = req.user ? req.user.id : null;
     const isAdmin = isRootOrAdmin(req.user);
     const result = await radioStore.listPlaylists({
@@ -171,6 +171,7 @@ router.get('/radio/playlists', optionalUser, async (req, res) => {
       requestingUserId: reqUserId,
       isAdmin,
       isPublic: isPublic !== undefined ? (isPublic === '1' || isPublic === 'true') : null,
+      includeMine: includeMine === '1' || includeMine === 'true' || includeMine === true,
       search,
       page,
       limit
@@ -412,7 +413,8 @@ router.put('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApp
       return res.status(404).json({ error: 'Радиостанция не найдена' });
     }
 
-    if (station.owner_id !== req.user.id && !isRootOrAdmin(req.user)) {
+    const isOwner = req.user && String(station.owner_id) === String(req.user.id);
+    if (!isOwner && !isRootOrAdmin(req.user)) {
       return res.status(403).json({ error: 'Только владелец станции может редактировать ленту времени' });
     }
 
@@ -437,7 +439,8 @@ router.delete('/radio/stations/:id/timeline', auth.authenticateToken, auth.check
       return res.status(404).json({ error: 'Радиостанция не найдена' });
     }
 
-    if (station.owner_id !== req.user.id && !isRootOrAdmin(req.user)) {
+    const isOwner = req.user && String(station.owner_id) === String(req.user.id);
+    if (!isOwner && !isRootOrAdmin(req.user)) {
       return res.status(403).json({ error: 'Только владелец станции может очистить эфир' });
     }
 
