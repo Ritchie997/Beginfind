@@ -376,6 +376,16 @@
   color: #fff;
 }
 
+.radio-action-btn.is-active,
+.standalone-action-btn.is-active,
+.feed-player-sub-btn.is-active,
+.feed-player-ctrl-btn.is-active {
+  color: #ff4757 !important;
+  border-color: rgba(255, 71, 87, 0.45) !important;
+  background: rgba(255, 71, 87, 0.18) !important;
+  box-shadow: 0 0 10px rgba(255, 71, 87, 0.25);
+}
+
 .radio-action-btn.btn-unfreeze {
   color: #ffa502;
   border-color: rgba(255, 165, 2, 0.35);
@@ -798,6 +808,11 @@
   }
   .radio-controls-main {
     justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .deck-btn-label {
+    display: none;
   }
 }
 
@@ -1009,7 +1024,7 @@
   transition: color 0.15s;
 }
 
-.standalone-action-btn:hover, .standalone-action-btn.is-active {
+.standalone-action-btn:hover {
   color: #fff;
 }
 

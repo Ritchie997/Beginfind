@@ -106,8 +106,14 @@
           <!-- Собственный плеер трека на странице -->
           <div class="radio-track-standalone-player">
             <div class="standalone-player-controls">
-              <button type="button" class="standalone-play-btn" id="trackPagePlayBtn" title="Воспроизведение">
+              <button type="button" class="standalone-action-btn" id="trackPagePrevBtn" title="Предыдущий трек" aria-label="Предыдущий трек">
+                <i class="fas fa-backward-step"></i>
+              </button>
+              <button type="button" class="standalone-play-btn" id="trackPagePlayBtn" title="Воспроизведение" aria-label="Воспроизведение">
                 <i class="fas fa-play"></i>
+              </button>
+              <button type="button" class="standalone-action-btn" id="trackPageNextBtn" title="Следующий трек" aria-label="Следующий трек">
+                <i class="fas fa-forward-step"></i>
               </button>
               <div class="standalone-scrub-wrap">
                 <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">
@@ -118,10 +124,10 @@
                   <div class="standalone-progress-fill" id="trackPageProgressFill"></div>
                 </div>
               </div>
-              <button type="button" class="standalone-action-btn" id="trackPageLoopBtn" title="Зациклить">
+              <button type="button" class="standalone-action-btn" id="trackPageLoopBtn" title="Зациклить" aria-label="Зациклить">
                 <i class="fas fa-repeat"></i>
               </button>
-              <button type="button" class="standalone-action-btn" id="trackPageMuteBtn" title="Глушить звук">
+              <button type="button" class="standalone-action-btn" id="trackPageMuteBtn" title="Глушить звук" aria-label="Глушить звук">
                 <i class="fas fa-volume-high"></i>
               </button>
               <input type="range" min="0" max="1" step="0.05" value="0.9" class="standalone-vol-slider" id="trackPageVolumeSlider">
@@ -216,17 +222,23 @@
 
         <div class="radio-deck-controls">
           <div class="radio-controls-main">
-            <button type="button" class="radio-btn-play" id="deckPlayBtn" title="Воспроизведение / Пауза">
+            <button type="button" class="radio-action-btn" id="deckPrevBtn" title="Предыдущий трек" aria-label="Предыдущий трек">
+              <i class="fas fa-backward-step"></i> <span class="deck-btn-label">Предыдущий</span>
+            </button>
+            <button type="button" class="radio-btn-play" id="deckPlayBtn" title="Воспроизведение / Пауза" aria-label="Воспроизведение / Пауза">
               <i class="fas fa-play"></i>
             </button>
+            <button type="button" class="radio-action-btn" id="deckNextBtn" title="Следующий трек" aria-label="Следующий трек">
+              <i class="fas fa-forward-step"></i> <span class="deck-btn-label">Следующий</span>
+            </button>
+            <button type="button" class="radio-action-btn" id="deckLoopBtn" title="Зациклить" aria-label="Зациклить">
+              <i class="fas fa-repeat"></i> <span class="deck-btn-label">Зациклить</span>
+            </button>
             <button type="button" class="radio-action-btn btn-unfreeze" id="deckUnfreezeBtn" title="Слушать текущий трек с самого начала, отменив фиксацию по времени">
-              <i class="fas fa-rotate-left"></i> Слушать с начала
+              <i class="fas fa-rotate-left"></i> <span class="deck-btn-label">С начала</span>
             </button>
             <button type="button" class="radio-action-btn btn-live" id="deckLiveSyncBtn" title="Вернуться к синхронному живому эфиру">
-              <i class="fas fa-satellite-dish"></i> В эфир (Live)
-            </button>
-            <button type="button" class="radio-action-btn" id="deckSkipBtn" title="Пропустить этот трек и перейти к следующему">
-              <i class="fas fa-forward-step"></i> Пропустить
+              <i class="fas fa-satellite-dish"></i> <span class="deck-btn-label">В эфир</span>
             </button>
           </div>
 

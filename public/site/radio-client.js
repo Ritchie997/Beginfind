@@ -84,7 +84,9 @@
       trackPageDuration: document.getElementById('trackPageDuration'),
       trackPageSize: document.getElementById('trackPageSize'),
       trackPageDate: document.getElementById('trackPageDate'),
+      trackPagePrevBtn: document.getElementById('trackPagePrevBtn'),
       trackPagePlayBtn: document.getElementById('trackPagePlayBtn'),
+      trackPageNextBtn: document.getElementById('trackPageNextBtn'),
       trackPageProgressBar: document.getElementById('trackPageProgressBar'),
       trackPageProgressFill: document.getElementById('trackPageProgressFill'),
       trackPageCurrentTime: document.getElementById('trackPageCurrentTime'),
@@ -109,16 +111,26 @@
       deckTrackSub: document.getElementById('deckTrackSub'),
       deckTrackType: document.getElementById('deckTrackType'),
       deckVisualizer: document.getElementById('deckVisualizer'),
+      deckPrevBtn: document.getElementById('deckPrevBtn'),
       deckPlayBtn: document.getElementById('deckPlayBtn'),
+      deckNextBtn: document.getElementById('deckNextBtn') || document.getElementById('deckSkipBtn'),
+      deckLoopBtn: document.getElementById('deckLoopBtn'),
       deckUnfreezeBtn: document.getElementById('deckUnfreezeBtn'),
       deckLiveSyncBtn: document.getElementById('deckLiveSyncBtn'),
-      deckSkipBtn: document.getElementById('deckSkipBtn'),
+      deckSkipBtn: document.getElementById('deckNextBtn') || document.getElementById('deckSkipBtn'),
       deckProgressBar: document.getElementById('deckProgressBar'),
       deckProgressFill: document.getElementById('deckProgressFill'),
       deckTimeCurrent: document.getElementById('deckTimeCurrent'),
       deckTimeRemaining: document.getElementById('deckTimeRemaining'),
       deckVolumeSlider: document.getElementById('deckVolumeSlider'),
       deckMuteBtn: document.getElementById('deckMuteBtn'),
+
+      // Отдельный плеер ленты (если отображается)
+      feedPlayerBar: document.getElementById('feedPlayerBar'),
+      feedPlayerPrevBtn: document.getElementById('feedPlayerPrevBtn'),
+      feedPlayerPlayBtn: document.getElementById('feedPlayerPlayBtn'),
+      feedPlayerNextBtn: document.getElementById('feedPlayerNextBtn'),
+      feedPlayerLoopBtn: document.getElementById('feedPlayerLoopBtn'),
 
       // Станции и лента
       stationsGrid: document.getElementById('stationsGrid'),
@@ -268,6 +280,50 @@
 
     if (dom.deckLiveSyncBtn) {
       dom.deckLiveSyncBtn.style.display = state.isTimeshift ? 'inline-flex' : 'none';
+    }
+
+    if (dom.deckLoopBtn) {
+      dom.deckLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
+      dom.deckLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+    }
+  }
+
+  function skipSlot() {
+    if (state.nextSlots && state.nextSlots.length > 0) {
+      const next = state.nextSlots.shift();
+      if (state.currentSlot) state.prevSlots.unshift(state.currentSlot);
+      state.currentSlot = next;
+      state.isTimeshift = true;
+      const gAudio = getGlobalAudio();
+      if (gAudio && state.currentStation) {
+        gAudio.playRadio(state.currentStation, next, 0);
+      }
+      updateDeckUI();
+    } else if (state.currentStation) {
+      tuneStation(state.currentStation, true);
+    }
+  }
+
+  function prevSlot() {
+    const gAudio = getGlobalAudio();
+    const cur = gAudio ? gAudio.getState().currentTime : 0;
+    if (cur > 3) {
+      if (gAudio) gAudio.seek(0);
+      state.isTimeshift = true;
+      updateDeckUI();
+      return;
+    }
+    if (state.prevSlots && state.prevSlots.length > 0) {
+      const prev = state.prevSlots.shift();
+      if (state.currentSlot) state.nextSlots.unshift(state.currentSlot);
+      state.currentSlot = prev;
+      state.isTimeshift = true;
+      if (gAudio && state.currentStation) {
+        gAudio.playRadio(state.currentStation, prev, 0);
+      }
+      updateDeckUI();
+    } else if (gAudio) {
+      gAudio.seek(0);
     }
   }
 
@@ -1068,6 +1124,18 @@
         dom.trackPageDeleteBtn.style.display = isOwnerOrAdmin ? 'inline-flex' : 'none';
       }
 
+      if (gAudio) {
+        const gState = gAudio.getState();
+        if (dom.trackPageLoopBtn) {
+          dom.trackPageLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
+          dom.trackPageLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+        }
+        if (dom.trackPagePlayBtn) {
+          const isThisPlaying = gState.isPlaying && gState.track && gState.track.id === track.id;
+          dom.trackPagePlayBtn.innerHTML = isThisPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+        }
+      }
+
       window.history.pushState(null, '', `/radio/track/${track.id}`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -1529,16 +1597,26 @@
         updateFeedPlayButtons();
 
         // Обновление плеера на странице трека
-        if (currentViewingTrack && gState.track && gState.track.id === currentViewingTrack.id) {
+        if (currentViewingTrack) {
+          const isThis = gState.track && gState.track.id === currentViewingTrack.id;
           if (dom.trackPagePlayBtn) {
-            dom.trackPagePlayBtn.innerHTML = gState.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+            dom.trackPagePlayBtn.innerHTML = (gState.isPlaying && isThis) ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
           }
-          const cur = globalAudio.audio.currentTime || 0;
-          const dur = globalAudio.audio.duration || currentViewingTrack.duration || 0;
-          if (dom.trackPageCurrentTime) dom.trackPageCurrentTime.textContent = formatDuration(cur);
-          if (dom.trackPageTotalDuration) dom.trackPageTotalDuration.textContent = formatDuration(dur);
-          if (dom.trackPageProgressFill && dur > 0) {
-            dom.trackPageProgressFill.style.width = `${Math.min(100, (cur / dur) * 100)}%`;
+          if (dom.trackPageLoopBtn) {
+            dom.trackPageLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
+            dom.trackPageLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+          }
+          if (isThis) {
+            const cur = globalAudio.audio.currentTime || 0;
+            const dur = globalAudio.audio.duration || currentViewingTrack.duration || 0;
+            if (dom.trackPageCurrentTime) dom.trackPageCurrentTime.textContent = formatDuration(cur);
+            if (dom.trackPageTotalDuration) dom.trackPageTotalDuration.textContent = formatDuration(dur);
+            if (dom.trackPageProgressFill && dur > 0) {
+              dom.trackPageProgressFill.style.width = `${Math.min(100, (cur / dur) * 100)}%`;
+            }
+          }
+          if (dom.trackView && !dom.trackView.hidden && dom.trackView.style.display !== 'none' && gState.track && gState.track.id !== currentViewingTrack.id) {
+            openTrackPage(gState.track.id);
           }
         }
       });
@@ -1561,6 +1639,10 @@
     });
 
     // 2. Управление эфирной декой
+    dom.deckPrevBtn?.addEventListener('click', () => {
+      prevSlot();
+    });
+
     dom.deckPlayBtn?.addEventListener('click', () => {
       const gAudio = getGlobalAudio();
       if (!gAudio) return;
@@ -1581,6 +1663,18 @@
       }
     });
 
+    dom.deckNextBtn?.addEventListener('click', () => {
+      skipSlot();
+    });
+
+    dom.deckLoopBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.toggleLoop();
+        updateDeckUI();
+      }
+    });
+
     dom.deckUnfreezeBtn?.addEventListener('click', () => {
       const gAudio = getGlobalAudio();
       if (!gAudio) return;
@@ -1593,22 +1687,6 @@
     dom.deckLiveSyncBtn?.addEventListener('click', () => {
       if (!state.currentStation) return;
       tuneStation(state.currentStation, true);
-    });
-
-    dom.deckSkipBtn?.addEventListener('click', () => {
-      if (state.nextSlots.length > 0) {
-        const next = state.nextSlots.shift();
-        state.prevSlots.unshift(state.currentSlot);
-        state.currentSlot = next;
-        state.isTimeshift = true;
-        const gAudio = getGlobalAudio();
-        if (gAudio) {
-          gAudio.playRadio(state.currentStation, next, 0);
-        }
-        updateDeckUI();
-      } else if (state.currentStation) {
-        tuneStation(state.currentStation, true);
-      }
     });
 
     dom.deckProgressBar?.addEventListener('click', (e) => {
@@ -2206,6 +2284,11 @@
       switchTab('feed');
     });
 
+    dom.trackPagePrevBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.playPrev();
+    });
+
     dom.trackPagePlayBtn?.addEventListener('click', () => {
       if (!currentViewingTrack) return;
       const gAudio = getGlobalAudio();
@@ -2217,7 +2300,56 @@
       } else if (!curr.isPlaying && curr.track && curr.track.id === currentViewingTrack.id) {
         gAudio.resume();
       } else {
-        gAudio.playTrack(currentViewingTrack, [currentViewingTrack], 0);
+        const playlist = (state.feedTracks && state.feedTracks.length) ? state.feedTracks : [currentViewingTrack];
+        const idx = playlist.findIndex((t) => t.id === currentViewingTrack.id);
+        gAudio.playTrack(currentViewingTrack, playlist, idx >= 0 ? idx : 0);
+      }
+    });
+
+    dom.trackPageNextBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.playNext();
+    });
+
+    dom.trackPageLoopBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.toggleLoop();
+        if (dom.trackPageLoopBtn) {
+          const isL = gAudio.getState().isLoop;
+          dom.trackPageLoopBtn.classList.toggle('is-active', Boolean(isL));
+          dom.trackPageLoopBtn.title = isL ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+        }
+      }
+    });
+
+    // 7. Управление плеером ленты (если разметку открывают)
+    dom.feedPlayerPrevBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.playPrev();
+    });
+
+    dom.feedPlayerPlayBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (!gAudio) return;
+      if (gAudio.getState().isPlaying) gAudio.pause();
+      else gAudio.resume();
+    });
+
+    dom.feedPlayerNextBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.playNext();
+    });
+
+    dom.feedPlayerLoopBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.toggleLoop();
+        if (dom.feedPlayerLoopBtn) {
+          const isL = gAudio.getState().isLoop;
+          dom.feedPlayerLoopBtn.classList.toggle('is-active', Boolean(isL));
+          dom.feedPlayerLoopBtn.title = isL ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+        }
       }
     });
 
@@ -2659,7 +2791,9 @@
     openTrackPage,
     openCreatePlaylistModal,
     openUploadModal,
-    loadMySection
+    loadMySection,
+    skipSlot,
+    prevSlot
   };
 
   // Автозапуск при прямой загрузке страницы /radio (без SPA перехода)

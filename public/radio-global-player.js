@@ -196,6 +196,16 @@
         if (isAudioLeader && Number.isFinite(msg.index)) {
           playTrackAt(msg.index);
         }
+      } else if (msg.type === 'CMD_PLAY_NEXT') {
+        if (isAudioLeader) {
+          playNext();
+        }
+      } else if (msg.type === 'CMD_PLAY_PREV') {
+        if (isAudioLeader) {
+          playPrev();
+        }
+      } else if (msg.type === 'CMD_SET_LOOP') {
+        setLoop(msg.isLoop);
       } else if (msg.type === 'LEADER_LEAVING') {
         if (msg.tabId === remoteLeaderTabId) {
           remoteLeaderTabId = null;
@@ -267,13 +277,24 @@
 
   audio.addEventListener('ended', () => {
     if (state.mode === 'radio') {
-      // В режиме радио обновляем эфир со следующим слотом
+      // В режиме радио обновляем эфир со следующим слотом (или повторяем при зацикливании)
       if (state.station) {
-        syncRadioStationLive(state.station, true);
+        if (state.isLoop && state.currentSlot) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+        } else {
+          syncRadioStationLive(state.station, true);
+        }
       }
     } else if (state.isLoop) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
+      if (state.playlist.length <= 1) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
+        playTrackAt(state.currentIndex + 1);
+      } else {
+        playTrackAt(0);
+      }
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
       playTrackAt(state.currentIndex + 1);
     } else {
@@ -319,12 +340,8 @@
     try {
       navigator.mediaSession.setActionHandler('play', () => resume());
       navigator.mediaSession.setActionHandler('pause', () => pause());
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        if (state.currentIndex > 0) playTrackAt(state.currentIndex - 1);
-      });
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        if (state.currentIndex < state.playlist.length - 1) playTrackAt(state.currentIndex + 1);
-      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+      navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime !== undefined && Number.isFinite(details.seekTime)) {
           const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
@@ -488,6 +505,78 @@
     }
   }
 
+  function playNext() {
+    if (!isAudioLeader && broadcast) {
+      broadcast.postMessage({ type: 'CMD_PLAY_NEXT' });
+      return;
+    }
+    if (state.mode === 'radio') {
+      if (window.RadioClient && typeof window.RadioClient.skipSlot === 'function') {
+        window.RadioClient.skipSlot();
+      } else if (state.station) {
+        syncRadioStationLive(state.station, true);
+      }
+      return;
+    }
+    if (state.playlist && state.playlist.length > 0) {
+      if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
+        playTrackAt(state.currentIndex + 1);
+      } else if (state.isLoop || state.playlist.length > 1) {
+        playTrackAt(0);
+      } else {
+        seek(0);
+      }
+    }
+  }
+
+  function playPrev() {
+    if (!isAudioLeader && broadcast) {
+      broadcast.postMessage({ type: 'CMD_PLAY_PREV' });
+      return;
+    }
+    const cur = isAudioLeader ? (audio.currentTime || 0) : (state.currentTime || 0);
+    if (cur > 3) {
+      seek(0);
+      return;
+    }
+    if (state.mode === 'radio') {
+      if (window.RadioClient && typeof window.RadioClient.prevSlot === 'function') {
+        window.RadioClient.prevSlot();
+      } else {
+        seek(0);
+      }
+      return;
+    }
+    if (state.playlist && state.playlist.length > 0) {
+      if (state.currentIndex > 0) {
+        playTrackAt(state.currentIndex - 1);
+      } else if (state.isLoop || state.playlist.length > 1) {
+        playTrackAt(state.playlist.length - 1);
+      } else {
+        seek(0);
+      }
+    } else {
+      seek(0);
+    }
+  }
+
+  function toggleLoop() {
+    setLoop(!state.isLoop);
+  }
+
+  function setLoop(val) {
+    state.isLoop = Boolean(val);
+    if (!isAudioLeader && broadcast) {
+      broadcast.postMessage({ type: 'CMD_SET_LOOP', isLoop: state.isLoop });
+    }
+    if (domBar && domBar.loopBtn) {
+      domBar.loopBtn.classList.toggle('is-active', state.isLoop);
+      domBar.loopBtn.title = state.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+    }
+    notify();
+    announceState();
+  }
+
   function pause() {
     if (isAudioLeader) {
       audio.pause();
@@ -624,9 +713,10 @@
           </div>
           <div class="alltell-global-audio-center">
             <div class="alltell-global-controls-row">
-              <button type="button" class="alltell-global-audio-btn" id="globalAudioPrevBtn" title="Предыдущий"><i class="fas fa-backward-step"></i></button>
-              <button type="button" class="alltell-global-audio-btn alltell-global-play-btn" id="globalAudioPlayBtn" title="Воспроизведение"><i class="fas fa-play"></i></button>
-              <button type="button" class="alltell-global-audio-btn" id="globalAudioNextBtn" title="Следующий"><i class="fas fa-forward-step"></i></button>
+              <button type="button" class="alltell-global-audio-btn" id="globalAudioPrevBtn" title="Предыдущий трек" aria-label="Предыдущий трек"><i class="fas fa-backward-step"></i></button>
+              <button type="button" class="alltell-global-audio-btn alltell-global-play-btn" id="globalAudioPlayBtn" title="Воспроизведение" aria-label="Воспроизведение"><i class="fas fa-play"></i></button>
+              <button type="button" class="alltell-global-audio-btn" id="globalAudioNextBtn" title="Следующий трек" aria-label="Следующий трек"><i class="fas fa-forward-step"></i></button>
+              <button type="button" class="alltell-global-audio-btn" id="globalAudioLoopBtn" title="Зациклить" aria-label="Зациклить"><i class="fas fa-repeat"></i></button>
             </div>
             <div class="alltell-global-progress-wrap">
               <span class="alltell-global-time" id="globalAudioTimeCurrent">00:00</span>
@@ -660,6 +750,7 @@
       prevBtn: bar.querySelector('#globalAudioPrevBtn'),
       playBtn: bar.querySelector('#globalAudioPlayBtn'),
       nextBtn: bar.querySelector('#globalAudioNextBtn'),
+      loopBtn: bar.querySelector('#globalAudioLoopBtn'),
       timeCurrent: bar.querySelector('#globalAudioTimeCurrent'),
       timeDuration: bar.querySelector('#globalAudioTimeDuration'),
       progressFill: bar.querySelector('#globalAudioProgressFill'),
@@ -676,11 +767,15 @@
     });
 
     domBar.prevBtn?.addEventListener('click', () => {
-      if (state.currentIndex > 0) playTrackAt(state.currentIndex - 1);
+      playPrev();
     });
 
     domBar.nextBtn?.addEventListener('click', () => {
-      if (state.currentIndex < state.playlist.length - 1) playTrackAt(state.currentIndex + 1);
+      playNext();
+    });
+
+    domBar.loopBtn?.addEventListener('click', () => {
+      toggleLoop();
     });
 
     domBar.progressBar?.addEventListener('click', (e) => {
@@ -775,8 +870,6 @@
           domBar.icon.innerHTML = `<i class="fas fa-tower-broadcast"></i>`;
         }
       }
-      if (domBar.prevBtn) domBar.prevBtn.style.display = 'none';
-      if (domBar.nextBtn) domBar.nextBtn.style.display = 'none';
     } else {
       // Режим трека
       const t = state.track;
@@ -795,8 +888,11 @@
           domBar.icon.innerHTML = `<i class="fas fa-music"></i>`;
         }
       }
-      if (domBar.prevBtn) domBar.prevBtn.style.display = state.playlist.length > 1 ? 'inline-block' : 'none';
-      if (domBar.nextBtn) domBar.nextBtn.style.display = state.playlist.length > 1 ? 'inline-block' : 'none';
+    }
+
+    if (domBar.loopBtn) {
+      domBar.loopBtn.classList.toggle('is-active', Boolean(state.isLoop));
+      domBar.loopBtn.title = state.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
     }
 
     if (domBar.playBtn) {
@@ -909,6 +1005,11 @@
     getState: () => ({ ...state }),
     playRadio,
     playTrack,
+    playTrackAt,
+    playNext,
+    playPrev,
+    toggleLoop,
+    setLoop,
     pause,
     resume,
     seek,

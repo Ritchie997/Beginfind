@@ -4353,6 +4353,12 @@ body.articles-page .content-body {
   color: #fff;
 }
 
+.alltell-global-audio-btn.is-active {
+  color: #ff4757;
+  background: rgba(255, 71, 87, 0.16);
+  box-shadow: 0 0 10px rgba(255, 71, 87, 0.35);
+}
+
 .alltell-global-play-btn {
   width: 36px;
   height: 36px;
