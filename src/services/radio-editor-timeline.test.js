@@ -5,6 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execSync } = require('node:child_process');
 
 const rootDir = path.resolve(__dirname, '../..');
 const radioHtml = fs.readFileSync(path.join(rootDir, 'public/site/radio.html'), 'utf8');
@@ -411,4 +412,10 @@ test('radio-editor: playlists are framed with bracket-like side borders on timel
   assert.ok(freshClientJs.includes('radio-clip-bracket bracket-right'), 'Вывод правой скобки плейлиста на таймлайне');
   assert.ok(freshClientJs.includes('radio-eb-bracket-left'), 'Вывод левой скобки плейлиста в блочном редакторе');
   assert.ok(freshClientJs.includes('radio-eb-bracket-right'), 'Вывод правой скобки плейлиста в блочном редакторе');
+});
+
+test('radio-client: public/site/radio-client.js has valid syntax and executes without syntax errors', () => {
+  assert.doesNotThrow(() => {
+    execSync(`node -c "${path.join(rootDir, 'public/site/radio-client.js')}"`);
+  }, 'radio-client.js must have valid JavaScript syntax');
 });

@@ -2762,14 +2762,6 @@
       }
     }
   }
-        }
-      }
-    } catch (e) {
-      if (dom.smartGapPlaylistsList) {
-        dom.smartGapPlaylistsList.innerHTML = `<p class="alltell-error">Ошибка: ${escapeHtml(e.message)}</p>`;
-      }
-    }
-  }
 
   async function applySmartGapFill(e) {
     if (e) e.preventDefault();
