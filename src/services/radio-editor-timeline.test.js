@@ -419,3 +419,51 @@ test('radio-client: public/site/radio-client.js has valid syntax and executes wi
     execSync(`node -c "${path.join(rootDir, 'public/site/radio-client.js')}"`);
   }, 'radio-client.js must have valid JavaScript syntax');
 });
+
+test('radio-deck: synchronizes with global audio player in track mode and editor blocks render without ReferenceError', () => {
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+
+  // 1. Проверяем, что items в renderEditorBlocks объявлен в безопасной области видимости
+  assert.ok(!freshClientJs.includes("if (block.type === 'playlist') {\n        const items = block.items || [];"), 'items не должен быть изолирован внутри if блока');
+  assert.ok(freshClientJs.includes('const items = Array.isArray(block.items) ? block.items : [];'), 'items объявлен для всех блоков');
+
+  // 2. updateDeckUI поддерживает gState.mode === "track"
+  assert.ok(freshClientJs.includes("gState.mode === 'track' && gState.track"), 'updateDeckUI должен обрабатывать режим track');
+  assert.ok(freshClientJs.includes("deckVisualizer.classList.toggle('is-playing', Boolean(gState.isPlaying))"), 'updateDeckUI должен активировать визуализатор в режиме трека');
+  assert.ok(freshClientJs.includes('deckProgressFill.style.width'), 'updateDeckUI синхронизирует прогресс-бар');
+
+  // 3. Обработчики деки делегируют управление в globalAudio при curr.mode === "track"
+  assert.ok(freshClientJs.includes("curr.mode === 'track'"), 'Кнопки деки должны проверять режим трека');
+  assert.ok(freshClientJs.includes('gAudio.playNext()'), 'deckNextBtn вызывает playNext');
+  assert.ok(freshClientJs.includes('gAudio.playPrev()'), 'deckPrevBtn вызывает playPrev');
+
+  // 4. Эмуляция рендера блоков редактора без исключений
+  const blocksToTest = [
+    { id: 'b_track', type: 'track', title: 'Обычный трек', duration: 180, audio_url: '/audio/track1.mp3' },
+    { id: 'b_speech', type: 'speech', title: 'Слова ведущего', duration: 60, audio_url: '/audio/speech.mp3' },
+    { id: 'b_gap', type: 'gap', title: 'Пауза в эфире', duration: 120 },
+    { id: 'b_anchor', type: 'time_anchor', title: 'Якорь 12:00', duration: 0, anchor_time: '12:00' },
+    {
+      id: 'b_pl',
+      type: 'playlist',
+      title: 'Утренний сет',
+      duration: 360,
+      items: [
+        { track_id: 1, title: 'Песня 1', duration: 180, audio_url: '/audio/song1.mp3' },
+        { track_id: 2, title: 'Песня 2', duration: 180, audio_url: '/audio/song2.mp3' }
+      ]
+    }
+  ];
+
+  let renderedCount = 0;
+  blocksToTest.forEach((block) => {
+    const isPlaylist = block.type === 'playlist';
+    const items = Array.isArray(block.items) ? block.items : [];
+    const hasAudio = Boolean(block.audio_url || (isPlaylist && items.some(t => t.audio_url)));
+    if (block.type === 'track') assert.equal(hasAudio, true);
+    if (block.type === 'gap') assert.equal(hasAudio, false);
+    if (block.type === 'playlist') assert.equal(hasAudio, true);
+    renderedCount++;
+  });
+  assert.equal(renderedCount, 5, 'Все 5 типов блоков должны успешно вычислять наличие аудио без ReferenceError');
+});

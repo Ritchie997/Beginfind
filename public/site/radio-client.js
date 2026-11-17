@@ -258,6 +258,84 @@
     if (!dom.deckTitle) return;
     const globalAudio = getGlobalAudio();
     const gState = globalAudio ? globalAudio.getState() : {};
+
+    // 1. Режим воспроизведения трека (из ленты, плейлиста или редактора эфира)
+    if (gState.mode === 'track' && gState.track) {
+      const track = gState.track;
+      const typeLabel = track.type === 'speech' ? 'Слова' : track.type === 'podcast' ? 'Подкаст' : track.type === 'jingle' ? 'Джингл' : 'Трек';
+      const pillLabel = track.type === 'speech' ? 'РЕЧЬ' : track.type === 'podcast' ? 'ПОДКАСТ' : 'АУДИО';
+
+      dom.deckTitle.innerHTML = `<span>${escapeHtml(track.title || 'Аудиотрек')}</span><span class="radio-freq-pill">${pillLabel}</span>`;
+      if (dom.deckOwner) {
+        dom.deckOwner.textContent = track.author_name ? `Исполнитель: ${escapeHtml(track.author_name)}` : 'Медиатека AllTell';
+      }
+
+      if (dom.deckAvatar) {
+        if (track.cover_url) {
+          dom.deckAvatar.innerHTML = `<img src="${escapeHtml(track.cover_url)}" alt="">`;
+        } else {
+          dom.deckAvatar.innerHTML = `<i class="fas fa-compact-disc"></i>`;
+        }
+      }
+
+      if (dom.deckStatus) {
+        if (gState.isPlaying) {
+          dom.deckStatus.className = 'radio-status-tag is-live';
+          dom.deckStatus.textContent = 'В эфире';
+        } else {
+          dom.deckStatus.className = 'radio-status-tag is-timeshift';
+          dom.deckStatus.textContent = 'Пауза';
+        }
+      }
+
+      if (dom.deckTrackTitle) dom.deckTrackTitle.textContent = track.title || 'Аудиотрек';
+      if (dom.deckTrackType) {
+        dom.deckTrackType.textContent = typeLabel;
+        dom.deckTrackType.className = `radio-track-type-badge type-${track.type || 'track'}`;
+      }
+
+      const cur = (globalAudio && globalAudio.audio) ? (globalAudio.audio.currentTime || 0) : (gState.currentTime || 0);
+      const dur = (globalAudio && globalAudio.audio && globalAudio.audio.duration) ? globalAudio.audio.duration : (track.duration || gState.duration || 0);
+
+      if (dom.deckTrackSub) {
+        dom.deckTrackSub.textContent = track.author_name ? `${track.author_name} • ${formatDuration(dur)}` : `Длительность: ${formatDuration(dur)}`;
+      }
+
+      if (dom.deckPlayBtn) {
+        dom.deckPlayBtn.innerHTML = gState.isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+      }
+      if (dom.deckVisualizer) {
+        dom.deckVisualizer.classList.toggle('is-playing', Boolean(gState.isPlaying));
+      }
+
+      if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = formatDuration(cur);
+      if (dom.deckTimeRemaining) {
+        const rem = Math.max(0, dur - cur);
+        dom.deckTimeRemaining.textContent = rem > 0 ? `-${formatDuration(rem)}` : formatDuration(dur);
+      }
+      if (dom.deckProgressFill && dur > 0) {
+        dom.deckProgressFill.style.width = `${Math.min(100, Math.max(0, (cur / dur) * 100))}%`;
+      }
+
+      if (dom.deckLiveSyncBtn) {
+        dom.deckLiveSyncBtn.style.display = (state.currentStation || (state.stations && state.stations.length)) ? 'inline-flex' : 'none';
+        dom.deckLiveSyncBtn.title = 'Переключиться на живой эфир радиостанций';
+      }
+
+      if (dom.deckUnfreezeBtn) {
+        dom.deckUnfreezeBtn.style.display = 'inline-flex';
+        dom.deckUnfreezeBtn.title = 'Слушать трек с начала';
+      }
+
+      if (dom.deckLoopBtn) {
+        dom.deckLoopBtn.classList.toggle('is-active', Boolean(gState.isLoop));
+        dom.deckLoopBtn.title = gState.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+      }
+
+      return;
+    }
+
+    // 2. Режим радиостанции
     const st = state.currentStation || gState.station;
 
     if (!st) {
@@ -269,6 +347,12 @@
       }
       if (dom.deckTrackTitle) dom.deckTrackTitle.textContent = 'Тишина в эфире';
       if (dom.deckTrackSub) dom.deckTrackSub.textContent = 'Настройтесь на активную частоту ниже';
+      if (dom.deckPlayBtn) dom.deckPlayBtn.innerHTML = '<i class="fas fa-play"></i>';
+      if (dom.deckVisualizer) dom.deckVisualizer.classList.remove('is-playing');
+      if (dom.deckProgressFill) dom.deckProgressFill.style.width = '0%';
+      if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = '00:00';
+      if (dom.deckTimeRemaining) dom.deckTimeRemaining.textContent = '--:--';
+      if (dom.deckLiveSyncBtn) dom.deckLiveSyncBtn.style.display = 'none';
       return;
     }
 
@@ -323,6 +407,17 @@
       }
     }
 
+    const cur = (globalAudio && globalAudio.audio) ? (globalAudio.audio.currentTime || 0) : (gState.currentTime || 0);
+    const dur = (globalAudio && globalAudio.audio && globalAudio.audio.duration) ? globalAudio.audio.duration : (slot ? (slot.duration || 0) : (gState.duration || 0));
+    if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = formatDuration(cur);
+    if (dom.deckTimeRemaining) {
+      const rem = Math.max(0, dur - cur);
+      dom.deckTimeRemaining.textContent = rem > 0 ? `-${formatDuration(rem)}` : formatDuration(dur);
+    }
+    if (dom.deckProgressFill && dur > 0) {
+      dom.deckProgressFill.style.width = `${Math.min(100, Math.max(0, (cur / dur) * 100))}%`;
+    }
+
     if (dom.deckLiveSyncBtn) {
       dom.deckLiveSyncBtn.style.display = state.isTimeshift ? 'inline-flex' : 'none';
     }
@@ -334,12 +429,18 @@
   }
 
   function skipSlot() {
+    const gAudio = getGlobalAudio();
+    const curr = gAudio ? gAudio.getState() : {};
+    if (curr.mode === 'track') {
+      gAudio.playNext();
+      updateDeckUI();
+      return;
+    }
     if (state.nextSlots && state.nextSlots.length > 0) {
       const next = state.nextSlots.shift();
       if (state.currentSlot) state.prevSlots.unshift(state.currentSlot);
       state.currentSlot = next;
       state.isTimeshift = true;
-      const gAudio = getGlobalAudio();
       if (gAudio && state.currentStation) {
         gAudio.playRadio(state.currentStation, next, 0);
       }
@@ -351,6 +452,12 @@
 
   function prevSlot() {
     const gAudio = getGlobalAudio();
+    const curr = gAudio ? gAudio.getState() : {};
+    if (curr.mode === 'track') {
+      gAudio.playPrev();
+      updateDeckUI();
+      return;
+    }
     const cur = gAudio ? gAudio.getState().currentTime : 0;
     if (cur > 3) {
       if (gAudio) gAudio.seek(0);
@@ -1782,12 +1889,13 @@
       `;
 
       // Карточка блока в стиле Антропедии
-      const typeLabel = block.type === 'playlist' ? 'Плейлист' : block.type === 'speech' ? 'Слова' : block.type === 'jingle' ? 'Джингл' : block.type === 'time_anchor' ? 'Якорь' : block.type === 'gap' ? 'Пауза' : 'Трек';
-      const typeIcon = block.type === 'playlist' ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
+      const isPlaylist = block.type === 'playlist';
+      const items = Array.isArray(block.items) ? block.items : [];
+      const typeLabel = isPlaylist ? 'Плейлист' : block.type === 'speech' ? 'Слова' : block.type === 'jingle' ? 'Джингл' : block.type === 'time_anchor' ? 'Якорь' : block.type === 'gap' ? 'Пауза' : 'Трек';
+      const typeIcon = isPlaylist ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
 
       let bodyHtml = '';
-      if (block.type === 'playlist') {
-        const items = block.items || [];
+      if (isPlaylist) {
         const isCollapsed = Boolean(block.isCollapsed);
         bodyHtml = `
           <div class="radio-playlist-accordion">
@@ -1883,8 +1991,6 @@
           </div>
         `;
       }
-
-      const isPlaylist = block.type === 'playlist';
 
       html += `
         <div class="radio-eb-block ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" draggable="true">
@@ -3279,7 +3385,10 @@
       tabEditor.style.display = tabName === 'editor' ? '' : 'none';
     }
 
-    if (tabName === 'live') loadStations();
+    if (tabName === 'live') {
+      loadStations();
+      updateDeckUI();
+    }
     if (tabName === 'feed') loadTracks();
     if (tabName === 'my') loadMySection();
     if (tabName === 'editor') initEditor();
@@ -3369,13 +3478,23 @@
       const gAudio = getGlobalAudio();
       if (!gAudio) return;
 
+      const curr = gAudio.getState();
+      if (curr.mode === 'track') {
+        if (curr.isPlaying) {
+          gAudio.pause();
+        } else {
+          gAudio.resume();
+        }
+        updateDeckUI();
+        return;
+      }
+
       if (!state.currentStation) {
         const firstCard = document.querySelector('.radio-station-card');
         if (firstCard) firstCard.click();
         return;
       }
 
-      const curr = gAudio.getState();
       if (curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
         gAudio.pause();
       } else if (!curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
@@ -3407,8 +3526,12 @@
     });
 
     dom.deckLiveSyncBtn?.addEventListener('click', () => {
-      if (!state.currentStation) return;
-      tuneStation(state.currentStation, true);
+      if (state.currentStation) {
+        tuneStation(state.currentStation, true);
+      } else {
+        const firstCard = document.querySelector('.radio-station-card');
+        if (firstCard) firstCard.click();
+      }
     });
 
     dom.deckProgressBar?.addEventListener('click', (e) => {

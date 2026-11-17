@@ -850,8 +850,9 @@
     // открыл отдельный трек или играет обычная музыкальная дорожка, нижний бар всегда виден!
     const tabLive = document.getElementById('tabContentLive');
     const isLiveDeckVisible = Boolean(tabLive && !tabLive.hidden && tabLive.style.display !== 'none');
-    const isRadioPageWithDeck = (window.location.pathname === '/radio') && isLiveDeckVisible;
-    const shouldShow = Boolean(state.mode && !(isRadioPageWithDeck && state.mode === 'radio'));
+    const isRadioPage = (window.location.pathname === '/radio') || window.location.pathname.startsWith('/radio');
+    const isRadioPageWithDeck = isRadioPage && isLiveDeckVisible;
+    const shouldShow = Boolean(state.mode && !isRadioPageWithDeck);
     domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
