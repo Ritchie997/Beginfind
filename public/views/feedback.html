@@ -119,8 +119,8 @@
                     <label class="form-label">Скриншот (по желанию)</label>
                     <div class="feedback-attachments" id="feedbackAttachments"></div>
                     <div class="feedback-attach-row btns-compact">
-                        <input type="file" id="feedbackFileInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-                        <button type="button" class="btn btn-secondary btn-sm" id="feedbackPickFileBtn"><i class="fas fa-image"></i> Прикрепить скриншот</button>
+                        <input type="file" id="feedbackFileInput" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.heic,.heif" multiple style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; opacity: 0; pointer-events: none;">
+                        <label for="feedbackFileInput" class="btn btn-secondary btn-sm" id="feedbackPickFileBtn" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-image"></i> Прикрепить скриншот</label>
                     </div>
                 </div>
             </div>

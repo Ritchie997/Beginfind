@@ -28,7 +28,7 @@
 
   // Формулировки без рода — имя автора может быть любым.
   function headline(n) {
-    const where = n.targetType === 'gallery' ? 'к работе' : 'к статье';
+    const where = n.targetType === 'gallery' ? 'к работе' : (n.targetType === 'franchise_post' ? 'к публикации' : 'к статье');
     const title = n.targetTitle ? ` ${where} «${escapeHtml(n.targetTitle)}»` : '';
     if (n.type === 'collab_request') {
       return `<b>${escapeHtml(n.actorName)}</b> предложил правку и соавторство${title}`;
@@ -84,7 +84,7 @@
     }
   }
 
-  // Переход: соавторство / комментарий в Antropedia / работа в галерее.
+  // Переход: соавторство / комментарий в Antropedia / работа в галерее / публикация в AllTell.
   async function openNotification(n) {
     if (n.type === 'collab_request' || n.type === 'collab_approved' || n.type === 'collab_declined') {
       if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
@@ -105,6 +105,20 @@
       } else {
         window.location.href = '/site/gallery.html?work=' + encodeURIComponent(n.targetId);
       }
+    } else if (n.targetType === 'franchise_post') {
+      const parts = String(n.targetId || '').split(':');
+      const franchiseId = parts[0] || '';
+      const postId = parts[1] || parts[0] || '';
+      const hash = n.commentId ? '#comment-' + encodeURIComponent(n.commentId) : '';
+      const url = '/alltell?franchise=' + encodeURIComponent(franchiseId) + (postId ? '&post=' + encodeURIComponent(postId) : '') + hash;
+      if (window.location.pathname.startsWith('/alltell') && window.AllTellClient && typeof window.AllTellClient.focusComment === 'function') {
+        window.history.pushState({}, '', url);
+        window.AllTellClient.focusComment(postId, n.commentId, franchiseId);
+      } else if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
+        window.PublicSite.navigateTo(url);
+      } else {
+        window.location.href = url;
+      }
     } else {
       if (window.spaRouter && typeof window.spaRouter.openAntropediaArticle === 'function') {
         await window.spaRouter.openAntropediaArticle(n.targetId, { jumpToComments: true });
@@ -124,6 +138,28 @@
     open: false,
     unread: 0,
     items: [],
+    _pollTimer: null,
+
+    isLoggedIn() {
+      const auth = window.authManager;
+      return !!(auth && (typeof auth.isAuthenticated === 'function' ? auth.isAuthenticated() : auth.getToken()));
+    },
+
+    startPolling() {
+      if (this._pollTimer) return;
+      this._pollTimer = setInterval(() => {
+        if (!document.hidden && this.isLoggedIn()) {
+          this.checkUnread();
+        }
+      }, 30000);
+    },
+
+    stopPolling() {
+      if (this._pollTimer) {
+        clearInterval(this._pollTimer);
+        this._pollTimer = null;
+      }
+    },
 
     init() {
       const currentEl = document.getElementById('notif-bell');
@@ -185,25 +221,42 @@
             if (this.btn) this.btn.focus();
           }
         });
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden && this.isLoggedIn()) {
+            this.checkUnread();
+          }
+        });
+        window.addEventListener('authChanged', () => {
+          if (this.isLoggedIn()) {
+            this.checkUnread();
+            this.startPolling();
+          } else {
+            this.stopPolling();
+            this.setUnread(0);
+            this.items = [];
+            if (this.open) this.close();
+          }
+        });
       }
 
-      if (window.authManager && typeof window.authManager.isAuthenticated === 'function' && window.authManager.isAuthenticated()) {
+      if (this.isLoggedIn()) {
         this.checkUnread();
+        this.startPolling();
       }
     },
 
     async checkUnread() {
-      const auth = window.authManager;
-      const token = auth && typeof auth.getToken === 'function' ? auth.getToken() : null;
-      if (!token) {
+      if (!this.isLoggedIn()) {
         this.setUnread(0);
         return;
       }
-      const res = await api('/api/notifications');
+      const res = await api('/api/notifications/summary');
       if (res && res.success && res.data) {
-        this.items = Array.isArray(res.data.items) ? res.data.items : [];
-        if (typeof res.data.unread === 'number') {
-          this.setUnread(res.data.unread);
+        this.applySummary(res.data);
+      } else {
+        const listRes = await api('/api/notifications');
+        if (listRes && listRes.success && listRes.data && typeof listRes.data.unread === 'number') {
+          this.setUnread(listRes.data.unread);
         }
       }
     },

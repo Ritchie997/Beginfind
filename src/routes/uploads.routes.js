@@ -3,6 +3,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const auth = require('../middleware/auth');
 const { uploadImage, uploadAudio } = require('../uploads/multer-config');
 const { UPLOADS_DIR } = require('../config/paths');
@@ -28,7 +29,7 @@ router.get('/upload-limits', (req, res) => {
   }
 });
 
-router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadImage.single('image'), (req, res) => {
+router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadImage.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Файл не загружен' });
@@ -52,16 +53,30 @@ router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadI
       return res.status(400).json({ error: `Файл больше ${maxFileSizeMb} МБ — лимит задан в Настройках` });
     }
 
+    let finalFilename = req.file.filename;
+    const ext = path.extname(req.file.filename).toLowerCase();
+    if (['.heic', '.heif'].includes(ext)) {
+      try {
+        const convertedFilename = req.file.filename.replace(/\.(heic|heif)$/i, '.webp');
+        const convertedPath = path.join(UPLOADS_DIR, convertedFilename);
+        await sharp(filePath).toFormat('webp', { quality: 85 }).toFile(convertedPath);
+        fs.unlink(filePath, () => {});
+        finalFilename = convertedFilename;
+      } catch (convErr) {
+        console.warn('HEIC conversion warning:', convErr.message);
+      }
+    }
+
     // Возвращаем путь к загруженному файлу (без домена), чтобы сервер мог его нормализовать
     res.setHeader('Content-Type', 'application/json');
-    res.json({ url: `/uploads/${req.file.filename}` });
+    res.json({ url: `/uploads/${finalFilename}` });
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Внутренняя ошибка сервера при загрузке: ' + error.message });
   }
 });
 
-router.post('/upload-images', auth.authenticateToken, auth.checkApproved, uploadImage.array('images', 60), (req, res) => {
+router.post('/upload-images', auth.authenticateToken, auth.checkApproved, uploadImage.array('images', 60), async (req, res) => {
   const files = req.files || [];
   const cleanupFiles = () => files.forEach((file) => fs.unlink(file.path, () => {}));
   try {
@@ -72,11 +87,25 @@ router.post('/upload-images', auth.authenticateToken, auth.checkApproved, upload
       cleanupFiles();
       return res.status(400).json({ error: `Файл «${tooBig.originalname}» больше ${maxFileSizeMb} МБ — лимит задан в Настройках` });
     }
-    const urls = files.map((file) => {
+    const urls = [];
+    for (const file of files) {
       const filePath = path.join(UPLOADS_DIR, file.filename);
       if (!fs.existsSync(filePath)) throw new Error(`Загруженное изображение «${file.originalname}» не найдено`);
-      return `/uploads/${file.filename}`;
-    });
+      let finalFilename = file.filename;
+      const ext = path.extname(file.filename).toLowerCase();
+      if (['.heic', '.heif'].includes(ext)) {
+        try {
+          const convertedFilename = file.filename.replace(/\.(heic|heif)$/i, '.webp');
+          const convertedPath = path.join(UPLOADS_DIR, convertedFilename);
+          await sharp(filePath).toFormat('webp', { quality: 85 }).toFile(convertedPath);
+          fs.unlink(filePath, () => {});
+          finalFilename = convertedFilename;
+        } catch (convErr) {
+          console.warn('HEIC conversion warning:', convErr.message);
+        }
+      }
+      urls.push(`/uploads/${finalFilename}`);
+    }
     res.status(201).json({ urls });
   } catch (error) {
     cleanupFiles();

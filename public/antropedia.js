@@ -2703,6 +2703,11 @@ initEngagement() {
       this.commentsListEl.innerHTML = top
         .map((c) => this.renderCommentHtml(c, repliesByParent.get(c.id) || [], me, canModerate, false, c.id))
         .join('');
+
+      if (window.location.hash && /^#comment-\d+$/.test(window.location.hash)) {
+        const targetId = window.location.hash.replace('#comment-', '');
+        setTimeout(() => this.focusComment(targetId), 60);
+      }
     }
 
     // topParentId — id ВЕРХНЕГО комментария треда (для самого верхнего
@@ -2731,7 +2736,7 @@ initEngagement() {
           <div class="antropedia-comment-body${standalone ? ' antropedia-comment-sticker-only' : ''}">${html}</div>
           <div class="antropedia-comment-actions">
             ${reactionsBar}
-            <button type="button" class="antropedia-comment-reply-btn" data-action="reply" data-id="${topParentId}" data-mention="${escapeHtml(comment.authorName)}"><i class="far fa-message"></i> Ответить</button>
+            <button type="button" class="antropedia-comment-reply-btn" data-action="reply" data-id="${comment.id}" data-top-id="${topParentId}" data-mention="${escapeHtml(comment.authorName)}"><i class="far fa-message"></i> Ответить</button>
           </div>
           ${isReply ? '' : this.renderRepliesHtml(comment.id, replies, me, canModerate)}
           ${isReply ? '' : `<div class="antropedia-reply-compose-mount" data-reply-mount="${comment.id}"></div>`}
@@ -2793,7 +2798,14 @@ initEngagement() {
       if (toggleBtn) { this.toggleReplies(toggleBtn); return; }
 
       const replyBtn = e.target.closest('[data-action="reply"]');
-      if (replyBtn) { this.toggleReplyComposer(replyBtn.getAttribute('data-id'), replyBtn.getAttribute('data-mention')); return; }
+      if (replyBtn) {
+        this.toggleReplyComposer(
+          replyBtn.getAttribute('data-top-id') || replyBtn.getAttribute('data-id'),
+          replyBtn.getAttribute('data-mention'),
+          replyBtn.getAttribute('data-id')
+        );
+        return;
+      }
 
       const deleteBtn = e.target.closest('[data-action="delete-comment"]');
       if (deleteBtn) { this.deleteComment(deleteBtn.getAttribute('data-id')); return; }
@@ -2824,7 +2836,7 @@ initEngagement() {
         });
         targets.push({
           label: 'Ответ на комментарий — стикером',
-          send: (code) => this.submitReply(comment.parentId || comment.id, code)
+          send: (code) => this.submitReply(comment.id, code)
         });
       }
       if (this.currentSlug) {
@@ -2854,12 +2866,9 @@ initEngagement() {
     }
 
     // Одна открытая форма ответа зараз на ТРЕД (parentId — id верхнего
-    // комментария, см. topParentId в renderCommentHtml) — открытие ответа на
-    // другой тред закрывает предыдущую форму, но повторный клик "Ответить"
-    // внутри уже открытого треда (в том числе на другой его ответ) НЕ
-    // закрывает и не сбрасывает набранный черновик — просто переносит фокус,
-    // чтобы случайный повторный клик не стирал начатый ответ.
-    toggleReplyComposer(parentId, mentionName) {
+    // комментария, см. topParentId в renderCommentHtml). replyToCommentId —
+    // конкретный комментарий, на который отвечаем (для точного уведомления).
+    toggleReplyComposer(parentId, mentionName, replyToCommentId) {
       const mount = this.commentsListEl?.querySelector(`[data-reply-mount="${parentId}"]`);
       if (!mount) return;
 
@@ -2885,8 +2894,9 @@ initEngagement() {
         </div>
       `;
 
+      const targetSubmitId = replyToCommentId || parentId;
       const composer = this.wireComposer(mount.firstElementChild, {
-        onSubmit: (content) => this.submitReply(parentId, content),
+        onSubmit: (content) => this.submitReply(targetSubmitId, content),
         onCancel: () => { mount.innerHTML = ''; this._activeReplyParentId = null; }
       });
 
@@ -5067,4 +5077,11 @@ initEngagement() {
 
   window.AntropediaManager = AntropediaManager;
   window.antropediaManager = new AntropediaManager();
+
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash && /^#comment-\d+$/.test(window.location.hash) && window.antropediaManager) {
+      const targetId = window.location.hash.replace('#comment-', '');
+      window.antropediaManager.focusComment(targetId);
+    }
+  });
 })();

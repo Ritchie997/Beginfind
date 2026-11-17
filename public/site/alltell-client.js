@@ -966,11 +966,13 @@
     return 'ответов';
   }
 
-  function renderPostComment(comment, replies, postId, canManage, userId, expandedRepliesSet) {
+  function renderPostComment(comment, replies, postId, canManage, userId, expandedRepliesSet, isReply) {
     var own = Number(comment.userId) === Number(userId);
     var authorId = comment.authorId ?? comment.userId;
     var reactions = renderReactionBar(comment.reactions, 'franchise_post_comment', comment.id);
-    var isReply = !replies;
+    if (typeof isReply !== 'boolean') {
+      isReply = Boolean(comment.parentId);
+    }
     var contentHtml = renderCommentContent(comment);
 
     var repliesHtml = '';
@@ -983,11 +985,11 @@
       var extraCount = sorted.length - 1;
 
       var shownHtml = (hasExtra && !isExpanded ? [sorted[0]] : sorted).map(function (reply) {
-        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet);
+        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet, true);
       }).join('');
 
       var extraHtml = (hasExtra ? sorted.slice(1) : []).map(function (reply) {
-        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet);
+        return renderPostComment(reply, null, postId, canManage, userId, expandedRepliesSet, true);
       }).join('');
 
       var toggleHtml = hasExtra
@@ -1027,14 +1029,14 @@
           </div>
         </div>`;
 
-    return `<article class="alltell-comment ${isReply ? 'alltell-comment-reply' : 'alltell-comment-top'}" data-comment-id="${Number(comment.id)}">
+    return `<article class="alltell-comment ${isReply ? 'alltell-comment-is-reply' : 'alltell-comment-top'}" data-comment-id="${Number(comment.id)}">
       <div class="alltell-comment-heading">
         ${authorHtml}
       </div>
       <div class="alltell-comment-content">${contentHtml}</div>
       <div class="alltell-comment-actions">
         ${reactions}
-        <button type="button" class="alltell-comment-reply" data-action="reply-comment" data-comment-id="${Number(comment.id)}" data-author="${escapeHtml(comment.authorName)}">
+        <button type="button" class="alltell-comment-reply-btn" data-action="reply-comment" data-comment-id="${Number(comment.id)}" data-author="${escapeHtml(comment.authorName)}">
           <i class="far fa-message" aria-hidden="true"></i> Ответить
         </button>
         ${own || canManage ? `<button type="button" class="alltell-comment-delete" data-action="delete-comment" data-comment-id="${Number(comment.id)}" title="Удалить"><i class="fas fa-trash-can"></i></button>` : ''}
@@ -1048,7 +1050,7 @@
     var topLevel = comments.filter(function (comment) { return !comment.parentId; });
     var commentsHtml = topLevel.map(function (comment) {
       var replies = comments.filter(function (reply) { return Number(reply.parentId) === Number(comment.id); });
-      return renderPostComment(comment, replies.length ? replies : null, post.id, canManage, userId, social.expandedReplies);
+      return renderPostComment(comment, replies.length ? replies : null, post.id, canManage, userId, social.expandedReplies, false);
     }).join('');
     var compose = loggedIn && social.open
       ? `<form class="alltell-comment-form" data-comment-form data-post-id="${Number(post.id)}">
@@ -4612,6 +4614,71 @@
       }
     }
 
+    async function focusPostOrComment(postId, commentId, franchiseId) {
+      if (!postId && !commentId) return;
+      if (franchiseId && (!state.detail || Number(state.detail.franchise.id) !== Number(franchiseId))) {
+        await loadDetail(franchiseId);
+      }
+      for (var attempt = 0; attempt < 30; attempt++) {
+        var postCard = postId ? root.querySelector('.alltell-post-card[data-post-id="' + postId + '"]') : null;
+        if (!postCard && commentId) {
+          var foundComment = root.querySelector('.alltell-comment[data-comment-id="' + commentId + '"]');
+          if (foundComment) {
+            postCard = foundComment.closest('.alltell-post-card');
+          }
+        }
+        if (postCard) {
+          var pId = postId || postCard.dataset.postId;
+          var fId = franchiseId || (postCard.querySelector('[data-post-social]') ? postCard.querySelector('[data-post-social]').dataset.franchiseId : null) || (state.detail && state.detail.franchise ? state.detail.franchise.id : null);
+          var social = getPostSocial(pId, fId);
+          if (!social.loaded && !social.loading) {
+            try {
+              await loadPostComments(pId, fId);
+            } catch (err) {
+              console.error('Failed to load comments for focus:', err);
+            }
+          } else if (social.loading) {
+            await new Promise(function (r) { setTimeout(r, 100); });
+            continue;
+          }
+          if (commentId) {
+            var commentEl = root.querySelector('.alltell-comment[data-comment-id="' + commentId + '"]');
+            if (!commentEl && social.loaded) {
+              var targetCommentData = (social.comments || []).find(function (c) { return Number(c.id) === Number(commentId); });
+              if (targetCommentData && targetCommentData.parentId) {
+                social.expandedReplies = social.expandedReplies || new Set();
+                social.expandedReplies.add(String(targetCommentData.parentId));
+                renderSocialPanel(pId, fId);
+                commentEl = root.querySelector('.alltell-comment[data-comment-id="' + commentId + '"]');
+              }
+            } else if (commentEl) {
+              var extraReplies = commentEl.closest('.alltell-comment-replies-extra');
+              if (extraReplies && extraReplies.hidden) {
+                var repliesWrap = extraReplies.closest('.alltell-comment-replies');
+                var parentCommentId = repliesWrap ? repliesWrap.dataset.repliesFor : null;
+                if (parentCommentId) {
+                  social.expandedReplies = social.expandedReplies || new Set();
+                  social.expandedReplies.add(String(parentCommentId));
+                  renderSocialPanel(pId, fId);
+                  commentEl = root.querySelector('.alltell-comment[data-comment-id="' + commentId + '"]');
+                }
+              }
+            }
+            if (commentEl) {
+              commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              commentEl.classList.add('is-highlighted');
+              setTimeout(function () { commentEl.classList.remove('is-highlighted'); }, 2600);
+              return;
+            }
+          } else {
+            postCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+          }
+        }
+        await new Promise(function (r) { setTimeout(r, 100); });
+      }
+    }
+
     function ensureStickerPicker() {
       if (window.PublicStickerPicker) return Promise.resolve(window.PublicStickerPicker);
       return new Promise(function (resolve, reject) {
@@ -6229,10 +6296,14 @@
           return Number(comment.id) === Number(button.dataset.commentId);
         });
         if (!targetComment) return;
-        commentSocial.replyTo = { id: targetComment.parentId || targetComment.id, authorName: button.dataset.author };
+        commentSocial.replyTo = { id: targetComment.id, rootId: targetComment.parentId || targetComment.id, authorName: button.dataset.author };
         commentSocial.open = true;
         renderSocialPanel(commentPostId, commentFranchiseId);
-        root.querySelector('[data-post-social="' + postSocialKey(commentFranchiseId, commentPostId) + '"] [data-comment-form] textarea')?.focus();
+        var replyTextarea = root.querySelector('[data-post-social="' + postSocialKey(commentFranchiseId, commentPostId) + '"] [data-comment-form] textarea');
+        if (replyTextarea) {
+          replyTextarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          replyTextarea.focus();
+        }
       } else if (action === 'toggle-replies') {
         var repliesRoot = button.closest('[data-post-social]');
         if (repliesRoot) {
@@ -7063,12 +7134,39 @@
     root.addEventListener('submit', onSubmit);
     document.addEventListener('click', onDocClick);
     window.addEventListener('authChanged', onAuthChanged);
+
+    function onHashChange() {
+      var hashMatch = (window.location.hash || '').match(/^#comment-(\d+)$/);
+      if (hashMatch) {
+        var urlParams = new URLSearchParams(window.location.search);
+        focusPostOrComment(urlParams.get('post'), hashMatch[1], urlParams.get('franchise'));
+      }
+    }
+    window.addEventListener('hashchange', onHashChange);
+
+    window.AllTellClient.focusComment = focusPostOrComment;
+
     await loadArticleIndex();
     await loadMapIndex();
     await refreshCurrentView();
+
+    var initialParams = new URLSearchParams(window.location.search);
+    var initialPostId = initialParams.get('post');
+    var initialHashMatch = (window.location.hash || '').match(/^#comment-(\d+)$/);
+    var initialCommentId = initialHashMatch ? initialHashMatch[1] : null;
+    if (initialPostId || initialCommentId) {
+      setTimeout(function () {
+        focusPostOrComment(initialPostId, initialCommentId, initialParams.get('franchise'));
+      }, 80);
+    }
+
     return function () {
       state.disposed = true;
       closePostHighlightPicker();
+      window.removeEventListener('hashchange', onHashChange);
+      if (window.AllTellClient.focusComment === focusPostOrComment) {
+        window.AllTellClient.focusComment = null;
+      }
       root.removeEventListener('mousedown', onMouseDown);
       root.removeEventListener('click', onClick);
       root.removeEventListener('input', onInput);

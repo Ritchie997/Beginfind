@@ -21,7 +21,17 @@ if (!fs.existsSync(STICKERS_DIR)) {
 // в запросе, поэтому дополнительно проверяем и реальное расширение файла —
 // иначе можно было бы загрузить, например, .svg/.html с image/* заголовком
 // и получить хранимый XSS при открытии файла напрямую из /uploads.
-const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+// Добавлены .heic и .heif для скриншотов и фото с мобильных устройств (iOS).
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif']);
+
+const MIME_EXTENSION_MAP = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/heic': '.heic',
+  'image/heif': '.heif'
+};
 
 const imageStorage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -29,8 +39,11 @@ const imageStorage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    let ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ext && MIME_EXTENSION_MAP[file.mimetype]) {
+      ext = MIME_EXTENSION_MAP[file.mimetype];
+    }
+    cb(null, file.fieldname + '-' + uniqueSuffix + (ext || '.png'));
   }
 });
 
@@ -50,11 +63,14 @@ const uploadImage = multer({
   },
   fileFilter: function (req, file, cb) {
     // Проверяем и заявленный mimetype, и реальное расширение файла
-    const ext = path.extname(file.originalname).toLowerCase();
+    let ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ext && MIME_EXTENSION_MAP[file.mimetype]) {
+      ext = MIME_EXTENSION_MAP[file.mimetype];
+    }
     if (file.mimetype.startsWith('image/') && ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Разрешены только изображения (jpg, jpeg, png, gif, webp)!'));
+      cb(new Error('Разрешены только изображения (jpg, jpeg, png, gif, webp, heic)!'));
     }
   }
 });

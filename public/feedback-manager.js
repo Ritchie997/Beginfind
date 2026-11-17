@@ -256,7 +256,19 @@
         const btn = e.target.closest('[data-report-type]');
         if (btn) this.setReportType(btn.dataset.reportType);
       });
-      root.querySelector('#feedbackPickFileBtn').addEventListener('click', () => root.querySelector('#feedbackFileInput').click());
+      const pickBtn = root.querySelector('#feedbackPickFileBtn');
+      const fileInput = root.querySelector('#feedbackFileInput');
+      if (pickBtn && fileInput) {
+        pickBtn.addEventListener('click', (e) => {
+          if (fileInput.disabled) {
+            e.preventDefault();
+            return;
+          }
+          if (pickBtn.tagName !== 'LABEL') {
+            fileInput.click();
+          }
+        });
+      }
       root.querySelector('#feedbackFileInput').addEventListener('change', (e) => this.uploadFiles(e.target));
       root.querySelector('#feedbackAttachments').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-remove-attachment]');
@@ -593,7 +605,16 @@
 
     renderFormAttachments() {
       this.root.querySelector('#feedbackAttachments').innerHTML = renderAttachments(this.attachments, true);
-      this.root.querySelector('#feedbackPickFileBtn').disabled = this.attachments.length >= MAX_SCREENSHOTS;
+      const isFull = this.attachments.length >= MAX_SCREENSHOTS;
+      const pickBtn = this.root.querySelector('#feedbackPickFileBtn');
+      const fileInput = this.root.querySelector('#feedbackFileInput');
+      if (fileInput) fileInput.disabled = isFull;
+      if (pickBtn) {
+        pickBtn.disabled = isFull;
+        pickBtn.classList.toggle('disabled', isFull);
+        pickBtn.style.pointerEvents = isFull ? 'none' : '';
+        pickBtn.style.opacity = isFull ? '0.5' : '';
+      }
     }
 
     // Пока скриншот грузится, «Отправить» заблокирована — иначе обращение

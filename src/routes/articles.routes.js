@@ -1264,19 +1264,17 @@ router.post('/articles/:id/comments', auth.authenticateToken, auth.checkApproved
     // подшивается к тому же родителю, а не плодит цепочку — иначе пришлось
     // бы рекурсивно отрисовывать сколь угодно глубокое дерево.
     let parentId = req.body.parentId ? Number(req.body.parentId) : null;
-    let parentAuthorId = null;
+    const parentAuthorIds = [];
     if (parentId) {
       const parent = await social.getComment(parentId);
       if (!parent || parent.slug !== req.params.id) {
         return res.status(400).json({ error: 'Комментарий, на который вы отвечаете, не найден' });
       }
-      parentAuthorId = parent.userId;
+      parentAuthorIds.push(parent.userId);
       if (parent.parentId) {
+        const top = await social.getComment(parent.parentId);
+        if (top) parentAuthorIds.push(top.userId);
         parentId = parent.parentId;
-        // Ответ на ответ подшивается к ветке — уведомить нужно автора
-        // ветки (тот, кому отвечали, получит своё через @упоминание).
-        const top = await social.getComment(parentId);
-        parentAuthorId = top ? top.userId : parentAuthorId;
       }
     }
 
@@ -1286,11 +1284,11 @@ router.post('/articles/:id/comments', auth.authenticateToken, auth.checkApproved
     const [withReactions] = await attachCommentExtras([withStickers], req.user.id);
     res.status(201).json(withReactions);
 
-    // Ответ автору ветки и @упоминания — после ответа клиенту, не задерживая его.
+    // Ответ автору ветки, автору ответа и @упоминания — после ответа клиенту, не задерживая его.
     userNotifications.notifyAboutComment({
       actor: req.user,
       comment,
-      parentAuthorId,
+      parentAuthorIds,
       targetType: 'article',
       targetId: article.slug || req.params.id,
       titleFor: async (user) => {

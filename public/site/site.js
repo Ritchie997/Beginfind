@@ -6396,6 +6396,14 @@
             '<input type="text" id="siteFeedbackContact" class="form-input" maxlength="150" placeholder="Ваш email или имя в Telegram / Discord">' +
             '<small style="font-size: 12px; color: var(--text-muted);">Нужен для ответа службы поддержки</small>' +
           '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Скриншот (по желанию)</label>' +
+            '<div id="siteFeedbackAttachments" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;"></div>' +
+            '<div style="display: flex; align-items: center; gap: 8px;">' +
+              '<input type="file" id="siteFeedbackFileInput" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.heic,.heif" multiple style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; opacity: 0; pointer-events: none;">' +
+              '<label for="siteFeedbackFileInput" class="btn btn-secondary btn-sm" id="siteFeedbackPickBtn" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-image"></i> Прикрепить скриншот</label>' +
+            '</div>' +
+          '</div>' +
           '<div id="siteFeedbackStatus" class="site-feedback-status" hidden></div>' +
         '</div>' +
         '<div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">' +
@@ -6422,6 +6430,74 @@
     var contactReqEl = modal.querySelector('#siteFeedbackContactReq');
     var statusEl = modal.querySelector('#siteFeedbackStatus');
     var submitBtn = modal.querySelector('#siteFeedbackSubmitBtn');
+    var attachmentsEl = modal.querySelector('#siteFeedbackAttachments');
+    var fileInput = modal.querySelector('#siteFeedbackFileInput');
+    var pickBtn = modal.querySelector('#siteFeedbackPickBtn');
+    var attachments = [];
+
+    function renderAttachments() {
+      if (!attachmentsEl) return;
+      attachmentsEl.innerHTML = attachments.map(function (url, idx) {
+        return '<span style="position: relative; display: inline-flex; align-items: center; border: 1px solid var(--background-accent); border-radius: 6px; overflow: hidden;">' +
+          '<img src="' + url + '" style="width: 56px; height: 56px; object-fit: cover; display: block;" alt="">' +
+          '<button type="button" data-del-attach="' + idx + '" style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;">&times;</button>' +
+        '</span>';
+      }).join('');
+      var isFull = attachments.length >= 5;
+      if (fileInput) fileInput.disabled = isFull;
+      if (pickBtn) {
+        pickBtn.classList.toggle('disabled', isFull);
+        pickBtn.style.pointerEvents = isFull ? 'none' : '';
+        pickBtn.style.opacity = isFull ? '0.5' : '';
+      }
+    }
+
+    if (attachmentsEl) {
+      attachmentsEl.onclick = function (e) {
+        var btn = e.target.closest('[data-del-attach]');
+        if (btn) {
+          attachments.splice(Number(btn.dataset.delAttach), 1);
+          renderAttachments();
+        }
+      };
+    }
+
+    if (fileInput) {
+      fileInput.value = '';
+      fileInput.onchange = async function () {
+        var files = Array.from(fileInput.files || []);
+        fileInput.value = '';
+        if (!files.length) return;
+        var authToken = (window.authManager && typeof window.authManager.getToken === 'function' ? window.authManager.getToken() : null) ||
+                        localStorage.getItem('alltell_auth_token') ||
+                        localStorage.getItem('token') || '';
+        for (var i = 0; i < files.length; i++) {
+          if (attachments.length >= 5) break;
+          var file = files[i];
+          var formData = new FormData();
+          formData.append('image', file);
+          try {
+            var headers = {};
+            if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+            var res = await fetch('/api/upload-image', {
+              method: 'POST',
+              headers: headers,
+              body: formData
+            });
+            var data = await res.json();
+            if (res.ok && data.url) {
+              attachments.push(data.url);
+              renderAttachments();
+            } else {
+              alert('Ошибка загрузки скриншота: ' + (data.error || 'не удалось загрузить'));
+            }
+          } catch (uploadErr) {
+            alert('Ошибка загрузки: ' + uploadErr.message);
+          }
+        }
+      };
+    }
+    renderAttachments();
 
     if (categoryEl) categoryEl.value = 'bug';
     if (textEl) textEl.value = '';
@@ -6490,7 +6566,8 @@
         var payload = {
           category: category,
           text: text,
-          contact: contact
+          contact: contact,
+          attachments: attachments
         };
         var headers = { 'Content-Type': 'application/json' };
         if (authToken) headers['Authorization'] = 'Bearer ' + authToken;

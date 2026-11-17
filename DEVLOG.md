@@ -5,6 +5,23 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-17 — вложенные ответы AllTell, уведомления об ответах и мобильные скриншоты в обращениях
+
+- **Вложенные ответы на комментарии в ленте AllTell (`public/site/alltell-client.js`, `public/site/site.css`):**
+  - Устранена коллизия CSS-классов, из-за которой стиль кнопки ответа `.alltell-comment-reply` ломал разметку карточки комментария-ответа. Кнопка переименована в `.alltell-comment-reply-btn`.
+  - Для ответов добавлен отдельный модификатор `.alltell-comment.alltell-comment-is-reply` с контрастным фоном `var(--background-secondary)`, компактным аватаром (20px) и отступом с левой акцентной границей, визуально отделяющим ответы от корневых комментариев.
+  - Исправлена ошибочная классификация `var isReply = !replies;` в `alltell-client.js`, из-за которой обычные комментарии без ответов рендерились как ответы.
+  - Добавлена анимация подсветки `.alltell-comment.is-highlighted` и прямая навигация к комментариям публикаций по хешу `#comment-\d+` и параметрам URL (`franchise`, `post`).
+- **Уведомления об ответах на комментарии в AllTell и Антропедии (`src/routes/franchises.routes.js`, `src/routes/articles.routes.js`, `src/services/user-notifications.js`, `public/user-notifications.js`, `public/antropedia.js`):**
+  - В маршрут комментариев публикаций франшиз AllTell (`POST /api/franchises/:id/posts/:postId/comments`) подключена отправка уведомлений через `userNotifications.notifyAboutComment` (ранее в AllTell уведомления о комментариях отсутствовали).
+  - В `notifyAboutComment` добавлена поддержка массива `parentAuthorIds`, благодаря чему при ответе на ответ уведомления получают и автор конкретного ответа, и автор ветки комментариев.
+  - В клиентском модуле `user-notifications.js` добавлена обработка цели `franchise_post` для AllTell (заголовок «к публикации», переход и фокусировка комментария), а также фоновый опрос сводки `/api/notifications/summary` раз в 30 секунд и по событию `visibilitychange` для всплывающих уведомлений без перезагрузки страниц.
+  - В `antropedia.js` обеспечена передача точного `replyToCommentId` и переход к комментарию по событию `hashchange`.
+- **Прикрепление скриншотов в обращениях с мобильных устройств (`public/views/feedback.html`, `public/feedback-manager.js`, `public/site/site.js`, `src/uploads/multer-config.js`, `src/routes/uploads.routes.js`):**
+  - Заменена связка `<button>` + `display:none/hidden` на доступный нативный `<label for="feedbackFileInput">`, решающая блокировку программного `input.click()` в мобильном Safari на iOS.
+  - Добавлена поддержка загрузки скриншотов в модальном окне обращений в футере публичного сайта (`siteFeedbackModal`).
+  - Добавлена поддержка форматов `.heic` и `.heif` в `ALLOWED_IMAGE_EXTENSIONS` с автоматической конвертацией в `.webp` на сервере через `sharp` для корректного отображения скриншотов с iPhone на всех устройствах.
+
 ## 2026-11-15 — расширение поля чтения в Антропедии и настройка размера изображения в инфобоксе
 
 - **Расширение области чтения статьи и вынос сайдбара вправо (`public/site/site.css`, `public/antropedia.css`):**

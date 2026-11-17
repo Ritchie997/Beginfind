@@ -16,6 +16,7 @@ const { serversSchemaReady } = require('../db/connections');
 const social = require('../services/social-store');
 const stickers = require('../services/stickers-store');
 const mentions = require('../services/mentions');
+const userNotifications = require('../services/user-notifications');
 const { getAvatarUrl } = require('../services/avatars');
 const { convertToMp3 } = require('../services/audio-converter');
 
@@ -649,12 +650,18 @@ router.post('/franchises/:id/posts/:postId/comments', auth.authenticateToken, au
       return res.status(400).json({ error: 'Комментарий не может быть пустым' });
     }
     let parentId = req.body.parentId ? Number(req.body.parentId) : null;
+    const parentAuthorIds = [];
     if (parentId) {
       const parent = await social.getFranchisePostComment(parentId);
       if (!parent || Number(parent.postId) !== Number(post.id)) {
         return res.status(400).json({ error: 'Комментарий, на который вы отвечаете, не найден' });
       }
-      if (parent.parentId) parentId = parent.parentId;
+      parentAuthorIds.push(parent.userId);
+      if (parent.parentId) {
+        const top = await social.getFranchisePostComment(parent.parentId);
+        if (top) parentAuthorIds.push(top.userId);
+        parentId = parent.parentId;
+      }
     }
     const comment = await social.addFranchisePostComment(
       req.user.id,
@@ -665,6 +672,17 @@ router.post('/franchises/:id/posts/:postId/comments', auth.authenticateToken, au
     );
     const [result] = await attachPostCommentExtras([comment], req.user.id);
     res.status(201).json(result);
+
+    userNotifications.notifyAboutComment({
+      actor: req.user,
+      comment,
+      parentAuthorIds,
+      targetType: 'franchise_post',
+      targetId: `${req.params.id}:${post.id}`,
+      titleFor: async () => {
+        return post.title || `Публикация во франшизе`;
+      }
+    });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }

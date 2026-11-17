@@ -4156,6 +4156,34 @@ input::-ms-clear {
     border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.alltell-comment.is-highlighted {
+    animation: alltellCommentFocus 2.6s ease-out;
+}
+
+@keyframes alltellCommentFocus {
+    0%, 40% { background: rgba(88, 101, 242, 0.28); box-shadow: 0 0 0 2px var(--blurple, #5865f2); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.alltell-comment.alltell-comment-is-reply {
+    display: block;
+    padding: 9px 12px;
+    background: var(--background-secondary, #2b2d31);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.alltell-comment.alltell-comment-is-reply .alltell-comment-author-avatar img,
+.alltell-comment.alltell-comment-is-reply .alltell-avatar-fallback {
+    width: 20px;
+    height: 20px;
+    font-size: 9px;
+}
+
+.alltell-comment.alltell-comment-is-reply .alltell-comment-content {
+    font-size: 12.5px;
+}
+
 .alltell-comment-replies {
     margin-top: 8px;
     margin-left: 20px;
@@ -4319,6 +4347,7 @@ input::-ms-clear {
     margin-top: 6px;
 }
 
+.alltell-comment-reply-btn,
 .alltell-comment-reply,
 .alltell-comment-delete {
     border: none;
@@ -4332,6 +4361,7 @@ input::-ms-clear {
     padding: 2px 4px;
 }
 
+.alltell-comment-reply-btn:hover,
 .alltell-comment-reply:hover,
 .alltell-comment-delete:hover {
     color: var(--header-primary);

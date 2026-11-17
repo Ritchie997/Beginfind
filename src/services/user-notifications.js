@@ -76,10 +76,13 @@ async function create(userId, data) {
  *   глазами получателя (у многослойной статьи — с его слоя) или null, если
  *   получателю она недоступна
  */
-async function notifyAboutComment({ actor, comment, parentAuthorId, targetType, targetId, titleFor }) {
+async function notifyAboutComment({ actor, comment, parentAuthorId, parentAuthorIds, targetType, targetId, titleFor }) {
   try {
     const recipients = new Map(); // userId -> type
-    if (parentAuthorId && parentAuthorId !== actor.id) recipients.set(parentAuthorId, 'reply');
+    const replyIds = (Array.isArray(parentAuthorIds) ? parentAuthorIds : [parentAuthorId])
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0 && id !== Number(actor.id));
+    replyIds.forEach((id) => recipients.set(id, 'reply'));
     const names = mentions.extractMentionNames(comment.content);
     if (names.length) {
       const resolved = await mentions.resolveNames(names);
