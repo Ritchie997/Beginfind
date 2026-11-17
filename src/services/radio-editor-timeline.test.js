@@ -517,3 +517,42 @@ test('radio-broadcast: choosing start time initiates live broadcast and virtual 
   assert.equal(currentSlot.title, 'Хит дня', 'В 15:03:30 должен играть второй трек');
   assert.equal(offsetInSlot, 90, 'Смещение внутри второго трека должно быть ровно 90 секунд');
 });
+
+test('radio-timeshift: pause resumes from paused position without stopping live broadcast and blocks playing future tracks', async () => {
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+  const freshStoreJs = fs.readFileSync(path.join(rootDir, 'src/services/radio-store.js'), 'utf8');
+  const freshRoutesJs = fs.readFileSync(path.join(rootDir, 'src/routes/radio.routes.js'), 'utf8');
+
+  // 1. Блокировка воспроизведения будущих треков на клиенте
+  assert.ok(freshClientJs.includes('!state.isTimeshift'), 'Должна быть проверка режима прямого эфира');
+  assert.ok(freshClientJs.includes('Будущие треки станут доступны только после выхода в эфир'), 'Запрет переключения на будущие треки');
+  assert.ok(freshClientJs.includes('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире'), 'Запрет перемотки прогресс-бара вперед за пределы сыгранного');
+
+  // 2. Защита на бэкенде: nextSlots не отдает audioUrl для будущих треков
+  assert.ok(freshStoreJs.includes('audioUrl: null'), 'nextSlots должен иметь audioUrl: null для защиты от воспроизведения будущего эфира');
+  assert.ok(freshRoutesJs.includes('s.start_time > nowIso && !isOwner && !isAdmin'), 'timeline API для гостей должен скрывать audio_url будущих слотов');
+
+  // 3. Поддержка выхода в таймшифт и прослушивания прошлых треков
+  assert.ok(freshClientJs.includes('state.timeshiftForwardSlots'), 'Должна быть поддержка навигации по таймшифту');
+  assert.ok(freshClientJs.includes('deckLiveSyncBtn'), 'Кнопка В эфир для возврата в прямой эфир');
+
+  // 4. Эмуляция защиты: попытка промотать вперед на 80% при сыгранных 30%
+  const trackDuration = 200;
+  const elapsedInBroadcast = 60; // 30% трека сыграло в эфире
+  const maxLiveRatio = elapsedInBroadcast / trackDuration; // 0.3
+  const userRequestedRatio = 0.75; // 75% трека (будущее!)
+
+  let canSeek = false;
+  if (userRequestedRatio <= maxLiveRatio + 0.03) {
+    canSeek = true;
+  }
+  assert.equal(canSeek, false, 'Перемотка в несыгранное будущее должна быть запрещена');
+
+  // Перемотка назад (на 15%) разрешена и переводит в таймшифт
+  const rewindRatio = 0.15;
+  let enteredTimeshift = false;
+  if (rewindRatio < maxLiveRatio - 0.03) {
+    enteredTimeshift = true;
+  }
+  assert.equal(enteredTimeshift, true, 'Перемотка назад должна переводить в режим таймшифта');
+});

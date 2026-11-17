@@ -485,7 +485,7 @@ async function getStationLiveState(stationId) {
       id: s.id,
       title: s.title,
       type: s.type,
-      audioUrl: s.audio_url,
+      audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
       duration: s.duration,
       startTime: s.start_time,
       endTime: s.end_time

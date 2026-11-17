@@ -398,7 +398,29 @@ router.get('/radio/stations/:id/timeline', async (req, res) => {
   try {
     const { fromTime, toTime } = req.query;
     const slots = await radioStore.getTimelineSlots(req.params.id, fromTime, toTime);
-    res.json(slots);
+
+    const station = await radioStore.getStationById(req.params.id);
+    const authHeader = req.headers['authorization'];
+    let user = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        user = auth.verifyToken(token);
+      } catch (_) {}
+    }
+    const isOwner = user && station && String(station.owner_id) === String(user.id);
+    const isAdmin = user && isRootOrAdmin(user);
+
+    const nowIso = new Date().toISOString();
+    const safeSlots = (slots || []).map((s) => {
+      // Если слот ещё не вышел в эфир, и запрос не от владельца/админа — скрываем audio_url
+      if (s.start_time > nowIso && !isOwner && !isAdmin) {
+        return { ...s, audio_url: null };
+      }
+      return s;
+    });
+
+    res.json(safeSlots);
   } catch (error) {
     console.error('[radio] Error getting timeline:', error);
     res.status(500).json({ error: 'Не удалось загрузить ленту времени: ' + error.message });

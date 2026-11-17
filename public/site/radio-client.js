@@ -420,6 +420,25 @@
 
     if (dom.deckLiveSyncBtn) {
       dom.deckLiveSyncBtn.style.display = state.isTimeshift ? 'inline-flex' : 'none';
+      dom.deckLiveSyncBtn.title = 'Вернуться в прямой эфир станции';
+    }
+
+    if (dom.deckNextBtn) {
+      if (!state.isTimeshift) {
+        dom.deckNextBtn.disabled = true;
+        dom.deckNextBtn.style.opacity = '0.35';
+        dom.deckNextBtn.title = 'Будущие треки станут доступны только после выхода в эфир';
+      } else {
+        dom.deckNextBtn.disabled = false;
+        dom.deckNextBtn.style.opacity = '1';
+        dom.deckNextBtn.title = 'Следующий трек / В эфир';
+      }
+    }
+
+    if (dom.deckPrevBtn) {
+      dom.deckPrevBtn.disabled = false;
+      dom.deckPrevBtn.style.opacity = '1';
+      dom.deckPrevBtn.title = 'Предыдущий трек из эфира / С начала';
     }
 
     if (dom.deckLoopBtn) {
@@ -436,17 +455,39 @@
       updateDeckUI();
       return;
     }
-    if (state.nextSlots && state.nextSlots.length > 0) {
-      const next = state.nextSlots.shift();
+
+    // В режиме радио: запрещено перескакивать в несыгранное будущее эфира!
+    if (!state.isTimeshift) {
+      showToast('Будущие треки станут доступны только после выхода в эфир', 'info');
+      return;
+    }
+
+    // Если слушатель находился в таймшифте (отставал от эфира), он может двигаться вперед только до прямого эфира
+    if (state.timeshiftForwardSlots && state.timeshiftForwardSlots.length > 0) {
+      const nextSlot = state.timeshiftForwardSlots.shift();
       if (state.currentSlot) state.prevSlots.unshift(state.currentSlot);
-      state.currentSlot = next;
-      state.isTimeshift = true;
-      if (gAudio && state.currentStation) {
-        gAudio.playRadio(state.currentStation, next, 0);
+      state.currentSlot = nextSlot;
+
+      if (state.liveCurrentSlot && nextSlot.id === state.liveCurrentSlot.id) {
+        state.isTimeshift = false;
+        if (state.currentStation) {
+          tuneStation(state.currentStation, true);
+        }
+        return;
+      }
+
+      if (gAudio && state.currentStation && nextSlot.audioUrl) {
+        gAudio.playRadio(state.currentStation, nextSlot, 0);
       }
       updateDeckUI();
-    } else if (state.currentStation) {
+      return;
+    }
+
+    // Если слотов в таймшифте больше нет, возвращаем слушателя в живой эфир
+    state.isTimeshift = false;
+    if (state.currentStation) {
       tuneStation(state.currentStation, true);
+      showToast('Вы вернулись в прямой эфир станции', 'info');
     }
   }
 
@@ -458,35 +499,43 @@
       updateDeckUI();
       return;
     }
-    const cur = gAudio ? gAudio.getState().currentTime : 0;
+    const cur = (gAudio && gAudio.audio) ? (gAudio.audio.currentTime || 0) : (curr.currentTime || 0);
     if (cur > 3) {
       if (gAudio) gAudio.seek(0);
       state.isTimeshift = true;
       updateDeckUI();
+      showToast('Трек запущен с начала (таймшифт)', 'info');
       return;
     }
     if (state.prevSlots && state.prevSlots.length > 0) {
+      if (!state.timeshiftForwardSlots) state.timeshiftForwardSlots = [];
+      if (state.currentSlot) state.timeshiftForwardSlots.unshift(state.currentSlot);
+
       const prev = state.prevSlots.shift();
-      if (state.currentSlot) state.nextSlots.unshift(state.currentSlot);
       state.currentSlot = prev;
       state.isTimeshift = true;
-      if (gAudio && state.currentStation) {
+      if (gAudio && state.currentStation && prev.audioUrl) {
         gAudio.playRadio(state.currentStation, prev, 0);
       }
       updateDeckUI();
+      showToast(`Включен прошлый трек «${prev.title}» (архив эфира)`, 'info');
     } else if (gAudio) {
       gAudio.seek(0);
+      state.isTimeshift = true;
+      updateDeckUI();
     }
   }
 
   async function tuneStation(station, autoPlay = true) {
     state.currentStation = station;
     state.isTimeshift = false;
+    state.timeshiftForwardSlots = [];
     updateDeckUI();
 
     try {
       const live = await api(`/api/radio/stations/${station.id}/live`);
       state.currentSlot = live.currentSlot;
+      state.liveCurrentSlot = live.currentSlot;
       state.nextSlots = live.nextSlots || [];
       state.prevSlots = live.prevSlots || [];
 
@@ -3599,7 +3648,18 @@
       if (curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
         gAudio.pause();
       } else if (!curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
+        // Разжимаем паузу: продолжаем играть с того места, где звук стоял (не пропуская эфир!)
         gAudio.resume();
+
+        // Проверяем отставание от живого эфира: если реальный эфир ушел вперед, переходим в таймшифт
+        if (state.currentSlot && state.currentSlot.startTime) {
+          const liveOffset = Math.max(0, (Date.now() - new Date(state.currentSlot.startTime).getTime()) / 1000);
+          const curTime = (gAudio.audio ? gAudio.audio.currentTime : curr.currentTime) || 0;
+          if (liveOffset > curTime + 2.5) {
+            state.isTimeshift = true;
+          }
+        }
+        updateDeckUI();
       } else {
         tuneStation(state.currentStation, true);
       }
@@ -3624,11 +3684,15 @@
       state.isTimeshift = true;
       updateDeckUI();
       gAudio.resume();
+      showToast('Текущий трек играет с самого начала (таймшифт)', 'info');
     });
 
     dom.deckLiveSyncBtn?.addEventListener('click', () => {
+      state.isTimeshift = false;
+      state.timeshiftForwardSlots = [];
       if (state.currentStation) {
         tuneStation(state.currentStation, true);
+        showToast(`Вы вернулись в прямой эфир станции «${state.currentStation.name}»`, 'info');
       } else {
         const firstCard = document.querySelector('.radio-station-card');
         if (firstCard) firstCard.click();
@@ -3640,8 +3704,23 @@
       if (!gAudio) return;
       const rect = dom.deckProgressBar.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+
+      const curr = gAudio.getState();
+      if (curr.mode === 'radio' && state.currentStation && !state.isTimeshift && state.currentSlot) {
+        const curOffset = Math.max(0, (Date.now() - new Date(state.currentSlot.startTime).getTime()) / 1000);
+        const dur = (gAudio.audio && gAudio.audio.duration) ? gAudio.audio.duration : (state.currentSlot.duration || 0);
+        const maxLiveRatio = dur > 0 ? (curOffset / dur) : 1;
+
+        if (ratio > maxLiveRatio + 0.03) {
+          showToast('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире', 'warning');
+          return;
+        }
+        if (ratio < maxLiveRatio - 0.03) {
+          state.isTimeshift = true;
+        }
+      }
+
       gAudio.seek(ratio);
-      state.isTimeshift = true;
       updateDeckUI();
     });
 
