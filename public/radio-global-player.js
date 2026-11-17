@@ -353,6 +353,34 @@
     } catch (_) {}
   }
 
+  // Надежное выставление смещения времени для живого радиоэфира
+  function applyAudioOffset(targetOffset) {
+    const offset = Math.max(0, Number(targetOffset) || 0);
+    if (offset <= 0) return;
+
+    const setTime = () => {
+      try {
+        const dur = audio.duration || 0;
+        const safeOffset = (dur > 0 && offset >= dur) ? (offset % dur) : offset;
+        if (Math.abs((audio.currentTime || 0) - safeOffset) > 1.5) {
+          audio.currentTime = safeOffset;
+        }
+      } catch (_) {}
+    };
+
+    if (audio.readyState >= 1) {
+      setTime();
+    } else {
+      const onReady = () => {
+        audio.removeEventListener('loadedmetadata', onReady);
+        audio.removeEventListener('canplay', onReady);
+        setTime();
+      };
+      audio.addEventListener('loadedmetadata', onReady, { once: true });
+      audio.addEventListener('canplay', onReady, { once: true });
+    }
+  }
+
   // ===== Синхронизация прямого эфира радиостанции =====
   async function syncRadioStationLive(station, autoPlay = true) {
     try {
@@ -381,8 +409,9 @@
         const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);
         if (!isSameSrc) {
           audio.src = targetSlot.audioUrl;
-          audio.currentTime = targetOffset;
         }
+        applyAudioOffset(targetOffset);
+
         if (autoPlay) {
           isAudioLeader = true;
           remoteLeaderTabId = null;
@@ -401,13 +430,17 @@
             const unlock = () => {
               document.removeEventListener('pointerdown', unlock);
               document.removeEventListener('keydown', unlock);
-              audio.play().then(() => {
-                state.isPlaying = true;
-                updateMediaSession();
-                updateBarUI();
-                notify();
-                announcePlay();
-              }).catch(() => {});
+              if (state.mode === 'radio' && state.station) {
+                syncRadioStationLive(state.station, true);
+              } else {
+                audio.play().then(() => {
+                  state.isPlaying = true;
+                  updateMediaSession();
+                  updateBarUI();
+                  notify();
+                  announcePlay();
+                }).catch(() => {});
+              }
             };
             document.addEventListener('pointerdown', unlock, { once: true });
             document.addEventListener('keydown', unlock, { once: true });
@@ -443,8 +476,9 @@
       const isSameSrc = currentSrc === slot.audioUrl || currentSrc.endsWith(slot.audioUrl);
       if (!isSameSrc) {
         audio.src = slot.audioUrl;
-        audio.currentTime = offset || 0;
       }
+      applyAudioOffset(offset);
+
       audio.play().then(() => {
         state.isPlaying = true;
         updateMediaSession();
@@ -455,6 +489,16 @@
         state.isPlaying = false;
         updateBarUI();
         notify();
+        // Разблокировка автовоспроизведения при клике
+        const unlock = () => {
+          document.removeEventListener('pointerdown', unlock);
+          document.removeEventListener('keydown', unlock);
+          if (state.mode === 'radio' && state.station) {
+            syncRadioStationLive(state.station, true);
+          }
+        };
+        document.addEventListener('pointerdown', unlock, { once: true });
+        document.addEventListener('keydown', unlock, { once: true });
       });
     } else {
       syncRadioStationLive(station, true);

@@ -343,8 +343,9 @@
           </div>
           <div class="radio-editor-time-wrap">
             <label><i class="far fa-clock"></i> Старт вещания:</label>
-            <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm">
-            <button type="button" class="btn btn-secondary btn-sm" id="btnSetStartTimeNow" title="Синхронизировать с текущим временем">Сейчас</button>
+            <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
+            <button type="button" class="btn btn-primary btn-sm" id="btnSetStartTimeNow" title="Запустить вещание в прямой эфир прямо сейчас"><i class="fas fa-play"></i> Сейчас (Старт)</button>
+            <span id="editorLiveStatusBadge" class="badge" style="display:none; font-size:0.75rem; padding:4px 8px; border-radius:6px;"></span>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <button type="button" class="btn btn-secondary btn-sm" id="btnToggleMediaDrawer" title="Открыть боковую панель медиатеки">

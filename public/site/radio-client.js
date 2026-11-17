@@ -578,6 +578,10 @@
           state.currentStation = gState.station;
           updateDeckUI();
           highlightActiveStation(gState.station.id);
+        } else if (gState.mode !== 'track') {
+          // Находим станцию, в которой прямо сейчас идет живой эфир, либо первую в каталоге, и начинаем вещание со смещением!
+          const targetStation = stations.find((s) => s.isLive) || stations[0];
+          tuneStation(targetStation, true);
         } else {
           tuneStation(stations[0], false);
         }
@@ -1525,6 +1529,100 @@
     return compiled;
   }
 
+  function updateEditorLiveStatusBadge(isLive, startMs) {
+    const badge = document.getElementById('editorLiveStatusBadge');
+    if (!badge) return;
+    if (!state.selectedStationForEdit || !state.editorBlocks || state.editorBlocks.length === 0) {
+      badge.style.display = 'none';
+      return;
+    }
+    badge.style.display = 'inline-flex';
+    badge.style.alignItems = 'center';
+    badge.style.gap = '6px';
+    if (isLive) {
+      badge.style.background = '#16a34a';
+      badge.style.color = '#fff';
+      badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> В эфире прямо сейчас';
+      badge.title = 'Вещание идет прямо сейчас по виртуальному расписанию';
+    } else {
+      badge.style.background = '#2563eb';
+      badge.style.color = '#fff';
+      badge.innerHTML = `<i class="far fa-clock"></i> Старт в ${formatClockTime(startMs)}`;
+      badge.title = 'Вещание запланировано на будущее время и запустится автоматически';
+    }
+  }
+
+  // Запуск / публикация вещания радиостанции
+  async function publishBroadcast(startTime, options = {}) {
+    const { notify = true, autoTune = true } = options;
+    if (!state.selectedStationForEdit) {
+      if (state.myStations && state.myStations.length > 0) {
+        state.selectedStationForEdit = state.myStations[0];
+        if (dom.editorStationSelect) dom.editorStationSelect.value = state.myStations[0].id;
+      } else {
+        if (notify) showToast('Пожалуйста, выберите радиостанцию для вещания', 'warning');
+        return false;
+      }
+    }
+
+    if (startTime) {
+      setEditorStartTime(startTime);
+    }
+    syncCompiledSlots();
+
+    if (!state.editorSlots || state.editorSlots.length === 0) {
+      if (notify) showToast('Сетка вещания пуста. Добавьте треки или плейлисты перед стартом эфира.', 'warning');
+      return false;
+    }
+
+    const st = state.selectedStationForEdit;
+    const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
+    const isLiveNow = startMs <= Date.now();
+
+    try {
+      if (dom.btnSaveTimeline) {
+        dom.btnSaveTimeline.disabled = true;
+        dom.btnSaveTimeline.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запуск вещания…';
+      }
+
+      await api(`/api/radio/stations/${st.id}/timeline`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slots: state.editorSlots,
+          startTime: state.editorStartTime || new Date().toISOString()
+        })
+      });
+
+      renderEditor();
+      await loadStations();
+
+      if (notify) {
+        if (isLiveNow) {
+          showToast(`🔴 Вещание радиостанции «${st.name}» успешно запущено в прямой эфир!`, 'success');
+        } else {
+          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(startMs)}. Эфир запустится точно по расписанию.`, 'info');
+        }
+      }
+
+      // Если эфир активен прямо сейчас, настраиваем станцию и запускаем проигрывание с нужного времени!
+      if (isLiveNow && autoTune) {
+        tuneStation(st, true);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[radio] Error starting broadcast:', e);
+      if (notify) showToast('Ошибка запуска вещания: ' + e.message, 'error');
+      return false;
+    } finally {
+      if (dom.btnSaveTimeline) {
+        dom.btnSaveTimeline.disabled = false;
+        dom.btnSaveTimeline.innerHTML = '<i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)';
+      }
+    }
+  }
+
   async function loadStationTimeline(stationId) {
     try {
       const slots = await api(`/api/radio/stations/${stationId}/timeline`);
@@ -2467,10 +2565,13 @@
 
   // Общий рендерер редактора
   function renderEditor() {
+    syncCompiledSlots();
     renderTimelineRibbon();
     renderEditorBlocks();
     updateCapacityUI();
     updateEditorPlaybackUI();
+    const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
+    updateEditorLiveStatusBadge(startMs <= Date.now() && state.editorBlocks && state.editorBlocks.length > 0, startMs);
   }
 
   // Сохраняем имя renderEditorSlots для обратной совместимости
@@ -3591,14 +3692,18 @@
 
     dom.editorBroadcastStartTime?.addEventListener('change', (e) => {
       if (e.target.value) {
-        state.editorStartTime = new Date(e.target.value).toISOString();
-        renderEditorSlots();
+        publishBroadcast(e.target.value, {
+          notify: true,
+          autoTune: new Date(e.target.value).getTime() <= Date.now()
+        });
       }
     });
 
     dom.btnSetStartTimeNow?.addEventListener('click', () => {
-      setEditorStartTime(new Date());
-      renderEditorSlots();
+      publishBroadcast(new Date(), {
+        notify: true,
+        autoTune: true
+      });
     });
 
     dom.btnClearTimelineBtn?.addEventListener('click', async () => {
@@ -3646,38 +3751,7 @@
     });
 
     dom.btnSaveTimeline?.addEventListener('click', async () => {
-      if (!state.selectedStationForEdit) {
-        showToast('Пожалуйста, выберите радиостанцию', 'warning');
-        return;
-      }
-      if (state.editorSlots.length === 0) {
-        showToast('Сетка пуста. Добавьте хотя бы один трек.', 'warning');
-        return;
-      }
-
-      try {
-        dom.btnSaveTimeline.disabled = true;
-        dom.btnSaveTimeline.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохраняем…';
-
-        await api(`/api/radio/stations/${state.selectedStationForEdit.id}/timeline`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slots: state.editorSlots,
-            startTime: state.editorStartTime || new Date().toISOString()
-          })
-        });
-
-        showToast('Сетка вещания успешно опубликована на 24 часа! Эфир обновлен.', 'success');
-        loadStations();
-      } catch (e) {
-        showToast('Ошибка сохранения сетки: ' + e.message, 'error');
-      } finally {
-        if (dom.btnSaveTimeline) {
-          dom.btnSaveTimeline.disabled = false;
-          dom.btnSaveTimeline.innerHTML = '<i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)';
-        }
-      }
+      await publishBroadcast(state.editorStartTime || new Date(), { notify: true, autoTune: true });
     });
 
     // Масштабирование видео-таймлайна

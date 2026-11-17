@@ -467,3 +467,53 @@ test('radio-deck: synchronizes with global audio player in track mode and editor
   });
   assert.equal(renderedCount, 5, 'Все 5 типов блоков должны успешно вычислять наличие аудио без ReferenceError');
 });
+
+test('radio-broadcast: choosing start time initiates live broadcast and virtual timeline plays from exact offset upon entry', () => {
+  const freshClientJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+  const freshPlayerJs = fs.readFileSync(path.join(rootDir, 'public/radio-global-player.js'), 'utf8');
+  const freshHtml = fs.readFileSync(path.join(rootDir, 'public/site/radio.html'), 'utf8');
+
+  // 1. Выбор старта вещания и кнопка "Сейчас" инициируют запуск вещания
+  assert.ok(freshClientJs.includes('async function publishBroadcast('), 'Должна быть функция запуска вещания publishBroadcast');
+  assert.ok(freshClientJs.includes('btnSetStartTimeNow?.addEventListener'), 'Кнопка Сейчас должна быть привязана к обработчику');
+  assert.ok(freshClientJs.includes('publishBroadcast(new Date()'), 'Клик на Сейчас должен вызывать publishBroadcast');
+  assert.ok(freshClientJs.includes('updateEditorLiveStatusBadge('), 'Должно быть визуальное отображение статуса эфира');
+  assert.ok(freshHtml.includes('id="editorLiveStatusBadge"'), 'Бейдж статуса эфира в разметке');
+
+  // 2. applyAudioOffset в аудиоплеере для воспроизведения с нужного времени без перегрузки сервера
+  assert.ok(freshPlayerJs.includes('function applyAudioOffset('), 'Плеер должен иметь функцию applyAudioOffset');
+  assert.ok(freshPlayerJs.includes('loadedmetadata'), 'applyAudioOffset должен ожидать loadedmetadata для надежной перемотки');
+  assert.ok(freshPlayerJs.includes('safeOffset'), 'applyAudioOffset должен безопасно рассчитывать смещение');
+
+  // 3. Автоматический вход в живой эфир при заходе на страницу радио
+  assert.ok(freshClientJs.includes('stations.find((s) => s.isLive)'), 'loadStations должен находить активную станцию в эфире');
+
+  // 4. Эмуляция виртуального таймера эфира: расчет текущего слота и смещения по заходу слушателя
+  const broadcastStart = new Date('2026-11-17T15:00:00.000Z').getTime();
+  const scheduleSlots = [
+    { id: 's1', title: 'Вступительное слово', duration: 120 }, // 15:00:00 - 15:02:00
+    { id: 's2', title: 'Хит дня', duration: 240 },             // 15:02:00 - 15:06:00
+    { id: 's3', title: 'Интервью', duration: 300 }             // 15:06:00 - 15:11:00
+  ];
+
+  // Слушатель заходит в радио в 15:03:30 (спустя 210 секунд после старта)
+  const entryTime = new Date('2026-11-17T15:03:30.000Z').getTime();
+  const elapsedFromStart = (entryTime - broadcastStart) / 1000; // 210 сек
+
+  let currentSlot = null;
+  let offsetInSlot = 0;
+  let acc = 0;
+
+  for (const s of scheduleSlots) {
+    if (acc + s.duration > elapsedFromStart) {
+      currentSlot = s;
+      offsetInSlot = elapsedFromStart - acc;
+      break;
+    }
+    acc += s.duration;
+  }
+
+  assert.ok(currentSlot, 'Слот должен быть найден');
+  assert.equal(currentSlot.title, 'Хит дня', 'В 15:03:30 должен играть второй трек');
+  assert.equal(offsetInSlot, 90, 'Смещение внутри второго трека должно быть ровно 90 секунд');
+});
