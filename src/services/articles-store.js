@@ -19,6 +19,7 @@ const { CONTENT_DIR } = require('../config/paths');
 const { slugify } = require('./slugify');
 const blocks = require('./blocks');
 const articleLayers = require('./article-layers');
+const searchService = require('./article-search');
 
 const TRASH_DIR = path.join(CONTENT_DIR, '.trash');
 const FILE_EXT = '.json';
@@ -598,26 +599,22 @@ function allLayersSearchText(article) {
 }
 
 function searchArticles(query, { limit = 50, offset = 0 } = {}) {
-  const q = query.trim().toLowerCase();
+  const parsed = searchService.parseSearchQuery(query);
   const all = listArticles();
 
   const scored = all
     .map(article => {
-      const titleLower = article.title.toLowerCase();
-      const contentLower = allLayersSearchText(article).toLowerCase();
-      let rank = 0;
-      if (titleLower === q) rank = 1;
-      else if (titleLower.includes(q)) rank = 2;
-      else if (contentLower.includes(q)) rank = 3;
-      return { article, rank };
+      const content = allLayersSearchText(article);
+      const score = searchService.scoreArticleText(article.title, content, parsed);
+      return { article, score };
     })
-    .filter(({ rank }) => rank > 0)
-    .sort((a, b) => a.rank - b.rank);
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => (b.score - a.score) || (new Date(b.article.created_at || 0) - new Date(a.article.created_at || 0)));
 
   const total = scored.length;
-  const page = scored.slice(offset, offset + limit).map(({ article, rank }) => ({
+  const page = scored.slice(offset, offset + limit).map(({ article, score }) => ({
     ...article,
-    relevance_score: rank === 1 ? 100 : rank === 2 ? 80 : 60
+    relevance_score: score
   }));
 
   return { rows: page, total };
@@ -636,6 +633,7 @@ function filterArticles(opts = {}) {
   const {
     viewCounts = null,
     q = '',
+    parsedQuery: providedParsedQuery = null,
     tags = [],
     server = '',
     locked, // true | false | undefined — фильтр не применяется
@@ -646,18 +644,15 @@ function filterArticles(opts = {}) {
 
   let list = listArticles();
 
-  const qLower = q.trim().toLowerCase();
+  const parsedQuery = providedParsedQuery || (q ? searchService.parseSearchQuery(q) : null);
   let scoreBySlug = null;
-  if (qLower) {
+  if (parsedQuery && parsedQuery.hasTextCriteria) {
     scoreBySlug = new Map();
     list = list.filter((a) => {
-      const titleLower = a.title.toLowerCase();
-      let rank = 0;
-      if (titleLower === qLower) rank = 3;
-      else if (titleLower.includes(qLower)) rank = 2;
-      else if (allLayersSearchText(a).toLowerCase().includes(qLower)) rank = 1;
-      if (rank > 0) scoreBySlug.set(a.slug, rank);
-      return rank > 0;
+      const content = allLayersSearchText(a);
+      const score = searchService.scoreArticleText(a.title, content, parsedQuery);
+      if (score > 0) scoreBySlug.set(a.slug, score);
+      return score > 0;
     });
   }
 
@@ -695,7 +690,7 @@ function filterArticles(opts = {}) {
     }
   }
 
-  const effectiveSort = sort || (qLower ? 'relevance' : 'newest');
+  const effectiveSort = sort || (scoreBySlug ? 'relevance' : 'newest');
   const sorted = [...list];
   switch (effectiveSort) {
     case 'relevance':

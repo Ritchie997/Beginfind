@@ -2,6 +2,7 @@
 
 const articleLayers = require('./article-layers');
 const blocks = require('./blocks');
+const searchService = require('./article-search');
 
 function sanitizePublicBlocks(rawBlocks) {
   return (rawBlocks || []).flatMap((block) => {
@@ -155,11 +156,10 @@ function listPublicArticles(articles, {
   q = '', tag = '', sort = '', viewCounts = null, dateFrom = '', dateTo = '', limit = 30, offset = 0,
   serverId = '', server = '', locked
 } = {}) {
-  // «#слово» в строке поиска — это тег (совпадение по началу тега), остальное —
-  // текстовый запрос; так же устроен поиск в админке.
-  const words = String(q).trim().slice(0, 200).split(/\s+/).filter(Boolean);
-  const hashKeys = words.filter((w) => w.startsWith('#')).map(normalizeTagKey).filter(Boolean);
-  const query = words.filter((w) => !w.startsWith('#')).join(' ').toLocaleLowerCase();
+  // Разбор запроса: "точная фраза", @автор, #тег и слова
+  const parsed = searchService.parseSearchQuery(q);
+  const hashKeys = [...parsed.hashKeys];
+  const authorTerms = [...parsed.authorTerms];
   const tagKeys = String(tag).slice(0, 300).split(',').map(normalizeTagKey).filter(Boolean).slice(0, 20);
   const from = parseDateBound(dateFrom, false);
   const to = parseDateBound(dateTo, true);
@@ -168,7 +168,7 @@ function listPublicArticles(articles, {
     ? true
     : (locked === 'false' || locked === false ? false : undefined);
   const requestedSort = SORT_MODES.includes(sort) ? sort : '';
-  const effectiveSort = requestedSort || (query ? 'relevance' : 'newest');
+  const effectiveSort = requestedSort || (parsed.hasTextCriteria ? 'relevance' : 'newest');
   const createdAt = (item) => new Date(item.article.created_at || 0);
   const visible = [];
 
@@ -186,6 +186,13 @@ function listPublicArticles(articles, {
       if (!hashKeys.every((key) => own.some((t) => t.startsWith(key)))) continue;
     }
 
+    if (authorTerms.length) {
+      const content = publicArticleSearchText(article, resolved);
+      const isAuthorMatch = (article.legacyAuthorName && authorTerms.some((t) => article.legacyAuthorName.toLowerCase().includes(t)))
+        || authorTerms.some((t) => searchService.textContainsAuthorMention(content, t));
+      if (!isAuthorMatch) continue;
+    }
+
     if (from || to) {
       const created = article.created_at ? new Date(article.created_at) : null;
       if (!created || Number.isNaN(created.getTime())) continue;
@@ -194,12 +201,10 @@ function listPublicArticles(articles, {
     }
 
     let rank = 0;
-    if (query) {
-      const title = String(resolved.layer.title || (!article.layers || !article.layers.length ? article.title : article.slug) || '')
-        .toLocaleLowerCase();
-      if (title === query) rank = 3;
-      else if (title.includes(query)) rank = 2;
-      else if (publicArticleSearchText(article, resolved).includes(query)) rank = 1;
+    if (parsed.hasTextCriteria) {
+      const title = String(resolved.layer.title || (!article.layers || !article.layers.length ? article.title : article.slug) || '');
+      const content = publicArticleSearchText(article, resolved);
+      rank = searchService.scoreArticleText(title, content, parsed);
       if (!rank) continue;
     }
     visible.push({ article, resolved, rank });

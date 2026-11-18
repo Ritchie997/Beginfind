@@ -20,6 +20,8 @@ const gallery = require('../services/gallery-store');
 const userNotifications = require('../services/user-notifications');
 const articleCollabStore = require('../services/article-collab-store');
 const mentions = require('../services/mentions');
+const searchService = require('../services/article-search');
+const blocks = require('../services/blocks');
 const { PORT, HOST } = require('../config/env');
 const { dbPath, UPLOADS_DIR } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
@@ -78,6 +80,22 @@ function resolveLegacyAuthorIds(names) {
           if (id) result.set(name, id);
         });
         resolve(result);
+      }
+    );
+  });
+}
+
+function findUserIdsByAuthorTerms(terms) {
+  if (!terms || !terms.length) return Promise.resolve(new Set());
+  return new Promise((resolve) => {
+    const conditions = terms.map(() => '(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)').join(' OR ');
+    const params = terms.flatMap((t) => [`%${t.toLowerCase()}%`, `%${t.toLowerCase()}%`]);
+    usersDb.all(
+      `SELECT id FROM users WHERE status = 'approved' AND (${conditions})`,
+      params,
+      (err, rows) => {
+        if (err || !rows) return resolve(new Set());
+        resolve(new Set(rows.map((r) => r.id)));
       }
     );
   });
@@ -524,20 +542,20 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const tags = tag ? String(tag).split(',').map((s) => s.trim()).filter(Boolean) : [];
     const lockedFilter = locked === 'true' ? true : locked === 'false' ? false : undefined;
 
-    // Слова с # в строке поиска ("#персонаж") — это теги, а не текст: теги из
-    // поля «Теги» в текст статьи не входят, и раньше такой запрос находил
-    // статью, только если хештег написан прямо в тексте. Совпадение — по
-    // началу тега ("#перс" найдёт и "персонаж"); несколько — все сразу.
-    const words = String(q).trim().split(/\s+/).filter(Boolean);
-    const hashKeys = words.filter((w) => w.startsWith('#')).map((w) => store.tagKey(w)).filter(Boolean);
-    const textQuery = words.filter((w) => !w.startsWith('#')).join(' ');
+    // Разбор поискового запроса: фразы в кавычках "...", @авторы, #теги и слова
+    const parsedQuery = searchService.parseSearchQuery(q);
+    const hashKeys = [...parsedQuery.hashKeys];
+    const authorTerms = [...parsedQuery.authorTerms];
 
     const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
     // Теги фильтруем здесь, а не в filterArticles: у каждого читателя свои
     // видимые теги (только с доступных ему слоёв, см. readerTagKeys).
     const targetServer = server || req.query.serverId || '';
-    const filtered = store.filterArticles({ q: textQuery, server: targetServer, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    const filtered = store.filterArticles({ parsedQuery, server: targetServer, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
     const tagKeys = tags.map((t) => store.tagKey(t));
+
+    const matchedAuthorIds = authorTerms.length ? await findUserIdsByAuthorTerms(authorTerms) : null;
+    const legacyNameToId = await resolveLegacyAuthorIds(filtered.map((a) => a.legacyAuthorName).filter(Boolean));
 
     // Доступ проверяется ДО среза страницы — иначе total и фактический
     // размер страницы врали бы из-за статей, закрытых по ролям для этого
@@ -551,6 +569,14 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
         const own = [...readerTagKeys(resolved)];
         if (!hashKeys.every((k) => own.some((t) => t.startsWith(k)))) continue;
       }
+      if (authorTerms.length) {
+        const effId = effectiveAuthorId(article, legacyNameToId);
+        const isAuthorMatch = (effId && matchedAuthorIds && matchedAuthorIds.has(effId))
+          || (Array.isArray(article.co_author_ids) && matchedAuthorIds && article.co_author_ids.some((id) => matchedAuthorIds.has(id)))
+          || (article.legacyAuthorName && authorTerms.some((t) => article.legacyAuthorName.toLowerCase().includes(t)))
+          || (resolved.content && authorTerms.some((t) => searchService.textContainsAuthorMention(blocks.documentSearchText(resolved.content), t)));
+        if (!isAuthorMatch) continue;
+      }
       accessible.push(article);
     }
 
@@ -558,8 +584,6 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 30));
     const offsetNum = Math.max(0, parseInt(offset, 10) || 0);
     const page = accessible.slice(offsetNum, offsetNum + limitNum);
-
-    const legacyNameToId = await resolveLegacyAuthorIds(page.map((a) => a.legacyAuthorName).filter(Boolean));
     const allUserIds = [];
     page.forEach((a) => {
       const effId = effectiveAuthorId(a, legacyNameToId);
