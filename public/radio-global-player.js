@@ -379,7 +379,6 @@
   // Надежное выставление смещения времени для живого радиоэфира
   function applyAudioOffset(targetOffset) {
     const offset = Math.max(0, Number(targetOffset) || 0);
-    if (offset <= 0) return;
 
     const setTime = () => {
       try {
@@ -435,6 +434,8 @@
         const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);
         if (!isSameSrc) {
           audio.src = targetSlot.audioUrl;
+        } else if (audio.ended) {
+          audio.currentTime = 0;
         }
         audio.loop = Boolean(state.isLoop);
         applyAudioOffset(targetOffset);

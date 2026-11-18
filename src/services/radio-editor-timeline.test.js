@@ -586,3 +586,32 @@ test('radio-ui: context menus, quick insert popover, templates and playhead are 
   assert.ok(radioJs.includes('applyTemplate'), 'radio-client.js должен поддерживать загрузку шаблонов сетки');
   assert.ok(radioJs.includes('updateTimelinePlayhead'), 'radio-client.js должен поддерживать интерактивный плейхед');
 });
+
+test('radio-editor & scheduler: fresh start time on publication, live deck sync, and virtual loop isolation', () => {
+  const radioJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+  const playerJs = fs.readFileSync(path.join(rootDir, 'public/radio-global-player.js'), 'utf8');
+  const storeJs = fs.readFileSync(path.join(rootDir, 'src/services/radio-store.js'), 'utf8');
+
+  // 1. Устранение бага 20 секунд: при запуске эфира время старта обновляется до текущего момента
+  assert.ok(radioJs.includes('forceNow || (!isStationCurrentlyLive && !isFutureSchedule)'), 'publishBroadcast должен обновлять время старта до текущего момента, если станция не была в эфире');
+  assert.ok(radioJs.includes('targetStartMs = nowMs;'), 'Время старта нового вещания должно быть nowMs, чтобы 1-й трек играл с 0:00');
+  assert.ok(playerJs.includes('Math.abs((audio.currentTime || 0) - safeOffset) > 1.5'), 'applyAudioOffset должен сбрасывать currentTime в 0, если safeOffset == 0 и трек стоял на паузе/предпрослушивании');
+  assert.ok(!playerJs.includes('if (offset <= 0) return;'), 'Устаревший return при offset <= 0 должен быть удален для гарантированного сброса в 0:00');
+
+  // 2. Устранение расхождения "указан один трек, играет другой"
+  assert.ok(radioJs.includes('(!state.isTimeshift && gState.currentSlot) ? gState.currentSlot : (state.currentSlot || gState.currentSlot)'), 'updateDeckUI должен брать актуальный слот из gState, исключая показ старого слота');
+  assert.ok(radioJs.includes('state.currentSlot = gState.currentSlot;'), 'Подписка на globalAudio должна синхронизировать state.currentSlot в реальном времени');
+  assert.ok(radioJs.includes('activeSlot = current.currentSlot;'), 'updateEditorPlaybackUI должен поддерживать режим radio и выделять текущий слот эфира');
+  assert.ok(radioJs.includes('card.classList.toggle(\'is-playing-block\''), 'updateEditorPlaybackUI должен подсвечивать играющий блок в сетке вещания');
+
+  // 3. Защита от грубого обрыва трека посреди песни таймером опроса (30с)
+  assert.ok(radioJs.includes('isPlayingNaturally && !isNearEnd'), '30-секундный поллинг не должен грубо прерывать играющий трек, если до конца осталось больше 4 секунд');
+
+  // 4. Очистка сетки вещания: сброс визуального состояния без необходимости перезагрузки
+  assert.ok(radioJs.includes('state.selectedStationForEdit.isLive = false;'), 'Очистка эфира должна немедленно выставлять isLive = false');
+  assert.ok(radioJs.includes('gAudio.stop()'), 'Очистка эфира должна останавливать играющее радио этой станции');
+
+  // 5. Изоляция виртуального цикла на бэкенде: повтор только актуальной сетки без старых завершенных партий
+  assert.ok(storeJs.includes('scheduleStartIndex'), 'getStationLiveState должен изолировать последнюю непрерывную сетку для кольцевого зацикливания');
+  assert.ok(storeJs.includes('activeLoopSlots = allSlots.slice(scheduleStartIndex)'), 'Виртуальный цикл должен проигрывать только слоты текущей сетки вещания');
+});

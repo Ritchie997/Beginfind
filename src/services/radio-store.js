@@ -440,16 +440,30 @@ async function getStationLiveState(stationId) {
     );
 
     if (allSlots.length > 0) {
-      const totalDurationSec = allSlots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+      // Изолируем последний непрерывный блок расписания (последнюю опубликованную сетку)
+      let scheduleStartIndex = allSlots.length - 1;
+      for (let i = allSlots.length - 1; i > 0; i--) {
+        const prevEndMs = new Date(allSlots[i - 1].end_time).getTime();
+        const currStartMs = new Date(allSlots[i].start_time).getTime();
+        // Если между слотами нет разрыва более 5 секунд — они принадлежат одной сетке
+        if (currStartMs - prevEndMs <= 5000) {
+          scheduleStartIndex = i - 1;
+        } else {
+          break;
+        }
+      }
+      const activeLoopSlots = allSlots.slice(scheduleStartIndex);
+
+      const totalDurationSec = activeLoopSlots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
       if (totalDurationSec > 0) {
-        const firstStartMs = new Date(allSlots[0].start_time).getTime();
+        const firstStartMs = new Date(activeLoopSlots[0].start_time).getTime();
         const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
         const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
 
         let accumulator = 0;
         let matchedIndex = -1;
-        for (let idx = 0; idx < allSlots.length; idx++) {
-          const slot = allSlots[idx];
+        for (let idx = 0; idx < activeLoopSlots.length; idx++) {
+          const slot = activeLoopSlots[idx];
           const slotDur = Number(slot.duration) || 0;
           if (accumulator + slotDur > normalizedElapsed) {
             currentSlot = { ...slot };
@@ -464,8 +478,8 @@ async function getStationLiveState(stationId) {
 
         // Если виртуальный цикл активен, генерируем следующие слоты из кольцевого цикла
         if (matchedIndex >= 0) {
-          for (let i = 1; i <= Math.min(10, allSlots.length); i++) {
-            const ns = allSlots[(matchedIndex + i) % allSlots.length];
+          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+            const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
             loopNextSlots.push({
               id: ns.id,
               title: ns.title,

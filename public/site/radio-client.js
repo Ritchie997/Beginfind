@@ -410,7 +410,10 @@
       }
     }
 
-    const slot = state.currentSlot || gState.currentSlot;
+    const slot = (!state.isTimeshift && gState.currentSlot) ? gState.currentSlot : (state.currentSlot || gState.currentSlot);
+    if (!state.isTimeshift && gState.currentSlot) {
+      state.currentSlot = gState.currentSlot;
+    }
 
     if (dom.deckStatus) {
       if (state.isTimeshift) {
@@ -580,13 +583,17 @@
   }
 
   async function tuneStation(station, autoPlay = true) {
-    state.currentStation = station;
+    if (!station) return;
+    const stObj = (typeof station === 'object' && station !== null)
+      ? station
+      : (state.stations && state.stations.find((s) => String(s.id) === String(station))) || (state.myStations && state.myStations.find((s) => String(s.id) === String(station))) || { id: station, name: 'Радиостанция' };
+    state.currentStation = stObj;
     state.isTimeshift = false;
     state.timeshiftForwardSlots = [];
     updateDeckUI();
 
     try {
-      const live = await api(`/api/radio/stations/${station.id}/live`);
+      const live = await api(`/api/radio/stations/${stObj.id}/live`);
       state.currentSlot = live.currentSlot;
       state.liveCurrentSlot = live.currentSlot;
       state.nextSlots = live.nextSlots || [];
@@ -595,14 +602,14 @@
       const globalAudio = getGlobalAudio();
       if (globalAudio && autoPlay) {
         if (state.currentSlot && state.currentSlot.audioUrl) {
-          globalAudio.playRadio(station, state.currentSlot, live.offset || 0);
+          globalAudio.playRadio(stObj, state.currentSlot, live.offset || 0);
         } else {
-          globalAudio.playRadio(station, null, 0);
+          globalAudio.playRadio(stObj, null, 0);
         }
       }
 
       updateDeckUI();
-      highlightActiveStation(station.id);
+      highlightActiveStation(stObj.id);
     } catch (e) {
       console.error('[radio] Tune station error:', e);
     }
@@ -1642,6 +1649,12 @@
   }
 
   function syncCompiledSlots() {
+    // Синхронизируем длительность плейлистов со строгой суммой элементов
+    (state.editorBlocks || []).forEach((b) => {
+      if (b.type === 'playlist' && Array.isArray(b.items)) {
+        b.duration = b.items.reduce((s, it) => s + Math.max(1, Number(it.duration) || 0), 0);
+      }
+    });
     const compiled = compileBlocksToSlots(state.editorBlocks, state.editorStartTime);
     state.editorSlots = compiled.slots;
     return compiled;
@@ -1672,7 +1685,7 @@
 
   // Запуск / публикация вещания радиостанции
   async function publishBroadcast(startTime, options = {}) {
-    const { notify = true, autoTune = true } = options;
+    const { notify = true, autoTune = true, forceNow = false } = options;
     if (!state.selectedStationForEdit) {
       if (state.myStations && state.myStations.length > 0) {
         state.selectedStationForEdit = state.myStations[0];
@@ -1683,9 +1696,24 @@
       }
     }
 
-    if (startTime) {
-      setEditorStartTime(startTime);
+    const st = state.selectedStationForEdit;
+    const nowMs = getEffectiveNowMs();
+    let targetStartMs = startTime ? new Date(startTime).getTime() : (state.editorStartTime ? new Date(state.editorStartTime).getTime() : nowMs);
+    if (isNaN(targetStartMs)) targetStartMs = nowMs;
+
+    const isStationCurrentlyLive = Boolean(st.isLive);
+    const isFutureSchedule = targetStartMs > (nowMs + 5000);
+
+    // Если запрошен запуск сейчас (forceNow) ИЛИ
+    // станция сейчас НЕ в эфире (или эфир уже закончился в прошлом),
+    // И время не было намеренно запланировано на будущее —
+    // стартуем ровно с текущей миллисекунды (now), чтобы 1-й трек играл строго с 0:00!
+    if (forceNow || (!isStationCurrentlyLive && !isFutureSchedule)) {
+      targetStartMs = nowMs;
     }
+
+    const finalStartTimeIso = new Date(targetStartMs).toISOString();
+    setEditorStartTime(finalStartTimeIso);
     syncCompiledSlots();
 
     if (!state.editorSlots || state.editorSlots.length === 0) {
@@ -1693,9 +1721,7 @@
       return false;
     }
 
-    const st = state.selectedStationForEdit;
-    const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
-    const isLiveNow = startMs <= Date.now();
+    const isLiveNow = targetStartMs <= nowMs;
 
     try {
       if (dom.btnSaveTimeline) {
@@ -1708,7 +1734,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slots: state.editorSlots,
-          startTime: state.editorStartTime || new Date().toISOString()
+          startTime: finalStartTimeIso
         })
       });
 
@@ -1719,20 +1745,13 @@
         if (isLiveNow) {
           showToast(`🔴 Вещание радиостанции «${st.name}» успешно запущено в прямой эфир!`, 'success');
         } else {
-          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(startMs)}. Эфир запустится точно по расписанию.`, 'info');
+          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(targetStartMs)}. Эфир запустится точно по расписанию.`, 'info');
         }
       }
 
       // Если эфир активен прямо сейчас, настраиваем станцию и запускаем проигрывание с нужного времени!
       if (isLiveNow && autoTune) {
-        const gAudio = getGlobalAudio();
-        const gState = gAudio ? gAudio.getState() : {};
-        const isAlreadyPlayingThisStation = gState.isPlaying && gState.mode === 'radio' && gState.station && String(gState.station.id) === String(st.id);
-        if (!isAlreadyPlayingThisStation) {
-          tuneStation(st, true);
-        } else {
-          updateDeckUI();
-        }
+        await tuneStation(st, true);
       }
 
       return true;
@@ -2100,9 +2119,13 @@
     }
 
     let cursor = new Date(state.editorStartTime || Date.now()).getTime();
+    if (isNaN(cursor)) cursor = Date.now();
 
     let html = '';
     state.editorBlocks.forEach((block, index) => {
+      if (block.type === 'playlist' && Array.isArray(block.items)) {
+        block.duration = block.items.reduce((s, it) => s + Math.max(1, Number(it.duration) || 0), 0);
+      }
       const durSec = Number(block.duration) || 0;
       const startMs = cursor;
       const endMs = cursor + durSec * 1000;
@@ -2638,9 +2661,12 @@
     const gAudio = getGlobalAudio();
     const current = gState || (gAudio ? gAudio.getState() : {});
     const isPlaying = Boolean(current.isPlaying);
+    const activeSlot = current.currentSlot;
     const currentTrack = current.track;
-    const currentUrl = currentTrack && currentTrack.audio_url;
+    const currentUrl = (currentTrack && currentTrack.audio_url) || (activeSlot && (activeSlot.audioUrl || activeSlot.audio_url)) || (gAudio && gAudio.audio ? gAudio.audio.src : null);
     const currentBlockId = currentTrack && currentTrack.blockId;
+    const currentTrackId = (currentTrack && currentTrack.id) || (activeSlot && (activeSlot.trackId || activeSlot.track_id));
+    const currentTitle = (currentTrack && currentTrack.title) || (activeSlot && activeSlot.title);
 
     // 1. Обновляем кнопки и подсветку блоков редактора
     const listEl = dom.editorBlocksList || dom.editorSlotsList;
@@ -2650,7 +2676,19 @@
         const block = state.editorBlocks[bIdx];
         const isThisBlockPlaying = isPlaying && block && (
           (currentBlockId && block.id === currentBlockId) ||
-          (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
+          (currentUrl && (
+            block.audio_url === currentUrl ||
+            (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
+            (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
+          )) ||
+          (currentTrackId && (
+            block.track_id == currentTrackId ||
+            (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
+          )) ||
+          (currentTitle && (
+            block.title === currentTitle ||
+            (block.items && block.items.some((it) => it.title === currentTitle))
+          ))
         );
 
         card.classList.toggle('is-playing-block', Boolean(isThisBlockPlaying));
@@ -2658,31 +2696,27 @@
         // Кнопка предпрослушивания блока
         const previewBtn = card.querySelector('.btn-preview-block');
         if (previewBtn) {
-          const isBtnActive = isPlaying && block && (
-            (currentBlockId && block.id === currentBlockId) ||
-            (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
-          );
-          previewBtn.classList.toggle('is-playing', Boolean(isBtnActive));
-          previewBtn.innerHTML = `<i class="fas ${isBtnActive ? 'fa-pause' : 'fa-play'}"></i>`;
-          previewBtn.title = isBtnActive ? 'Пауза' : 'Воспроизвести в общем плеере';
+          previewBtn.classList.toggle('is-playing', Boolean(isThisBlockPlaying));
+          previewBtn.innerHTML = `<i class="fas ${isThisBlockPlaying ? 'fa-pause' : 'fa-play'}"></i>`;
+          previewBtn.title = isThisBlockPlaying ? 'Пауза' : 'Воспроизвести в общем плеере';
         }
 
         // Кнопка плейлиста в аккордеоне
         const plPlayBtn = card.querySelector('.btn-play-playlist-block');
         if (plPlayBtn) {
-          const isPlActive = isPlaying && block && (
-            (currentBlockId && block.id === currentBlockId) ||
-            (block.items && block.items.some((it) => it.audio_url === currentUrl))
-          );
-          plPlayBtn.classList.toggle('is-playing', Boolean(isPlActive));
-          plPlayBtn.innerHTML = `<i class="fas ${isPlActive ? 'fa-pause' : 'fa-play'}"></i> ${isPlActive ? 'Пауза' : 'Слушать'}`;
+          plPlayBtn.classList.toggle('is-playing', Boolean(isThisBlockPlaying));
+          plPlayBtn.innerHTML = `<i class="fas ${isThisBlockPlaying ? 'fa-pause' : 'fa-play'}"></i> ${isThisBlockPlaying ? 'Пауза' : 'Слушать'}`;
         }
 
         // Вложенные треки плейлиста
         card.querySelectorAll('.radio-playlist-nested-track').forEach((nTrack) => {
           const tIdx = parseInt(nTrack.dataset.trackIndex, 10);
           const it = block && block.items && block.items[tIdx];
-          const isTrackActive = isPlaying && it && (it.audio_url === currentUrl);
+          const isTrackActive = isPlaying && it && (
+            (currentUrl && (it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url)))) ||
+            (currentTrackId && (it.track_id || it.id) == currentTrackId) ||
+            (currentTitle && it.title === currentTitle)
+          );
           nTrack.classList.toggle('is-playing', Boolean(isTrackActive));
           const nPlayBtn = nTrack.querySelector('.btn-play-nested-track');
           if (nPlayBtn) {
@@ -2701,7 +2735,19 @@
         const block = state.editorBlocks[bIdx];
         const isClipPlaying = isPlaying && block && (
           (currentBlockId && block.id === currentBlockId) ||
-          (currentUrl && (block.audio_url === currentUrl || (block.items && block.items.some((it) => it.audio_url === currentUrl))))
+          (currentUrl && (
+            block.audio_url === currentUrl ||
+            (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
+            (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
+          )) ||
+          (currentTrackId && (
+            block.track_id == currentTrackId ||
+            (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
+          )) ||
+          (currentTitle && (
+            block.title === currentTitle ||
+            (block.items && block.items.some((it) => it.title === currentTitle))
+          ))
         );
         clip.classList.toggle('is-playing', Boolean(isClipPlaying));
       });
@@ -3096,7 +3142,7 @@
       items.push({
         icon: 'fa-radio',
         label: 'Настроиться на эту волну',
-        onClick: () => tuneStation(st.id)
+        onClick: () => tuneStation(st)
       });
     }
 
@@ -4325,6 +4371,10 @@
     // Подписка на глобальный аудиоплеер AllTell
     if (globalAudio) {
       state.globalUnsub = globalAudio.subscribe((gState) => {
+        if (!state.isTimeshift && gState.mode === 'radio' && gState.currentSlot) {
+          state.currentSlot = gState.currentSlot;
+          if (gState.station) state.currentStation = gState.station;
+        }
         updateDeckUI();
         updateFeedPlayButtons();
 
@@ -4537,7 +4587,8 @@
     dom.btnSetStartTimeNow?.addEventListener('click', () => {
       publishBroadcast(new Date(), {
         notify: true,
-        autoTune: true
+        autoTune: true,
+        forceNow: true
       });
     });
 
@@ -4556,11 +4607,24 @@
         });
         state.editorSlots = [];
         state.editorBlocks = [];
+        if (state.selectedStationForEdit) {
+          state.selectedStationForEdit.isLive = false;
+        }
+        if (state.currentStation && String(state.currentStation.id) === String(state.selectedStationForEdit.id)) {
+          state.currentSlot = null;
+          state.nextSlots = [];
+          state.prevSlots = [];
+          state.currentStation.isLive = false;
+          const gAudio = getGlobalAudio();
+          if (gAudio && gAudio.getState().mode === 'radio' && gAudio.getState().station && String(gAudio.getState().station.id) === String(state.selectedStationForEdit.id)) {
+            gAudio.stop();
+          }
+        }
         renderEditorSlots();
         renderEditor();
         updateDeckUI();
         showToast('Сетка вещания радиостанции очищена. Эфир освобожден.', 'info');
-        loadStations();
+        await loadStations();
       } catch (err) {
         showToast('Ошибка при очистке сетки: ' + err.message, 'error');
       }
@@ -5807,9 +5871,19 @@
 
           // Переключаем эфир на новый слот ТОЛЬКО если:
           // прямо сейчас играет радио этой станции, и слот действительно сменился на сервере
-          if (gAudio && gState.isPlaying && gState.mode === 'radio' && gState.station && gState.station.id === state.currentStation.id) {
+          if (gAudio && gState.isPlaying && gState.mode === 'radio' && gState.station && String(gState.station.id) === String(state.currentStation.id)) {
             if (live.currentSlot && live.currentSlot.audioUrl && live.currentSlot.id !== prevSlotId) {
-              gAudio.playRadio(state.currentStation, live.currentSlot, live.offset || 0);
+              const htmlAudio = gAudio.audio;
+              const isNearEnd = htmlAudio && htmlAudio.duration && (htmlAudio.duration - htmlAudio.currentTime < 4);
+              const isPlayingNaturally = htmlAudio && !htmlAudio.paused && !htmlAudio.ended;
+
+              // Если текущий аудиотрек ещё играет и до конца осталось больше 4 секунд —
+              // не прерываем его грубо посреди трека! Он сам завершится по событию 'ended' и переключится.
+              if (isPlayingNaturally && !isNearEnd) {
+                // трек ещё играет, даём доиграть
+              } else {
+                gAudio.playRadio(state.currentStation, live.currentSlot, live.offset || 0);
+              }
             }
           }
         } catch (_) {}
