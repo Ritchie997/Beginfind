@@ -556,3 +556,31 @@ test('radio-timeshift: pause resumes from paused position without stopping live 
   }
   assert.equal(enteredTimeshift, true, 'Перемотка назад должна переводить в режим таймшифта');
 });
+
+test('radio-ui: context menus, quick insert popover, templates and playhead are fully implemented', () => {
+  const radioHtml = fs.readFileSync(path.join(rootDir, 'public/site/radio.html'), 'utf8');
+  const radioCss = fs.readFileSync(path.join(rootDir, 'public/site/radio.css'), 'utf8');
+  const radioJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+
+  // 1. Модальные окна: modalEditStation и modalRadioTemplates используют .modal-overlay и .modal-box
+  assert.ok(radioHtml.includes('id="modalEditStation"'), 'modalEditStation должен присутствовать в HTML');
+  assert.ok(radioHtml.includes('<div class="modal-overlay" id="modalEditStation"'), 'modalEditStation должен использовать .modal-overlay, а не разваливаться внизу страницы');
+  assert.ok(radioHtml.includes('id="modalRadioTemplates"'), 'modalRadioTemplates должен присутствовать в HTML');
+  assert.ok(radioHtml.includes('<div class="modal-overlay" id="modalRadioTemplates"'), 'modalRadioTemplates должен использовать .modal-overlay');
+
+  // 2. CSS: базовые модальные стили и контекстное меню
+  assert.ok(radioCss.includes('.modal-overlay {'), 'radio.css должен определять .modal-overlay с position: fixed');
+  assert.ok(radioCss.includes('.modal-box {'), 'radio.css должен определять .modal-box');
+  assert.ok(radioCss.includes('.radio-context-menu {'), 'radio.css должен определять плавающее контекстное меню');
+  assert.ok(radioCss.includes('.radio-context-menu-item'), 'radio.css должен определять элементы контекстного меню');
+  assert.ok(radioCss.includes('.radio-templates-list'), 'radio.css должен определять стили списка шаблонов');
+
+  // 3. JS: контекстное меню станций, блоков, быстрый инсертер и шаблоны
+  assert.ok(radioJs.includes('openStationContextMenu'), 'radio-client.js должен содержать openStationContextMenu');
+  assert.ok(radioJs.includes('openBlockContextMenu'), 'radio-client.js должен содержать openBlockContextMenu');
+  assert.ok(radioJs.includes('openQuickInsertMenu'), 'radio-client.js должен содержать openQuickInsertMenu');
+  assert.ok(!radioJs.includes("window.prompt(\n      'Что вы хотите добавить в сетку вещания?"), 'Устаревший window.prompt должен быть удален из openQuickInsertMenu');
+  assert.ok(radioJs.includes('saveCurrentGridAsTemplate'), 'radio-client.js должен поддерживать сохранение шаблонов сетки');
+  assert.ok(radioJs.includes('applyTemplate'), 'radio-client.js должен поддерживать загрузку шаблонов сетки');
+  assert.ok(radioJs.includes('updateTimelinePlayhead'), 'radio-client.js должен поддерживать интерактивный плейхед');
+});

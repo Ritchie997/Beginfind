@@ -189,7 +189,7 @@
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnDeckEditStation" style="display:none;" title="Редактировать описание и настройки радиостанции"><i class="fas fa-pen"></i> Настройки</button>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnDeckEditStation" style="display:none;" title="Опции и настройки радиостанции"><i class="fas fa-ellipsis-vertical"></i> Опции</button>
             <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
           </div>
         </div>
@@ -343,7 +343,7 @@
           <div class="radio-editor-station-select-wrap">
             <label><i class="fas fa-tower-broadcast"></i> Станция:</label>
             <select id="editorStationSelect" class="radio-form-select" style="min-width:200px;"></select>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnEditStationSettings" title="Редактировать описание и настройки радиостанции"><i class="fas fa-edit"></i> Настройки</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnEditStationSettings" title="Действия со станцией и настройки"><i class="fas fa-ellipsis-vertical"></i> Опции станции</button>
           </div>
           <div class="radio-editor-time-wrap">
             <label><i class="far fa-clock"></i> Старт вещания:</label>
@@ -842,11 +842,11 @@
   </div>
 
   <!-- МОДАЛЬНОЕ ОКНО: НАСТРОЙКИ / РЕДАКТИРОВАНИЕ РАДИОСТАНЦИИ -->
-  <div class="radio-modal-backdrop modal-backdrop" id="modalEditStation" hidden style="display: none;">
-    <div class="radio-modal modal-dialog">
+  <div class="modal-overlay" id="modalEditStation" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 560px;">
       <div class="modal-header">
         <h3 class="modal-title"><i class="fas fa-tower-broadcast"></i> Настройки радиостанции</h3>
-        <button type="button" class="radio-modal-close modal-close" data-close="modalEditStation">×</button>
+        <button type="button" class="modal-close" data-close="modalEditStation" aria-label="Закрыть">&times;</button>
       </div>
       <form id="formEditStation">
         <input type="hidden" id="editStationId" value="">
@@ -877,6 +877,32 @@
           <button type="submit" class="btn btn-primary" id="btnSubmitEditStation"><i class="fas fa-save"></i> Сохранить настройки</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ШАБЛОНЫ ЭФИРНЫХ СЕТОК -->
+  <div class="modal-overlay" id="modalRadioTemplates" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-layer-group"></i> Шаблоны эфирной сетки</h3>
+        <button type="button" class="modal-close" data-close="modalRadioTemplates" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px;">
+          <p style="font-size:0.88rem; color:#94a3b8; margin:0;">
+            Сохраняйте готовые подборки блоков и загружайте их в эфир радиостанции в один клик.
+          </p>
+          <button type="button" class="btn btn-sm btn-primary" id="btnSaveCurrentAsTemplate" style="white-space:nowrap;">
+            <i class="fas fa-plus"></i> Сохранить текущую
+          </button>
+        </div>
+        <div id="radioTemplatesList" class="radio-templates-list">
+          <!-- Заполняется динамически -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close="modalRadioTemplates">Закрыть</button>
+      </div>
     </div>
   </div>
 

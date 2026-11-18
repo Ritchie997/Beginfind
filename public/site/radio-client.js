@@ -63,7 +63,8 @@
     recordTimerInterval: null,
     globalUnsub: null,
     serverTimeDelta: 0,
-    serverClockInterval: null
+    serverClockInterval: null,
+    pendingInsertIndex: -1
   };
 
   function getEffectiveNowMs() {
@@ -647,7 +648,7 @@
               <div class="radio-card-meta" style="flex:1;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                   <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
-                  ${isOwner ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-card-edit-station" data-station-id="${st.id}" title="Редактировать описание и параметры радиостанции"><i class="fas fa-pen"></i></button>` : ''}
+                  ${isOwner ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-card-station-menu" data-station-id="${st.id}" title="Опции и настройки радиостанции"><i class="fas fa-ellipsis-vertical"></i></button>` : ''}
                 </div>
                 <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
               </div>
@@ -666,12 +667,12 @@
       `;
       }).join('');
 
-      dom.stationsGrid.querySelectorAll('.btn-card-edit-station').forEach((btn) => {
+      dom.stationsGrid.querySelectorAll('.btn-card-station-menu, .btn-card-edit-station').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const sId = btn.dataset.stationId;
-          const found = stations.find((s) => s.id == sId);
-          if (found) openEditStationModal(found);
+          const found = stations.find((s) => String(s.id) === String(sId));
+          if (found) openStationContextMenu(found, btn);
         });
       });
 
@@ -1853,6 +1854,14 @@
             playEditorBlock(bIdx);
           });
 
+          el.addEventListener('contextmenu', (e) => {
+            if (isEdgeResizing) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const bIdx = parseInt(el.dataset.index, 10);
+            openBlockContextMenu(bIdx, el, e.clientX, e.clientY);
+          });
+
           el.addEventListener('dragstart', (e) => {
             if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) {
               e.preventDefault();
@@ -2055,18 +2064,7 @@
     }
 
     // Плейхед прямого эфира (On-Air indicator)
-    if (dom.radioTimelinePlayhead) {
-      const nowMs = Date.now();
-      const startMs = new Date(state.editorStartTime || Date.now()).getTime();
-      const elapsedSec = (nowMs - startMs) / 1000;
-      if (elapsedSec >= 0 && elapsedSec <= effectiveScale) {
-        const playheadPct = (elapsedSec / effectiveScale) * 100;
-        dom.radioTimelinePlayhead.style.display = 'block';
-        dom.radioTimelinePlayhead.style.left = `${playheadPct.toFixed(2)}%`;
-      } else {
-        dom.radioTimelinePlayhead.style.display = 'none';
-      }
-    }
+    updateTimelinePlayhead();
   }
 
   // 2. Отрисовка блочного конструктора эфира (в стиле Антропедии)
@@ -2249,6 +2247,9 @@
               <button type="button" class="radio-eb-btn danger btn-delete-block" data-index="${index}" title="Удалить из сетки">
                 <i class="fas fa-trash"></i>
               </button>
+              <button type="button" class="radio-eb-btn btn-block-menu" data-index="${index}" title="Опции и действия с блоком">
+                <i class="fas fa-ellipsis-vertical"></i>
+              </button>
             </div>
           </div>
           <div class="radio-eb-body">
@@ -2340,9 +2341,30 @@
 
     // Кнопки межблочных инсертеров
     listEl.querySelectorAll('.btn-insert-block-at').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const targetIdx = parseInt(btn.dataset.index, 10);
-        openQuickInsertMenu(targetIdx);
+        openQuickInsertMenu(targetIdx, btn);
+      });
+    });
+
+    // Меню опций блока
+    listEl.querySelectorAll('.btn-block-menu').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.index, 10);
+        openBlockContextMenu(idx, btn);
+      });
+    });
+
+    // Контекстное меню блока по правому клику
+    listEl.querySelectorAll('.radio-eb-block').forEach((card) => {
+      card.addEventListener('contextmenu', (e) => {
+        if (e.target.closest('button, input, select, textarea, a')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = parseInt(card.dataset.index, 10);
+        openBlockContextMenu(idx, card, e.clientX, e.clientY);
       });
     });
 
@@ -2804,31 +2826,596 @@
     renderTimelineRibbon();
   }
 
-  function openQuickInsertMenu(targetIndex) {
-    const choice = window.prompt(
-      'Что вы хотите добавить в сетку вещания?\n1 - Трек из медиатеки\n2 - Плейлист в эфир\n3 - Слова ведущего\n4 - Джингл / Отбивку',
-      '1'
-    );
-    if (!choice) return;
-    const trimmed = choice.trim();
-    if (trimmed === '1') {
-      dom.btnPickFromMyTracks?.click();
-    } else if (trimmed === '2') {
-      openPickPlaylistForTimeline(targetIndex);
-    } else if (trimmed === '3') {
-      openInsertWordsModalForIndex(targetIndex - 1);
-    } else if (trimmed === '4') {
-      const jingleTitle = window.prompt('Название джингла / отбивки:', 'Джингл AllTell FM');
-      if (jingleTitle) {
-        addBlockToEditor({
-          id: genBlockId(),
-          type: 'jingle',
-          title: jingleTitle.trim(),
-          duration: 10,
-          audio_url: null
-        }, targetIndex);
+  function checkIsStationOwner(st) {
+    if (!st) return false;
+    const curUser = getCurrentUser();
+    return Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
+  }
+
+  // ===== СИСТЕМА КОНТЕКСТНЫХ МЕНЮ (DROPDOWN / CONTEXT MENU) =====
+  let activeContextMenuEl = null;
+
+  function hideContextMenu() {
+    if (activeContextMenuEl) {
+      activeContextMenuEl.remove();
+      activeContextMenuEl = null;
+    }
+  }
+
+  function showContextMenu({ anchorEl, x, y, title, items = [] }) {
+    hideContextMenu();
+    if (!items || items.length === 0) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'radio-context-menu';
+    menu.id = 'radioContextMenu';
+
+    let html = '';
+    if (title) {
+      html += `<div class="radio-context-menu-header">${escapeHtml(title)}</div>`;
+    }
+
+    items.forEach((item, idx) => {
+      if (item.header) {
+        html += `<div class="radio-context-menu-header">${escapeHtml(item.header)}</div>`;
+      } else if (item.divider) {
+        html += `<div class="radio-context-menu-divider"></div>`;
+      } else {
+        const disabled = item.disabled ? 'disabled style="opacity:0.35; pointer-events:none;"' : '';
+        const dangerClass = item.danger ? 'is-danger' : '';
+        const activeClass = item.active ? 'is-active' : '';
+        const badge = item.badge ? `<span class="radio-context-menu-badge">${escapeHtml(item.badge)}</span>` : '';
+        const icon = item.icon ? `<i class="fas ${item.icon}"></i>` : '';
+        html += `
+          <button type="button" class="radio-context-menu-item ${dangerClass} ${activeClass}" data-item-idx="${idx}" ${disabled}>
+            ${icon}
+            <span class="radio-context-menu-label">${escapeHtml(item.label)}</span>
+            ${badge}
+          </button>
+        `;
+      }
+    });
+
+    menu.innerHTML = html;
+    document.body.appendChild(menu);
+    activeContextMenuEl = menu;
+
+    menu.querySelectorAll('.radio-context-menu-item').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.itemIdx, 10);
+        const item = items[idx];
+        hideContextMenu();
+        if (item && typeof item.onClick === 'function') {
+          item.onClick();
+        }
+      });
+    });
+
+    const menuRect = menu.getBoundingClientRect();
+    const margin = 8;
+    let posX = 0;
+    let posY = 0;
+
+    if (anchorEl) {
+      const anchorRect = anchorEl.getBoundingClientRect();
+      posX = anchorRect.left;
+      posY = anchorRect.bottom + 4;
+
+      if (posX + menuRect.width > window.innerWidth - margin) {
+        posX = window.innerWidth - menuRect.width - margin;
+      }
+      if (posX < margin) posX = margin;
+
+      if (posY + menuRect.height > window.innerHeight - margin) {
+        posY = anchorRect.top - menuRect.height - 4;
+      }
+      if (posY < margin) posY = margin;
+    } else if (typeof x === 'number' && typeof y === 'number') {
+      posX = x;
+      posY = y;
+
+      if (posX + menuRect.width > window.innerWidth - margin) {
+        posX = window.innerWidth - menuRect.width - margin;
+      }
+      if (posX < margin) posX = margin;
+
+      if (posY + menuRect.height > window.innerHeight - margin) {
+        posY = y - menuRect.height;
+      }
+      if (posY < margin) posY = margin;
+    }
+
+    menu.style.left = `${Math.max(margin, Math.round(posX))}px`;
+    menu.style.top = `${Math.max(margin, Math.round(posY))}px`;
+  }
+
+  // Закрытие контекстного меню при клике вне его или Escape
+  window.addEventListener('click', (e) => {
+    if (activeContextMenuEl && !activeContextMenuEl.contains(e.target)) {
+      hideContextMenu();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && activeContextMenuEl) {
+      hideContextMenu();
+    }
+  });
+
+  window.addEventListener('resize', hideContextMenu);
+  window.addEventListener('scroll', hideContextMenu, true);
+
+  // Синхронизация времени сервера эфира (калибровка часов)
+  async function syncRadioServerTime() {
+    try {
+      const res = await api('/api/system-settings/sync-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientTimeIso: new Date().toISOString() })
+      });
+      if (res && res.effectiveServerTime) {
+        state.serverTimeDelta = new Date(res.effectiveServerTime).getTime() - Date.now();
+        showToast('Часы эфира синхронизированы с вашим браузером!', 'success');
+      }
+    } catch (err) {
+      showToast('Ошибка синхронизации времени: ' + err.message, 'error');
+    }
+  }
+
+  // Быстрое переключение поведения при окончании сетки
+  async function quickUpdateFallbackMode(st, newMode) {
+    try {
+      await api(`/api/radio/stations/${st.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fallbackMode: newMode })
+      });
+      st.fallback_mode = newMode;
+      if (state.currentStation && String(state.currentStation.id) === String(st.id)) {
+        state.currentStation.fallback_mode = newMode;
+      }
+      if (state.selectedStationForEdit && String(state.selectedStationForEdit.id) === String(st.id)) {
+        state.selectedStationForEdit.fallback_mode = newMode;
+      }
+      const label = newMode === 'loop' ? 'Зацикливание' : newMode === 'noise' ? 'Радиопомехи' : 'Тишина';
+      showToast(`Режим эфира изменён: ${label}`, 'success');
+      renderStations();
+    } catch (err) {
+      showToast('Ошибка смены режима: ' + err.message, 'error');
+    }
+  }
+
+  // Открытие модального окна настроек станции
+  function openEditStationModal(st) {
+    if (!st) return;
+    if (dom.editStationId) dom.editStationId.value = st.id;
+    if (dom.editStationName) dom.editStationName.value = st.name || '';
+    if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
+    if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
+    if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
+    showModal('modalEditStation');
+  }
+
+  // Контекстное меню радиостанции
+  function openStationContextMenu(st, anchorEl, clientX, clientY) {
+    if (!st) return;
+    const isOwner = checkIsStationOwner(st);
+    const fallbackMode = st.fallback_mode || 'loop';
+    const fallbackLabels = {
+      loop: '🔄 Зацикливание',
+      noise: '📻 Радиопомехи',
+      silence: '🔇 Тишина'
+    };
+
+    const items = [
+      {
+        header: `${st.name} (${st.frequency} FM)`
+      }
+    ];
+
+    if (isOwner) {
+      items.push({
+        icon: 'fa-sliders',
+        label: 'Настройки и параметры станции',
+        onClick: () => openEditStationModal(st)
+      });
+
+      items.push({
+        icon: 'fa-arrows-rotate',
+        label: 'Поведение при пустом эфире',
+        badge: fallbackLabels[fallbackMode] || fallbackMode,
+        onClick: () => {
+          const nextMode = fallbackMode === 'loop' ? 'noise' : (fallbackMode === 'noise' ? 'silence' : 'loop');
+          quickUpdateFallbackMode(st, nextMode);
+        }
+      });
+
+      items.push({
+        icon: 'fa-clock',
+        label: 'Синхронизировать время вещания',
+        onClick: () => syncRadioServerTime()
+      });
+
+      items.push({
+        icon: 'fa-layer-group',
+        label: 'Шаблоны эфирной сетки...',
+        onClick: () => openTemplatesModal()
+      });
+
+      items.push({ divider: true });
+
+      items.push({
+        icon: 'fa-trash-can',
+        label: 'Очистить сетку эфира',
+        danger: true,
+        onClick: () => {
+          if (dom.btnClearTimelineBtn) dom.btnClearTimelineBtn.click();
+        }
+      });
+
+      items.push({
+        icon: 'fa-door-open',
+        label: 'Освободить радиочастоту',
+        danger: true,
+        onClick: () => {
+          if (dom.btnReleaseStationBtn) dom.btnReleaseStationBtn.click();
+        }
+      });
+    } else {
+      items.push({
+        icon: 'fa-radio',
+        label: 'Настроиться на эту волну',
+        onClick: () => tuneStation(st.id)
+      });
+    }
+
+    showContextMenu({
+      anchorEl,
+      x: clientX,
+      y: clientY,
+      items
+    });
+  }
+
+  // Разрезание блока пополам
+  function splitBlockInHalf(blockIndex) {
+    const block = state.editorBlocks[blockIndex];
+    if (!block) return;
+    if (block.type === 'playlist' && block.items && block.items.length > 1) {
+      const mid = Math.floor((block.items.length - 1) / 2);
+      splitPlaylistBlock(blockIndex, mid);
+      return;
+    }
+    if (block.duration <= 4) {
+      showToast('Блок слишком короткий для разделения', 'warning');
+      return;
+    }
+    const dur1 = Math.floor(block.duration / 2);
+    const dur2 = block.duration - dur1;
+    block.duration = dur1;
+    const clone = JSON.parse(JSON.stringify(block));
+    clone.id = genBlockId();
+    clone.title = `${block.title} (Часть 2)`;
+    clone.duration = dur2;
+    state.editorBlocks.splice(blockIndex + 1, 0, clone);
+    renderEditor();
+    showToast('Блок успешно разделен на 2 части', 'info');
+  }
+
+  // Контекстное меню блока эфира
+  function openBlockContextMenu(blockIndex, anchorEl, clientX, clientY) {
+    const block = state.editorBlocks[blockIndex];
+    if (!block) return;
+
+    const items = [
+      {
+        header: `${block.title}`
+      },
+      {
+        icon: 'fa-clone',
+        label: 'Дублировать блок',
+        onClick: () => {
+          const orig = state.editorBlocks[blockIndex];
+          if (orig) {
+            const clone = JSON.parse(JSON.stringify(orig));
+            clone.id = genBlockId();
+            state.editorBlocks.splice(blockIndex + 1, 0, clone);
+            renderEditor();
+            showToast(`Блок «${orig.title}» продублирован`, 'info');
+          }
+        }
+      },
+      {
+        icon: 'fa-scissors',
+        label: 'Разрезать пополам (Split)',
+        onClick: () => {
+          splitBlockInHalf(blockIndex);
+        }
+      },
+      {
+        icon: 'fa-arrow-up',
+        label: 'Сдвинуть выше (влево)',
+        disabled: blockIndex === 0,
+        onClick: () => {
+          if (blockIndex > 0) {
+            const temp = state.editorBlocks[blockIndex];
+            state.editorBlocks[blockIndex] = state.editorBlocks[blockIndex - 1];
+            state.editorBlocks[blockIndex - 1] = temp;
+            renderEditor();
+          }
+        }
+      },
+      {
+        icon: 'fa-arrow-down',
+        label: 'Сдвинуть ниже (вправо)',
+        disabled: blockIndex >= state.editorBlocks.length - 1,
+        onClick: () => {
+          if (blockIndex < state.editorBlocks.length - 1) {
+            const temp = state.editorBlocks[blockIndex];
+            state.editorBlocks[blockIndex] = state.editorBlocks[blockIndex + 1];
+            state.editorBlocks[blockIndex + 1] = temp;
+            renderEditor();
+          }
+        }
+      },
+      { divider: true },
+      {
+        icon: 'fa-trash-can',
+        label: 'Удалить из сетки вещания',
+        danger: true,
+        onClick: () => {
+          state.editorBlocks.splice(blockIndex, 1);
+          renderEditor();
+        }
+      }
+    ];
+
+    showContextMenu({
+      anchorEl,
+      x: clientX,
+      y: clientY,
+      items
+    });
+  }
+
+  // Быстрое меню вставки между блоками (вместо window.prompt)
+  function openQuickInsertMenu(targetIndex, anchorEl, clientX, clientY) {
+    showContextMenu({
+      anchorEl,
+      x: clientX,
+      y: clientY,
+      title: `Вставка в позицию #${targetIndex + 1}`,
+      items: [
+        {
+          icon: 'fa-music',
+          label: 'Трек из медиатеки',
+          onClick: () => {
+            state.pendingInsertIndex = targetIndex;
+            dom.btnPickFromMyTracks?.click();
+          }
+        },
+        {
+          icon: 'fa-list-check',
+          label: 'Плейлист целиком в эфир',
+          onClick: () => {
+            openPickPlaylistForTimeline(targetIndex);
+          }
+        },
+        {
+          icon: 'fa-microphone',
+          label: 'Слова ведущего / Подводка',
+          onClick: () => {
+            openInsertWordsModalForIndex(targetIndex - 1);
+          }
+        },
+        {
+          icon: 'fa-bell',
+          label: 'Джингл / Отбивка (10 сек)',
+          onClick: () => {
+            addBlockToEditor({
+              id: genBlockId(),
+              type: 'jingle',
+              title: 'Джингл AllTell FM',
+              duration: 10,
+              audio_url: null
+            }, targetIndex);
+          }
+        },
+        {
+          icon: 'fa-pause',
+          label: 'Пауза в эфире (Gap, 15 сек)',
+          onClick: () => {
+            addBlockToEditor({
+              id: genBlockId(),
+              type: 'gap',
+              title: 'Пауза в эфире',
+              duration: 15,
+              audio_url: null
+            }, targetIndex);
+          }
+        },
+        {
+          divider: true
+        },
+        {
+          icon: 'fa-wand-magic-sparkles',
+          label: 'Умное заполнение паузы...',
+          onClick: () => {
+            openSmartGapFillModal({ targetIndex });
+          }
+        }
+      ]
+    });
+  }
+
+  // ===== ШАБЛОНЫ ЭФИРНОЙ СЕТКИ (TEMPLATES) =====
+  const TEMPLATES_STORAGE_KEY = 'alltell_radio_grid_templates';
+
+  function getSavedTemplates() {
+    try {
+      const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveTemplatesList(list) {
+    try {
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.error('Ошибка сохранения шаблона:', e);
+    }
+  }
+
+  function saveCurrentGridAsTemplate(name) {
+    if (!state.editorBlocks || state.editorBlocks.length === 0) {
+      showToast('Сетка вещания пуста, нечего сохранять в шаблон', 'warning');
+      return;
+    }
+    const title = (name || '').trim() || `Шаблон эфира от ${new Date().toLocaleDateString('ru-RU')}`;
+    const templates = getSavedTemplates();
+    const newTpl = {
+      id: 'tpl_' + Date.now(),
+      name: title,
+      createdAt: new Date().toISOString(),
+      blocksCount: state.editorBlocks.length,
+      totalDuration: state.editorBlocks.reduce((acc, b) => acc + (b.duration || 0), 0),
+      blocks: JSON.parse(JSON.stringify(state.editorBlocks))
+    };
+    templates.unshift(newTpl);
+    saveTemplatesList(templates);
+    renderTemplatesList();
+    showToast(`Шаблон «${title}» сохранён!`, 'success');
+  }
+
+  function applyTemplate(tplId) {
+    const templates = getSavedTemplates();
+    const tpl = templates.find((t) => t.id === tplId);
+    if (!tpl || !Array.isArray(tpl.blocks)) return;
+
+    if (state.editorBlocks.length > 0) {
+      if (!window.confirm(`Загрузить шаблон «${tpl.name}»? Текущая сетка редактора будет заменена на ${tpl.blocks.length} блоков из шаблона.`)) {
+        return;
       }
     }
+
+    state.editorBlocks = JSON.parse(JSON.stringify(tpl.blocks));
+    state.editorBlocks.forEach((b) => {
+      b.id = genBlockId();
+    });
+    renderEditor();
+    hideModal('modalRadioTemplates');
+    showToast(`Шаблон «${tpl.name}» успешно загружен в эфир!`, 'success');
+  }
+
+  function deleteTemplate(tplId) {
+    let templates = getSavedTemplates();
+    templates = templates.filter((t) => t.id !== tplId);
+    saveTemplatesList(templates);
+    renderTemplatesList();
+    showToast('Шаблон удален', 'info');
+  }
+
+  function renderTemplatesList() {
+    const listEl = document.getElementById('radioTemplatesList');
+    if (!listEl) return;
+    const templates = getSavedTemplates();
+    if (templates.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:30px 10px; color:#94a3b8;">
+          <i class="fas fa-layer-group" style="font-size:2rem; margin-bottom:10px; opacity:0.5; display:block;"></i>
+          У вас пока нет сохранённых шаблонов сеток вещания. Нажмите «Сохранить текущую», чтобы создать первый шаблон!
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = templates.map((tpl) => `
+      <div class="radio-template-item">
+        <div class="radio-template-info">
+          <div class="radio-template-title">${escapeHtml(tpl.name)}</div>
+          <div class="radio-template-meta">
+            <span><i class="fas fa-cubes"></i> ${tpl.blocksCount} блоков</span>
+            <span><i class="fas fa-clock"></i> ${formatDuration(tpl.totalDuration)}</span>
+            <span><i class="far fa-calendar-alt"></i> ${new Date(tpl.createdAt).toLocaleDateString('ru-RU')}</span>
+          </div>
+        </div>
+        <div class="radio-template-actions">
+          <button type="button" class="btn btn-primary btn-sm btn-apply-template" data-id="${tpl.id}" title="Загрузить эту сетку в редактор">
+            <i class="fas fa-arrow-down"></i> Загрузить
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-sm btn-delete-template" data-id="${tpl.id}" title="Удалить шаблон">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+
+    listEl.querySelectorAll('.btn-apply-template').forEach((btn) => {
+      btn.addEventListener('click', () => applyTemplate(btn.dataset.id));
+    });
+
+    listEl.querySelectorAll('.btn-delete-template').forEach((btn) => {
+      btn.addEventListener('click', () => deleteTemplate(btn.dataset.id));
+    });
+  }
+
+  function openTemplatesModal() {
+    renderTemplatesList();
+    showModal('modalRadioTemplates');
+  }
+
+  // ===== ИНДИКАТОР ПРЯМОГО ЭФИРА (PLAYHEAD) НА ТАЙМЛАЙНЕ =====
+  function updateTimelinePlayhead() {
+    if (!dom.radioTimelinePlayhead || !dom.radioTimelineTrack) return;
+    if (!state.editorStartTime && !state.selectedStationForEdit) {
+      dom.radioTimelinePlayhead.style.display = 'none';
+      return;
+    }
+
+    const { totalDurationSec } = syncCompiledSlots();
+    if (totalDurationSec <= 0) {
+      dom.radioTimelinePlayhead.style.display = 'none';
+      return;
+    }
+
+    const baseScale = state.baseScaleSec || 1200;
+    const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
+    const effectiveScale = Math.max(60, Math.round(neededScale / state.timelineZoom));
+
+    const nowMs = getEffectiveNowMs();
+    const startMs = new Date(state.editorStartTime || Date.now()).getTime();
+    const elapsedSec = (nowMs - startMs) / 1000;
+
+    const st = state.selectedStationForEdit || state.currentStation;
+    const fallbackMode = (st && st.fallback_mode) || 'loop';
+
+    if (elapsedSec >= 0) {
+      let activeElapsed = elapsedSec;
+      let isLooping = false;
+
+      if (elapsedSec > totalDurationSec && fallbackMode === 'loop' && totalDurationSec > 0) {
+        activeElapsed = elapsedSec % totalDurationSec;
+        isLooping = true;
+      }
+
+      if (activeElapsed <= effectiveScale) {
+        const playheadPct = (activeElapsed / effectiveScale) * 100;
+        dom.radioTimelinePlayhead.style.display = 'block';
+        dom.radioTimelinePlayhead.style.left = `${playheadPct.toFixed(2)}%`;
+
+        const badge = dom.radioTimelinePlayhead.querySelector('.radio-timeline-playhead-badge');
+        if (badge) {
+          const liveTimeStr = formatClockTime(nowMs);
+          badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
+        }
+        return;
+      }
+    }
+
+    dom.radioTimelinePlayhead.style.display = 'none';
   }
 
   async function openPickPlaylistForTimeline(targetIndex = -1) {
@@ -4357,6 +4944,9 @@
 
           dom.btnPickTracksBatch.onclick = () => {
             const checked = list.querySelectorAll('.pick-track-checkbox:checked');
+            let insertAt = (typeof state.pendingInsertIndex === 'number' && state.pendingInsertIndex >= 0)
+              ? state.pendingInsertIndex
+              : -1;
             checked.forEach((cb) => {
               addSlotToEditor({
                 track_id: cb.dataset.id,
@@ -4364,20 +4954,26 @@
                 audio_url: cb.dataset.url,
                 duration: parseFloat(cb.dataset.duration) || 180,
                 type: cb.dataset.type || 'track'
-              });
+              }, insertAt);
+              if (insertAt >= 0) insertAt++;
             });
+            state.pendingInsertIndex = -1;
             hideModal(modal);
           };
 
           list.querySelectorAll('.btn-pick-single-item').forEach((b) => {
             b.addEventListener('click', () => {
+              const insertAt = (typeof state.pendingInsertIndex === 'number' && state.pendingInsertIndex >= 0)
+                ? state.pendingInsertIndex
+                : -1;
               addSlotToEditor({
                 track_id: b.dataset.id,
                 title: b.dataset.title,
                 audio_url: b.dataset.url,
                 duration: parseFloat(b.dataset.duration) || 180,
                 type: b.dataset.type || 'track'
-              });
+              }, insertAt);
+              state.pendingInsertIndex = -1;
               hideModal(modal);
             });
           });
@@ -5002,30 +5598,27 @@
       }
     });
 
-    // Редактирование описания и настроек радиостанции
-    function openEditStationModal(st) {
-      if (!st) return;
-      if (dom.editStationId) dom.editStationId.value = st.id;
-      if (dom.editStationName) dom.editStationName.value = st.name || '';
-      if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
-      if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
-      if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
-      showModal('modalEditStation');
-    }
-
-    dom.btnEditStationSettings?.addEventListener('click', () => {
-      if (state.selectedStationForEdit) {
-        openEditStationModal(state.selectedStationForEdit);
-      } else if (state.myStations && state.myStations.length > 0) {
-        openEditStationModal(state.myStations[0]);
+    dom.btnEditStationSettings?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetStation = state.selectedStationForEdit || (state.myStations && state.myStations[0]);
+      if (targetStation) {
+        openStationContextMenu(targetStation, dom.btnEditStationSettings);
       } else {
-        showToast('Выберите радиостанцию для редактирования', 'info');
+        showToast('Выберите радиостанцию для управления', 'info');
       }
     });
 
-    dom.btnDeckEditStation?.addEventListener('click', () => {
+    dom.btnDeckEditStation?.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (state.currentStation) {
-        openEditStationModal(state.currentStation);
+        openStationContextMenu(state.currentStation, dom.btnDeckEditStation);
+      }
+    });
+
+    document.getElementById('btnSaveCurrentAsTemplate')?.addEventListener('click', () => {
+      const name = window.prompt('Введите название для этого шаблона сетки:', `Сетка эфира (${state.editorBlocks.length} бл.)`);
+      if (name && name.trim()) {
+        saveCurrentGridAsTemplate(name.trim());
       }
     });
 
@@ -5116,6 +5709,7 @@
         const nowMs = getEffectiveNowMs();
         dom.radioServerClock.innerHTML = `<i class="fas fa-clock"></i> Эфир: ${formatClockTime(nowMs)}`;
       }
+      updateTimelinePlayhead();
     }, 1000);
 
     // Проверка открытия конкретного трека через URL: /radio/track/:id или ?track=id
@@ -5209,7 +5803,11 @@
     setTimelineZoom,
     renderEditor,
     openPickPlaylistForTimeline,
-    openSmartGapFillModal
+    openSmartGapFillModal,
+    openStationContextMenu,
+    openBlockContextMenu,
+    openQuickInsertMenu,
+    openTemplatesModal
   };
 
   // Автозапуск при прямой загрузке страницы /radio (без SPA перехода)
