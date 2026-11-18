@@ -31,6 +31,13 @@
     return window.AllTellGlobalRadio;
   }
 
+  // Получение текущего авторизованного пользователя
+  function getCurrentUser() {
+    return (window.authManager && typeof window.authManager.getUser === 'function')
+      ? window.authManager.getUser()
+      : null;
+  }
+
   // ===== Состояние страницы Радио =====
   const state = {
     currentStation: null,
@@ -2828,12 +2835,25 @@
 
   function checkIsStationOwner(st) {
     if (!st) return false;
+    // Владелец, если станция в списке станций текущего пользователя или прямо сейчас редактируется
+    if (state.myStations && state.myStations.some((s) => String(s.id) === String(st.id))) {
+      return true;
+    }
+    if (state.selectedStationForEdit && String(state.selectedStationForEdit.id) === String(st.id)) {
+      return true;
+    }
     const curUser = getCurrentUser();
-    return Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
+    if (!curUser) return false;
+    return Boolean(
+      (st.owner_id && String(st.owner_id) === String(curUser.id)) ||
+      curUser.is_root ||
+      (curUser.admin_level && curUser.admin_level > 0)
+    );
   }
 
   // ===== СИСТЕМА КОНТЕКСТНЫХ МЕНЮ (DROPDOWN / CONTEXT MENU) =====
   let activeContextMenuEl = null;
+  let contextMenuOpenedAt = 0;
 
   function hideContextMenu() {
     if (activeContextMenuEl) {
@@ -2849,6 +2869,7 @@
     const menu = document.createElement('div');
     menu.className = 'radio-context-menu';
     menu.id = 'radioContextMenu';
+    menu.setAttribute('role', 'menu');
 
     let html = '';
     if (title) {
@@ -2879,6 +2900,7 @@
     menu.innerHTML = html;
     document.body.appendChild(menu);
     activeContextMenuEl = menu;
+    contextMenuOpenedAt = Date.now();
 
     menu.querySelectorAll('.radio-context-menu-item').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -2897,7 +2919,7 @@
     let posX = 0;
     let posY = 0;
 
-    if (anchorEl) {
+    if (anchorEl && typeof anchorEl.getBoundingClientRect === 'function') {
       const anchorRect = anchorEl.getBoundingClientRect();
       posX = anchorRect.left;
       posY = anchorRect.bottom + 4;
@@ -2924,6 +2946,9 @@
         posY = y - menuRect.height;
       }
       if (posY < margin) posY = margin;
+    } else {
+      posX = (window.innerWidth - menuRect.width) / 2;
+      posY = (window.innerHeight - menuRect.height) / 2;
     }
 
     menu.style.left = `${Math.max(margin, Math.round(posX))}px`;
@@ -2932,6 +2957,7 @@
 
   // Закрытие контекстного меню при клике вне его или Escape
   window.addEventListener('click', (e) => {
+    if (Date.now() - contextMenuOpenedAt < 100) return;
     if (activeContextMenuEl && !activeContextMenuEl.contains(e.target)) {
       hideContextMenu();
     }
@@ -2944,7 +2970,11 @@
   });
 
   window.addEventListener('resize', hideContextMenu);
-  window.addEventListener('scroll', hideContextMenu, true);
+  window.addEventListener('scroll', (e) => {
+    if (Date.now() - contextMenuOpenedAt < 150) return;
+    if (activeContextMenuEl && activeContextMenuEl.contains(e.target)) return;
+    hideContextMenu();
+  }, true);
 
   // Синхронизация времени сервера эфира (калибровка часов)
   async function syncRadioServerTime() {
@@ -2980,7 +3010,7 @@
       }
       const label = newMode === 'loop' ? 'Зацикливание' : newMode === 'noise' ? 'Радиопомехи' : 'Тишина';
       showToast(`Режим эфира изменён: ${label}`, 'success');
-      renderStations();
+      loadStations();
     } catch (err) {
       showToast('Ошибка смены режима: ' + err.message, 'error');
     }
@@ -5598,20 +5628,54 @@
       }
     });
 
-    dom.btnEditStationSettings?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const targetStation = state.selectedStationForEdit || (state.myStations && state.myStations[0]);
+    const handleStationSettingsClick = (e, btn) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const triggerBtn = btn || dom.btnEditStationSettings || document.getElementById('btnEditStationSettings');
+      const sSelectVal = dom.editorStationSelect?.value || document.getElementById('editorStationSelect')?.value;
+      const targetStation = state.selectedStationForEdit
+        || (sSelectVal && state.myStations && state.myStations.find(s => String(s.id) === String(sSelectVal)))
+        || (state.myStations && state.myStations[0])
+        || state.currentStation;
+
       if (targetStation) {
-        openStationContextMenu(targetStation, dom.btnEditStationSettings);
+        openStationContextMenu(targetStation, triggerBtn);
       } else {
-        showToast('Выберите радиостанцию для управления', 'info');
+        showToast('Пожалуйста, выберите или зарегистрируйте радиостанцию', 'info');
+      }
+    };
+
+    dom.btnEditStationSettings?.addEventListener('click', (e) => handleStationSettingsClick(e, dom.btnEditStationSettings));
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('#btnEditStationSettings');
+      if (btn) {
+        handleStationSettingsClick(e, btn);
       }
     });
 
-    dom.btnDeckEditStation?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (state.currentStation) {
-        openStationContextMenu(state.currentStation, dom.btnDeckEditStation);
+    const handleDeckEditClick = (e, btn) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const triggerBtn = btn || dom.btnDeckEditStation || document.getElementById('btnDeckEditStation');
+      const target = state.currentStation || (state.myStations && state.myStations[0]) || state.selectedStationForEdit;
+      if (target) {
+        openStationContextMenu(target, triggerBtn);
+      } else {
+        showToast('Радиостанция не выбрана', 'info');
+      }
+    };
+
+    dom.btnDeckEditStation?.addEventListener('click', (e) => handleDeckEditClick(e, dom.btnDeckEditStation));
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('#btnDeckEditStation');
+      if (btn) {
+        handleDeckEditClick(e, btn);
       }
     });
 

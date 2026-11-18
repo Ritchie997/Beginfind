@@ -576,6 +576,8 @@ test('radio-ui: context menus, quick insert popover, templates and playhead are 
   assert.ok(radioCss.includes('.radio-templates-list'), 'radio.css должен определять стили списка шаблонов');
 
   // 3. JS: контекстное меню станций, блоков, быстрый инсертер и шаблоны
+  assert.ok(radioJs.includes('function getCurrentUser()'), 'getCurrentUser должен быть определен в radio-client.js');
+  assert.ok(radioJs.includes('handleStationSettingsClick'), 'handleStationSettingsClick должен гарантировать кликабельность опций станции');
   assert.ok(radioJs.includes('openStationContextMenu'), 'radio-client.js должен содержать openStationContextMenu');
   assert.ok(radioJs.includes('openBlockContextMenu'), 'radio-client.js должен содержать openBlockContextMenu');
   assert.ok(radioJs.includes('openQuickInsertMenu'), 'radio-client.js должен содержать openQuickInsertMenu');
