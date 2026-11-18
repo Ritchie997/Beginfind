@@ -14,10 +14,37 @@
     return `${pad(m)}:${pad(s)}`;
   }
 
-  function formatClockTime(dateOrMs) {
-    const d = new Date(dateOrMs);
+  function getUserTimezoneInfo() {
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const abs = Math.abs(offsetMin);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
     const pad = (n) => (n < 10 ? '0' : '') + n;
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const utcOffsetStr = `UTC${sign}${h}${m > 0 ? `:${pad(m)}` : ''}`;
+    let tzName = '';
+    try {
+      tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch (_) {}
+    return {
+      offsetMinutes: offsetMin,
+      utcOffsetStr,
+      tzName,
+      label: tzName ? `${utcOffsetStr} • ${tzName}` : utcOffsetStr
+    };
+  }
+
+  function formatClockTime(dateOrMs, options = {}) {
+    if (!dateOrMs) return '--:--:--';
+    const d = new Date(dateOrMs);
+    if (isNaN(d.getTime())) return '--:--:--';
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    if (options && options.withTz) {
+      const tz = getUserTimezoneInfo();
+      return `${timeStr} (${tz.utcOffsetStr})`;
+    }
+    return timeStr;
   }
 
   function escapeHtml(str) {
@@ -75,7 +102,7 @@
   };
 
   function getEffectiveNowMs() {
-    return Date.now() + (state.serverTimeDelta || 0);
+    return Date.now();
   }
 
   let dom = {};
@@ -1678,8 +1705,9 @@
     } else {
       badge.style.background = '#2563eb';
       badge.style.color = '#fff';
-      badge.innerHTML = `<i class="far fa-clock"></i> Старт в ${formatClockTime(startMs)}`;
-      badge.title = 'Вещание запланировано на будущее время и запустится автоматически';
+      const tz = getUserTimezoneInfo();
+      badge.innerHTML = `<i class="far fa-clock"></i> Старт в ${formatClockTime(startMs)} <span style="font-size:0.7rem; opacity:0.85;">(${tz.utcOffsetStr})</span>`;
+      badge.title = `Вещание запланировано на ${formatClockTime(startMs)} по вашему системному времени (${tz.label})`;
     }
   }
 
@@ -1745,7 +1773,7 @@
         if (isLiveNow) {
           showToast(`🔴 Вещание радиостанции «${st.name}» успешно запущено в прямой эфир!`, 'success');
         } else {
-          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(targetStartMs)}. Эфир запустится точно по расписанию.`, 'info');
+          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(targetStartMs)} (${getUserTimezoneInfo().utcOffsetStr}). Эфир запустится точно по расписанию.`, 'info');
         }
       }
 
@@ -1802,7 +1830,9 @@
       dom.timelineTotalDuration.textContent = formatDuration(totalDurationSec);
     }
     if (dom.timelineEndTime) {
-      dom.timelineEndTime.textContent = formatClockTime(endTimeIso);
+      const tz = getUserTimezoneInfo();
+      dom.timelineEndTime.textContent = `${formatClockTime(endTimeIso)} (${tz.utcOffsetStr})`;
+      dom.timelineEndTime.title = `Окончание вещания по вашему системному времени (${tz.label})`;
     }
 
     // Растущая шкала: базовая 20 минут (1200 сек), чем больше треков, тем больше растет!
@@ -2256,7 +2286,7 @@
               <span class="eb-type-badge type-${block.type}">
                 <i class="fas ${typeIcon}"></i> ${typeLabel}
               </span>
-              <span class="radio-eb-time-range">${formatClockTime(startMs)} — ${formatClockTime(endMs)}</span>
+              <span class="radio-eb-time-range" title="Время выхода блока по вашему системному времени (${getUserTimezoneInfo().utcOffsetStr})">${formatClockTime(startMs)} — ${formatClockTime(endMs)}</span>
               <span class="radio-eb-duration-badge">${formatDuration(durSec)}</span>
             </div>
             <div class="radio-eb-actions">
@@ -3025,15 +3055,13 @@
   // Синхронизация времени сервера эфира (калибровка часов)
   async function syncRadioServerTime() {
     try {
+      const tz = getUserTimezoneInfo();
       const res = await api('/api/system-settings/sync-time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientTimeIso: new Date().toISOString() })
       });
-      if (res && res.effectiveServerTime) {
-        state.serverTimeDelta = new Date(res.effectiveServerTime).getTime() - Date.now();
-        showToast('Часы эфира синхронизированы с вашим браузером!', 'success');
-      }
+      showToast(`Время эфира синхронизировано с часами устройства: ${formatClockTime(new Date(), { withSeconds: true })} (${tz.label || tz.utcOffsetStr})`, 'success');
     } catch (err) {
       showToast('Ошибка синхронизации времени: ' + err.message, 'error');
     }
@@ -3107,9 +3135,11 @@
         }
       });
 
+      const tz = getUserTimezoneInfo();
       items.push({
         icon: 'fa-clock',
-        label: 'Синхронизировать время вещания',
+        label: `Часовой пояс: ${tz.utcOffsetStr}`,
+        badge: 'Синхронизировать',
         onClick: () => syncRadioServerTime()
       });
 
@@ -3484,8 +3514,10 @@
 
         const badge = dom.radioTimelinePlayhead.querySelector('.radio-timeline-playhead-badge');
         if (badge) {
+          const tz = getUserTimezoneInfo();
           const liveTimeStr = formatClockTime(nowMs);
           badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
+          badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
         }
         return;
       }
@@ -5803,15 +5835,13 @@
         if (dom.btnSyncClock) {
           dom.btnSyncClock.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         }
+        const tz = getUserTimezoneInfo();
         const res = await api('/api/system-settings/sync-time', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clientTimeIso: new Date().toISOString() })
         });
-        if (res && res.effectiveServerTime) {
-          state.serverTimeDelta = new Date(res.effectiveServerTime).getTime() - Date.now();
-          showToast('Время эфира успешно синхронизировано с часами вашего браузера!', 'success');
-        }
+        showToast(`Время эфира синхронизировано с часами устройства: ${formatClockTime(new Date(), { withSeconds: true })} (${tz.label || tz.utcOffsetStr})`, 'success');
       } catch (err) {
         showToast('Ошибка синхронизации времени: ' + err.message, 'error');
       } finally {
@@ -5823,19 +5853,22 @@
 
     async function syncClockWithServer() {
       try {
-        const res = await api('/api/system-settings/public');
-        if (res && res.serverTime) {
-          state.serverTimeDelta = new Date(res.serverTime).getTime() - Date.now();
-        }
+        await api('/api/system-settings/public');
       } catch (_) {}
     }
     syncClockWithServer();
 
     clearInterval(state.serverClockInterval);
     state.serverClockInterval = setInterval(() => {
+      const nowMs = getEffectiveNowMs();
+      const tz = getUserTimezoneInfo();
+      const badge = document.getElementById('radioUserTimezoneBadge');
+      if (badge) {
+        badge.textContent = tz.utcOffsetStr;
+        badge.title = tz.label;
+      }
       if (dom.radioServerClock) {
-        const nowMs = getEffectiveNowMs();
-        dom.radioServerClock.innerHTML = `<i class="fas fa-clock"></i> Эфир: ${formatClockTime(nowMs)}`;
+        dom.radioServerClock.innerHTML = `<i class="fas fa-clock"></i> Эфир: ${formatClockTime(nowMs, { withSeconds: true })}`;
       }
       updateTimelinePlayhead();
     }, 1000);

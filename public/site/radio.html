@@ -350,9 +350,10 @@
             <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
             <button type="button" class="btn btn-primary btn-sm" id="btnSetStartTimeNow" title="Запустить вещание в прямой эфир прямо сейчас"><i class="fas fa-play"></i> Сейчас (Старт)</button>
             <span id="editorLiveStatusBadge" class="badge" style="display:none; font-size:0.75rem; padding:4px 8px; border-radius:6px;"></span>
-            <div class="radio-time-sync-widget" style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#94a3b8; margin-left:6px;" title="Текущее эффективное время сервера вещания">
+            <div class="radio-time-sync-widget" id="radioTimeSyncWidget" style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#94a3b8; margin-left:6px;" title="Системное время вашего устройства и часовой пояс">
               <span id="radioServerClock"><i class="fas fa-clock"></i> Эфир: --:--:--</span>
-              <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSyncClock" title="Синхронизировать время вещания с часами браузера"><i class="fas fa-sync-alt"></i></button>
+              <span id="radioUserTimezoneBadge" class="badge" style="background:rgba(99,102,241,0.2); color:#a5b4fc; font-size:0.72rem; padding:2px 6px; border-radius:4px; font-family:monospace;" title="Ваш часовой пояс">UTC</span>
+              <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSyncClock" title="Проверить системное время и часовой пояс"><i class="fas fa-location-dot"></i></button>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">

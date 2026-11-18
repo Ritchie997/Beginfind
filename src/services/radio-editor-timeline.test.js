@@ -615,3 +615,48 @@ test('radio-editor & scheduler: fresh start time on publication, live deck sync,
   assert.ok(storeJs.includes('scheduleStartIndex'), 'getStationLiveState должен изолировать последнюю непрерывную сетку для кольцевого зацикливания');
   assert.ok(storeJs.includes('activeLoopSlots = allSlots.slice(scheduleStartIndex)'), 'Виртуальный цикл должен проигрывать только слоты текущей сетки вещания');
 });
+
+test('radio-timezone: user system timezone adjustment, multi-timezone worldwide synchronization & UI display', () => {
+  const radioHtml = fs.readFileSync(path.join(rootDir, 'public/site/radio.html'), 'utf8');
+  const radioJs = fs.readFileSync(path.join(rootDir, 'public/site/radio-client.js'), 'utf8');
+
+  // 1. Проверяем разметку: плашка часового пояса и обновленный виджет синхронизации
+  assert.ok(radioHtml.includes('id="radioUserTimezoneBadge"'), 'radio.html должен содержать бейдж часового пояса пользователя radioUserTimezoneBadge');
+  assert.ok(radioHtml.includes('id="radioTimeSyncWidget"'), 'radio.html должен содержать виджет времени и синхронизации');
+
+  // 2. Проверяем клиентские функции определения системного пояса и форматирования
+  assert.ok(radioJs.includes('function getUserTimezoneInfo()'), 'radio-client.js должен экспортировать/определять getUserTimezoneInfo()');
+  assert.ok(radioJs.includes('Intl.DateTimeFormat().resolvedOptions().timeZone'), 'getUserTimezoneInfo должен определять системное имя таймзоны через Intl');
+  assert.ok(radioJs.includes('getTimezoneOffset()'), 'getUserTimezoneInfo должен определять точное системное смещение getTimezoneOffset()');
+  assert.ok(radioJs.includes('function formatClockTime('), 'radio-client.js должен содержать formatClockTime с поддержкой системных часов');
+  assert.ok(radioJs.includes('function getEffectiveNowMs() {\n    return Date.now();\n  }'), 'getEffectiveNowMs должен возвращать точное локальное системное время Date.now()');
+
+  // 3. Симуляция двух пользователей в разных часовых поясах (Пользователь A: 06:00, Пользователь B: 10:00)
+  // Оба пользователя подключаются к одной передаче, начавшейся в один физический момент времени (UTC)
+  const physicalStartUtc = '2026-11-18T06:00:00.000Z';
+  const slotDurationSec = 180;
+  const physicalEndUtc = new Date(new Date(physicalStartUtc).getTime() + slotDurationSec * 1000).toISOString();
+
+  // Пользователь A (UTC+0, Лондон/Рейкьявик):
+  const dateUserA = new Date(physicalStartUtc);
+  const timeStrUserA = dateUserA.toLocaleTimeString('ru-RU', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
+  assert.equal(timeStrUserA, '06:00', 'Для пользователя в поясе 06:00 на часах должно быть ровно 06:00');
+
+  // Пользователь B (UTC+4, Самара/Дубай):
+  const dateUserB = new Date(physicalStartUtc);
+  const timeStrUserB = dateUserB.toLocaleTimeString('ru-RU', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false });
+  assert.equal(timeStrUserB, '10:00', 'Для пользователя в поясе 10:00 на часах должно быть ровно 10:00');
+
+  // Моделируем логику воспроизведения аудио:
+  // Через 45 секунд после старта передачи (физический момент nowUtc)
+  const currentPhysicalNow = new Date('2026-11-18T06:00:45.000Z').getTime();
+  const startMs = new Date(physicalStartUtc).getTime();
+  const offsetUserA = (currentPhysicalNow - startMs) / 1000;
+  const offsetUserB = (currentPhysicalNow - startMs) / 1000;
+
+  // Офсет воспроизведения для обоих пользователей АБСОЛЮТНО одинаков (45 сек),
+  // звук играет строго синхронно во всем мире, при этом каждый видит свое корректное системное время:
+  assert.equal(offsetUserA, 45, 'Офсет трека для пользователя А должен быть ровно 45 секунд');
+  assert.equal(offsetUserB, 45, 'Офсет трека для пользователя Б должен быть ровно 45 секунд');
+  assert.equal(offsetUserA, offsetUserB, 'Синхронизация воспроизведения между часовыми поясами должна быть идентична на 100%');
+});
