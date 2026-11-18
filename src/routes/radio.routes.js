@@ -394,22 +394,15 @@ router.get('/radio/stations/:id/live', async (req, res) => {
 });
 
 // GET /api/radio/stations/:id/timeline — просмотр сетки вещания станции
-router.get('/radio/stations/:id/timeline', async (req, res) => {
+router.get('/radio/stations/:id/timeline', optionalUser, async (req, res) => {
   try {
     const { fromTime, toTime } = req.query;
     const slots = await radioStore.getTimelineSlots(req.params.id, fromTime, toTime);
 
     const station = await radioStore.getStationById(req.params.id);
-    const authHeader = req.headers['authorization'];
-    let user = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.split(' ')[1];
-        user = auth.verifyToken(token);
-      } catch (_) {}
-    }
-    const isOwner = user && station && String(station.owner_id) === String(user.id);
-    const isAdmin = user && isRootOrAdmin(user);
+    const user = req.user;
+    const isOwner = Boolean(user && station && String(station.owner_id) === String(user.id));
+    const isAdmin = Boolean(user && isRootOrAdmin(user));
 
     const nowIso = new Date().toISOString();
     const safeSlots = (slots || []).map((s) => {

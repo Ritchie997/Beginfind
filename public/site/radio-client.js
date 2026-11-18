@@ -61,8 +61,14 @@
     recordedChunks: [],
     recordStartTime: 0,
     recordTimerInterval: null,
-    globalUnsub: null
+    globalUnsub: null,
+    serverTimeDelta: 0,
+    serverClockInterval: null
   };
+
+  function getEffectiveNowMs() {
+    return Date.now() + (state.serverTimeDelta || 0);
+  }
 
   let dom = {};
 
@@ -227,6 +233,18 @@
       playlistViewTracksList: document.getElementById('playlistViewTracksList'),
       formUploadTrack: document.getElementById('formUploadTrack'),
       formCreateStation: document.getElementById('formCreateStation'),
+      btnDeckEditStation: document.getElementById('btnDeckEditStation'),
+      btnEditStationSettings: document.getElementById('btnEditStationSettings'),
+      modalEditStation: document.getElementById('modalEditStation'),
+      formEditStation: document.getElementById('formEditStation'),
+      editStationId: document.getElementById('editStationId'),
+      editStationName: document.getElementById('editStationName'),
+      editStationDescription: document.getElementById('editStationDescription'),
+      editStationFallback: document.getElementById('editStationFallback'),
+      editStationAvatar: document.getElementById('editStationAvatar'),
+      btnSubmitEditStation: document.getElementById('btnSubmitEditStation'),
+      btnSyncClock: document.getElementById('btnSyncClock'),
+      radioServerClock: document.getElementById('radioServerClock'),
       modalPickTrackList: document.getElementById('modalPickTrackList'),
       pickTrackSelectAll: document.getElementById('pickTrackSelectAll'),
       btnPickTracksBatch: document.getElementById('btnPickTracksBatch'),
@@ -363,7 +381,14 @@
       if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = '00:00';
       if (dom.deckTimeRemaining) dom.deckTimeRemaining.textContent = '--:--';
       if (dom.deckLiveSyncBtn) dom.deckLiveSyncBtn.style.display = 'none';
+      if (dom.btnDeckEditStation) dom.btnDeckEditStation.style.display = 'none';
       return;
+    }
+
+    const curUser = getCurrentUser();
+    const isStationOwner = Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
+    if (dom.btnDeckEditStation) {
+      dom.btnDeckEditStation.style.display = isStationOwner ? 'inline-flex' : 'none';
     }
 
     dom.deckTitle.innerHTML = `<span>${escapeHtml(st.name)}</span><span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span>`;
@@ -608,16 +633,22 @@
       const globalAudio = getGlobalAudio();
       const gState = globalAudio ? globalAudio.getState() : {};
       const activeStationId = (state.currentStation && state.currentStation.id) || (gState.station && gState.station.id);
+      const curUser = getCurrentUser();
 
-      dom.stationsGrid.innerHTML = stations.map((st) => `
+      dom.stationsGrid.innerHTML = stations.map((st) => {
+        const isOwner = Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
+        return `
         <div class="radio-station-card ${activeStationId === st.id ? 'is-active-tune' : ''}" data-id="${st.id}">
           <div>
             <div class="radio-card-top">
               <div class="radio-card-avatar">
                 ${st.avatar_url ? `<img src="${escapeHtml(st.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
               </div>
-              <div class="radio-card-meta">
-                <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
+              <div class="radio-card-meta" style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                  <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
+                  ${isOwner ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-card-edit-station" data-station-id="${st.id}" title="Редактировать описание и параметры радиостанции"><i class="fas fa-pen"></i></button>` : ''}
+                </div>
                 <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
               </div>
             </div>
@@ -632,7 +663,17 @@
             </div>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
+
+      dom.stationsGrid.querySelectorAll('.btn-card-edit-station').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const sId = btn.dataset.stationId;
+          const found = stations.find((s) => s.id == sId);
+          if (found) openEditStationModal(found);
+        });
+      });
 
       dom.stationsGrid.querySelectorAll('.radio-station-card').forEach((card) => {
         card.addEventListener('click', () => {
@@ -1676,7 +1717,14 @@
 
       // Если эфир активен прямо сейчас, настраиваем станцию и запускаем проигрывание с нужного времени!
       if (isLiveNow && autoTune) {
-        tuneStation(st, true);
+        const gAudio = getGlobalAudio();
+        const gState = gAudio ? gAudio.getState() : {};
+        const isAlreadyPlayingThisStation = gState.isPlaying && gState.mode === 'radio' && gState.station && String(gState.station.id) === String(st.id);
+        if (!isAlreadyPlayingThisStation) {
+          tuneStation(st, true);
+        } else {
+          updateDeckUI();
+        }
       }
 
       return true;
@@ -1703,6 +1751,15 @@
         type: s.type || 'track'
       }));
       state.editorBlocks = convertSlotsToBlocks(slots || []);
+
+      // Если в сетке уже есть слоты — сохраняем исходное время начала эфира,
+      // чтобы при нажатии «Опубликовать в эфир» эфир не откатывался к началу!
+      if (slots && slots.length > 0 && slots[0].start_time) {
+        setEditorStartTime(slots[0].start_time);
+      } else {
+        setEditorStartTime(getEffectiveNowMs());
+      }
+
       renderEditor();
     } catch (e) {
       console.error('[radio] Error loading timeline:', e);
@@ -3349,16 +3406,17 @@
     }
     const [h, m] = parts;
 
-    const baseDate = new Date(state.editorStartTime || Date.now());
+    const baseMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : getEffectiveNowMs();
+    const baseDate = new Date(baseMs);
     const targetDate = new Date(baseDate);
     targetDate.setHours(h, m, 0, 0);
 
     let targetMs = targetDate.getTime();
-    if (targetMs < baseDate.getTime() - 12 * 3600 * 1000) {
+    if (targetMs < baseMs) {
       targetMs += 24 * 3600 * 1000;
     }
 
-    let cursor = baseDate.getTime();
+    let cursor = baseMs;
     for (let i = 0; i < state.editorSlots.length; i++) {
       const slot = state.editorSlots[i];
       const durMs = (Number(slot.duration) || 0) * 1000;
@@ -3383,6 +3441,65 @@
       priorEndTime: formatClockTime(cursor),
       nextSlot: null
     };
+  }
+
+  function insertSpeechAtSlotIndex(slot, slotIndex) {
+    const speechBlock = {
+      id: genBlockId(),
+      type: 'speech',
+      track_id: slot.track_id || null,
+      title: slot.title || 'Слова ведущего',
+      audio_url: slot.audio_url,
+      duration: Math.max(1, Number(slot.duration) || 0),
+      subType: 'speech'
+    };
+
+    if (!state.editorBlocks || state.editorBlocks.length === 0) {
+      state.editorBlocks = [speechBlock];
+      syncCompiledSlots();
+      renderEditor();
+      return;
+    }
+
+    let accumulatedSlots = 0;
+    let inserted = false;
+
+    for (let bIdx = 0; bIdx < state.editorBlocks.length; bIdx++) {
+      const block = state.editorBlocks[bIdx];
+      const count = block.type === 'playlist' ? (block.items ? block.items.length : 0) : 1;
+
+      if (accumulatedSlots + count >= slotIndex) {
+        if (block.type === 'playlist' && block.items && block.items.length > 1) {
+          const trackIdxInPlaylist = slotIndex - accumulatedSlots - 1;
+          if (trackIdxInPlaylist >= 0 && trackIdxInPlaylist < block.items.length - 1) {
+            splitPlaylistBlock(bIdx, trackIdxInPlaylist);
+            state.editorBlocks.splice(bIdx + 1, 0, speechBlock);
+            inserted = true;
+            break;
+          } else if (trackIdxInPlaylist < 0) {
+            state.editorBlocks.splice(bIdx, 0, speechBlock);
+            inserted = true;
+            break;
+          } else {
+            state.editorBlocks.splice(bIdx + 1, 0, speechBlock);
+            inserted = true;
+            break;
+          }
+        } else {
+          state.editorBlocks.splice(bIdx + 1, 0, speechBlock);
+          inserted = true;
+          break;
+        }
+      }
+      accumulatedSlots += count;
+    }
+
+    if (!inserted) {
+      state.editorBlocks.push(speechBlock);
+    }
+
+    syncCompiledSlots();
+    renderEditor();
   }
 
   function openInsertWordsModalForIndex(slotIndex) {
@@ -3821,7 +3938,10 @@
           method: 'DELETE'
         });
         state.editorSlots = [];
+        state.editorBlocks = [];
         renderEditorSlots();
+        renderEditor();
+        updateDeckUI();
         showToast('Сетка вещания радиостанции очищена. Эфир освобожден.', 'info');
         loadStations();
       } catch (err) {
@@ -4429,7 +4549,7 @@
         }
 
         const calc = calculateSpeechInsertionSlot(targetTime);
-        addSlotToEditor({
+        insertSpeechAtSlotIndex({
           title,
           type: 'speech',
           audio_url: finalAudioUrl,
@@ -4437,7 +4557,10 @@
         }, calc.insertIndex);
 
         hideModal('modalInsertWordsByTime');
-        showToast(`Слова ведущего установлены в сетку после трека №${calc.priorSlotIndex || 1}`, 'success');
+        showToast(`Слова ведущего установлены в сетку после трека №${calc.priorSlotIndex || 1} и сохранены в эфир!`, 'success');
+
+        // Автоматически сохраняем обновленную сетку в эфир, чтобы расписание диктора не слетало
+        await publishBroadcast(state.editorStartTime, { notify: false, autoTune: false });
       } catch (err) {
         showToast('Ошибка добавления слов: ' + err.message, 'error');
       } finally {
@@ -4879,6 +5002,122 @@
       }
     });
 
+    // Редактирование описания и настроек радиостанции
+    function openEditStationModal(st) {
+      if (!st) return;
+      if (dom.editStationId) dom.editStationId.value = st.id;
+      if (dom.editStationName) dom.editStationName.value = st.name || '';
+      if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
+      if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
+      if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
+      showModal('modalEditStation');
+    }
+
+    dom.btnEditStationSettings?.addEventListener('click', () => {
+      if (state.selectedStationForEdit) {
+        openEditStationModal(state.selectedStationForEdit);
+      } else if (state.myStations && state.myStations.length > 0) {
+        openEditStationModal(state.myStations[0]);
+      } else {
+        showToast('Выберите радиостанцию для редактирования', 'info');
+      }
+    });
+
+    dom.btnDeckEditStation?.addEventListener('click', () => {
+      if (state.currentStation) {
+        openEditStationModal(state.currentStation);
+      }
+    });
+
+    dom.formEditStation?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = dom.editStationId?.value;
+      const name = dom.editStationName?.value?.trim();
+      const description = dom.editStationDescription?.value?.trim();
+      const fallbackMode = dom.editStationFallback?.value || 'loop';
+      const avatarUrl = dom.editStationAvatar?.value?.trim() || null;
+
+      if (!id || !name) {
+        showToast('Укажите название радиостанции', 'warning');
+        return;
+      }
+
+      const submitBtn = dom.btnSubmitEditStation;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение…';
+      }
+
+      try {
+        const updated = await api(`/api/radio/stations/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, fallbackMode, avatarUrl })
+        });
+
+        if (state.currentStation && String(state.currentStation.id) === String(id)) {
+          state.currentStation = { ...state.currentStation, ...updated };
+        }
+        if (state.selectedStationForEdit && String(state.selectedStationForEdit.id) === String(id)) {
+          state.selectedStationForEdit = { ...state.selectedStationForEdit, ...updated };
+        }
+
+        hideModal('modalEditStation');
+        showToast(`Настройки радиостанции «${updated.name}» успешно сохранены!`, 'success');
+        await loadStations();
+        updateDeckUI();
+      } catch (err) {
+        showToast('Ошибка сохранения настроек: ' + err.message, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fas fa-save"></i> Сохранить настройки';
+        }
+      }
+    });
+
+    // Синхронизация и отображение времени эфира сервера (для мини-ПК)
+    dom.btnSyncClock?.addEventListener('click', async () => {
+      try {
+        if (dom.btnSyncClock) {
+          dom.btnSyncClock.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        }
+        const res = await api('/api/system-settings/sync-time', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientTimeIso: new Date().toISOString() })
+        });
+        if (res && res.effectiveServerTime) {
+          state.serverTimeDelta = new Date(res.effectiveServerTime).getTime() - Date.now();
+          showToast('Время эфира успешно синхронизировано с часами вашего браузера!', 'success');
+        }
+      } catch (err) {
+        showToast('Ошибка синхронизации времени: ' + err.message, 'error');
+      } finally {
+        if (dom.btnSyncClock) {
+          dom.btnSyncClock.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        }
+      }
+    });
+
+    async function syncClockWithServer() {
+      try {
+        const res = await api('/api/system-settings/public');
+        if (res && res.serverTime) {
+          state.serverTimeDelta = new Date(res.serverTime).getTime() - Date.now();
+        }
+      } catch (_) {}
+    }
+    syncClockWithServer();
+
+    clearInterval(state.serverClockInterval);
+    state.serverClockInterval = setInterval(() => {
+      if (dom.radioServerClock) {
+        const nowMs = getEffectiveNowMs();
+        dom.radioServerClock.innerHTML = `<i class="fas fa-clock"></i> Эфир: ${formatClockTime(nowMs)}`;
+      }
+    }, 1000);
+
     // Проверка открытия конкретного трека через URL: /radio/track/:id или ?track=id
     const trackPathMatch = window.location.pathname.match(/\/radio\/track\/([^/]+)/);
     const searchTrackId = new URLSearchParams(window.location.search).get('track');
@@ -4922,6 +5161,8 @@
     const cleanupFn = function cleanup() {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
+      clearInterval(state.serverClockInterval);
+      state.serverClockInterval = null;
       if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
         state.mediaRecorder.stop();
       }

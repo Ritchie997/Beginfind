@@ -283,6 +283,17 @@
     updateProgressUI();
   });
 
+  audio.addEventListener('error', () => {
+    console.warn('[GlobalRadio] Audio element error:', audio.error);
+    if (state.mode === 'radio' && state.station) {
+      setTimeout(() => {
+        if (state.mode === 'radio' && state.station) {
+          syncRadioStationLive(state.station, true);
+        }
+      }, 1000);
+    }
+  });
+
   audio.addEventListener('ended', () => {
     if (state.isLoop) {
       // Зацикливание включенного трека/слота: повторяем текущую дорожку с начала
@@ -408,10 +419,13 @@
 
       // Если слот, вернувшийся с сервера, это тот самый слот, который только что завершился
       if (state.currentSlot && targetSlot && state.currentSlot.id === targetSlot.id && audio.ended) {
-        if (live.nextSlots && live.nextSlots.length > 0) {
-          targetSlot = live.nextSlots[0];
-          targetOffset = 0;
-        }
+        // Сервер еще не успел перешагнуть end_time текущего слота: подождем полсекунды и обновим live
+        setTimeout(() => {
+          if (state.mode === 'radio' && state.station && state.station.id === station.id) {
+            syncRadioStationLive(station, autoPlay);
+          }
+        }, 500);
+        return;
       }
 
       state.currentSlot = targetSlot;
@@ -464,12 +478,22 @@
           notify();
         }
       } else {
-        audio.pause();
-        audio.src = '';
-        state.isPlaying = false;
-        updateMediaSession();
-        updateBarUI();
-        notify();
+        if (audio.ended || !state.isPlaying) {
+          audio.pause();
+          audio.src = '';
+          state.isPlaying = false;
+          updateMediaSession();
+          updateBarUI();
+          notify();
+          // Если станция в режиме loop или есть следующие слоты, повторяем опрос
+          if (station.fallback_mode === 'loop' || (live.nextSlots && live.nextSlots.length > 0)) {
+            setTimeout(() => {
+              if (state.mode === 'radio' && state.station && state.station.id === station.id) {
+                syncRadioStationLive(station, true);
+              }
+            }, 3000);
+          }
+        }
       }
     } catch (e) {
       console.error('[GlobalRadio] Sync error:', e);

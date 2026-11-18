@@ -35,8 +35,17 @@ const DEFAULT_SETTINGS = {
   // выданные токены живут до срока, с которым были подписаны.
   sessionDurationHours: 8,
   maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false, radio: false },
-  maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
+  maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.',
+  // Смещение системного времени сервера/мини-ПК относительно реального (в минутах).
+  // Используется для синхронизации расписания эфира и дикторов, если на мини-ПК сбиты часы.
+  serverTimeOffsetMinutes: 0
 };
+
+function getEffectiveServerTime() {
+  const settings = readSettings();
+  const offsetMs = (Number(settings.serverTimeOffsetMinutes) || 0) * 60 * 1000;
+  return new Date(Date.now() + offsetMs);
+}
 
 function normalizeMaintenancePages(value, legacyMode = false) {
   const pages = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -104,5 +113,6 @@ module.exports = {
   MAINTENANCE_PAGE_KEYS,
   normalizeMaintenancePages,
   readSettings,
-  writeSettings
+  writeSettings,
+  getEffectiveServerTime
 };

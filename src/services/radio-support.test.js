@@ -245,3 +245,119 @@ test('radio-store: favorites ("Моё") and playlists (private and public)', asy
   await radioStore.deletePlaylist(privatePlaylist.id, String(userId), false);
   await radioStore.deleteTrack(track.id, userId, true);
 });
+
+test('radio-store: virtual loop loops broadcast after schedule ends and populates nextSlots', async () => {
+  const freq = 99.3;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Looping Station',
+    description: 'Loops forever',
+    ownerId: 901,
+    ownerName: 'LoopMaster',
+    fallbackMode: 'loop'
+  });
+
+  // 3 слота по 10 секунд (всего 30 секунд цикл)
+  // Стартовали 45 секунд назад — значит прямо сейчас идет 2-й круг цикла!
+  const now = radioStore.getEffectiveNow().getTime();
+  const startTime = new Date(now - 45000).toISOString();
+
+  await radioStore.setTimelineSlots(station.id, [
+    { title: 'Loop Track 1', duration: 10, audio_url: '/uploads/loop1.mp3', type: 'track' },
+    { title: 'Loop Track 2', duration: 10, audio_url: '/uploads/loop2.mp3', type: 'track' },
+    { title: 'Loop Track 3', duration: 10, audio_url: '/uploads/loop3.mp3', type: 'track' }
+  ], startTime);
+
+  const liveState = await radioStore.getStationLiveState(station.id);
+  assert.ok(liveState.isLive, 'Станция должна быть активна');
+  assert.equal(liveState.isVirtualLoop, true, 'Виртуальное зацикливание должно быть включено');
+  assert.ok(liveState.currentSlot, 'Должен быть текущий играющий слот из цикла');
+  // 45 сек modulo 30 сек = 15 сек.
+  // 0-10с: Track 1, 10-20с: Track 2. Значит на 15-й секунде играет Track 2!
+  assert.equal(liveState.currentSlot.title, 'Loop Track 2', 'На 15-й секунде цикла должен играть Track 2');
+  assert.ok(liveState.nextSlots.length > 0, 'В режиме зацикливания nextSlots не должен быть пустым');
+  assert.equal(liveState.nextSlots[0].title, 'Loop Track 3', 'Следующим слотом должен быть Track 3');
+
+  await radioStore.deleteStation(station.id, 901, true);
+});
+
+test('radio-store: audio_url fallback from radio_tracks prevents NOT NULL constraint failure', async () => {
+  const freq = 99.4;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'NotNull Test Station',
+    ownerId: 902,
+    ownerName: 'Tester',
+    fallbackMode: 'loop'
+  });
+
+  const track = await radioStore.createTrack({
+    userId: 902,
+    authorName: 'Tester',
+    title: 'Song With Url',
+    audioUrl: '/uploads/real-song.mp3',
+    duration: 100,
+    size: 2000,
+    format: 'mp3'
+  });
+
+  // Отправляем слот с track_id, но с audio_url: null (как случалось в сломавшемся редакторе)
+  const slots = await radioStore.setTimelineSlots(station.id, [
+    { track_id: track.id, title: 'Slot From Track', audio_url: null, duration: 100 }
+  ], new Date().toISOString());
+
+  assert.equal(slots.length, 1);
+  assert.equal(slots[0].audio_url, '/uploads/real-song.mp3', 'audio_url должен быть автоматически подтянут из radio_tracks');
+
+  await radioStore.deleteTrack(track.id, 902, true);
+  await radioStore.deleteStation(station.id, 902, true);
+});
+
+test('radio-store: updating timeline replaces old overlapping slots without duplicates or track repeats', async () => {
+  const freq = 99.5;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Overlap Test Station',
+    ownerId: 903,
+    ownerName: 'Tester',
+    fallbackMode: 'loop'
+  });
+
+  const baseStart = new Date(Date.now() - 60000).toISOString();
+
+  // Первый запуск сетки: 3 трека по 60 сек
+  await radioStore.setTimelineSlots(station.id, [
+    { title: 'Track A', duration: 60, audio_url: '/uploads/a.mp3' },
+    { title: 'Track B', duration: 60, audio_url: '/uploads/b.mp3' },
+    { title: 'Track C', duration: 60, audio_url: '/uploads/c.mp3' }
+  ], baseStart);
+
+  let initialSlots = await radioStore.getTimelineSlots(station.id);
+  assert.equal(initialSlots.length, 3);
+
+  // Редактирование эфира: добавили Track D в конец, сохранив тот же baseStart эфира
+  await radioStore.setTimelineSlots(station.id, [
+    { title: 'Track A', duration: 60, audio_url: '/uploads/a.mp3' },
+    { title: 'Track B', duration: 60, audio_url: '/uploads/b.mp3' },
+    { title: 'Track C', duration: 60, audio_url: '/uploads/c.mp3' },
+    { title: 'Track D', duration: 60, audio_url: '/uploads/d.mp3' }
+  ], baseStart);
+
+  let updatedSlots = await radioStore.getTimelineSlots(station.id);
+  assert.equal(updatedSlots.length, 4, 'В сетке должно быть ровно 4 слота, без дубликатов от старой публикации');
+  assert.equal(updatedSlots[0].title, 'Track A');
+  assert.equal(updatedSlots[1].title, 'Track B');
+  assert.equal(updatedSlots[2].title, 'Track C');
+  assert.equal(updatedSlots[3].title, 'Track D');
+
+  await radioStore.deleteStation(station.id, 903, true);
+});

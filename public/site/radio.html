@@ -188,7 +188,10 @@
               <div class="radio-station-owner" id="deckStationOwner">Вещание не запущено</div>
             </div>
           </div>
-          <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnDeckEditStation" style="display:none;" title="Редактировать описание и настройки радиостанции"><i class="fas fa-pen"></i> Настройки</button>
+            <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
+          </div>
         </div>
 
         <div class="radio-deck-body">
@@ -340,12 +343,17 @@
           <div class="radio-editor-station-select-wrap">
             <label><i class="fas fa-tower-broadcast"></i> Станция:</label>
             <select id="editorStationSelect" class="radio-form-select" style="min-width:200px;"></select>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnEditStationSettings" title="Редактировать описание и настройки радиостанции"><i class="fas fa-edit"></i> Настройки</button>
           </div>
           <div class="radio-editor-time-wrap">
             <label><i class="far fa-clock"></i> Старт вещания:</label>
             <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
             <button type="button" class="btn btn-primary btn-sm" id="btnSetStartTimeNow" title="Запустить вещание в прямой эфир прямо сейчас"><i class="fas fa-play"></i> Сейчас (Старт)</button>
             <span id="editorLiveStatusBadge" class="badge" style="display:none; font-size:0.75rem; padding:4px 8px; border-radius:6px;"></span>
+            <div class="radio-time-sync-widget" style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#94a3b8; margin-left:6px;" title="Текущее эффективное время сервера вещания">
+              <span id="radioServerClock"><i class="fas fa-clock"></i> Эфир: --:--:--</span>
+              <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSyncClock" title="Синхронизировать время вещания с часами браузера"><i class="fas fa-sync-alt"></i></button>
+            </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <button type="button" class="btn btn-secondary btn-sm" id="btnToggleMediaDrawer" title="Открыть боковую панель медиатеки">
@@ -828,6 +836,45 @@
           <button type="submit" class="btn btn-primary" id="btnSubmitSmartGapFill" disabled>
             <i class="fas fa-magic"></i> Заполнить эфир
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: НАСТРОЙКИ / РЕДАКТИРОВАНИЕ РАДИОСТАНЦИИ -->
+  <div class="radio-modal-backdrop modal-backdrop" id="modalEditStation" hidden style="display: none;">
+    <div class="radio-modal modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-tower-broadcast"></i> Настройки радиостанции</h3>
+        <button type="button" class="radio-modal-close modal-close" data-close="modalEditStation">×</button>
+      </div>
+      <form id="formEditStation">
+        <input type="hidden" id="editStationId" value="">
+        <div class="modal-body">
+          <div class="radio-form-group">
+            <label>Название радиостанции *</label>
+            <input type="text" id="editStationName" class="radio-form-input form-control" required placeholder="Например: Звериная Коробка FM">
+          </div>
+          <div class="radio-form-group">
+            <label>Описание станции</label>
+            <textarea id="editStationDescription" class="radio-form-textarea form-control" rows="3" placeholder="Расскажите о формате вашей радиостанции..."></textarea>
+          </div>
+          <div class="radio-form-group">
+            <label>Поведение при пустом эфире (когда сетка закончилась)</label>
+            <select id="editStationFallback" class="radio-form-select form-select">
+              <option value="loop">🔄 Зацикливать составленную сетку вещания (по умолчанию)</option>
+              <option value="noise">📻 Звук радиопомех / белый шум</option>
+              <option value="silence">🔇 Тишина / Офлайн</option>
+            </select>
+          </div>
+          <div class="radio-form-group">
+            <label>Аватар / Обложка радиостанции (URL)</label>
+            <input type="url" id="editStationAvatar" class="radio-form-input form-control" placeholder="https://... или оставьте пустым">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalEditStation">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitEditStation"><i class="fas fa-save"></i> Сохранить настройки</button>
         </div>
       </form>
     </div>

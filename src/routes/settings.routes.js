@@ -9,7 +9,8 @@ const {
   readSettings,
   writeSettings,
   DEFAULT_SETTINGS,
-  normalizeMaintenancePages
+  normalizeMaintenancePages,
+  getEffectiveServerTime
 } = require('../services/system-settings');
 const {
   setMaintenanceBypassCookie,
@@ -48,7 +49,7 @@ router.get('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
 router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   try {
     const current = readSettings();
-    const { maxFileSize, allowRegistration, sessionDurationHours, maintenancePages, maintenanceMessage } = req.body;
+    const { maxFileSize, allowRegistration, sessionDurationHours, maintenancePages, maintenanceMessage, serverTimeOffsetMinutes } = req.body;
 
     const settings = writeSettings({
       maxFileSize: maxFileSize !== undefined ? clampInt(maxFileSize, current.maxFileSize, 1, 20) : current.maxFileSize,
@@ -64,9 +65,12 @@ router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
         : current.maintenancePages,
       maintenanceMessage: maintenanceMessage !== undefined
         ? (String(maintenanceMessage).trim().slice(0, 300) || DEFAULT_SETTINGS.maintenanceMessage)
-        : current.maintenanceMessage
+        : current.maintenanceMessage,
+      serverTimeOffsetMinutes: serverTimeOffsetMinutes !== undefined
+        ? clampInt(serverTimeOffsetMinutes, current.serverTimeOffsetMinutes || 0, -24 * 60, 24 * 60)
+        : (current.serverTimeOffsetMinutes || 0)
     });
-    res.json({ message: 'Настройки сохранены', settings });
+    res.json({ message: 'Настройки сохранены', settings, effectiveServerTime: getEffectiveServerTime().toISOString() });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -89,10 +93,40 @@ router.get('/system-settings/public', (req, res) => {
     res.json({
       maxFileSize: settings.maxFileSize,
       maxFileSizeBytes: settings.maxFileSize * 1024 * 1024,
-      allowRegistration: settings.allowRegistration
+      allowRegistration: settings.allowRegistration,
+      serverTimeOffsetMinutes: settings.serverTimeOffsetMinutes || 0,
+      serverTime: getEffectiveServerTime().toISOString()
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/system-settings/sync-time — калибровка смещения времени сервера (для мини-ПК с несинхронизированным RTC)
+router.post('/system-settings/sync-time', auth.authenticateToken, auth.checkApproved, (req, res) => {
+  try {
+    const { clientTimeIso, offsetMinutes } = req.body || {};
+    let finalOffsetMinutes = 0;
+
+    if (offsetMinutes !== undefined && Number.isFinite(Number(offsetMinutes))) {
+      finalOffsetMinutes = clampInt(offsetMinutes, 0, -24 * 60, 24 * 60);
+    } else if (clientTimeIso) {
+      const clientMs = new Date(clientTimeIso).getTime();
+      if (!isNaN(clientMs)) {
+        const diffMs = clientMs - Date.now();
+        finalOffsetMinutes = clampInt(Math.round(diffMs / 60000), 0, -24 * 60, 24 * 60);
+      }
+    }
+
+    const settings = writeSettings({ serverTimeOffsetMinutes: finalOffsetMinutes });
+    res.json({
+      success: true,
+      message: 'Время синхронизировано',
+      serverTimeOffsetMinutes: settings.serverTimeOffsetMinutes,
+      effectiveServerTime: getEffectiveServerTime().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось синхронизировать время: ' + error.message });
   }
 });
 
