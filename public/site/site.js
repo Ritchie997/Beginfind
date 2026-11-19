@@ -49,9 +49,18 @@
   function safePublicImageUrl(value) {
     if (typeof value !== 'string' || !value.trim()) return '';
     var src = value.trim();
+    if (src.startsWith('blob:') || src.startsWith('data:')) return src;
     if (src.startsWith('/uploads/')) return src;
+    if (src.startsWith('uploads/')) return '/' + src;
+    if (!src.includes('/') && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(src.split(/[?#]/)[0])) return '/uploads/' + src;
     try {
       var url = new URL(src, window.location.origin);
+      if (url.origin === window.location.origin && !url.pathname.startsWith('/uploads/')) {
+        var cleanPath = url.pathname.slice(1);
+        if (!cleanPath.includes('/') && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(cleanPath)) {
+          return '/uploads/' + cleanPath + url.search;
+        }
+      }
       return (url.protocol === 'https:' || url.protocol === 'http:') ? url.href : '';
     } catch (error) {
       return '';

@@ -1625,7 +1625,7 @@
 
       return `<article class="alltell-form-image-item${image.uploading ? ' is-uploading' : (image.url ? ' is-uploaded' : ' is-pending')}" data-post-image="${index}" ${disabled ? '' : 'draggable="true"'}>
         <div class="alltell-form-image-thumb">
-          <img class="alltell-form-image-preview" src="${escapeHtml(image.preview || image.url)}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
+          <img class="alltell-form-image-preview" src="${escapeHtml(image.preview && image.preview.startsWith('blob:') ? image.preview : normalizeImageUrl(image.preview || image.url))}" alt="${escapeHtml(image.file ? image.file.name : 'Изображение ' + (index + 1))}">
           <span class="alltell-form-image-order" title="Порядковый номер">${index + 1}</span>
           <button class="alltell-form-image-delete" type="button" data-action="remove-image" data-image-index="${index}" title="Удалить изображение" aria-label="Удалить изображение" ${disabled ? 'disabled' : ''}>
             <i class="fas fa-xmark" aria-hidden="true"></i>
@@ -2151,7 +2151,7 @@
       } else {
         bodyHtml = formatPostBody(md);
       }
-      var previewImages = (state.postImages || []).map(function (item) { return item.preview || item.url; }).filter(Boolean);
+      var previewImages = (state.postImages || []).map(function (item) { return item.preview && item.preview.startsWith('blob:') ? item.preview : normalizeImageUrl(item.preview || item.url); }).filter(Boolean);
       if (previewImages.length) {
         bodyHtml += '<div class="alltell-post-preview-images" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">' +
           previewImages.map(function (src) {
@@ -4394,7 +4394,8 @@
         ? post.images
         : (post && post.image_url ? [post.image_url] : []);
       state.postImages = images.map(function (url) {
-        return { url: url, preview: url, file: null, uploading: false, error: null };
+        var norm = normalizeImageUrl(url);
+        return { url: norm, preview: norm, file: null, uploading: false, error: null };
       });
     }
 

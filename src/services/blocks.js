@@ -93,18 +93,25 @@ function normalizeChildBlocks(raw, { allowContainers = false, allowSpoiler = fal
  * при переезде или восстановлении бэкапа на другом адресе. Внешние картинки
  * (путь не начинается с /uploads/) и уже относительные пути не трогаются.
  */
-function toRelativeUploadPath(src) {
-  const s = typeof src === 'string' ? src.trim() : '';
-  if (!/^https?:\/\//i.test(s)) return typeof src === 'string' ? src : '';
-  try {
-    const u = new URL(s);
-    if (u.pathname.startsWith('/uploads/')) return u.pathname + u.search;
-  } catch (e) { /* битый URL — оставляем как есть */ }
-  return s;
-}
-
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i;
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|flac|m4a|aac|opus|webm|wma)$/i;
+
+function toRelativeUploadPath(src) {
+  let s = typeof src === 'string' ? src.trim() : '';
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      if (u.pathname.startsWith('/uploads/')) return u.pathname + u.search;
+    } catch (e) { /* битый URL — оставляем как есть */ }
+    return s;
+  }
+  if (s.startsWith('/uploads/')) return s;
+  if (s.startsWith('uploads/')) return '/' + s;
+  const pathOnly = s.split(/[?#]/)[0];
+  if (!s.includes('/') && IMAGE_EXT_RE.test(pathOnly)) return '/uploads/' + s;
+  return s;
+}
 
 function sanitizeAudioPath(raw) {
   if (typeof raw !== 'string') return '';

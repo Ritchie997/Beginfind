@@ -54,6 +54,25 @@
     return /\.gif(\?|$)/i.test(String(url || ''));
   }
 
+  function normalizeGalleryImageUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    const s = url.trim();
+    if (!s) return '';
+    if (s.startsWith('blob:') || s.startsWith('data:')) return s;
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        const u = new URL(s);
+        if (u.pathname.startsWith('/uploads/')) return u.pathname + u.search;
+      } catch (e) {}
+      return s;
+    }
+    if (s.startsWith('/uploads/')) return s;
+    if (s.startsWith('uploads/')) return '/' + s;
+    if (s.startsWith('/')) return s;
+    if (!s.includes('/') && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(s)) return '/uploads/' + s;
+    return '/' + s;
+  }
+
   // Разметка пикера стикеров — та же, что STICKER_PICKER_MARKUP в
   // antropedia.js (wireComposer ищет его по классам внутри формы).
   const STICKER_PICKER_MARKUP = `
@@ -95,7 +114,7 @@
     if (work.pagesCount > 1) badges.push(`<span class="gallery-badge" title="Страниц"><i class="far fa-images"></i> ${work.pagesCount}</span>`);
     if (work.hasVariations) badges.push('<span class="gallery-badge" title="У страниц есть вариации"><i class="fas fa-layer-group"></i></span>');
     const media = cover
-      ? `<img src="${escapeHtml(cover.thumb || cover.url)}" alt="${escapeHtml(work.title)}" loading="lazy" decoding="async">`
+      ? `<img src="${escapeHtml(normalizeGalleryImageUrl(cover.thumb || cover.url))}" alt="${escapeHtml(work.title)}" loading="lazy" decoding="async">`
       : '<div class="gallery-card-empty"><i class="far fa-image"></i><span>Нет страниц</span></div>';
     return `
       <article class="gallery-card${compact ? ' gallery-card-compact' : ''}" data-work-id="${work.id}" tabindex="0" title="${escapeHtml(work.title)}">
@@ -295,6 +314,19 @@
       this.commentsEmptyEl = q('comments-empty');
       this.commentFormEl = q('comment-form');
       this.commentInputEl = this.commentFormEl.querySelector('.antropedia-comment-input');
+      if (this.commentInputEl) {
+        this.commentInputEl.addEventListener('dragover', (e) => {
+          if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+            e.preventDefault();
+          }
+        });
+        this.commentInputEl.addEventListener('drop', (e) => {
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            e.preventDefault();
+            showMessage('Прикрепление изображений к комментариям не поддерживается', 'info');
+          }
+        });
+      }
       this.reactionsBarEl = q('reactions');
       this.initEngagement();
 
@@ -610,7 +642,7 @@
         this.showPage(this.pageIndex);
         // Миниатюра в полосе — тоже выбранной вариации.
         const thumb = this.$('strip').querySelector(`[data-page-index="${pageIndex}"] img`);
-        if (thumb) thumb.src = page.variants[variantIndex].thumb;
+        if (thumb) thumb.src = normalizeGalleryImageUrl(page.variants[variantIndex].thumb || page.variants[variantIndex].url);
       } else {
         const block = this.$('pages').querySelector(`[data-page-index="${pageIndex}"]`);
         if (block) block.outerHTML = this.pageBlockHtml(page, pageIndex);
@@ -624,7 +656,7 @@
       const chips = this.variantChipsHtml(page);
       return `<div class="gv-page-block" data-page-index="${i}">`
         + (chips ? `<div class="gv-variants gv-page-variants">${chips}</div>` : '')
-        + `<img class="gv-page" src="${escapeHtml(img.url)}" alt="Страница ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async"${style}>`
+        + `<img class="gv-page" src="${escapeHtml(normalizeGalleryImageUrl(img.url))}" alt="Страница ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async"${style}>`
         + '</div>';
     }
 
@@ -651,7 +683,7 @@
         this.$('pages').innerHTML = '';
         this.$('strip').innerHTML = pages.map((page, i) => {
           const img = this.variantOf(page);
-          return `<button type="button" class="gv-thumb" data-page-index="${i}"><img src="${escapeHtml(img.thumb)}" alt="" loading="lazy">${page.variants.length > 1 ? '<i class="fas fa-layer-group gv-thumb-layers"></i>' : ''}</button>`;
+          return `<button type="button" class="gv-thumb" data-page-index="${i}"><img src="${escapeHtml(normalizeGalleryImageUrl(img.thumb || img.url))}" alt="" loading="lazy">${page.variants.length > 1 ? '<i class="fas fa-layer-group gv-thumb-layers"></i>' : ''}</button>`;
         }).join('');
         this.showPage(this.pageIndex);
       } else {
@@ -673,7 +705,7 @@
       const img = this.variantOf(pages[this.pageIndex]);
       this.$('variants').innerHTML = this.variantChipsHtml(pages[this.pageIndex]);
       const imageEl = this.$('image');
-      imageEl.src = img.url;
+      imageEl.src = normalizeGalleryImageUrl(img.url);
       imageEl.alt = `${this.work.title} — ${this.pageIndex + 1}`;
       if (animate) {
         imageEl.classList.remove('gv-in-next', 'gv-in-prev');
@@ -688,7 +720,7 @@
       this.$('strip').querySelector('.gv-thumb.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
       // Соседние страницы — заранее, чтобы листание было мгновенным.
       [pages[this.pageIndex + 1], pages[this.pageIndex - 1]].forEach((p) => {
-        if (p) { const pre = new Image(); pre.src = this.variantOf(p).url; }
+        if (p) { const pre = new Image(); pre.src = normalizeGalleryImageUrl(this.variantOf(p).url); }
       });
     }
 
@@ -1052,6 +1084,10 @@
         return target;
       };
       this.rootEl.addEventListener('dragover', (e) => {
+        if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+          e.preventDefault();
+          return;
+        }
         const target = findDropTarget(e);
         if (!target) return;
         e.preventDefault();
@@ -1062,12 +1098,35 @@
         const target = findDropTarget(e);
         if (target && !target.contains(e.relatedTarget)) target.classList.remove('is-drop-target');
       });
-      this.rootEl.addEventListener('drop', (e) => {
+      this.rootEl.addEventListener('drop', async (e) => {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          e.preventDefault();
+          const files = e.dataTransfer.files;
+          const currentUserId = window.authManager?.getCurrentUser?.()?.id;
+          if (!currentUserId) {
+            window.showModalLogin?.('login');
+            return;
+          }
+          const activeFolder = this.activeFolderId ? this.findFolder(this.activeFolderId) : null;
+          if (activeFolder && Number(activeFolder.ownerId) === Number(currentUserId)) {
+            await this.uploadFolderImages(files);
+            return;
+          }
+          const savedPromise = window.galleryEditor.open(null);
+          window.galleryEditor.addPages(files);
+          const saved = await savedPromise;
+          if (saved) {
+            await this.resetAndLoad();
+            window.galleryViewer.openWork(saved.id);
+          }
+          return;
+        }
         const target = findDropTarget(e);
         if (!target) return;
         e.preventDefault();
         target.classList.remove('is-drop-target');
         const drag = this.dragging;
+        if (!drag) return;
         this.dragging = null;
         const folderId = target.dataset.folderId || target.dataset.folderParent || null;
         if (drag.folderId) this.moveFolderToParent(drag.folderId, folderId);
@@ -1277,7 +1336,7 @@
         ? folder.preview.filter((image) => typeof image?.url === 'string' && image.url.trim())
         : [];
       const previewMarkup = previewImages.length
-        ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(image.url)}" alt="" loading="lazy" decoding="async">`).join('')
+        ? previewImages.slice(0, 3).map((image, index) => `<img class="gallery-folder-preview-image gallery-folder-preview-image-${index + 1}" src="${escapeHtml(normalizeGalleryImageUrl(image.url))}" alt="" loading="lazy" decoding="async">`).join('')
         : '<i class="fas fa-folder"></i>';
       const currentUser = window.authManager?.getCurrentUser?.();
       const currentUserId = currentUser?.id;
@@ -2477,7 +2536,7 @@
         const restricted = p.variants.some((v) => v.roles.length);
         return `
           <div class="ge-page${i === this.selectedPage ? ' is-selected' : ''}" draggable="true" data-page="${i}" title="Страница ${i + 1} — нажмите, чтобы настроить вариации">
-            <img src="${escapeHtml(first.preview || first.thumb || first.url)}" alt="">
+            <img src="${escapeHtml(first.preview || normalizeGalleryImageUrl(first.thumb || first.url))}" alt="">
             <span class="ge-page-num">${i + 1}</span>
             ${p.variants.length > 1 ? `<span class="ge-page-layers" title="Вариаций"><i class="fas fa-layer-group"></i> ${p.variants.length}</span>` : ''}
             ${restricted ? '<span class="ge-page-lock" title="У вариаций есть роли"><i class="fas fa-lock"></i></span>' : ''}
@@ -2589,7 +2648,7 @@
         <p class="form-label-hint">Имя вариации читатель видит в переключателе. Роли — кому эта вариация видна (пусто — всем, кому видна работа); страницу без единой доступной вариации читатель не увидит.</p>
         ${page.variants.map((v, vi) => `
           <div class="ge-variant-row" data-variant="${vi}">
-            <img src="${escapeHtml(v.preview || v.thumb || v.url)}" alt="">
+            <img src="${escapeHtml(v.preview || normalizeGalleryImageUrl(v.thumb || v.url))}" alt="">
             <div class="ge-variant-fields">
               <input type="text" class="form-input" data-variant-name="${vi}" maxlength="80" value="${escapeHtml(v.name)}" placeholder="${vi === 0 ? 'Основная' : `Вариация ${vi + 1}`}">
               <div class="chip-field" data-variant-roles="${vi}">${CHIP_FIELD_MARKUP}</div>
@@ -2919,7 +2978,7 @@
       const work = res.data;
       const all = work.pages.flatMap((p) => p.variants);
       if (all.length === 1) {
-        this.finish({ workId: work.id, imageId: all[0].id, src: all[0].url, title: work.title });
+        this.finish({ workId: work.id, imageId: all[0].id, src: normalizeGalleryImageUrl(all[0].url), title: work.title });
         return;
       }
       // Несколько страниц или вариаций — выбрать, что именно переслать.
@@ -2932,7 +2991,7 @@
         <div class="gallery-picker-variant">
           ${work.pages.length > 1 ? `<div class="gallery-picker-variant-name">Страница ${i + 1}</div>` : ''}
           <div class="gallery-picker-pages">
-            ${page.variants.map((v) => `<button type="button" class="gallery-picker-page" data-image-id="${v.id}" data-src="${escapeHtml(v.url)}" title="${escapeHtml(v.name)}"><img src="${escapeHtml(v.thumb)}" alt="" loading="lazy"><span>${escapeHtml(page.variants.length > 1 ? v.name : String(i + 1))}</span></button>`).join('')}
+            ${page.variants.map((v) => `<button type="button" class="gallery-picker-page" data-image-id="${v.id}" data-src="${escapeHtml(normalizeGalleryImageUrl(v.url))}" title="${escapeHtml(v.name)}"><img src="${escapeHtml(normalizeGalleryImageUrl(v.thumb || v.url))}" alt="" loading="lazy"><span>${escapeHtml(page.variants.length > 1 ? v.name : String(i + 1))}</span></button>`).join('')}
           </div>
         </div>`).join('');
     }

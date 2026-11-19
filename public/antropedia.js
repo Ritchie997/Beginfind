@@ -1986,6 +1986,17 @@ initEngagement() {
       // Подсказка @пользователя: стрелки/Enter/Tab/Esc, пока список открыт.
       inputEl.addEventListener('keydown', (e) => this.handleMentionKeydown(e, inputEl), true);
       inputEl.addEventListener('blur', () => setTimeout(() => this.closeMentionSuggest(), 150));
+      inputEl.addEventListener('dragover', (e) => {
+        if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+          e.preventDefault();
+        }
+      });
+      inputEl.addEventListener('drop', (e) => {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          e.preventDefault();
+          showMessage('Прикрепление изображений к комментариям не поддерживается', 'info');
+        }
+      });
 
       // onSelect — что делает короткий клик по стикеру (или "Отправить" в
       // увеличенном превью, см. wireStickerPickerGestures) в ЭТОМ пикере:
