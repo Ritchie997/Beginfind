@@ -52,9 +52,13 @@
     if (n.type === 'collab_declined') {
       return `<b>${escapeHtml(n.actorName)}</b> отклонил вашу предложенную правку${title}`;
     }
-    return n.type === 'reply'
-      ? `<b>${escapeHtml(n.actorName)}</b> — ответ на ваш комментарий${title}`
-      : `<b>${escapeHtml(n.actorName)}</b> упоминает вас в комментарии${title}`;
+    if (n.type === 'reply') {
+      return `<b>${escapeHtml(n.actorName)}</b> — ответ на ваш комментарий${title}`;
+    }
+    if (n.targetType === 'franchise_post' && !n.commentId) {
+      return `<b>${escapeHtml(n.actorName)}</b> упоминает вас в публикации${n.targetTitle ? ` «${escapeHtml(n.targetTitle)}»` : ''}`;
+    }
+    return `<b>${escapeHtml(n.actorName)}</b> упоминает вас в комментарии${title}`;
   }
 
   async function api(path, method = 'GET', body = null) {

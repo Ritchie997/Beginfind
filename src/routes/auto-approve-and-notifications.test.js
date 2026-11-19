@@ -140,4 +140,36 @@ describe('Auto-approve registration, user join log, admin notifications, and exa
       assert.ok(score4 > 0);
     }
   });
+
+  test('notifyAboutPostMentions creates notification for mentioned user in franchise post', async () => {
+    const suffix = Date.now().toString().slice(-6);
+    const targetUsername = `u_target_${suffix}`;
+    const targetUser = await auth.register(targetUsername, `Целевой ${suffix}`, 'password123', { autoApprove: true });
+
+    const authorUsername = `u_author_${suffix}`;
+    const authorUser = await auth.register(authorUsername, `Автор ${suffix}`, 'password123', { autoApprove: true });
+
+    const unreadBefore = await userNotifications.countUnread(targetUser.id);
+
+    await userNotifications.notifyAboutPostMentions({
+      actor: authorUser,
+      post: {
+        id: 777,
+        title: 'Новая глава лора',
+        body: `Привет @${targetUsername}, зацени новую публикацию!`
+      },
+      franchiseId: 42,
+      titleFor: async () => 'Новая глава лора'
+    });
+
+    const unreadAfter = await userNotifications.countUnread(targetUser.id);
+    assert.equal(unreadAfter, unreadBefore + 1, 'Target user unread notifications should increase');
+
+    const list = await userNotifications.list(targetUser.id, 5);
+    const notif = list.find((n) => n.type === 'mention' && n.targetType === 'franchise_post' && n.targetId === '42:777');
+    assert.ok(notif, 'Notification for franchise post mention must be present in user notifications');
+    assert.equal(notif.actorId, authorUser.id);
+    assert.equal(notif.targetTitle, 'Новая глава лора');
+    assert.ok(notif.excerpt.includes(targetUsername));
+  });
 });

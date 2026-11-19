@@ -338,6 +338,16 @@ async function publicPost(row, user) {
     event_at: row.event_at,
     created_by: row.created_by,
     created_by_name: row.created_by_name,
+    created_by_avatar: row.created_by ? getAvatarUrl(row.created_by) : null,
+    author_avatar: row.created_by ? getAvatarUrl(row.created_by) : null,
+    mentions: await (async () => {
+      const names = mentions.extractMentionNames(`${row.title || ''} ${row.body || ''}`);
+      if (!names.length) return {};
+      const resolved = await mentions.resolveNames(names);
+      const map = {};
+      resolved.forEach((item, key) => { map[key] = item.id; });
+      return map;
+    })(),
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -792,7 +802,17 @@ router.post('/franchises/:id/posts', auth.authenticateToken, auth.checkApproved,
       post.hub_status, canManage ? 'published' : 'pending', req.user.id, authorName
     ]);
     const row = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [result.lastID]);
-    res.status(201).json(await publicPost(row, req.user));
+    const responsePost = await publicPost(row, req.user);
+    res.status(201).json(responsePost);
+
+    if (canManage) {
+      userNotifications.notifyAboutPostMentions({
+        actor: req.user,
+        post: row,
+        franchiseId,
+        titleFor: async () => post.title || 'Публикация во франшизе'
+      });
+    }
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -827,7 +847,17 @@ router.put('/franchises/:id/posts/:postId', auth.authenticateToken, auth.checkAp
       post.image_urls[0] || null, JSON.stringify(post.image_urls),
       post.audio_url, JSON.stringify(post.audio_tracks), post.hub_status, req.user.id, postId, franchiseId
     ]);
-    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
+    const updatedPost = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]);
+    res.json(await publicPost(updatedPost, req.user));
+
+    if (updatedPost && updatedPost.approval_status === 'published') {
+      userNotifications.notifyAboutPostMentions({
+        actor: req.user,
+        post: updatedPost,
+        franchiseId,
+        titleFor: async () => updatedPost.title || 'Публикация во франшизе'
+      });
+    }
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -866,7 +896,17 @@ router.post('/franchises/:id/posts/:postId/approve', auth.authenticateToken, aut
       WHERE id = ? AND server_id = ? AND approval_status = 'pending'
     `, [postId, franchiseId]);
     if (!result.changes) return res.status(404).json({ error: 'Предложение не найдено или уже обработано' });
-    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
+    const updatedPost = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]);
+    res.json(await publicPost(updatedPost, req.user));
+
+    if (updatedPost && updatedPost.approval_status === 'published') {
+      userNotifications.notifyAboutPostMentions({
+        actor: req.user,
+        post: updatedPost,
+        franchiseId,
+        titleFor: async () => updatedPost.title || 'Публикация во франшизе'
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -885,7 +925,17 @@ router.post('/franchises/:id/posts/:postId/reject', auth.authenticateToken, auth
       WHERE id = ? AND server_id = ? AND approval_status = 'pending'
     `, [postId, franchiseId]);
     if (!result.changes) return res.status(404).json({ error: 'Предложение не найдено или уже обработано' });
-    res.json(await publicPost(await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]), req.user));
+    const updatedPost = await dbGet('SELECT * FROM franchise_posts WHERE id = ?', [postId]);
+    res.json(await publicPost(updatedPost, req.user));
+
+    if (updatedPost && updatedPost.approval_status === 'published') {
+      userNotifications.notifyAboutPostMentions({
+        actor: req.user,
+        post: updatedPost,
+        franchiseId,
+        titleFor: async () => updatedPost.title || 'Публикация во франшизе'
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

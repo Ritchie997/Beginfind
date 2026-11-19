@@ -462,7 +462,7 @@
           </div>
         </div>
         <div class="alltell-live-card-content">
-          <div class="alltell-live-avatar" style="background: ${gradient}">
+          <div class="alltell-live-avatar ${franchise.avatar_url ? 'has-image' : ''}" style="background: ${franchise.avatar_url ? 'var(--background-tertiary)' : gradient}">
             ${franchise.avatar_url
               ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" alt="${escapeHtml(franchise.name)}">`
               : escapeHtml(initials(franchise.name))}
@@ -849,7 +849,7 @@
                 <div class="alltell-feed-item">
                   <div class="alltell-feed-franchise-card">
                     <a class="alltell-feed-franchise-link" href="/alltell?franchise=${Number(post.franchise_id)}">
-                      <span class="alltell-feed-franchise-avatar" style="background:${gradient}">
+                      <span class="alltell-feed-franchise-avatar ${post.franchise_avatar_url ? 'has-image' : ''}" style="background:${post.franchise_avatar_url ? 'var(--background-tertiary)' : gradient}">
                         ${post.franchise_avatar_url
                           ? `<img src="${escapeHtml(normalizeImageUrl(post.franchise_avatar_url))}" alt="">`
                           : escapeHtml(initials(post.franchise_name))}
@@ -939,6 +939,132 @@
 
   function renderStickerText(comment) {
     return renderCommentContent(comment);
+  }
+
+  var mentionSuggestEl = null;
+  var mentionSuggestState = null;
+  var mentionSuggestTimer = null;
+  var mentionSuggestSeq = 0;
+
+  function ensureMentionSuggest() {
+    if (mentionSuggestEl) return mentionSuggestEl;
+    var el = document.createElement('div');
+    el.className = 'alltell-mention-suggest';
+    el.hidden = true;
+    el.addEventListener('mousedown', function (e) {
+      var btn = e.target.closest('button[data-name]');
+      if (!btn) return;
+      e.preventDefault();
+      applyMention(btn);
+    });
+    document.body.appendChild(el);
+    mentionSuggestEl = el;
+    return el;
+  }
+
+  function closeMentionSuggest() {
+    if (mentionSuggestEl) mentionSuggestEl.hidden = true;
+    mentionSuggestState = null;
+  }
+
+  function mentionQueryAtCaret(inputEl) {
+    if (!inputEl) return null;
+    var val = inputEl.value;
+    if (typeof val !== 'string') return null;
+    var caret = inputEl.selectionStart;
+    if (inputEl.selectionEnd !== caret) return null;
+    var before = val.slice(0, caret);
+    var m = /(?:^|[\s\u00a0(])@([^@\n\[\]\u00a0]{1,32})$/.exec(before);
+    if (!m) return null;
+    var query = m[1];
+    var start = caret - query.length - 1;
+    return { inputEl: inputEl, start: start, end: caret, query: query };
+  }
+
+  function updateMentionSuggest(inputEl) {
+    var queryState = mentionQueryAtCaret(inputEl);
+    if (!queryState) { closeMentionSuggest(); return; }
+    clearTimeout(mentionSuggestTimer);
+    mentionSuggestTimer = setTimeout(async function () {
+      var seq = ++mentionSuggestSeq;
+      var users = [];
+      try {
+        users = await request('/api/users/search?q=' + encodeURIComponent(queryState.query));
+        if (!Array.isArray(users)) users = [];
+      } catch (e) {
+        users = [];
+      }
+      if (seq !== mentionSuggestSeq || document.activeElement !== inputEl) return;
+      var fresh = mentionQueryAtCaret(inputEl);
+      if (!fresh || !users.length) { closeMentionSuggest(); return; }
+      var el = ensureMentionSuggest();
+      el.innerHTML = users.slice(0, 8).map(function (u, i) {
+        var name = u.display_name || u.username;
+        var initial = escapeHtml(name.trim().charAt(0).toUpperCase() || '?');
+        var avatarHtml = u.avatar
+          ? '<img src="' + escapeHtml(normalizeImageUrl(u.avatar)) + '" alt="">'
+          : initial;
+        return '<button type="button" data-name="' + escapeHtml(name) + '" class="' + (i === 0 ? 'is-active' : '') + '">' +
+               '<span class="alltell-mention-avatar">' + avatarHtml + '</span>' +
+               '<span>@' + escapeHtml(name) + '</span>' +
+               '</button>';
+      }).join('');
+
+      var box = inputEl.getBoundingClientRect();
+      var left = Math.max(8, Math.min(box.left + 16, window.innerWidth - 260));
+      var top = box.bottom + 6;
+      if (top + 200 > window.innerHeight && box.top > 210) {
+        top = Math.max(8, box.top - 210);
+      }
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      el.hidden = false;
+      mentionSuggestState = { inputEl: inputEl, start: fresh.start, end: fresh.end };
+    }, 120);
+  }
+
+  function handleMentionKeydown(e, inputEl) {
+    var el = mentionSuggestEl;
+    if (!el || el.hidden || !mentionSuggestState || mentionSuggestState.inputEl !== inputEl) return false;
+    var buttons = Array.from(el.querySelectorAll('button'));
+    if (!buttons.length) return false;
+    var i = buttons.findIndex(function (b) { return b.classList.contains('is-active'); });
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (buttons[i]) buttons[i].classList.remove('is-active');
+      i = (i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[i].classList.add('is-active');
+      buttons[i].scrollIntoView({ block: 'nearest' });
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      applyMention(buttons[i >= 0 ? i : 0]);
+      return true;
+    }
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closeMentionSuggest();
+      return true;
+    }
+    return false;
+  }
+
+  function applyMention(btn) {
+    var state = mentionSuggestState;
+    if (!btn || !state) { closeMentionSuggest(); return; }
+    var inputEl = state.inputEl;
+    var name = btn.dataset.name;
+    var text = (/\s/.test(name) ? '@[' + name + ']' : '@' + name) + ' ';
+    var val = inputEl.value;
+    inputEl.value = val.slice(0, state.start) + text + val.slice(state.end);
+    var newCaret = state.start + text.length;
+    inputEl.setSelectionRange(newCaret, newCaret);
+    closeMentionSuggest();
+    inputEl.focus();
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function renderReactionBar(reactions, targetType, targetId) {
@@ -1175,9 +1301,12 @@
     }, 10);
   }
 
-  function formatPostBody(body) {
+  function formatPostBody(body, mentions) {
     if (!body) return '';
     var text = escapeHtml(body);
+    if (mentions && Object.keys(mentions).length) {
+      text = linkMentions(text, mentions);
+    }
 
     // 1. Извлекаем блоки кода ```lang\ncode\n``` чтобы их содержимое не задевалось остальной разметкой
     var codeBlocks = [];
@@ -1327,19 +1456,25 @@
     var postMaps = Array.isArray(post.maps) && post.maps.length
       ? post.maps
       : (post.map ? [post.map] : []);
+    var authorAvatarUrl = post.created_by_avatar || post.author_avatar || post.authorAvatar;
+    var authorInitials = escapeHtml(initials(post.created_by_name));
+    var avatarMarkup = authorAvatarUrl
+      ? `<img src="${escapeHtml(normalizeImageUrl(authorAvatarUrl))}" alt="">`
+      : authorInitials;
+    var avatarCls = 'alltell-author-avatar' + (authorAvatarUrl ? ' has-image' : '');
 
     return `
       <article class="alltell-post-card" data-post-id="${Number(post.id)}">
         <div class="alltell-post-card-header">
           <div class="alltell-post-author-block">
             ${post.created_by || post.user_id ? `
-              <a href="/profile/${encodeURIComponent(post.created_by || post.user_id)}" class="alltell-author-avatar alltell-author-avatar-link" title="Перейти в профиль">${escapeHtml(initials(post.created_by_name))}</a>
+              <a href="/profile/${encodeURIComponent(post.created_by || post.user_id)}" class="${avatarCls} alltell-author-avatar-link" title="Перейти в профиль">${avatarMarkup}</a>
               <div class="alltell-author-info">
                 <a href="/profile/${encodeURIComponent(post.created_by || post.user_id)}" class="alltell-author-name alltell-author-name-link" title="Перейти в профиль">${escapeHtml(post.created_by_name)}</a>
                 <time class="alltell-post-date" datetime="${escapeHtml(post.created_at)}">${escapeHtml(dateLabel(post.created_at))}</time>
               </div>
             ` : `
-              <div class="alltell-author-avatar">${escapeHtml(initials(post.created_by_name))}</div>
+              <div class="${avatarCls}">${avatarMarkup}</div>
               <div class="alltell-author-info">
                 <strong class="alltell-author-name">${escapeHtml(post.created_by_name)}</strong>
                 <time class="alltell-post-date" datetime="${escapeHtml(post.created_at)}">${escapeHtml(dateLabel(post.created_at))}</time>
@@ -1359,7 +1494,7 @@
 
         <h3 class="alltell-post-title">${escapeHtml(post.title)}</h3>
 
-        ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body)}</div>` : ''}
+        ${post.body ? `<div class="alltell-post-body">${formatPostBody(post.body, post.mentions)}</div>` : ''}
 
         ${audioTracks.length ? `
           <div class="alltell-post-audio" data-audio-player data-audio-config="${escapeHtml(JSON.stringify(audioTracks.length === 1 ? audioTracks[0] : { playlist: audioTracks }))}"></div>
@@ -3570,7 +3705,7 @@
         <div class="alltell-field">
           <label class="alltell-field-label">Аватарка хаба</label>
           <div style="display:flex;align-items:center;gap:14px;">
-            <div id="hub-avatar-preview" style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg, var(--blurple), var(--accent-teal));display:grid;place-items:center;color:#fff;font-size:18px;overflow:hidden;flex-shrink:0;">
+            <div id="hub-avatar-preview" class="${editingHub.avatar_url ? 'has-image' : ''}" style="width:48px;height:48px;border-radius:12px;background:${editingHub.avatar_url ? 'var(--background-tertiary)' : 'linear-gradient(135deg, var(--blurple), var(--accent-teal))'};display:grid;place-items:center;color:#fff;font-size:18px;overflow:hidden;flex-shrink:0;">
               ${editingHub.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(editingHub.avatar_url))}" style="width:100%;height:100%;object-fit:cover;" alt="">` : '<i class="fas fa-dice-d20"></i>'}
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
@@ -3831,7 +3966,7 @@
         <div class="alltell-field">
           <label class="alltell-field-label">Аватарка франшизы</label>
           <div style="display:flex;align-items:center;gap:16px;">
-            <div id="settings-avatar-preview" style="width:64px;height:64px;border-radius:18px;background:${franchiseGradient(franchise.id, franchise.name)};display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+            <div id="settings-avatar-preview" class="${franchise.avatar_url ? 'has-image' : ''}" style="width:64px;height:64px;border-radius:18px;background:${franchise.avatar_url ? 'var(--background-tertiary)' : franchiseGradient(franchise.id, franchise.name)};display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;overflow:hidden;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
               ${franchise.avatar_url ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" style="width:100%;height:100%;object-fit:cover;" alt="">` : escapeHtml(initials(franchise.name))}
             </div>
             ${canEdit ? `
@@ -3956,7 +4091,7 @@
           </div>
           <div class="alltell-franchise-header-body">
             <div class="alltell-franchise-avatar-wrap">
-              <div class="alltell-franchise-avatar" style="background: ${gradient}">
+              <div class="alltell-franchise-avatar ${franchise.avatar_url ? 'has-image' : ''}" style="background: ${franchise.avatar_url ? 'var(--background-tertiary)' : gradient}">
                 ${franchise.avatar_url
                   ? `<img src="${escapeHtml(normalizeImageUrl(franchise.avatar_url))}" alt="${escapeHtml(franchise.name)}">`
                   : escapeHtml(initials(franchise.name))}
@@ -5329,6 +5464,8 @@
               var uploadedUrl = await uploadSingleImage(fileInput.files[0]);
               avatarUrl = uploadedUrl;
               avatarPreview.textContent = '';
+              avatarPreview.style.background = 'var(--background-tertiary)';
+              avatarPreview.classList.add('has-image');
               avatarPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(uploadedUrl)) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" alt="">';
               removeBtn.style.display = 'inline-flex';
               labelSpan.textContent = 'Сменить фото';
@@ -5346,6 +5483,7 @@
             removeBtn.style.display = 'none';
             labelSpan.textContent = 'Выбрать фото';
             var val = nameInput.value.trim();
+            avatarPreview.classList.remove('has-image');
             avatarPreview.textContent = initials(val) || '?';
             avatarPreview.style.background = franchiseAvatarColor(val || 'Franchise');
           });
@@ -6638,7 +6776,13 @@
         var sUrlInput = root.querySelector('#settings-avatar-url');
         var sLabel = root.querySelector('#settings-avatar-label');
         if (sUrlInput) sUrlInput.value = '';
-        if (sPreview) sPreview.innerHTML = escapeHtml(initials(state.detail && state.detail.franchise ? state.detail.franchise.name : ''));
+        if (sPreview) {
+          sPreview.innerHTML = escapeHtml(initials(state.detail && state.detail.franchise ? state.detail.franchise.name : ''));
+          sPreview.classList.remove('has-image');
+          if (state.detail && state.detail.franchise) {
+            sPreview.style.background = franchiseGradient(state.detail.franchise.id, state.detail.franchise.name);
+          }
+        }
         button.style.display = 'none';
         if (sLabel) sLabel.textContent = 'Загрузить аватарку';
       } else if (action === 'manage-remove-hub-avatar') {
@@ -6646,13 +6790,20 @@
         var hUrlInput = root.querySelector('#hub-avatar-url');
         var hLabel = root.querySelector('#hub-avatar-label');
         if (hUrlInput) hUrlInput.value = '';
-        if (hPreview) hPreview.innerHTML = '<i class="fas fa-dice-d20"></i>';
+        if (hPreview) {
+          hPreview.innerHTML = '<i class="fas fa-dice-d20"></i>';
+          hPreview.classList.remove('has-image');
+          hPreview.style.background = 'linear-gradient(135deg, var(--blurple), var(--accent-teal))';
+        }
         button.style.display = 'none';
         if (hLabel) hLabel.textContent = 'Загрузить аватарку';
       }
     }
 
     function onInput(event) {
+      if (event.target.tagName === 'TEXTAREA') {
+        updateMentionSuggest(event.target);
+      }
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
       if (event.target.matches('[data-map-search]')) renderMapOptions(event.target);
       if (event.target.matches('textarea[data-autogrow]')) {
@@ -6683,6 +6834,9 @@
     }
 
     function onKeyDown(event) {
+      if (event.target.tagName === 'TEXTAREA') {
+        if (handleMentionKeydown(event, event.target)) return;
+      }
       if (event.target.matches('#new-map-title-input')) {
         if (event.key === 'Enter') {
           event.preventDefault();
@@ -6836,7 +6990,11 @@
           var sUrlInput = root.querySelector('#settings-avatar-url');
           var sRemoveBtn = root.querySelector('#settings-avatar-remove');
           if (sUrlInput) sUrlInput.value = url;
-          if (sPreview) sPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          if (sPreview) {
+            sPreview.classList.add('has-image');
+            sPreview.style.background = 'var(--background-tertiary)';
+            sPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          }
           if (sRemoveBtn) sRemoveBtn.style.display = 'inline-flex';
           if (sLabel) sLabel.textContent = 'Сменить аватарку';
         }).catch(function (err) {
@@ -6860,7 +7018,11 @@
           var hUrlInput = root.querySelector('#hub-avatar-url');
           var hRemoveBtn = root.querySelector('#hub-avatar-remove');
           if (hUrlInput) hUrlInput.value = url;
-          if (hPreview) hPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          if (hPreview) {
+            hPreview.classList.add('has-image');
+            hPreview.style.background = 'var(--background-tertiary)';
+            hPreview.innerHTML = '<img src="' + escapeHtml(normalizeImageUrl(url)) + '" style="width:100%;height:100%;object-fit:cover;" alt="">';
+          }
           if (hRemoveBtn) hRemoveBtn.style.display = 'inline-flex';
           if (hLabel) hLabel.textContent = 'Сменить аватарку';
         }).catch(function (err) {
@@ -7083,6 +7245,9 @@
     }
 
     function onDocClick(event) {
+      if (mentionSuggestEl && !mentionSuggestEl.hidden && !mentionSuggestEl.contains(event.target)) {
+        closeMentionSuggest();
+      }
       if (event.target.closest('#alltell-modal-container') || event.target.closest('.alltell-modal-overlay')) {
         return;
       }
@@ -7163,6 +7328,11 @@
     return function () {
       state.disposed = true;
       closePostHighlightPicker();
+      closeMentionSuggest();
+      if (mentionSuggestEl && mentionSuggestEl.parentNode) {
+        mentionSuggestEl.parentNode.removeChild(mentionSuggestEl);
+        mentionSuggestEl = null;
+      }
       window.removeEventListener('hashchange', onHashChange);
       if (window.AllTellClient.focusComment === focusPostOrComment) {
         window.AllTellClient.focusComment = null;

@@ -152,4 +152,34 @@ async function markRead(userId, ids) {
   );
 }
 
-module.exports = { create, notifyAboutComment, list, countUnread, takeUnnotified, markRead };
+async function notifyAboutPostMentions({ actor, post, franchiseId, titleFor }) {
+  try {
+    const content = `${post.title || ''} ${post.body || ''}`;
+    const names = mentions.extractMentionNames(content);
+    if (!names.length) return;
+    const resolved = await mentions.resolveNames(names);
+    if (!resolved.size) return;
+
+    const base = {
+      actorId: actor.id,
+      actorName: actor.display_name || actor.username,
+      targetType: 'franchise_post',
+      targetId: `${franchiseId}:${post.id}`,
+      commentId: null,
+      excerpt: makeExcerpt(post.body || post.title)
+    };
+
+    for (const [_, { id }] of resolved) {
+      if (id === actor.id) continue;
+      const user = await auth.getUserFull(id);
+      if (!user || user.status !== 'approved') continue;
+      const title = titleFor ? await titleFor(user) : (post.title || 'Публикация во франшизе');
+      if (title == null) continue;
+      await create(id, { ...base, type: 'mention', targetTitle: title });
+    }
+  } catch (err) {
+    console.error('[notifications] Не удалось создать уведомления об упоминаниях в публикации:', err.message);
+  }
+}
+
+module.exports = { create, notifyAboutComment, notifyAboutPostMentions, makeExcerpt, list, countUnread, takeUnnotified, markRead };

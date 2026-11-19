@@ -3319,6 +3319,96 @@ input::-ms-clear {
     font-weight: 800;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.alltell-author-avatar.has-image {
+    background: var(--background-tertiary);
+}
+
+.alltell-author-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 50%;
+}
+
+.alltell-franchise-avatar.has-image,
+.alltell-live-avatar.has-image,
+.alltell-feed-franchise-avatar.has-image,
+.alltell-card-hub-avatar-wrap.has-image,
+.alltell-modal-avatar-preview.has-image {
+    background: var(--background-tertiary) !important;
+}
+
+.pin-avatar.has-image {
+    background: var(--background-tertiary);
+}
+
+.pin-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+}
+
+.alltell-mention-suggest {
+    position: fixed;
+    z-index: 2500;
+    background: var(--background-floating, #2b2d31);
+    border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    max-height: 220px;
+    overflow-y: auto;
+    min-width: 180px;
+    max-width: 280px;
+}
+
+.alltell-mention-suggest button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-normal, #dbdee1);
+    font-size: 13.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.alltell-mention-suggest button:hover,
+.alltell-mention-suggest button.is-active {
+    background: var(--blurple, #5865f2);
+    color: #ffffff;
+}
+
+.alltell-mention-suggest .alltell-mention-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--background-tertiary);
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+    color: #ffffff;
+}
+
+.alltell-mention-suggest .alltell-mention-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .alltell-author-info {

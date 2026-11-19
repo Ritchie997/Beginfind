@@ -5875,7 +5875,18 @@
     var avatar = document.createElement('div');
     avatar.className = 'pin-avatar';
     var authorName = work.author && work.author.display_name || 'Автор';
-    avatar.textContent = authorName.trim().charAt(0).toLocaleUpperCase() || 'А';
+    var authorAvatar = work.author && work.author.avatar ? safePublicImageUrl(work.author.avatar) : null;
+    if (authorAvatar) {
+      avatar.classList.add('has-image');
+      var avatarImg = document.createElement('img');
+      avatarImg.src = authorAvatar;
+      avatarImg.srcset = window.avatarSrcSet ? window.avatarSrcSet(authorAvatar) : '';
+      avatarImg.alt = '';
+      avatarImg.loading = 'lazy';
+      avatar.appendChild(avatarImg);
+    } else {
+      avatar.textContent = authorName.trim().charAt(0).toLocaleUpperCase() || 'А';
+    }
     var text = document.createElement('div');
     text.className = 'pin-caption-text';
     var titleEl = document.createElement('div');
