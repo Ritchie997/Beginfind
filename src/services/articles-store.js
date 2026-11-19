@@ -20,6 +20,7 @@ const { slugify } = require('./slugify');
 const blocks = require('./blocks');
 const articleLayers = require('./article-layers');
 const searchService = require('./article-search');
+const articlesFts = require('./articles-fts');
 
 const TRASH_DIR = path.join(CONTENT_DIR, '.trash');
 const FILE_EXT = '.json';
@@ -169,6 +170,7 @@ function writeArticleFile(slug, article) {
   // читался markdown (полностью machine-readable JSON в одну строку было бы
   // куда менее приятно смотреть в git diff при правке одной статьи).
   fs.writeFileSync(articlePath(slug), JSON.stringify(fileContents, null, 2), 'utf8');
+  articlesFts.indexArticle({ slug, ...fileContents }).catch(() => {});
 }
 
 /**
@@ -188,6 +190,7 @@ function listArticles() {
 
   articles.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   cache = articles;
+  articlesFts.syncAllArticles(articles).catch(() => {});
   return cache;
 }
 
@@ -453,6 +456,7 @@ function deleteArticle(slug) {
   ensureDirs();
   const trashName = `${slug}.${Date.now()}${FILE_EXT}`;
   fs.renameSync(filePath, path.join(TRASH_DIR, trashName));
+  articlesFts.removeArticle(slug).catch(() => {});
   invalidateCache();
 
   rewriteMentions((link) => (link.slug === slug ? DELETED_MENTION_TEXT : null));
@@ -465,6 +469,7 @@ function permanentlyDeleteArticle(slug) {
   if (!fs.existsSync(filePath)) return false;
 
   fs.unlinkSync(filePath);
+  articlesFts.removeArticle(slug).catch(() => {});
   if (fs.existsSync(TRASH_DIR)) {
     fs.readdirSync(TRASH_DIR)
       .filter((name) => name.startsWith(`${slug}.`) && name.endsWith(FILE_EXT))
@@ -634,6 +639,7 @@ function filterArticles(opts = {}) {
     viewCounts = null,
     q = '',
     parsedQuery: providedParsedQuery = null,
+    ftsMatches = null,
     tags = [],
     server = '',
     locked, // true | false | undefined — фильтр не применяется
@@ -646,7 +652,18 @@ function filterArticles(opts = {}) {
 
   const parsedQuery = providedParsedQuery || (q ? searchService.parseSearchQuery(q) : null);
   let scoreBySlug = null;
-  if (parsedQuery && parsedQuery.hasTextCriteria) {
+  if (ftsMatches && ftsMatches instanceof Map) {
+    scoreBySlug = new Map();
+    list = list.filter((a) => {
+      const match = ftsMatches.get(a.slug);
+      if (match) {
+        scoreBySlug.set(a.slug, match.score);
+        a.search_snippet = match.snippet || '';
+        return true;
+      }
+      return false;
+    });
+  } else if (parsedQuery && parsedQuery.hasTextCriteria) {
     scoreBySlug = new Map();
     list = list.filter((a) => {
       const content = allLayersSearchText(a);

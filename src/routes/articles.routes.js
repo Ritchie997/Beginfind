@@ -21,6 +21,7 @@ const userNotifications = require('../services/user-notifications');
 const articleCollabStore = require('../services/article-collab-store');
 const mentions = require('../services/mentions');
 const searchService = require('../services/article-search');
+const articlesFts = require('../services/articles-fts');
 const blocks = require('../services/blocks');
 const { PORT, HOST } = require('../config/env');
 const { dbPath, UPLOADS_DIR } = require('../config/paths');
@@ -450,6 +451,7 @@ async function formatArticleResponse(article, req, usersMap, legacyNameToId, ran
     // теги закрытых слоёв в ответ не попадают.
     tags: resolved ? (viewLayer.tags || []) : [],
     excerpt: viewLayer.excerpt ?? article.excerpt,
+    search_snippet: article.search_snippet || '',
     // Арты, пересланные из галереи (image-блок с data.gallery): src — из
     // самой работы, закрытая для читателя работа не показывается.
     content: updateImageUrlsInContent(req && req.user ? await gallery.resolveEmbedsInDocument(viewLayer.content, req.user) : viewLayer.content, req),
@@ -547,11 +549,20 @@ router.get('/articles/browse', auth.authenticateToken, auth.checkApproved, async
     const hashKeys = [...parsedQuery.hashKeys];
     const authorTerms = [...parsedQuery.authorTerms];
 
+    let ftsMatches = null;
+    if (parsedQuery.hasTextCriteria || authorTerms.length || hashKeys.length) {
+      try {
+        ftsMatches = await articlesFts.searchFts(parsedQuery);
+      } catch (ftsErr) {
+        console.error('[articles.routes] Ошибка поиска FTS5:', ftsErr);
+      }
+    }
+
     const viewCounts = sort === 'views' ? await social.getAllViewCounts() : null;
     // Теги фильтруем здесь, а не в filterArticles: у каждого читателя свои
     // видимые теги (только с доступных ему слоёв, см. readerTagKeys).
     const targetServer = server || req.query.serverId || '';
-    const filtered = store.filterArticles({ parsedQuery, server: targetServer, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
+    const filtered = store.filterArticles({ parsedQuery, ftsMatches, server: targetServer, locked: lockedFilter, dateFrom, dateTo, sort, viewCounts });
     const tagKeys = tags.map((t) => store.tagKey(t));
 
     const matchedAuthorIds = authorTerms.length ? await findUserIdsByAuthorTerms(authorTerms) : null;

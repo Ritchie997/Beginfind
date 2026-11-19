@@ -51,6 +51,30 @@ const articlesDb = new sqlite3.Database(dbPath('articles.db'), (err) => {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      // Полнотекстовый поисковый индекс FTS5 (обратный индекс для сотен тысяч статей)
+      articlesDb.all('PRAGMA table_info(articles_fts)', (pragmaErr, cols) => {
+        const names = (cols || []).map((c) => c.name);
+        const isMissingColumns = names.length > 0 && (!names.includes('slug') || !names.includes('stems'));
+        const createFts = () => {
+          articlesDb.run(`CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+            slug UNINDEXED,
+            title,
+            tags,
+            author_name,
+            content,
+            stems,
+            tokenize = 'unicode61 remove_diacritics 2'
+          )`, (ftsErr) => {
+            if (ftsErr) console.error('Ошибка инициализации таблицы articles_fts:', ftsErr);
+          });
+        };
+        if (isMissingColumns) {
+          articlesDb.run('DROP TABLE IF EXISTS articles_fts', () => createFts());
+        } else {
+          createFts();
+        }
+      });
+
       // Заявки на соавторство и обновление статьи
       articlesDb.run(`CREATE TABLE IF NOT EXISTS article_collab_requests (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

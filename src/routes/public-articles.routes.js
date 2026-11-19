@@ -14,6 +14,8 @@ const gallery = require('../services/gallery-store');
 const { dbPath } = require('../config/paths');
 const { getAvatarUrl } = require('../services/avatars');
 const stickers = require('../services/stickers-store');
+const searchService = require('../services/article-search');
+const articlesFts = require('../services/articles-fts');
 
 const usersDb = new sqlite3.Database(dbPath('users.db'));
 
@@ -159,6 +161,18 @@ function createPublicArticlesRouter(
       const articles = articleStore.listArticles();
       const articlesBySlug = new Map(articles.map((article) => [article.slug, article]));
 
+      let ftsMatches = null;
+      if (req.query.q) {
+        const parsed = searchService.parseSearchQuery(req.query.q);
+        if (parsed.hasTextCriteria || parsed.authorTerms.length || parsed.hashKeys.length) {
+          try {
+            ftsMatches = await articlesFts.searchFts(parsed);
+          } catch (ftsErr) {
+            console.error('[public-articles.routes] Ошибка поиска FTS5:', ftsErr);
+          }
+        }
+      }
+
       const result = publicArticles.listPublicArticles(articles, {
         q: req.query.q,
         tag: req.query.tag,
@@ -170,7 +184,8 @@ function createPublicArticlesRouter(
         server: req.query.server || req.query.serverId || '',
         locked: req.query.locked,
         limit,
-        offset
+        offset,
+        ftsMatches
       });
 
       if (result.data.length) {

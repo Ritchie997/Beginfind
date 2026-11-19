@@ -80,13 +80,14 @@ function isArticleRoleRestricted(article) {
   return false;
 }
 
-function toPublicArticleSummary(article, resolved) {
+function toPublicArticleSummary(article, resolved, snippet = '') {
   const layer = resolved.layer;
   const isLegacy = !Array.isArray(article.layers) || article.layers.length === 0;
   return {
     slug: article.slug,
     title: layer.title || (isLegacy ? article.title : article.slug),
     excerpt: layer.excerpt || (isLegacy ? article.excerpt : '') || excerptFromDocument(layer.content),
+    search_snippet: snippet || '',
     image: layer.image || (isLegacy ? article.image : null),
     tags: Array.isArray(layer.tags) ? layer.tags : [],
     server: article.server || null,
@@ -154,7 +155,7 @@ const SORT_MODES = ['newest', 'oldest', 'updated', 'views', 'alpha', 'relevance'
 
 function listPublicArticles(articles, {
   q = '', tag = '', sort = '', viewCounts = null, dateFrom = '', dateTo = '', limit = 30, offset = 0,
-  serverId = '', server = '', locked
+  serverId = '', server = '', locked, ftsMatches = null
 } = {}) {
   // Разбор запроса: "точная фраза", @автор, #тег и слова
   const parsed = searchService.parseSearchQuery(q);
@@ -201,13 +202,19 @@ function listPublicArticles(articles, {
     }
 
     let rank = 0;
-    if (parsed.hasTextCriteria) {
+    let snippet = '';
+    if (ftsMatches && ftsMatches instanceof Map) {
+      const match = ftsMatches.get(article.slug);
+      if (!match) continue;
+      rank = match.score;
+      snippet = match.snippet || '';
+    } else if (parsed.hasTextCriteria) {
       const title = String(resolved.layer.title || (!article.layers || !article.layers.length ? article.title : article.slug) || '');
       const content = publicArticleSearchText(article, resolved);
       rank = searchService.scoreArticleText(title, content, parsed);
       if (!rank) continue;
     }
-    visible.push({ article, resolved, rank });
+    visible.push({ article, resolved, rank, snippet });
   }
 
   const views = (item) => (viewCounts ? viewCounts.get(item.article.slug) || 0 : 0);
@@ -235,7 +242,7 @@ function listPublicArticles(articles, {
 
   const total = visible.length;
   const page = visible.slice(offset, offset + limit)
-    .map(({ article, resolved }) => toPublicArticleSummary(article, resolved));
+    .map(({ article, resolved, snippet }) => toPublicArticleSummary(article, resolved, snippet));
 
   return { data: page, total, limit, offset };
 }

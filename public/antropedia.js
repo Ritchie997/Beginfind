@@ -1030,7 +1030,9 @@ function reactionsBarInnerHtml(reactions) {
         </div>` : ''}
         <div class="antropedia-card-body">
           <h3 class="antropedia-card-title">${escapeHtml(article.title)}</h3>
-          <p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>
+          ${article.search_snippet
+            ? `<div class="antropedia-card-snippet"><span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …${escapeHtml(article.search_snippet).replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">').replace(/&lt;\\/mark&gt;/g, '</mark>')}…</div>`
+            : `<p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>`}
           ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) =>
             `<span class="antropedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
           ).join('')}</div>` : ''}

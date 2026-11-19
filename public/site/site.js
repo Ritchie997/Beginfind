@@ -823,7 +823,18 @@
       link.appendChild(title);
       body.appendChild(link);
 
-      if (article.excerpt) {
+      if (article.search_snippet) {
+        var snippet = document.createElement('div');
+        snippet.className = 'wiki-card-snippet antropedia-card-snippet';
+        var safeSnippet = String(article.search_snippet)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">')
+          .replace(/&lt;\/mark&gt;/g, '</mark>');
+        snippet.innerHTML = '<span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …' + safeSnippet + '…';
+        body.appendChild(snippet);
+      } else if (article.excerpt) {
         var excerpt = document.createElement('div');
         excerpt.className = 'wiki-card-excerpt';
         excerpt.textContent = article.excerpt;
@@ -5719,7 +5730,18 @@
     link.appendChild(title);
     body.appendChild(link);
 
-    if (article.excerpt) {
+    if (article.search_snippet) {
+      var snippet = document.createElement('div');
+      snippet.className = 'wiki-card-snippet antropedia-card-snippet';
+      var safeSnippet = String(article.search_snippet)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">')
+        .replace(/&lt;\/mark&gt;/g, '</mark>');
+      snippet.innerHTML = '<span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …' + safeSnippet + '…';
+      body.appendChild(snippet);
+    } else if (article.excerpt) {
       var excerpt = document.createElement('div');
       excerpt.className = 'wiki-card-excerpt';
       excerpt.textContent = article.excerpt;
