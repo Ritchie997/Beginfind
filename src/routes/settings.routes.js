@@ -49,11 +49,12 @@ router.get('/system-settings', auth.authenticateToken, auth.checkApproved, auth.
 router.put('/system-settings', auth.authenticateToken, auth.checkApproved, auth.checkRoot, (req, res) => {
   try {
     const current = readSettings();
-    const { maxFileSize, allowRegistration, sessionDurationHours, maintenancePages, maintenanceMessage, serverTimeOffsetMinutes } = req.body;
+    const { maxFileSize, allowRegistration, autoApproveRegistration, sessionDurationHours, maintenancePages, maintenanceMessage, serverTimeOffsetMinutes } = req.body;
 
     const settings = writeSettings({
       maxFileSize: maxFileSize !== undefined ? clampInt(maxFileSize, current.maxFileSize, 1, 20) : current.maxFileSize,
       allowRegistration: allowRegistration !== undefined ? !!allowRegistration : current.allowRegistration,
+      autoApproveRegistration: autoApproveRegistration !== undefined ? !!autoApproveRegistration : current.autoApproveRegistration,
       // 1 час — 30 дней. Токены уже выданные это не меняет (см. комментарий
       // у generateToken в src/middleware/auth.js) — подействует со
       // следующего входа.
@@ -94,6 +95,7 @@ router.get('/system-settings/public', (req, res) => {
       maxFileSize: settings.maxFileSize,
       maxFileSizeBytes: settings.maxFileSize * 1024 * 1024,
       allowRegistration: settings.allowRegistration,
+      autoApproveRegistration: !!settings.autoApproveRegistration,
       serverTimeOffsetMinutes: settings.serverTimeOffsetMinutes || 0,
       serverTime: getEffectiveServerTime().toISOString()
     });
@@ -151,6 +153,21 @@ router.post('/maintenance-continue', auth.authenticateToken, auth.checkApproved,
 router.post('/maintenance-logout', (req, res) => {
   clearMaintenanceBypassCookie(req, res);
   return res.json({ cleared: true });
+});
+
+// GET /api/system-settings/join-log — журнал присоединившихся пользователей
+router.get('/system-settings/join-log', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const allowed = req.user.is_root || (req.user.permissions && (req.user.permissions.view_users_tab || req.user.permissions.manage_pending_users));
+    if (!allowed) {
+      return res.status(403).json({ error: 'Недостаточно прав для просмотра журнала' });
+    }
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const log = await auth.getUserJoinLog(limit);
+    res.json({ log });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;

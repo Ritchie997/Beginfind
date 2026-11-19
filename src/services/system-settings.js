@@ -29,6 +29,8 @@ const DEFAULT_SETTINGS = {
   maxFileSize: 5,
   // Блокирует POST /api/register, когда выключено — см. src/routes/auth.routes.js.
   allowRegistration: true,
+  // Автоматически одобрять регистрацию новых пользователей (без подтверждения заявки)
+  autoApproveRegistration: false,
   // Часы жизни JWT — см. auth.generateToken в src/middleware/auth.js. Читается
   // заново на каждый логин (не кэшируется при старте сервера), поэтому смена
   // значения не требует перезапуска — подействует на СЛЕДУЮЩИЙ вход; уже

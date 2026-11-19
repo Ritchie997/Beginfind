@@ -60,7 +60,19 @@ function optionalAuth(req, res, next) {
 
 // --- Пользователь ---
 
-router.post('/feedback/reports', ...base, handle((req) => store.createReport(req.user, req.body || {})));
+router.post('/feedback/reports', ...base, handle(async (req) => {
+  const report = await store.createReport(req.user, req.body || {});
+  auth.notifyAdminsWithPermission(['feedback_triage', 'feedback_cases', 'feedback_decide'], {
+    type: 'admin_feedback',
+    actorId: req.user.id,
+    actorName: req.user.display_name || req.user.username,
+    targetType: 'feedback',
+    targetId: report.id,
+    targetTitle: report.title || `Обращение #${report.id}`,
+    excerpt: report.description ? report.description.slice(0, 120) : 'Новое обращение'
+  });
+  return report;
+}));
 
 // Упрощённый эндпоинт отправки обращений и жалоб на статьи
 router.post('/feedback', optionalAuth, handle(async (req) => {
@@ -86,6 +98,15 @@ router.post('/feedback', optionalAuth, handle(async (req) => {
       articleReason: body.reason || body.articleReason || 'other',
       description: body.text || body.description || 'Жалоба на статью',
       comment: body.comment || ''
+    });
+    auth.notifyAdminsWithPermission(['feedback_triage', 'feedback_cases', 'feedback_decide'], {
+      type: 'admin_feedback',
+      actorId: req.user.id,
+      actorName: req.user.display_name || req.user.username,
+      targetType: 'feedback',
+      targetId: report.id,
+      targetTitle: report.title || `Жалоба на статью ${articleSlug}`,
+      excerpt: report.description ? report.description.slice(0, 120) : 'Жалоба на статью'
     });
     return { success: true, id: report.id, report };
   }
@@ -144,6 +165,15 @@ router.post('/feedback', optionalAuth, handle(async (req) => {
     title,
     description,
     attachments: body.attachments || []
+  });
+  auth.notifyAdminsWithPermission(['feedback_triage', 'feedback_cases', 'feedback_decide'], {
+    type: 'admin_feedback',
+    actorId: user.id || null,
+    actorName: user.display_name || user.username,
+    targetType: 'feedback',
+    targetId: report.id,
+    targetTitle: report.title || `Обращение #${report.id}`,
+    excerpt: report.description ? report.description.slice(0, 120) : 'Новое обращение'
   });
   return { success: true, id: report.id, report };
 }));

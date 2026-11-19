@@ -54,6 +54,23 @@ test('scoreArticleText: exact title match gets highest score', () => {
   assert.equal(scoreNoMatch, 0);
 });
 
+test('scoreArticleText: exact quotes «Поэт» or "Поэт" strictly do not match "поэтому" anywhere', () => {
+  for (const qStr of ['«Поэт»', '"Поэт"', '“Поэт”']) {
+    const parsed = search.parseSearchQuery(qStr);
+    assert.deepEqual(parsed.exactPhrases, ['поэт']);
+
+    // Заголовок или контент содержит "поэтому" — не должно матчиться!
+    const scoreTitlePoetomu = search.scoreArticleText('Поэтому мир так устроен', 'Текст...', parsed);
+    const scoreContentPoetomu = search.scoreArticleText('Заметки', 'И поэтому мы ушли.', parsed);
+    assert.equal(scoreTitlePoetomu, 0, `Title with 'поэтому' must not match ${qStr}`);
+    assert.equal(scoreContentPoetomu, 0, `Content with 'поэтому' must not match ${qStr}`);
+
+    // Реальный поэт — должно матчиться
+    const scoreMatch = search.scoreArticleText('Биография', 'Великий Поэт написал стих.', parsed);
+    assert.ok(scoreMatch > 0, `Article with 'Поэт' must match ${qStr}`);
+  }
+});
+
 test('scoreArticleText: multiple words must all match (AND logic)', () => {
   const parsed = search.parseSearchQuery('эльфы горы');
   const matchBoth = search.scoreArticleText('История: эльфы', 'Они покоряли горы.', parsed);

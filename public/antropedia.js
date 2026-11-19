@@ -3668,15 +3668,31 @@ initEngagement() {
 
     runInArticleSearch(query, options = {}) {
       this.clearSearchHighlights();
-      const q = (query != null ? String(query) : (this.inlineSearchEl ? this.inlineSearchEl.value : '')).trim();
-      if (!q || !this.contentEl) { this.updateSearchCount(); return; }
+      const rawQ = (query != null ? String(query) : (this.inlineSearchEl ? this.inlineSearchEl.value : '')).trim();
+      if (!rawQ || !this.contentEl) { this.updateSearchCount(); return; }
+
+      // Проверяем жесткое ограничение кавычками: «текст», "текст", 'текст'
+      let isExact = false;
+      let q = rawQ;
+      const quoteMatch = rawQ.match(/^["«“„‟'‘](.*)["»”'’]$/);
+      if (quoteMatch) {
+        isExact = true;
+        q = quoteMatch[1].trim();
+      }
+      if (!q) { this.updateSearchCount(); return; }
 
       const qLower = q.toLowerCase();
+      const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+      const exactRegex = isExact ? new RegExp(`(^|[^\\p{L}\\p{N}_])(${escapeRegex(qLower)})([^\\p{L}\\p{N}_]|$)`, 'iu') : null;
+
       const walker = document.createTreeWalker(this.contentEl, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
           if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
           const tag = node.parentElement.tagName;
           if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
+          if (exactRegex) {
+            return exactRegex.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+          }
           return node.nodeValue.toLowerCase().includes(qLower) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         }
       });
@@ -3688,19 +3704,41 @@ initEngagement() {
         const text = node.nodeValue;
         const lower = text.toLowerCase();
         const frag = document.createDocumentFragment();
-        let lastIndex = 0;
-        let idx = lower.indexOf(qLower);
-        while (idx !== -1) {
-          if (idx > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
-          const mark = document.createElement('mark');
-          mark.className = 'antropedia-search-hit';
-          mark.textContent = text.slice(idx, idx + q.length);
-          frag.appendChild(mark);
-          lastIndex = idx + q.length;
-          idx = lower.indexOf(qLower, lastIndex);
+
+        if (exactRegex) {
+          const re = new RegExp(`(^|[^\\p{L}\\p{N}_])(${escapeRegex(qLower)})([^\\p{L}\\p{N}_]|$)`, 'giu');
+          let m;
+          let lastIndex = 0;
+          while ((m = re.exec(text)) !== null) {
+            const prefix = m[1];
+            const matchedText = m[2];
+            const startIdx = m.index + prefix.length;
+            const endIdx = startIdx + matchedText.length;
+            if (startIdx > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, startIdx)));
+            const mark = document.createElement('mark');
+            mark.className = 'antropedia-search-hit';
+            mark.textContent = text.slice(startIdx, endIdx);
+            frag.appendChild(mark);
+            lastIndex = endIdx;
+            re.lastIndex = endIdx;
+          }
+          frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+          node.parentNode.replaceChild(frag, node);
+        } else {
+          let lastIndex = 0;
+          let idx = lower.indexOf(qLower);
+          while (idx !== -1) {
+            if (idx > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+            const mark = document.createElement('mark');
+            mark.className = 'antropedia-search-hit';
+            mark.textContent = text.slice(idx, idx + q.length);
+            frag.appendChild(mark);
+            lastIndex = idx + q.length;
+            idx = lower.indexOf(qLower, lastIndex);
+          }
+          frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+          node.parentNode.replaceChild(frag, node);
         }
-        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
-        node.parentNode.replaceChild(frag, node);
       });
 
       this._searchHits = Array.from(this.contentEl.querySelectorAll('mark.antropedia-search-hit'));

@@ -28,6 +28,19 @@
 
   // Формулировки без рода — имя автора может быть любым.
   function headline(n) {
+    if (n.type === 'admin_pending_user') {
+      return `📋 <b>${escapeHtml(n.actorName)}</b> — новая заявка на регистрацию`;
+    }
+    if (n.type === 'admin_password_reset') {
+      return `🔑 <b>${escapeHtml(n.actorName)}</b> — запрос на смену пароля`;
+    }
+    if (n.type === 'admin_feedback') {
+      const title = n.targetTitle ? `: «${escapeHtml(n.targetTitle)}»` : '';
+      return `🐞 <b>${escapeHtml(n.actorName)}</b> — обращение #${escapeHtml(n.targetId)}${title}`;
+    }
+    if (n.type === 'admin_user_joined') {
+      return `🎉 <b>${escapeHtml(n.actorName)}</b> присоединился(лась) к платформе`;
+    }
     const where = n.targetType === 'gallery' ? 'к работе' : (n.targetType === 'franchise_post' ? 'к публикации' : 'к статье');
     const title = n.targetTitle ? ` ${where} «${escapeHtml(n.targetTitle)}»` : '';
     if (n.type === 'collab_request') {
@@ -84,8 +97,32 @@
     }
   }
 
-  // Переход: соавторство / комментарий в Antropedia / работа в галерее / публикация в AllTell.
+  // Переход: соавторство / комментарий в Antropedia / работа в галерее / публикация в AllTell / админ-панель.
   async function openNotification(n) {
+    if (n.type === 'admin_pending_user' || n.type === 'admin_password_reset') {
+      if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+        window.spaRouter.navigateTo('/pending-users');
+      } else {
+        window.location.href = '/pending-users';
+      }
+      return;
+    }
+    if (n.type === 'admin_feedback') {
+      if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+        window.spaRouter.navigateTo('/feedback');
+      } else {
+        window.location.href = '/feedback';
+      }
+      return;
+    }
+    if (n.type === 'admin_user_joined') {
+      if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+        window.spaRouter.navigateTo('/users');
+      } else {
+        window.location.href = '/users';
+      }
+      return;
+    }
     if (n.type === 'collab_request' || n.type === 'collab_approved' || n.type === 'collab_declined') {
       if (window.PublicSite && typeof window.PublicSite.navigateTo === 'function') {
         window.PublicSite.navigateTo('/antropedia/' + encodeURIComponent(n.targetId));

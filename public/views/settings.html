@@ -20,6 +20,15 @@
         </div>
 
         <div class="form-group">
+            <label class="form-label">Автопринятие пользователей при регистрации</label>
+            <label class="switch">
+                <input type="checkbox" id="autoApproveRegistration">
+                <span class="slider"></span>
+            </label>
+            <div class="form-hint">При включении новые пользователи активируются автоматически сразу после регистрации без ожидания ручного подтверждения заявки.</div>
+        </div>
+
+        <div class="form-group">
             <label class="form-label">Держать вход открытым (часов)</label>
             <input type="number" id="sessionDurationHours" class="form-input" value="8" min="1" max="720">
             <div class="form-hint">Сколько часов действует вход, прежде чем попросит войти заново — до 720 (30 дней). Уже открытые сеансы это не меняет, подействует при следующем входе.</div>
@@ -226,6 +235,27 @@
             </div>
 
             <div id="migration-report"></div>
+        </div>
+    </fieldset>
+
+    <fieldset class="fieldset-group" id="join-log-fieldset">
+        <legend>Журнал присоединений пользователей</legend>
+        <div class="setting-description">
+            История пользователей, зарегистрировавшихся в системе: кто и когда присоединился,
+            а также статус одобрения (автоматически при регистрации или вручную администратором).
+        </div>
+
+        <div style="background: var(--background-tertiary); padding: 15px; border-radius: 8px;">
+            <div class="button-group" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <button class="btn btn-secondary btn-sm" id="refresh-join-log-btn" type="button">
+                    <i class="fas fa-sync-alt"></i> Обновить журнал
+                </button>
+                <span id="join-log-count" style="font-size: 13px; color: var(--text-muted);"></span>
+            </div>
+
+            <div id="join-log-container" style="max-height: 360px; overflow-y: auto;">
+                <div class="loading-pulse">Загрузка журнала присоединений...</div>
+            </div>
         </div>
     </fieldset>
 

@@ -258,10 +258,11 @@ function normalizeDisplayName(display_name) {
  * @param {string} password - Пароль (открытый текст)
  * @returns {Promise<{id, username, display_name, status}>}
  */
-async function register(username, display_name, password) {
+async function register(username, display_name, password, { autoApprove = false } = {}) {
   const loginName = normalizeLogin(username);
   const displayName = normalizeDisplayName(display_name);
   const hashedPassword = await bcrypt.hash(password, 12);
+  const initialStatus = autoApprove ? 'approved' : 'pending';
 
   return new Promise((resolve, reject) => {
     // Логин сравниваем без учёта регистра — чтобы "Ivan" и "ivan" не
@@ -277,22 +278,31 @@ async function register(username, display_name, password) {
         return;
       }
 
-      // Вставляем нового пользователя со статусом pending
       db.run(
         `INSERT INTO users (username, display_name, password, role_id, status, is_root)
-         VALUES (?, ?, ?, 4, 'pending', 0)`,
-        [loginName, displayName, hashedPassword],
-        function (err) {
+         VALUES (?, ?, ?, 4, ?, 0)`,
+        [loginName, displayName, hashedPassword, initialStatus],
+        async function (err) {
           if (err) {
             reject(err);
             return;
           }
 
+          const newUserId = this.lastID;
+          if (autoApprove) {
+            try {
+              await assignObserverRoleIfNeeded(newUserId);
+              await logUserJoin({ userId: newUserId, username: loginName, displayName, autoApproved: true });
+            } catch (postErr) {
+              console.error('[auth] Post-registration auto-approval error:', postErr.message);
+            }
+          }
+
           resolve({
-            id: this.lastID,
+            id: newUserId,
             username: loginName,
             display_name: displayName,
-            status: 'pending',
+            status: initialStatus,
             is_root: false
           });
         }
@@ -934,23 +944,134 @@ function getPendingUsers() {
  */
 function approveUser(userId, approvedBy) {
   return new Promise((resolve, reject) => {
+    db.get('SELECT id, username, display_name FROM users WHERE id = ?', [userId], (err, userRow) => {
+      if (err || !userRow) {
+        reject(new Error('Пользователь не найден'));
+        return;
+      }
+      db.run(
+        'UPDATE users SET status = ? WHERE id = ?',
+        ['approved', userId],
+        async function (err2) {
+          if (err2) {
+            reject(err2);
+            return;
+          }
+          if (this.changes === 0) {
+            reject(new Error('Пользователь не найден'));
+            return;
+          }
+          console.log(`Пользователь ${userId} одобрен пользователем ${approvedBy}`);
+          await logUserJoin({
+            userId: userRow.id,
+            username: userRow.username,
+            displayName: userRow.display_name,
+            autoApproved: false
+          });
+          resolve({ success: true, userId });
+        }
+      );
+    });
+  });
+}
+
+/**
+ * Записать событие присоединения пользователя в журнал
+ */
+function logUserJoin({ userId, username, displayName, autoApproved = false }) {
+  return new Promise((resolve) => {
     db.run(
-      'UPDATE users SET status = ? WHERE id = ?',
-      ['approved', userId],
+      'INSERT INTO user_join_log (user_id, username, display_name, auto_approved) VALUES (?, ?, ?, ?)',
+      [userId || null, username, displayName || username, autoApproved ? 1 : 0],
       function (err) {
-        if (err) {
-          reject(err);
-          return;
-        }
-        if (this.changes === 0) {
-          reject(new Error('Пользователь не найден'));
-          return;
-        }
-        console.log(`Пользователь ${userId} одобрен пользователем ${approvedBy}`);
-        resolve({ success: true, userId });
+        if (err) console.error('[auth] Ошибка записи в user_join_log:', err.message);
+        resolve(this ? this.lastID : null);
       }
     );
   });
+}
+
+/**
+ * Получить журнал присоединившихся пользователей
+ */
+function getUserJoinLog(limit = 100) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT id, user_id, username, display_name, joined_at, auto_approved
+       FROM user_join_log
+       ORDER BY joined_at DESC, id DESC
+       LIMIT ?`,
+      [limit],
+      (err, rows) => {
+        if (err) return reject(err);
+        if (rows && rows.length > 0) return resolve(rows);
+        // Если лог пуст (например, только включили функцию), возвращаем последних одобренных пользователей
+        db.all(
+          `SELECT id as user_id, username, display_name, created_at as joined_at, 0 as auto_approved
+           FROM users
+           WHERE status = 'approved'
+           ORDER BY created_at DESC
+           LIMIT ?`,
+          [limit],
+          (err2, fallbackRows) => {
+            if (err2) return resolve([]);
+            resolve(fallbackRows || []);
+          }
+        );
+      }
+    );
+  });
+}
+
+/**
+ * Найти пользователей с правами администратора, имеющих указанное разрешение (или одно из списка)
+ */
+function getUsersWithPermission(permissionOrPermissions) {
+  const keys = Array.isArray(permissionOrPermissions) ? permissionOrPermissions : [permissionOrPermissions];
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT u.id, u.username, u.display_name, u.is_root, r.permissions as role_permissions
+       FROM users u
+       LEFT JOIN admin_roles r ON u.admin_role_id = r.id
+       WHERE u.status = 'approved' AND (u.is_root = 1 OR u.admin_role_id IS NOT NULL)`,
+      [],
+      (err, rows) => {
+        if (err) return reject(err);
+        const matched = [];
+        for (const row of rows || []) {
+          if (row.is_root) {
+            matched.push(row);
+            continue;
+          }
+          if (row.role_permissions) {
+            try {
+              const perms = JSON.parse(row.role_permissions);
+              if (perms && keys.some((k) => perms[k])) {
+                matched.push(row);
+              }
+            } catch (_) {}
+          }
+        }
+        resolve(matched);
+      }
+    );
+  });
+}
+
+/**
+ * Отправить уведомление в колокольчик всем администраторам с соответствующими правами
+ */
+async function notifyAdminsWithPermission(permissionOrPermissions, notificationData) {
+  try {
+    const admins = await getUsersWithPermission(permissionOrPermissions);
+    const userNotifications = require('../services/user-notifications');
+    for (const admin of admins) {
+      if (notificationData.actorId && Number(admin.id) === Number(notificationData.actorId)) continue;
+      await userNotifications.create(admin.id, notificationData);
+    }
+  } catch (e) {
+    console.error('[auth] Не удалось отправить уведомления администраторам:', e.message);
+  }
 }
 
 /**
@@ -1517,6 +1638,10 @@ module.exports = {
   rejectPasswordResetRequest,
   assignObserverRoleIfNeeded,
   getUserFull,
+  logUserJoin,
+  getUserJoinLog,
+  getUsersWithPermission,
+  notifyAdminsWithPermission,
   PERMISSION_KEYS,
   JWT_SECRET
 };

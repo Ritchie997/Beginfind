@@ -152,4 +152,4 @@ async function markRead(userId, ids) {
   );
 }
 
-module.exports = { notifyAboutComment, list, countUnread, takeUnnotified, markRead };
+module.exports = { create, notifyAboutComment, list, countUnread, takeUnnotified, markRead };

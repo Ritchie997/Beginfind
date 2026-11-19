@@ -586,6 +586,20 @@ function showModalLogin(initialTab = 'login') {
       if (result.success) {
         regForm.style.display = 'none';
         regPending.style.display = 'block';
+        if (result.user && result.user.status === 'approved') {
+          const icon = regPending.querySelector('div');
+          const title = regPending.querySelector('h3');
+          const desc = regPending.querySelector('p');
+          const btn = regPending.querySelector('button');
+          if (icon) icon.textContent = '🎉';
+          if (title) title.textContent = 'Регистрация завершена!';
+          if (desc) desc.innerHTML = 'Ваш аккаунт активирован автоматически.<br>Теперь вы можете войти.';
+          if (btn) btn.textContent = 'Войти в аккаунт';
+          const loginUsername = document.getElementById('login-username');
+          if (loginUsername && regUsername?.value) {
+            loginUsername.value = regUsername.value.trim();
+          }
+        }
       } else {
         showFieldMessage(regMessage, result.error || 'Ошибка регистрации', 'error');
       }

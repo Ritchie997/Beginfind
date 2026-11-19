@@ -1725,22 +1725,41 @@
     function runInArticleSearch(query, options) {
       clearSearchHighlights();
       var inputEl = inlineSearchEl || (detail && detail.querySelector('#antropediaInlineSearch'));
-      var q = (query != null ? String(query) : (inputEl ? inputEl.value : '')).trim();
+      var rawQ = (query != null ? String(query) : (inputEl ? inputEl.value : '')).trim();
       if (inputEl && query != null && inputEl.value !== query) {
         inputEl.value = query;
       }
       var content = currentContentEl || (detail && detail.querySelector('.public-article-content'));
-      if (!q || !content) {
+      if (!rawQ || !content) {
+        updateSearchCount();
+        return;
+      }
+
+      // Проверяем жесткое ограничение кавычками: «текст», "текст", 'текст'
+      var isExact = false;
+      var q = rawQ;
+      var quoteMatch = rawQ.match(/^["«“„‟'‘](.*)["»”'’]$/);
+      if (quoteMatch) {
+        isExact = true;
+        q = quoteMatch[1].trim();
+      }
+      if (!q) {
         updateSearchCount();
         return;
       }
 
       var qLower = q.toLowerCase();
+      var escapeRegex = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'); };
+      var exactRegex = isExact ? new RegExp('(^|[^\\p{L}\\p{N}_])(' + escapeRegex(qLower) + ')([^\\p{L}\\p{N}_]|$)', 'iu') : null;
+
       var walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
         acceptNode: function (node) {
           if (!node.nodeValue || !node.parentElement) return NodeFilter.FILTER_REJECT;
           var tag = node.parentElement.tagName;
           if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') return NodeFilter.FILTER_REJECT;
+          if (exactRegex) {
+            return exactRegex.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+          }
           return node.nodeValue.toLowerCase().indexOf(qLower) !== -1 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         }
       });
@@ -1752,22 +1771,48 @@
         var text = node.nodeValue;
         var lower = text.toLowerCase();
         var frag = document.createDocumentFragment();
-        var lastIndex = 0;
-        var idx = lower.indexOf(qLower);
-        while (idx !== -1) {
-          if (idx > lastIndex) {
-            frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+
+        if (exactRegex) {
+          var re = new RegExp('(^|[^\\p{L}\\p{N}_])(' + escapeRegex(qLower) + ')([^\\p{L}\\p{N}_]|$)', 'giu');
+          var m;
+          var lastIndex = 0;
+          while ((m = re.exec(text)) !== null) {
+            var prefix = m[1];
+            var matchedText = m[2];
+            var startIdx = m.index + prefix.length;
+            var endIdx = startIdx + matchedText.length;
+            if (startIdx > lastIndex) {
+              frag.appendChild(document.createTextNode(text.slice(lastIndex, startIdx)));
+            }
+            var mark = document.createElement('mark');
+            mark.className = 'search-hit antropedia-search-hit';
+            mark.textContent = text.slice(startIdx, endIdx);
+            frag.appendChild(mark);
+            lastIndex = endIdx;
+            re.lastIndex = endIdx;
           }
-          var mark = document.createElement('mark');
-          mark.className = 'search-hit antropedia-search-hit';
-          mark.textContent = text.slice(idx, idx + q.length);
-          frag.appendChild(mark);
-          lastIndex = idx + q.length;
-          idx = lower.indexOf(qLower, lastIndex);
-        }
-        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
-        if (node.parentNode) {
-          node.parentNode.replaceChild(frag, node);
+          frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+          if (node.parentNode) {
+            node.parentNode.replaceChild(frag, node);
+          }
+        } else {
+          var lastIndex = 0;
+          var idx = lower.indexOf(qLower);
+          while (idx !== -1) {
+            if (idx > lastIndex) {
+              frag.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+            }
+            var mark = document.createElement('mark');
+            mark.className = 'search-hit antropedia-search-hit';
+            mark.textContent = text.slice(idx, idx + q.length);
+            frag.appendChild(mark);
+            lastIndex = idx + q.length;
+            idx = lower.indexOf(qLower, lastIndex);
+          }
+          frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+          if (node.parentNode) {
+            node.parentNode.replaceChild(frag, node);
+          }
         }
       });
 

@@ -37,9 +37,24 @@ router.post('/register', auth.rateLimitLimiter('registration'), async (req, res)
 
     console.log('Registration attempt for login:', username);
 
-    const user = await auth.register(username, display_name, password);
+    const autoApprove = !!readSettings().autoApproveRegistration;
+    const user = await auth.register(username, display_name, password, { autoApprove });
 
-    console.log('Registration pending for user:', user.username);
+    if (user.status === 'pending') {
+      console.log('Registration pending for user:', user.username);
+      // Уведомляем администраторов с правом manage_pending_users
+      auth.notifyAdminsWithPermission('manage_pending_users', {
+        type: 'admin_pending_user',
+        actorId: user.id,
+        actorName: user.display_name || user.username,
+        targetType: 'pending_user',
+        targetId: user.id,
+        targetTitle: user.username,
+        excerpt: `Новая заявка на регистрацию от ${user.display_name} (@${user.username})`
+      });
+    } else {
+      console.log('User auto-approved upon registration:', user.username);
+    }
 
     res.status(201).json({
       user: {
@@ -48,7 +63,9 @@ router.post('/register', auth.rateLimitLimiter('registration'), async (req, res)
         display_name: user.display_name,
         status: user.status
       },
-      message: 'Заявка отправлена. Ожидает подтверждения'
+      message: user.status === 'approved'
+        ? 'Регистрация прошла успешно! Ваш аккаунт активирован.'
+        : 'Заявка отправлена. Ожидает подтверждения'
     });
   } catch (error) {
     console.error('Registration error:', error.message);
@@ -267,6 +284,15 @@ router.post('/password-reset-request', auth.rateLimitLimiter('login'), async (re
     const propPass = proposedPassword || password;
     const confPass = confirmPassword || password_confirm;
     const result = await auth.createPasswordResetRequest(userField, propPass, confPass, reason);
+    auth.notifyAdminsWithPermission('manage_pending_users', {
+      type: 'admin_password_reset',
+      actorId: null,
+      actorName: userField,
+      targetType: 'password_reset',
+      targetId: userField,
+      targetTitle: userField,
+      excerpt: reason ? String(reason).slice(0, 100) : 'Запрос на смену пароля'
+    });
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });

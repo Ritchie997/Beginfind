@@ -267,6 +267,25 @@ function ensureUserSchema(db) {
         .then(() =>
           run(
             db,
+            `CREATE TABLE IF NOT EXISTS user_join_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER,
+              username TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              auto_approved INTEGER DEFAULT 0
+            )`
+          )
+        )
+        .then(() =>
+          run(
+            db,
+            'CREATE INDEX IF NOT EXISTS idx_user_join_log_joined ON user_join_log(joined_at DESC)'
+          )
+        )
+        .then(() =>
+          run(
+            db,
             `CREATE TABLE IF NOT EXISTS password_reset_requests (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               user_id INTEGER NOT NULL,

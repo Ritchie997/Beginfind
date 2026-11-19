@@ -659,6 +659,7 @@ class SPARouter {
       }
 
       await window.feedbackManager?.init();
+      window.markBadgeCategoryRead?.('sidebar-feedback');
     } catch (error) {
       console.error('Error loading feedback:', error);
       showMessage('Ошибка при загрузке обращений', 'error');
@@ -5842,6 +5843,7 @@ class SPARouter {
     const settings = {
       maxFileSize: document.getElementById('maxFileSize')?.value,
       allowRegistration: document.getElementById('allowRegistration')?.checked,
+      autoApproveRegistration: document.getElementById('autoApproveRegistration')?.checked,
       sessionDurationHours: document.getElementById('sessionDurationHours')?.value
     };
 
@@ -5905,6 +5907,7 @@ class SPARouter {
         body: JSON.stringify({
           maxFileSize: 5,
           allowRegistration: true,
+          autoApproveRegistration: false,
           sessionDurationHours: 8,
           maintenancePages: { home: false, alltell: false, antropedia: false, gallery: false, radio: false },
           maintenanceMessage: 'Сайт временно на техническом обслуживании. Загляните чуть позже.'
@@ -5933,6 +5936,10 @@ class SPARouter {
         window.SystemLimits?.setCache(settings.maxFileSize);
       }
       if (settings.allowRegistration !== undefined) document.getElementById('allowRegistration').checked = settings.allowRegistration;
+      if (settings.autoApproveRegistration !== undefined) {
+        const autoEl = document.getElementById('autoApproveRegistration');
+        if (autoEl) autoEl.checked = !!settings.autoApproveRegistration;
+      }
       if (settings.sessionDurationHours != null) document.getElementById('sessionDurationHours').value = settings.sessionDurationHours;
       const maintenancePages = settings.maintenancePages || {};
       if (maintenancePages.home !== undefined) document.getElementById('maintenancePageHome').checked = maintenancePages.home;
@@ -5941,8 +5948,64 @@ class SPARouter {
       if (maintenancePages.gallery !== undefined) document.getElementById('maintenancePageGallery').checked = maintenancePages.gallery;
       if (maintenancePages.radio !== undefined) document.getElementById('maintenancePageRadio').checked = maintenancePages.radio;
       if (settings.maintenanceMessage != null) document.getElementById('maintenanceMessage').value = settings.maintenanceMessage;
+
+      await this.loadJoinLog();
     } catch (error) {
       showMessage(`Ошибка загрузки настроек: ${error.message}`, 'error');
+    }
+  }
+
+  // Загрузка журнала присоединившихся пользователей
+  async loadJoinLog() {
+    const container = document.getElementById('join-log-container');
+    const countEl = document.getElementById('join-log-count');
+    if (!container) return;
+
+    try {
+      const res = await fetch('/api/system-settings/join-log');
+      if (!res.ok) throw new Error('Не удалось загрузить журнал присоединений');
+      const data = await res.json();
+      const log = Array.isArray(data.log) ? data.log : [];
+
+      if (countEl) {
+        countEl.textContent = log.length ? `Всего записей: ${log.length}` : '';
+      }
+
+      if (!log.length) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 14px;">Журнал присоединений пуст</div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <table class="backup-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Пользователь</th>
+              <th>Логин</th>
+              <th>Дата и время</th>
+              <th>Статус одобрения</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${log.map((item) => {
+              const dateStr = item.joined_at ? new Date(item.joined_at.includes('Z') ? item.joined_at : item.joined_at + 'Z').toLocaleString('ru-RU') : '—';
+              const isAuto = !!item.auto_approved;
+              const badgeClass = isAuto ? 'status-badge enabled' : 'status-badge disabled';
+              const badgeText = isAuto ? 'Автопринятие' : 'Одобрен вручную';
+              return `
+                <tr>
+                  <td><strong>${this.escapeHtml(item.display_name || item.username)}</strong></td>
+                  <td style="color: var(--text-muted);">@${this.escapeHtml(item.username)}</td>
+                  <td style="font-size: 13px; color: var(--text-muted);">${dateStr}</td>
+                  <td><span class="${badgeClass}">${badgeText}</span></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div style="padding: 15px; color: var(--red); font-size: 14px;">Ошибка загрузки журнала: ${this.escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -5952,7 +6015,7 @@ class SPARouter {
     await this.initSettingsForm();
 
     // Set up auto-save for simple settings
-    const autoSaveInputs = ['maxFileSize', 'allowRegistration', 'sessionDurationHours'];
+    const autoSaveInputs = ['maxFileSize', 'allowRegistration', 'autoApproveRegistration', 'sessionDurationHours'];
 
     autoSaveInputs.forEach(inputId => {
       const element = document.getElementById(inputId);
@@ -5975,6 +6038,7 @@ class SPARouter {
     document.getElementById('save-settings-btn')?.addEventListener('click', () => this.saveSettings());
     document.getElementById('reset-settings-btn')?.addEventListener('click', () => this.resetSettings());
     document.getElementById('save-maintenance-settings-btn')?.addEventListener('click', () => this.saveMaintenanceSettings());
+    document.getElementById('refresh-join-log-btn')?.addEventListener('click', () => this.loadJoinLog());
   }
 
   // Dashboard stats with real data and weekly activity
@@ -6497,6 +6561,7 @@ SPARouter.prototype.loadPendingUsers = async function() {
     }
 
     await this.renderPendingUsers();
+    window.markBadgeCategoryRead?.('sidebar-pending-users');
   } catch (error) {
     console.error('Error loading pending users:', error);
     showMessage('Ошибка при загрузке заявок', 'error');

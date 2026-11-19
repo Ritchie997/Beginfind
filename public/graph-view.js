@@ -594,6 +594,14 @@
     function nodeMatchesQuery(n) {
       const term = searchTerm();
       if (!term) return false;
+      const quoteMatch = term.match(/^["«“„‟'‘](.*)["»”'’]$/);
+      if (quoteMatch) {
+        const inner = quoteMatch[1].trim().toLowerCase();
+        if (!inner) return false;
+        const re = new RegExp(`(^|[^\\p{L}\\p{N}_])${inner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}\\p{N}_]|$)`, 'iu');
+        if ((n.tags || []).some((t) => re.test(String(t).toLowerCase()) || (tagColors?.[t]?.name && re.test(tagColors[t].name.toLowerCase())))) return true;
+        return !n.locked && !activeSearchQuery.startsWith('#') && re.test(n.title || '');
+      }
       if ((n.tags || []).some((t) => tagMatchesTerm(t, term))) return true;
       return !n.locked && !activeSearchQuery.startsWith('#') && (n.title || '').toLowerCase().includes(term);
     }

@@ -66,9 +66,9 @@ function parseSearchQuery(rawQuery) {
     };
   }
 
-  // Приводим все виды кавычек («», “”, „“) к стандартным "
+  // Приводим все виды кавычек («», “”, „“, ‟, ‘’, ‚‛) к стандартным "
   let working = raw
-    .replace(/[«»“”„]/g, '"')
+    .replace(/[«»“”„‟‘’‚‛]/g, '"')
     .slice(0, 300);
 
   const exactPhrases = [];
@@ -174,6 +174,16 @@ function scoreArticleText(title, content, parsedQuery) {
   const allTerms = [...parsedQuery.exactPhrases, ...parsedQuery.textWords];
   if (!allTerms.length) return 1;
 
+  // Если были заданы точные фразы в кавычках («...», "...") — ВСЕ они обязаны присутствовать строго на границах слов!
+  if (parsedQuery.exactPhrases.length > 0) {
+    const fullText = `${titleStr}\n\n${content || ''}`;
+    for (const phrase of parsedQuery.exactPhrases) {
+      if (!testWordBoundary(fullText, phrase)) {
+        return 0; // Строгое ограничение: фраза не найдена на границе слов
+      }
+    }
+  }
+
   // 2. Все термины найдены в самом заголовке с границами слов
   const allInTitle = allTerms.every((term) => testWordBoundary(titleStr, term));
   if (allInTitle) {
@@ -189,9 +199,12 @@ function scoreArticleText(title, content, parsedQuery) {
     return someInTitle ? 60 : 40;
   }
 
-  // 4. Мягкий фолбэк: если пользователь искал по префиксу заголовка (например, "Арагор" в "Арагорн")
-  if (cleanQuery && cleanQuery.length >= 3 && titleLower.includes(cleanQuery)) {
-    return 20;
+  // 4. Мягкий фолбэк: ТОЛЬКО если пользователь не использовал кавычки (нет exactPhrases)
+  // и ТОЛЬКО на границе слова в заголовке (префикс слова, например "Арагор" в "Арагорн")
+  if (parsedQuery.exactPhrases.length === 0 && cleanQuery && cleanQuery.length >= 3) {
+    if (testWordBoundary(titleStr, cleanQuery, { prefix: true })) {
+      return 20;
+    }
   }
 
   return 0;

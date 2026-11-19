@@ -1068,13 +1068,29 @@ async function refreshNotificationBadges() {
       }
     });
 
-    Object.entries(totals).forEach(([elementId, total]) => renderNavBadge(elementId, total));
+    window._currentNavBadgeTotals = totals;
+    Object.entries(totals).forEach(([elementId, total]) => {
+      const seen = parseInt(localStorage.getItem(`alltell_badge_seen_${elementId}`) || '0', 10);
+      const unread = Math.max(0, total - seen);
+      renderNavBadge(elementId, unread > 0 ? unread : 0);
+    });
     // Личные уведомления (ответы, @упоминания) — колокольчик в шапке.
     window.userNotificationsUI?.applySummary(summary);
   } catch (e) {
     console.error('Error refreshing notification badges:', e);
   }
 }
+
+// Отметить метку уведомления раздела прочитанной, чтобы не спамить после открытия
+window.markBadgeCategoryRead = function(elementId) {
+  try {
+    const total = window._currentNavBadgeTotals?.[elementId] ?? 0;
+    localStorage.setItem(`alltell_badge_seen_${elementId}`, String(total));
+    renderNavBadge(elementId, 0);
+  } catch (e) {
+    console.error('Error marking badge seen:', e);
+  }
+};
 
 window.initNotificationBadges = function() {
   const user = authManager.getUser();
