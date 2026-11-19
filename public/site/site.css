@@ -119,6 +119,15 @@
     font-size: 15px;
 }
 
+.site-logo-img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
 .site-nav {
     display: flex;
     align-items: center;
@@ -443,7 +452,7 @@
 @media (max-width: 560px) {
     .site-header-inner { gap: 8px; padding: 0 12px; }
     .site-logo { gap: 5px; font-size: 17px; }
-    .site-logo-mark { width: 27px; height: 27px; }
+    .site-logo-mark, .site-logo-img { width: 27px; height: 27px; }
     .site-header-actions { gap: 4px; }
     .site-admin-toggle { gap: 5px; padding: 7px 8px; font-size: 11px; white-space: nowrap; }
     .site-admin-toggle span { display: none; }
@@ -457,7 +466,7 @@
 @media (max-width: 360px) {
     .site-header-inner { gap: 5px; padding: 0 8px; }
     .site-logo { gap: 4px; font-size: 15px; }
-    .site-logo-mark { width: 25px; height: 25px; }
+    .site-logo-mark, .site-logo-img { width: 25px; height: 25px; }
     .site-admin-toggle { gap: 4px; padding: 6px 6px; font-size: 10px; }
     .site-user-avatar { width: 30px; height: 30px; flex-basis: 30px; }
 }

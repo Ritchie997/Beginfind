@@ -8,7 +8,7 @@
   var HEADER_INNER_HTML = `
     <div class="site-header-inner">
       <button class="site-burger" id="siteBurger" aria-label="Открыть меню"><span></span><span></span><span></span></button>
-      <a href="/" class="site-logo"><span class="site-logo-mark">✶</span> AllTell</a>
+      <a href="/" class="site-logo"><img class="site-logo-img" src="/icon/Alltell.png" alt="" width="30" height="30"> AllTell</a>
       <nav class="site-nav" id="siteNav">
         <a href="/" class="site-nav-link" data-page="home">Главная</a>
         <a href="/antropedia" class="site-nav-link" data-page="antropedia">Antropedia</a>
