@@ -10369,13 +10369,30 @@ a.site-profile-media-row:hover {
     border-left: 3px solid var(--blurple, #5865F2);
     padding: 6px 10px;
     border-radius: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    max-height: 110px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-break: break-word;
     margin: 0;
     flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.2)) transparent;
+}
+
+.public-wiki-card .wiki-card-snippet::-webkit-scrollbar,
+.antropedia-card-snippet::-webkit-scrollbar {
+    width: 4px;
+}
+
+.public-wiki-card .wiki-card-snippet::-webkit-scrollbar-thumb,
+.antropedia-card-snippet::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25));
+    border-radius: 4px;
+}
+
+.public-wiki-card .wiki-card-snippet::-webkit-scrollbar-track,
+.antropedia-card-snippet::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .antropedia-snippet-label {

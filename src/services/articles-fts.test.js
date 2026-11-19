@@ -85,4 +85,10 @@ test('articles-fts: indexing, BM25 search, snippets, and stemming', async () => 
   await fts.removeArticle('poet-bio', db);
   const res5 = await fts.searchFts(parsed1, {}, db);
   assert.equal(res5.has('poet-bio'), false);
+
+  // 6. Проверка изоляции сниппетов: пустой поиск не должен содержать search_snippet
+  const store = require('./articles-store');
+  const emptyResults = store.filterArticles({ q: '' });
+  assert.ok(emptyResults.length > 0);
+  assert.ok(emptyResults.every(a => !a.search_snippet), 'При пустом поиске ни у одной статьи не должно быть search_snippet');
 });

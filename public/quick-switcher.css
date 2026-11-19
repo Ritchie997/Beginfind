@@ -190,11 +190,25 @@
   font-size: 12px;
   line-height: 1.4;
   color: var(--header-secondary, #b9bbbe);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  max-height: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.qs-item-snippet::-webkit-scrollbar {
+  width: 4px;
+}
+
+.qs-item-snippet::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.qs-item-snippet::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .qs-item-snippet mark {

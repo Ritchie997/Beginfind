@@ -451,6 +451,7 @@ function reactionsBarInnerHtml(reactions) {
       this.sentinelEl = document.getElementById('antropediaSentinel');
       this.countEl = document.getElementById('antropediaCount');
       this.searchEl = document.getElementById('antropediaSearch');
+      this.searchClearBtn = document.getElementById('antropediaSearchClear');
       this.quickTagsEl = document.getElementById('antropediaQuickTags');
       this.serverFilterEl = document.getElementById('antropediaServerFilter');
       this.statusFilterEl = document.getElementById('antropediaStatusFilter');
@@ -556,6 +557,7 @@ function reactionsBarInnerHtml(reactions) {
       if (urlQuery && this.searchEl) {
         this.searchEl.value = urlQuery;
       }
+      this.updateSearchClear();
 
       await this.resetAndLoad();
     }
@@ -697,10 +699,39 @@ function reactionsBarInnerHtml(reactions) {
       });
     }
 
+    updateSearchClear() {
+      if (this.searchClearBtn) {
+        this.searchClearBtn.hidden = !this.searchEl?.value.trim();
+      }
+    }
+
     bindEvents() {
       this.searchEl?.addEventListener('input', () => {
+        this.updateSearchClear();
         clearTimeout(this._searchDebounce);
-        this._searchDebounce = setTimeout(() => this.resetAndLoad(), 300);
+        this._searchDebounce = setTimeout(() => {
+          try {
+            const url = new URL(window.location.href);
+            const val = this.searchEl?.value.trim() || '';
+            if (val) url.searchParams.set('q', val);
+            else url.searchParams.delete('q');
+            history.replaceState(history.state || {}, '', url.pathname + url.search);
+          } catch (_) {}
+          this.resetAndLoad();
+        }, 300);
+      });
+
+      this.searchClearBtn?.addEventListener('click', () => {
+        if (this.searchEl) this.searchEl.value = '';
+        this.updateSearchClear();
+        clearTimeout(this._searchDebounce);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('q');
+          history.replaceState(history.state || {}, '', url.pathname + url.search);
+        } catch (_) {}
+        this.resetAndLoad();
+        this.searchEl?.focus();
       });
 
       this.serverFilterEl?.addEventListener('change', () => this.resetAndLoad());
@@ -897,6 +928,14 @@ function reactionsBarInnerHtml(reactions) {
       if (this.dateToEl) this.dateToEl.value = '';
       if (this.sortEl) this.sortEl.value = 'newest';
       if (this.searchEl) this.searchEl.value = '';
+      this.updateSearchClear();
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('q')) {
+          url.searchParams.delete('q');
+          history.replaceState(history.state || {}, '', url.pathname + url.search);
+        }
+      } catch (_) {}
       this.resetAndLoad();
     }
 
@@ -1031,7 +1070,7 @@ function reactionsBarInnerHtml(reactions) {
         <div class="antropedia-card-body">
           <h3 class="antropedia-card-title">${escapeHtml(article.title)}</h3>
           ${article.search_snippet
-            ? `<div class="antropedia-card-snippet"><span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …${escapeHtml(article.search_snippet).replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">').replace(/&lt;\\/mark&gt;/g, '</mark>')}…</div>`
+            ? `<div class="antropedia-card-snippet"><span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …${escapeHtml(article.search_snippet).replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">').replace(/&lt;\/mark&gt;/g, '</mark>')}…</div>`
             : `<p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>`}
           ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) =>
             `<span class="antropedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`

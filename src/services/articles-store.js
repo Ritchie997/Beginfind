@@ -185,7 +185,10 @@ function listArticles() {
   for (const file of files) {
     const slug = file.slice(0, -FILE_EXT.length);
     const article = readArticleFile(slug);
-    if (article) articles.push(article);
+    if (article) {
+      delete article.search_snippet;
+      articles.push(article);
+    }
   }
 
   articles.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
@@ -658,10 +661,15 @@ function filterArticles(opts = {}) {
       const match = ftsMatches.get(a.slug);
       if (match) {
         scoreBySlug.set(a.slug, match.score);
-        a.search_snippet = match.snippet || '';
         return true;
       }
       return false;
+    }).map((a) => {
+      const match = ftsMatches.get(a.slug);
+      return {
+        ...a,
+        search_snippet: match ? (match.snippet || '') : ''
+      };
     });
   } else if (parsedQuery && parsedQuery.hasTextCriteria) {
     scoreBySlug = new Map();
@@ -670,6 +678,23 @@ function filterArticles(opts = {}) {
       const score = searchService.scoreArticleText(a.title, content, parsedQuery);
       if (score > 0) scoreBySlug.set(a.slug, score);
       return score > 0;
+    }).map((a) => {
+      if (a.search_snippet) {
+        const copy = { ...a };
+        delete copy.search_snippet;
+        return copy;
+      }
+      return a;
+    });
+  } else {
+    // При пустом запросе гарантируем отсутствие search_snippet
+    list = list.map((a) => {
+      if (a.search_snippet) {
+        const copy = { ...a };
+        delete copy.search_snippet;
+        return copy;
+      }
+      return a;
     });
   }
 

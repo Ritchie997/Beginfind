@@ -105,6 +105,26 @@
   box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
 }
 
+.antropedia-search-clear {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: color 0.15s ease;
+}
+
+.antropedia-search-clear:hover {
+  color: var(--text-normal);
+}
+
 /* Полоса быстрых тегов в тулбаре каталога */
 .antropedia-quick-tags {
   display: flex;
@@ -518,11 +538,25 @@
   border-left: 3px solid var(--blurple, #5865F2);
   padding: 6px 10px;
   border-radius: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  max-height: 110px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.2)) transparent;
+}
+
+.antropedia-card-snippet::-webkit-scrollbar {
+  width: 4px;
+}
+
+.antropedia-card-snippet::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25));
+  border-radius: 4px;
+}
+
+.antropedia-card-snippet::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .antropedia-snippet-label {

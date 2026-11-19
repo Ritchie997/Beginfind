@@ -258,7 +258,7 @@ function searchFts(parsedQuery, options = {}, db = getDb()) {
       SELECT slug,
              title,
              bm25(articles_fts, 10.0, 5.0, 3.0, 1.0, 2.0) as bm25_score,
-             snippet(articles_fts, 4, '<mark>', '</mark>', '…', 15) as snippet
+             snippet(articles_fts, 4, '<mark>', '</mark>', '…', 35) as snippet
       FROM articles_fts
       WHERE articles_fts MATCH ?
       ORDER BY bm25_score ASC
