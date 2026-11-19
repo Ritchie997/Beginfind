@@ -155,7 +155,7 @@ const SORT_MODES = ['newest', 'oldest', 'updated', 'views', 'alpha', 'relevance'
 
 function listPublicArticles(articles, {
   q = '', tag = '', sort = '', viewCounts = null, dateFrom = '', dateTo = '', limit = 30, offset = 0,
-  serverId = '', server = '', locked, ftsMatches = null
+  serverId = '', server = '', locked, ftsMatches = null, matchedAuthorIds = null
 } = {}) {
   // Разбор запроса: "точная фраза", @автор, #тег и слова
   const parsed = searchService.parseSearchQuery(q);
@@ -188,10 +188,21 @@ function listPublicArticles(articles, {
     }
 
     if (authorTerms.length) {
+      const isFtsAuthorMatch = ftsMatches && ftsMatches instanceof Map && ftsMatches.has(article.slug);
+      const effId = article.author_id;
+      const isIdMatch = effId && matchedAuthorIds && matchedAuthorIds.has(effId);
+      const isCoAuthorMatch = Array.isArray(article.co_author_ids) && matchedAuthorIds && article.co_author_ids.some((id) => matchedAuthorIds.has(id));
+      const isLegacyMatch = article.legacyAuthorName && authorTerms.some((t) => article.legacyAuthorName.toLowerCase().includes(t));
+      const isDirectNameMatch = article.author && (
+        (article.author.display_name && authorTerms.some((t) => article.author.display_name.toLowerCase().includes(t))) ||
+        (article.author.username && authorTerms.some((t) => article.author.username.toLowerCase().includes(t)))
+      );
       const content = publicArticleSearchText(article, resolved);
-      const isAuthorMatch = (article.legacyAuthorName && authorTerms.some((t) => article.legacyAuthorName.toLowerCase().includes(t)))
-        || authorTerms.some((t) => searchService.textContainsAuthorMention(content, t));
-      if (!isAuthorMatch) continue;
+      const isMentionMatch = authorTerms.some((t) => searchService.textContainsAuthorMention(content, t));
+
+      if (!isFtsAuthorMatch && !isIdMatch && !isCoAuthorMatch && !isLegacyMatch && !isDirectNameMatch && !isMentionMatch) {
+        continue;
+      }
     }
 
     if (from || to) {

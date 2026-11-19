@@ -826,6 +826,9 @@
       if (article.search_snippet) {
         var snippet = document.createElement('div');
         snippet.className = 'wiki-card-snippet antropedia-card-snippet';
+        snippet.addEventListener('click', function (e) {
+          e.stopPropagation();
+        });
         var safeSnippet = String(article.search_snippet)
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
@@ -5733,6 +5736,9 @@
     if (article.search_snippet) {
       var snippet = document.createElement('div');
       snippet.className = 'wiki-card-snippet antropedia-card-snippet';
+      snippet.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
       var safeSnippet = String(article.search_snippet)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')

@@ -41,6 +41,35 @@ function findLegacyAuthor(name) {
   });
 }
 
+function findUserIdsByAuthorTerms(terms) {
+  if (!terms || !terms.length) return Promise.resolve(new Set());
+  return new Promise((resolve) => {
+    const conditions = [];
+    const params = [];
+    terms.forEach((term) => {
+      const clean = String(term || '').trim().toLowerCase();
+      if (!clean) return;
+      conditions.push('(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)');
+      params.push(`%${clean}%`, `%${clean}%`);
+      const words = clean.split(/\s+/).filter(Boolean);
+      if (words.length > 1) {
+        const subConds = words.map(() => '(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)').join(' AND ');
+        conditions.push(`(${subConds})`);
+        words.forEach((w) => params.push(`%${w}%`, `%${w}%`));
+      }
+    });
+    if (!conditions.length) return resolve(new Set());
+    usersDb.all(
+      `SELECT id FROM users WHERE ${conditions.join(' OR ')}`,
+      params,
+      (err, rows) => {
+        if (err || !rows) return resolve(new Set());
+        resolve(new Set(rows.map((r) => r.id)));
+      }
+    );
+  });
+}
+
 async function getPublicAuthor(article) {
   const user = article.author_id
     ? await getUserById(article.author_id)
@@ -162,6 +191,7 @@ function createPublicArticlesRouter(
       const articlesBySlug = new Map(articles.map((article) => [article.slug, article]));
 
       let ftsMatches = null;
+      let matchedAuthorIds = null;
       if (req.query.q) {
         const parsed = searchService.parseSearchQuery(req.query.q);
         if (parsed.hasTextCriteria || parsed.authorTerms.length || parsed.hashKeys.length) {
@@ -169,6 +199,13 @@ function createPublicArticlesRouter(
             ftsMatches = await articlesFts.searchFts(parsed);
           } catch (ftsErr) {
             console.error('[public-articles.routes] Ошибка поиска FTS5:', ftsErr);
+          }
+        }
+        if (parsed.authorTerms.length) {
+          try {
+            matchedAuthorIds = await findUserIdsByAuthorTerms(parsed.authorTerms);
+          } catch (authErr) {
+            console.error('[public-articles.routes] Ошибка поиска авторов:', authErr);
           }
         }
       }
@@ -185,7 +222,8 @@ function createPublicArticlesRouter(
         locked: req.query.locked,
         limit,
         offset,
-        ftsMatches
+        ftsMatches,
+        matchedAuthorIds
       });
 
       if (result.data.length) {

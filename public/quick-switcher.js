@@ -387,7 +387,11 @@
     // Привязываем клики по результатам
     resultsEl.querySelectorAll('.qs-item').forEach((elem) => {
       const idx = parseInt(elem.dataset.idx, 10);
-      elem.addEventListener('click', () => {
+      elem.addEventListener('click', (e) => {
+        if (e.target.closest('.qs-item-snippet')) {
+          // Клик, скроллбар или выделение текста в сниппете не должны закрывать окно и переходить
+          return;
+        }
         if (currentResults[idx]) navigateToItem(currentResults[idx]);
       });
       elem.addEventListener('mouseenter', () => {

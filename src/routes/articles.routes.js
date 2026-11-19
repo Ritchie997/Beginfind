@@ -89,10 +89,23 @@ function resolveLegacyAuthorIds(names) {
 function findUserIdsByAuthorTerms(terms) {
   if (!terms || !terms.length) return Promise.resolve(new Set());
   return new Promise((resolve) => {
-    const conditions = terms.map(() => '(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)').join(' OR ');
-    const params = terms.flatMap((t) => [`%${t.toLowerCase()}%`, `%${t.toLowerCase()}%`]);
+    const conditions = [];
+    const params = [];
+    terms.forEach((term) => {
+      const clean = String(term || '').trim().toLowerCase();
+      if (!clean) return;
+      conditions.push('(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)');
+      params.push(`%${clean}%`, `%${clean}%`);
+      const words = clean.split(/\s+/).filter(Boolean);
+      if (words.length > 1) {
+        const subConds = words.map(() => '(LOWER(username) LIKE ? OR LOWER(display_name) LIKE ?)').join(' AND ');
+        conditions.push(`(${subConds})`);
+        words.forEach((w) => params.push(`%${w}%`, `%${w}%`));
+      }
+    });
+    if (!conditions.length) return resolve(new Set());
     usersDb.all(
-      `SELECT id FROM users WHERE status = 'approved' AND (${conditions})`,
+      `SELECT id FROM users WHERE ${conditions.join(' OR ')}`,
       params,
       (err, rows) => {
         if (err || !rows) return resolve(new Set());

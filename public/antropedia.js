@@ -1136,6 +1136,12 @@ function reactionsBarInnerHtml(reactions) {
       if (!card) return;
       const slug = card.dataset.slug;
 
+      // Клик или взаимодействие со сниппетом поиска (скроллбар, выделение текста)
+      // не должно открывать статью.
+      if (e.target.closest('.antropedia-card-snippet')) {
+        return;
+      }
+
       // Реакции эмодзи/стикером прямо на карточке (пилюля/кнопка "+"/уже
       // открытый пикер стикеров внутри — см. handleReactionsClick,
       // переиспользуется тот же обработчик, что и внутри статьи) — клик

@@ -10,12 +10,74 @@ const articleLayers = require('./article-layers');
 const searchService = require('./article-search');
 
 let dbInstance = null;
+let cachedUsersDb = null;
 
 function getDb() {
   if (!dbInstance) {
     dbInstance = new sqlite3.Database(dbPath('articles.db'));
   }
   return dbInstance;
+}
+
+function getUsersDb() {
+  if (!cachedUsersDb) {
+    cachedUsersDb = new sqlite3.Database(dbPath('users.db'));
+  }
+  return cachedUsersDb;
+}
+
+/**
+ * Загружает карту всех пользователей системы (id -> { id, username, display_name }).
+ */
+function loadAllUsersMap(db = getUsersDb()) {
+  return new Promise((resolve) => {
+    db.all('SELECT id, username, display_name FROM users', (err, rows) => {
+      if (err || !rows) return resolve(new Map());
+      const map = new Map();
+      rows.forEach((r) => {
+        map.set(Number(r.id), {
+          id: Number(r.id),
+          username: String(r.username || '').trim(),
+          display_name: String(r.display_name || '').trim()
+        });
+      });
+      resolve(map);
+    });
+  });
+}
+
+/**
+ * Формирует строку всех имен авторов статьи (автор, соавторы, легаси) для полнотекстового индекса.
+ */
+function getArticleAuthorNames(article, usersMap = null) {
+  const names = new Set();
+  if (article.legacyAuthorName) {
+    names.add(article.legacyAuthorName);
+  }
+  if (article.author) {
+    if (typeof article.author === 'string') names.add(article.author);
+    else if (typeof article.author === 'object') {
+      if (article.author.display_name) names.add(article.author.display_name);
+      if (article.author.username) names.add(article.author.username);
+    }
+  }
+  if (usersMap) {
+    if (article.author_id && usersMap.has(Number(article.author_id))) {
+      const u = usersMap.get(Number(article.author_id));
+      if (u.display_name) names.add(u.display_name);
+      if (u.username) names.add(u.username);
+    }
+    if (Array.isArray(article.co_author_ids)) {
+      article.co_author_ids.forEach((id) => {
+        if (usersMap.has(Number(id))) {
+          const u = usersMap.get(Number(id));
+          if (u.display_name) names.add(u.display_name);
+          if (u.username) names.add(u.username);
+        }
+      });
+    }
+  }
+  return Array.from(names).filter(Boolean).join(' ');
 }
 
 /**
@@ -69,7 +131,7 @@ function initFts(db = getDb()) {
 /**
  * Извлекает все слова и стеммы из текста статьи для поискового индекса.
  */
-function buildIndexDoc(article, authorName = '') {
+function buildIndexDoc(article, authorName = '', usersMap = null) {
   const slug = String(article.slug || '');
   const title = String(article.title || '');
 
@@ -91,7 +153,8 @@ function buildIndexDoc(article, authorName = '') {
   }
 
   // Автор
-  const authorStr = String(authorName || article.legacyAuthorName || '');
+  const resolvedAuthor = authorName || getArticleAuthorNames(article, usersMap);
+  const authorStr = String(resolvedAuthor || '');
 
   // Вычисляем стеммы для быстрого морфологического поиска
   const fullText = `${title} ${tagsStr} ${authorStr} ${contentText}`;
@@ -111,9 +174,18 @@ function buildIndexDoc(article, authorName = '') {
 /**
  * Индексирует одну статью в FTS5 (заменяет старую запись при наличии).
  */
-function indexArticle(article, authorName = '', db = getDb()) {
-  if (!article || !article.slug) return Promise.resolve();
-  const doc = buildIndexDoc(article, authorName);
+async function indexArticle(article, authorName = '', db = getDb()) {
+  if (!article || !article.slug) return;
+  let resolvedAuthor = authorName;
+  if (!resolvedAuthor) {
+    try {
+      const usersMap = await loadAllUsersMap();
+      resolvedAuthor = getArticleAuthorNames(article, usersMap);
+    } catch (_) {
+      resolvedAuthor = article.legacyAuthorName || '';
+    }
+  }
+  const doc = buildIndexDoc(article, resolvedAuthor);
 
   return new Promise((resolve) => {
     // Удаляем старую запись
@@ -152,14 +224,36 @@ function removeArticle(slug, db = getDb()) {
  */
 async function syncAllArticles(articles, authorResolver = null, db = getDb()) {
   await initFts(db);
+
+  let usersMap = null;
+  try {
+    usersMap = await loadAllUsersMap();
+    if (usersMap && usersMap.size > 0) {
+      const names = [];
+      for (const u of usersMap.values()) {
+        if (u.display_name) names.push(u.display_name);
+        if (u.username) names.push(u.username);
+      }
+      searchService.registerAuthorNames(names);
+    }
+  } catch (uErr) {
+    console.error('[articles-fts] Не удалось загрузить usersMap для индексации:', uErr.message);
+  }
+
   const count = await new Promise((resolve) => {
     db.get('SELECT count(*) as count FROM articles_fts', (err, row) => {
       resolve(row ? row.count : 0);
     });
   });
 
-  // Если записей в индексе столько же, сколько статей, повторная полная индексация не требуется
-  if (count === articles.length && count > 0) {
+  const hasPopulatedAuthors = await new Promise((resolve) => {
+    db.get("SELECT count(*) as count FROM articles_fts WHERE author_name != ''", (err, row) => {
+      resolve(row && row.count > 0);
+    });
+  });
+
+  // Если записей в индексе столько же, сколько статей, и авторы заполнены, повторная полная индексация не требуется
+  if (count === articles.length && count > 0 && hasPopulatedAuthors) {
     return count;
   }
 
@@ -174,8 +268,8 @@ async function syncAllArticles(articles, authorResolver = null, db = getDb()) {
       );
 
       for (const article of articles) {
-        const authorName = authorResolver ? authorResolver(article) : (article.legacyAuthorName || '');
-        const doc = buildIndexDoc(article, authorName);
+        const authorName = authorResolver ? authorResolver(article) : getArticleAuthorNames(article, usersMap);
+        const doc = buildIndexDoc(article, authorName, usersMap);
         stmt.run([doc.slug, doc.title, doc.tags, doc.author_name, doc.content, doc.stems]);
       }
 
@@ -215,11 +309,23 @@ function buildFtsMatchQuery(parsedQuery) {
     }
   }
 
-  // 3. Авторы (@поэт)
+  // 3. Авторы (@поэт, @Качуа, @"Corepse Kodai", @Sargos Bedagamy)
   for (const author of parsedQuery.authorTerms) {
-    const clean = author.replace(/[^\p{L}\p{N}_.-]/gu, '');
-    if (clean) {
-      parts.push(`author_name:"${clean}"*`);
+    const clean = String(author || '').replace(/["*]/g, '').trim();
+    if (!clean) continue;
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      const w = words[0].replace(/[^\p{L}\p{N}_.-]/gu, '');
+      if (w) parts.push(`author_name:"${w}"*`);
+    } else {
+      // Имя с пробелами: каждое слово должно присутствовать в author_name
+      const subParts = words
+        .map((w) => w.replace(/[^\p{L}\p{N}_.-]/gu, ''))
+        .filter(Boolean)
+        .map((w) => `author_name:"${w}"*`);
+      if (subParts.length) {
+        parts.push(`(${subParts.join(' AND ')})`);
+      }
     }
   }
 
@@ -258,7 +364,7 @@ function searchFts(parsedQuery, options = {}, db = getDb()) {
       SELECT slug,
              title,
              bm25(articles_fts, 10.0, 5.0, 3.0, 1.0, 2.0) as bm25_score,
-             snippet(articles_fts, 4, '<mark>', '</mark>', '…', 35) as snippet
+             snippet(articles_fts, -1, '<mark>', '</mark>', '…', 50) as snippet
       FROM articles_fts
       WHERE articles_fts MATCH ?
       ORDER BY bm25_score ASC

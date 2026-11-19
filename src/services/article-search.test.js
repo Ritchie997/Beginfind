@@ -166,3 +166,30 @@ test('scoreArticleText: automatic fallback to swapped layout (Gj\'n -> Поэт)
   const score = search.scoreArticleText('Поэт', 'Биография великого поэта.', parsed);
   assert.ok(score > 0, 'Should find article using layout alternative');
 });
+
+test('parseSearchQuery: author queries with spaces, quotes, and brackets', () => {
+  // 1. Одиночный автор без кавычек: @Качуа
+  const p1 = search.parseSearchQuery('@Качуа');
+  assert.deepEqual(p1.authorTerms, ['качуа']);
+  assert.deepEqual(p1.textWords, []);
+
+  // 2. Автор с пробелами в нике без кавычек: @Corepse Kodai
+  const p2 = search.parseSearchQuery('@Corepse Kodai');
+  assert.deepEqual(p2.authorTerms, ['corepse kodai']);
+  assert.deepEqual(p2.textWords, []);
+
+  // 3. Автор с пробелами в двойных кавычках: @"Corepse Kodai"
+  const p3 = search.parseSearchQuery('@"Corepse Kodai"');
+  assert.deepEqual(p3.authorTerms, ['corepse kodai']);
+  assert.deepEqual(p3.textWords, []);
+
+  // 4. Автор с пробелами в квадратных скобках: @[Corepse Kodai]
+  const p4 = search.parseSearchQuery('@[Corepse Kodai]');
+  assert.deepEqual(p4.authorTerms, ['corepse kodai']);
+  assert.deepEqual(p4.textWords, []);
+
+  // 5. Автор с пробелами + ключевое слово: @Corepse Kodai война
+  const p5 = search.parseSearchQuery('@Corepse Kodai война');
+  assert.deepEqual(p5.authorTerms, ['corepse kodai']);
+  assert.deepEqual(p5.textWords, ['война']);
+});

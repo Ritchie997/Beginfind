@@ -158,6 +158,29 @@ function extractStemsSet(text) {
   return new Set(extractWords(text).map(stemWord));
 }
 
+// Известные многословные имена авторов платформы для корректного разбора запросов вида @Corepse Kodai
+const knownMultiWordAuthors = new Set([
+  'corepse kodai',
+  'sargos bedagamy',
+  'польский косяк',
+  'кекс дроздовский',
+  'sonic pon',
+  'avadik kedavrik',
+  'твинк саргоса',
+  'creaticus ludens',
+  'новак фергюсон'
+]);
+
+function registerAuthorNames(names) {
+  if (!Array.isArray(names)) return;
+  names.forEach((name) => {
+    const clean = String(name || '').trim().toLowerCase();
+    if (clean && clean.includes(' ')) {
+      knownMultiWordAuthors.add(clean);
+    }
+  });
+}
+
 /**
  * Внутренний парсер компонентов запроса.
  */
@@ -183,25 +206,57 @@ function parseSearchQueryInternal(rawQuery) {
     .slice(0, 300);
 
   const exactPhrases = [];
-  const authorTerms = [];
+  const authorTermsWithIndex = [];
   const hashKeys = [];
   const textWords = [];
 
-  // 1. Извлекаем фразы в кавычках: "точная фраза"
+  // 1. Извлекаем авторов в кавычках или скобках: @"Имя Фамилия", @'Имя Фамилия', @[Имя Фамилия]
+  working = working.replace(/(?:^|\s)@(?:"([^"\n]{1,64})"|'([^'\n]{1,64})'|\[([^\]\n]{1,64})\])/gu, (match, q1, q2, b, offset) => {
+    const name = (q1 || q2 || b || '').trim().toLowerCase();
+    if (name) authorTermsWithIndex.push({ name, offset });
+    return ' ';
+  });
+
+  // 2. Извлекаем фразы в кавычках: "точная фраза"
   working = working.replace(/"([^"\n]+)"/g, (match, phrase) => {
     const trimmed = phrase.trim().toLowerCase();
     if (trimmed) exactPhrases.push(trimmed);
     return ' ';
   });
 
-  // 2. Извлекаем авторов: @username или @[Имя с пробелами]
-  working = working.replace(/(?:^|\s)@(?:\[([^\]\n]{1,64})\]|([\p{L}\p{N}_.-]{1,64}))/gu, (match, bracketed, simple) => {
-    const name = (bracketed || simple || '').trim().toLowerCase();
-    if (name) authorTerms.push(name);
-    return ' ';
+  // 3. Извлекаем авторов без кавычек: @username или @Имя_Фамилия или @Имя Фамилия
+  working = working.replace(/(?:^|\s)@([\p{L}\p{N}_.-]+(?:\s+[\p{L}\p{N}_.-]+)*)/gu, (match, nameGroup, offset) => {
+    const words = nameGroup.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return ' ';
+
+    // Проверяем, образуют ли первые 2 или 3 слова известного автора с пробелами
+    if (words.length >= 2) {
+      const twoWords = `${words[0]} ${words[1]}`.toLowerCase();
+      const threeWords = words.length >= 3 ? `${words[0]} ${words[1]} ${words[2]}`.toLowerCase() : '';
+      if (threeWords && knownMultiWordAuthors.has(threeWords)) {
+        authorTermsWithIndex.push({ name: threeWords, offset });
+        return ' ' + words.slice(3).join(' ') + ' ';
+      }
+      if (knownMultiWordAuthors.has(twoWords)) {
+        authorTermsWithIndex.push({ name: twoWords, offset });
+        return ' ' + words.slice(2).join(' ') + ' ';
+      }
+      // Если весь запрос после @ состоит только из 2 слов без хэштегов (например "@Corepse Kodai")
+      if (words.length === 2 && !raw.includes('#')) {
+        authorTermsWithIndex.push({ name: twoWords, offset });
+        return ' ';
+      }
+    }
+
+    // Одиночное имя (@Качуа, @Corepse, @Sargos)
+    authorTermsWithIndex.push({ name: words[0].toLowerCase(), offset });
+    return ' ' + words.slice(1).join(' ') + ' ';
   });
 
-  // 3. Извлекаем хэштеги: #тег
+  authorTermsWithIndex.sort((a, b) => a.offset - b.offset);
+  const authorTerms = authorTermsWithIndex.map((a) => a.name);
+
+  // 4. Извлекаем хэштеги: #тег
   working = working.replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (match, tag) => {
     const key = tag.trim().toLowerCase();
     if (key) hashKeys.push(key);
@@ -419,5 +474,6 @@ module.exports = {
   matchesAllTerms,
   scoreArticleText,
   textContainsAuthorMention,
+  registerAuthorNames,
   RUSSIAN_STOP_WORDS
 };

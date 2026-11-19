@@ -530,6 +530,9 @@
 }
 
 .antropedia-card-snippet {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
   margin: 0;
   font-size: 12.5px;
   color: var(--text-normal);
@@ -542,17 +545,23 @@
   overflow-y: auto;
   overflow-x: hidden;
   word-break: break-word;
+  overscroll-behavior: contain;
+  cursor: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.2)) transparent;
+  scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25)) transparent;
 }
 
 .antropedia-card-snippet::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .antropedia-card-snippet::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25));
   border-radius: 4px;
+}
+
+.antropedia-card-snippet::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.45));
 }
 
 .antropedia-card-snippet::-webkit-scrollbar-track {

@@ -10362,6 +10362,9 @@ a.site-profile-media-row:hover {
 
 .public-wiki-card .wiki-card-snippet,
 .antropedia-card-snippet {
+    position: relative;
+    z-index: 2;
+    pointer-events: auto;
     font-size: 12.5px;
     color: var(--text-normal);
     line-height: 1.5;
@@ -10375,19 +10378,26 @@ a.site-profile-media-row:hover {
     word-break: break-word;
     margin: 0;
     flex: 1;
+    overscroll-behavior: contain;
+    cursor: auto;
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.2)) transparent;
+    scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25)) transparent;
 }
 
 .public-wiki-card .wiki-card-snippet::-webkit-scrollbar,
 .antropedia-card-snippet::-webkit-scrollbar {
-    width: 4px;
+    width: 6px;
 }
 
 .public-wiki-card .wiki-card-snippet::-webkit-scrollbar-thumb,
 .antropedia-card-snippet::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.25));
     border-radius: 4px;
+}
+
+.public-wiki-card .wiki-card-snippet::-webkit-scrollbar-thumb:hover,
+.antropedia-card-snippet::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.45));
 }
 
 .public-wiki-card .wiki-card-snippet::-webkit-scrollbar-track,
