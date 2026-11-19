@@ -50,6 +50,7 @@ const mapsRoutes = require('./routes/maps.routes');
 const feedbackRoutes = require('./routes/feedback.routes');
 const galleryRoutes = require('./routes/gallery.routes');
 const radioRoutes = require('./routes/radio.routes');
+const globalSearchRoutes = require('./routes/global-search.routes');
 const radioStore = require('./services/radio-store');
 const mapTiler = require('./services/map-tiler');
 const avatars = require('./services/avatars');
@@ -164,6 +165,7 @@ app.use('/api', mapsRoutes);
 app.use('/api', feedbackRoutes);
 app.use('/api', galleryRoutes);
 app.use('/api', radioRoutes);
+app.use('/api', globalSearchRoutes);
 
 // Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между

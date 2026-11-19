@@ -1167,11 +1167,20 @@ window.initGlobalSearch = function() {
   if (!searchInput || searchInput._bound) return;
   searchInput._bound = true;
 
+  searchInput.addEventListener('focus', function() {
+    if (window.QuickSwitcher && typeof window.QuickSwitcher.open === 'function') {
+      searchInput.blur();
+      window.QuickSwitcher.open(searchInput.value || '');
+    }
+  });
+
   searchInput.addEventListener('keydown', function(event) {
     if (event.key === 'Enter') {
       event.preventDefault();
       const query = (searchInput.value || '').trim();
-      if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
+      if (window.QuickSwitcher && typeof window.QuickSwitcher.open === 'function') {
+        window.QuickSwitcher.open(query);
+      } else if (window.spaRouter && typeof window.spaRouter.navigateTo === 'function') {
         window.spaRouter.navigateTo('/admin-panel/antropedia?q=' + encodeURIComponent(query));
       }
     }

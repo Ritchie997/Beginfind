@@ -17,7 +17,7 @@
         <a href="/radio" class="site-nav-link" data-page="radio">Радио</a>
       </nav>
       <div class="site-header-actions">
-        <div class="site-search"><i class="fas fa-search" aria-hidden="true"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту..." aria-label="Поиск по сайту"></div>
+        <div class="site-search"><i class="fas fa-search" aria-hidden="true"></i><input id="siteSearchInput" type="text" placeholder="Поиск по сайту (Ctrl+K)..." aria-label="Поиск по сайту"></div>
         <a href="/admin-panel" class="site-admin-toggle" title="Переключиться в админ-панель"><i class="fas fa-shield-halved"></i><span>Админ-панель</span></a>
         <div class="notif-bell" id="notif-bell">
           <button type="button" class="notif-bell-btn" title="Уведомления"><i class="far fa-bell"></i><span class="notif-bell-count" hidden>0</span></button>
@@ -329,10 +329,22 @@
     bindSearch: function () {
       var input = this.searchInput;
       if (!input) return;
+
+      input.addEventListener('focus', function () {
+        if (window.QuickSwitcher && typeof window.QuickSwitcher.open === 'function') {
+          input.blur();
+          window.QuickSwitcher.open(input.value.trim());
+        }
+      });
+
       input.addEventListener('keydown', function (event) {
         if (event.key !== 'Enter') return;
         event.preventDefault();
         var query = input.value.trim();
+        if (window.QuickSwitcher && typeof window.QuickSwitcher.open === 'function') {
+          window.QuickSwitcher.open(query);
+          return;
+        }
         var page = document.body.dataset.page;
         // Если на странице галереи, стикеров или антропедии — пусть локальный поиск подхватит
         if (page === 'gallery' || page === 'antropedia' || page === 'stickers') return;
