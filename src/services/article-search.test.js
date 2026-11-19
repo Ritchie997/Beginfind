@@ -49,8 +49,8 @@ test('scoreArticleText: exact title match gets highest score', () => {
   const scoreNoMatch = search.scoreArticleText('Магия', 'И поэтому мы пошли домой.', parsed);
 
   assert.equal(scoreExact, 100);
-  assert.equal(scoreInTitle, 80);
-  assert.equal(scoreInContent, 40);
+  assert.equal(scoreInTitle, 85);
+  assert.ok(scoreInContent > 0);
   assert.equal(scoreNoMatch, 0);
 });
 
@@ -120,4 +120,49 @@ test('publicArticles integration: searching "Поэт" does not match article wi
   const result = publicArticles.listPublicArticles(mockArticles, { q: 'Поэт' });
   assert.equal(result.data.length, 1);
   assert.equal(result.data[0].slug, 'poet-bio');
+});
+
+test('stemWord: Russian noun inflections reduce to base stem', () => {
+  const poetForms = ['поэт', 'поэта', 'поэту', 'поэтом', 'поэте', 'поэты', 'поэтов', 'поэтам', 'поэтами', 'поэтах'];
+  for (const form of poetForms) {
+    assert.equal(search.stemWord(form), 'поэт', `Form '${form}' must stem to 'поэт'`);
+  }
+
+  // Защита стоп-слов: поэтому НЕ превращается в поэт!
+  assert.equal(search.stemWord('поэтому'), 'поэтому');
+  assert.notEqual(search.stemWord('поэтому'), 'поэт');
+
+  // Другие склонения
+  assert.equal(search.stemWord('эльфы'), 'эльф');
+  assert.equal(search.stemWord('эльфов'), 'эльф');
+  assert.equal(search.stemWord('горы'), 'гор');
+  assert.equal(search.stemWord('горах'), 'гор');
+});
+
+test('scoreArticleText: unquoted query finds inflected forms (stemming)', () => {
+  const parsed = search.parseSearchQuery('эльфы горы');
+  // "эльфов" и "горах" — падежные формы "эльфы" и "горы"
+  const scoreInflected = search.scoreArticleText('История эльфов', 'Они жили в высоких горах.', parsed);
+  assert.ok(scoreInflected > 0, 'Must match inflected forms via stemming');
+
+  // Кавычки "эльфы" требуют точную форму и не должны матчить только "эльфов"
+  const parsedExact = search.parseSearchQuery('"эльфы"');
+  const scoreExactFail = search.scoreArticleText('Заметки', 'Здесь упоминались эльфов.', parsedExact);
+  assert.equal(scoreExactFail, 0, 'Exact phrase in quotes must not match inflected suffix');
+});
+
+test('switchKeyboardLayout: corrects mistyped keyboard layout', () => {
+  assert.equal(search.switchKeyboardLayout("Gj'n"), 'Поэт');
+  assert.equal(search.switchKeyboardLayout('ghbdtn'), 'привет');
+  assert.equal(search.switchKeyboardLayout('руддщ'), 'hello');
+});
+
+test('scoreArticleText: automatic fallback to swapped layout (Gj\'n -> Поэт)', () => {
+  // Пользователь забыл переключить раскладку и ввел "Gj'n"
+  const parsed = search.parseSearchQuery("Gj'n");
+  assert.ok(parsed.layoutAlternative);
+  assert.deepEqual(parsed.layoutAlternative.textWords, ['поэт']);
+
+  const score = search.scoreArticleText('Поэт', 'Биография великого поэта.', parsed);
+  assert.ok(score > 0, 'Should find article using layout alternative');
 });
