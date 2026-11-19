@@ -3952,10 +3952,10 @@
       this.mods.alt = e.altKey;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (mod && key === 's') { e.preventDefault(); this.save(); return; }
+      if (mod && (e.code === 'KeyS' || key === 's' || key === 'ы')) { e.preventDefault(); this.save(); return; }
       if (this.isTyping()) return;
-      if (mod && key === 'z' && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
-      if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
+      if (mod && (e.code === 'KeyZ' || key === 'z' || key === 'я') && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
+      if (mod && (e.code === 'KeyY' || key === 'y' || key === 'н' || ((e.code === 'KeyZ' || key === 'z' || key === 'я') && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
       if (e.altKey) e.preventDefault(); // Alt в браузере уводит фокус в меню
       if (mod) return;
       if (e.key === ' ') {

@@ -1467,10 +1467,17 @@
         }
         return;
       }
-      if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); this.applyInlineFormat('**'); }
-      else if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); this.applyInlineFormat('_'); }
-      else if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); this.applyInlineFormat('++'); }
-      else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); this.insertLinkInline(); }
+      if (mod && (e.code === 'KeyB' || e.key.toLowerCase() === 'b' || e.key.toLowerCase() === 'и')) { e.preventDefault(); this.applyInlineFormat('**'); }
+      else if (mod && (e.code === 'KeyI' || e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'ш')) { e.preventDefault(); this.applyInlineFormat('_'); }
+      else if (mod && (e.code === 'KeyU' || e.key.toLowerCase() === 'u' || e.key.toLowerCase() === 'г')) { e.preventDefault(); this.applyInlineFormat('++'); }
+      else if (mod && (e.code === 'KeyK' || e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'л')) {
+        // Если выделен текст — форматируем как ссылку [text](url)
+        if (typeof ta.selectionStart === 'number' && ta.selectionStart !== ta.selectionEnd) {
+          e.preventDefault();
+          this.insertLinkInline();
+        }
+        // Если текст не выделен — даём событию пройти дальше, чтобы сработал глобальный Quick Switcher
+      }
     }
 
     splitTextBlockAtCursor(ta) {
@@ -4251,38 +4258,70 @@
       }
     }
 
+    getBlockById(id) {
+      if (!this.doc || !this.doc.blocks || !id) return null;
+      let found = null;
+      walkBlocks(this.doc.blocks, (b) => { if (b.id === id) found = b; });
+      return found;
+    }
+
     setupHotkeys() {
       if (this._hotkeysBound) return;
       this._hotkeysBound = true;
       document.addEventListener('keydown', (e) => {
         if (!this.container || !document.body.contains(this.container)) return;
         const mod = e.ctrlKey || e.metaKey;
-        if (mod && e.key.toLowerCase() === 's' && this.container.contains(document.activeElement)) {
-          e.preventDefault();
-          document.getElementById('saveArticleBtn')?.click();
-        }
-
-        // Delete/Backspace — удалить выделенные блоки, Esc — снять выделение.
-        // Только вне полей ввода: там эти клавиши редактируют текст.
-        if (!this._selectedIds.size || e.defaultPrevented || this._drag) return;
         const ae = document.activeElement;
         const typing = ae && (ae.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
 
-        if (mod && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ') && !typing) {
+        // Ctrl+S / Cmd+S — сохранить статью (работает в любой раскладке)
+        if (mod && (e.code === 'KeyS' || e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'ы') && this.container.contains(ae)) {
+          e.preventDefault();
+          document.getElementById('saveArticleBtn')?.click();
+          return;
+        }
+
+        if (e.defaultPrevented || this._drag) return;
+
+        // Отмена / повтор изменений структуры блоков вне текстовых полей ввода
+        if (mod && (e.code === 'KeyZ' || e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'я') && !typing) {
           e.preventDefault();
           if (e.shiftKey) this.redo();
           else this.undo();
           return;
         }
-        if (mod && (e.key.toLowerCase() === 'y' || e.code === 'KeyY') && !typing) {
+        if (mod && (e.code === 'KeyY' || e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') && !typing) {
           e.preventDefault();
           this.redo();
           return;
         }
 
+        // Копирование активного или выбранного блока (Ctrl+C / Cmd+C) вне полей ввода
+        if (mod && (e.code === 'KeyC' || e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'с') && !typing) {
+          const blockToCopy = (this._active && this._active.block) ||
+            (this._selectedIds && this._selectedIds.size === 1 ? this.getBlockById(Array.from(this._selectedIds)[0]) : null);
+          if (blockToCopy) {
+            e.preventDefault();
+            this.copyBlock(blockToCopy);
+            return;
+          }
+        }
+
+        // Вставка скопированного блока ниже активного (Ctrl+V / Cmd+V) вне полей ввода
+        if (mod && (e.code === 'KeyV' || e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'м') && !typing) {
+          if (readBlockClipboard()) {
+            e.preventDefault();
+            this.pasteBlockAfterActive();
+            return;
+          }
+        }
+
+        // Escape — снять выделение с блоков
         if (e.key === 'Escape') {
-          this.clearBlockSelection();
-        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) {
+          if (this._selectedIds && this._selectedIds.size) {
+            this.clearBlockSelection();
+          }
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && this._selectedIds && this._selectedIds.size) {
           e.preventDefault();
           this.deleteSelectedBlocks();
         }
