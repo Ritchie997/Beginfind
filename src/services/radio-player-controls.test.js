@@ -202,3 +202,37 @@ test('radio live sync: prevention of infinite fetch loop and net::ERR_INSUFFICIE
   // 4. Server returns 404 for deleted/unknown station live state
   assert.ok(radioRoutesJs.includes("error.message === 'Станция не найдена'") && radioRoutesJs.includes('status(404)'), 'radio.routes.js must return 404 when station is not found');
 });
+
+test('radio duration: auto-detection on upload, database auto-healing, and dynamic client/player sync', () => {
+  const audioConverterJs = fs.readFileSync(path.resolve(__dirname, '../../src/services/audio-converter.js'), 'utf8');
+  const uploadsRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/uploads.routes.js'), 'utf8');
+  const radioStoreJs = fs.readFileSync(path.resolve(__dirname, '../../src/services/radio-store.js'), 'utf8');
+  const radioRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/radio.routes.js'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+
+  // 1. Audio converter probeAudioDuration helper
+  assert.ok(audioConverterJs.includes('function probeAudioDuration('), 'audio-converter must define probeAudioDuration');
+  assert.ok(audioConverterJs.includes('probeAudioDuration,'), 'audio-converter must export probeAudioDuration');
+
+  // 2. Upload route returns detected duration
+  assert.ok(uploadsRoutesJs.includes('finalDuration') && uploadsRoutesJs.includes('duration: finalDuration'), 'uploads route must return probed audio duration');
+
+  // 3. Radio store updates and auto-heals 00:00 duration
+  assert.ok(radioStoreJs.includes('async function updateTrackDuration('), 'radio-store must define updateTrackDuration');
+  assert.ok(radioStoreJs.includes('zeroDurationTracks'), 'ensureTracksConvertedToMp3 must query zero duration tracks');
+  assert.ok(radioStoreJs.includes('probeAudioDuration(filePath)'), 'ensureTracksConvertedToMp3 must probe tracks with duration <= 0');
+
+  // 4. Radio route endpoint
+  assert.ok(radioRoutesJs.includes('/radio/tracks/:id/duration'), 'radio.routes.js must provide PATCH /radio/tracks/:id/duration');
+
+  // 5. Radio client handles Infinity, sets data-track-duration-id, and falls back to server duration
+  assert.ok(radioClientJs.includes('data-track-duration-id'), 'radio-client must tag duration elements with data-track-duration-id');
+  assert.ok(radioClientJs.includes('uploadRes.duration'), 'radio-client upload handler must fallback to server uploadRes.duration');
+  assert.ok(radioClientJs.includes('audio.currentTime = 1e101'), 'getAudioDuration must handle Infinity duration in Chromium');
+
+  // 6. Global radio player heals duration on playback and syncs DOM and server
+  assert.ok(globalPlayerJs.includes('handleDetectedDuration'), 'radio-global-player must implement handleDetectedDuration');
+  assert.ok(globalPlayerJs.includes('/api/radio/tracks/'), 'handleDetectedDuration must patch duration to server');
+});
+

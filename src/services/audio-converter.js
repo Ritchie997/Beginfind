@@ -13,6 +13,48 @@ function isFfmpegAvailable() {
 }
 
 /**
+ * Извлекает длительность аудиофайла в секундах с помощью ffprobe или ffmpeg.
+ * Возвращает округленное целое число секунд (> 0) или 0 в случае неудачи.
+ * 
+ * @param {string} filePath - Абсолютный путь к файлу
+ * @returns {number}
+ */
+function probeAudioDuration(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return 0;
+
+  // 1. Попытка через ffprobe (быстрое чтение контейнера метаданных)
+  try {
+    const res = spawnSync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ], { timeout: 4000 });
+    if (res.status === 0) {
+      const val = parseFloat(res.stdout.toString().trim());
+      if (Number.isFinite(val) && val > 0) {
+        return Math.round(val);
+      }
+    }
+  } catch (_) {}
+
+  // 2. Fallback через ffmpeg -i (парсинг строки Duration в stderr)
+  try {
+    const res = spawnSync('ffmpeg', ['-i', filePath], { timeout: 4000 });
+    const match = res.stderr.toString().match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    if (match) {
+      const h = Number(match[1]) || 0;
+      const m = Number(match[2]) || 0;
+      const s = parseFloat(match[3]) || 0;
+      const total = h * 3600 + m * 60 + s;
+      if (total > 0) return Math.round(total);
+    }
+  } catch (_) {}
+
+  return 0;
+}
+
+/**
  * Конвертирует аудиофайл в MP3 с использованием ffmpeg.
  * Если файл уже MP3 (по расширению и формату), конвертация пропускается.
  * Исходный не-MP3 файл удаляется после успешного кодирования.
@@ -38,7 +80,8 @@ async function convertToMp3(inputPath) {
       outputPath: inputPath,
       filename: path.basename(inputPath),
       size: stat.size,
-      format: 'mp3'
+      format: 'mp3',
+      duration: probeAudioDuration(inputPath)
     };
   }
 
@@ -50,6 +93,7 @@ async function convertToMp3(inputPath) {
       filename: path.basename(inputPath),
       size: stat.size,
       format: ext.replace('.', ''),
+      duration: probeAudioDuration(inputPath),
       ffmpegMissing: true
     };
   }
@@ -112,7 +156,8 @@ async function convertToMp3(inputPath) {
             outputPath,
             filename: outputFilename,
             size: newStat.size,
-            format: 'mp3'
+            format: 'mp3',
+            duration: probeAudioDuration(outputPath)
           });
         } catch (e) {
           resolve({
@@ -120,7 +165,8 @@ async function convertToMp3(inputPath) {
             outputPath: inputPath,
             filename: path.basename(inputPath),
             size: stat.size,
-            format: ext.replace('.', '')
+            format: ext.replace('.', ''),
+            duration: probeAudioDuration(inputPath)
           });
         }
       } else {
@@ -130,7 +176,8 @@ async function convertToMp3(inputPath) {
           outputPath: inputPath,
           filename: path.basename(inputPath),
           size: stat.size,
-          format: ext.replace('.', '')
+          format: ext.replace('.', ''),
+          duration: probeAudioDuration(inputPath)
         });
       }
     });
@@ -181,5 +228,6 @@ function decodeOriginalName(str) {
 module.exports = {
   convertToMp3,
   isFfmpegAvailable,
+  probeAudioDuration,
   decodeOriginalName
 };

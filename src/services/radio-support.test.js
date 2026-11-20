@@ -361,3 +361,28 @@ test('radio-store: updating timeline replaces old overlapping slots without dupl
 
   await radioStore.deleteStation(station.id, 903, true);
 });
+
+test('radio-store: track duration auto-probing and updateTrackDuration', async () => {
+  const zeroTrack = await radioStore.createTrack({
+    userId: 999,
+    authorName: 'ZeroTester',
+    title: 'Zero Duration Song',
+    audioUrl: '/uploads/nonexistent-song.mp3',
+    duration: 0,
+    size: 1000,
+    format: 'mp3',
+    type: 'track'
+  });
+
+  assert.equal(zeroTrack.duration, 0, 'Initially duration is 0');
+
+  // Update track duration manually via updateTrackDuration
+  const updated = await radioStore.updateTrackDuration(zeroTrack.id, 215);
+  assert.equal(updated.duration, 215, 'Track duration should be updated to 215s');
+
+  const fetched = await radioStore.getTrackById(zeroTrack.id);
+  assert.equal(fetched.duration, 215, 'Fetched track should reflect updated duration');
+
+  await radioStore.deleteTrack(zeroTrack.id, 999, false);
+});
+

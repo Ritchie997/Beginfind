@@ -57,6 +57,24 @@ router.get('/radio/tracks/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/radio/tracks/:id/duration — обновление/уточнение длительности трека при воспроизведении
+router.patch('/radio/tracks/:id/duration', async (req, res) => {
+  try {
+    const { duration } = req.body;
+    const durSec = Math.round(Number(duration));
+    if (!Number.isFinite(durSec) || durSec <= 0) {
+      return res.status(400).json({ error: 'Некорректная длительность' });
+    }
+    const track = await radioStore.updateTrackDuration(req.params.id, durSec);
+    if (!track) {
+      return res.status(404).json({ error: 'Трек не найден' });
+    }
+    res.json({ success: true, track });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/radio/tracks — публикация аудиозаписи
 router.post('/radio/tracks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {

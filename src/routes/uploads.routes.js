@@ -8,7 +8,7 @@ const auth = require('../middleware/auth');
 const { uploadImage, uploadAudio } = require('../uploads/multer-config');
 const { UPLOADS_DIR } = require('../config/paths');
 const { readSettings } = require('../services/system-settings');
-const { convertToMp3, decodeOriginalName } = require('../services/audio-converter');
+const { convertToMp3, decodeOriginalName, probeAudioDuration } = require('../services/audio-converter');
 
 const router = express.Router();
 
@@ -150,6 +150,8 @@ router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadA
     const originalNameWithoutExt = path.basename(cleanOriginalName, path.extname(cleanOriginalName));
     const title = bodyTitle || originalNameWithoutExt;
 
+    const finalDuration = conv.duration || probeAudioDuration(path.join(UPLOADS_DIR, conv.filename)) || 0;
+
     res.setHeader('Content-Type', 'application/json');
     res.status(201).json({
       success: true,
@@ -158,7 +160,8 @@ router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadA
       originalname: cleanOriginalName,
       title: title,
       size: conv.size,
-      format: conv.format
+      format: conv.format,
+      duration: finalDuration
     });
   } catch (error) {
     console.error('Upload audio error:', error);

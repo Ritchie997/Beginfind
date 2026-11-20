@@ -5,6 +5,36 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-20 — исправление отображения длительности треков (00:00) в Радио: автоопределение при загрузке, восстановление в БД и динамическая синхронизация
+
+- **Выявление причин отображения длительности 00:00:**
+  1. В браузерах на базе Chromium для локальных `Blob` URL некоторых аудиокодеков/форматов (WebM, VBR MP3 без заголовка TOC, WAV, OGG) свойство `audio.duration` на событии `loadedmetadata` часто возвращает `Infinity` или `NaN`, из-за чего клиентский расчёт при загрузке трека сохранял `duration = 0`.
+  2. Маршрут `/api/upload-audio` (`src/routes/uploads.routes.js`) и конвертер `convertToMp3` не замеряли и не возвращали точную длительность файла на диске при сохранении.
+  3. В базе данных `radio_tracks` старые треки оставались с `duration = 0` или `NULL`, отображаясь в карточках и на странице трека как `00:00`.
+- **Серверное зондирование длительности (`src/services/audio-converter.js`, `src/routes/uploads.routes.js`, `src/services/radio-store.js`):**
+  - В [src/services/audio-converter.js](file:///c:/Warning/Project/Beginfind/src/services/audio-converter.js) добавлена и экспортирована функция `probeAudioDuration(filePath)`:
+    - Считывает точную длительность через `ffprobe` (метаданные контейнера за 10–20 мс).
+    - Имеет надёжный резервный механизм через регулярное выражение `Duration: (\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)` из вывода `ffmpeg -i`.
+  - В [src/routes/uploads.routes.js](file:///c:/Warning/Project/Beginfind/src/routes/uploads.routes.js) эндпоинт `/upload-audio` теперь возвращает `duration: finalDuration` (секунды).
+  - В [src/services/radio-store.js](file:///c:/Warning/Project/Beginfind/src/services/radio-store.js):
+    - `createTrack` автоматически вызывает `probeAudioDuration`, если переданная клиентом длительность `<= 0` и файл уже лежит в `uploads/`.
+    - `getTrackById` автоматически дозаполняет и сохраняет `duration`, если у трека длительность `<= 0` и файл присутствует на диске.
+    - В функцию фоновой конвертации и сканирования `ensureTracksConvertedToMp3()` добавлено автоисцеление всех существующих записей в таблице `radio_tracks` с `duration <= 0 OR duration IS NULL` и обновление соответствующих слотов `radio_timeline_slots`.
+    - Добавлена функция `updateTrackDuration(id, duration)` для сохранения уточнённой длительности.
+- **Новый API-эндпоинт и клиентская синхронизация (`src/routes/radio.routes.js`, `public/site/radio-client.js`, `public/radio-global-player.js`):**
+  - В [src/routes/radio.routes.js](file:///c:/Warning/Project/Beginfind/src/routes/radio.routes.js) добавлен маршрут `PATCH /api/radio/tracks/:id/duration`.
+  - В [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js):
+    - Функция `getAudioDuration(fileOrUrl)` доработана: при обнаружении `Infinity` выполняет перемотку `audio.currentTime = 1e101`, заставляющую браузер вычислить реальную длину потока, и дополнительно слушает события `durationchange`, `canplay` и `loadeddata`.
+    - При отправке формы добавления трека используется резервная серверная длительность из ответа загрузки: `dur = (await durPromise) || uploadRes.duration || 0;`.
+    - Во всех карточках треков и на странице отдельного трека добавлены селекторы `[data-track-duration-id="${t.id}"]`.
+  - В [public/radio-global-player.js](file:///c:/Warning/Project/Beginfind/public/radio-global-player.js):
+    - Добавлен обработчик `handleDetectedDuration()` на события `loadedmetadata` и `durationchange`. Как только трек с нулевой длиной начинает играть в браузере, его настоящая длительность мгновенно обновляется во всех карточках на странице и отправляется через `PATCH /api/radio/tracks/:id/duration` в базу данных.
+- **Тестирование:**
+  - В [src/services/radio-support.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-support.test.js) добавлен тест `radio-store: track duration auto-probing and updateTrackDuration`.
+  - В [src/services/radio-player-controls.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-player-controls.test.js) добавлен тест `radio duration: auto-detection on upload, database auto-healing, and dynamic client/player sync`.
+  - Все 121 тест проекта успешно пройдены (`npm test`).
+
+
 ## 2026-11-20 — ликвидация лавинообразного бесконечного цикла запросов эфира (net::ERR_INSUFFICIENT_RESOURCES) и MEDIA_ELEMENT_ERROR
 
 - **Устранение рекурсивного DDoS-шторма запросов `/api/radio/stations/:id/live` (`public/radio-global-player.js`, `src/routes/radio.routes.js`):**

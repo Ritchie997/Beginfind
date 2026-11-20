@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { radioDb } = require('../db/connections');
 const { UPLOADS_DIR } = require('../config/paths');
-const { convertToMp3, decodeOriginalName } = require('./audio-converter');
+const { convertToMp3, decodeOriginalName, probeAudioDuration } = require('./audio-converter');
 const { getEffectiveServerTime } = require('./system-settings');
 
 function getEffectiveNow() {
@@ -86,6 +86,24 @@ async function ensureTracksConvertedToMp3() {
         await run('UPDATE radio_tracks SET format = ? WHERE id = ?', ['mp3', track.id]);
       }
     }
+
+    // Автоматическое восстановление длительности треков (00:00) из файлов в uploads/
+    const zeroDurationTracks = await all(
+      "SELECT id, audio_url FROM radio_tracks WHERE (duration <= 0 OR duration IS NULL) AND audio_url LIKE '/uploads/%'"
+    );
+    for (const track of zeroDurationTracks) {
+      if (track.audio_url) {
+        const fileName = path.basename(track.audio_url);
+        const filePath = path.join(UPLOADS_DIR, fileName);
+        if (fs.existsSync(filePath)) {
+          const probed = probeAudioDuration(filePath);
+          if (probed > 0) {
+            await run('UPDATE radio_tracks SET duration = ? WHERE id = ?', [probed, track.id]);
+            await run('UPDATE radio_timeline_slots SET duration = ? WHERE track_id = ? AND (duration <= 0 OR duration IS NULL)', [probed, track.id]);
+          }
+        }
+      }
+    }
   } catch (err) {
     console.warn('[radio-store] Error auto-converting existing tracks to mp3:', err.message);
   }
@@ -138,7 +156,20 @@ async function listTracks({ type = null, search = '', page = 1, limit = 50, user
 }
 
 async function getTrackById(id) {
-  return get('SELECT * FROM radio_tracks WHERE id = ?', [id]);
+  const track = await get('SELECT * FROM radio_tracks WHERE id = ?', [id]);
+  if (track && (Number(track.duration) <= 0 || !track.duration) && track.audio_url && track.audio_url.startsWith('/uploads/')) {
+    const fileName = path.basename(track.audio_url);
+    const filePath = path.join(UPLOADS_DIR, fileName);
+    if (fs.existsSync(filePath)) {
+      const probed = probeAudioDuration(filePath);
+      if (probed > 0) {
+        track.duration = probed;
+        await run('UPDATE radio_tracks SET duration = ? WHERE id = ?', [probed, track.id]);
+        await run('UPDATE radio_timeline_slots SET duration = ? WHERE track_id = ? AND (duration <= 0 OR duration IS NULL)', [probed, track.id]);
+      }
+    }
+  }
+  return track;
 }
 
 async function createTrack({ userId, authorName, title, audioUrl, duration = 0, size = 0, format = 'mp3', type = 'track', coverUrl = null }) {
@@ -147,6 +178,7 @@ async function createTrack({ userId, authorName, title, audioUrl, duration = 0, 
   let cleanFormat = 'mp3';
   let cleanUrl = audioUrl;
   let cleanSize = Number(size) || 0;
+  let cleanDuration = Math.round(Number(duration)) || 0;
 
   // Автоматическая конвертация любого загруженного аудиофайла в MP3 при публикации
   if (cleanUrl && cleanUrl.startsWith('/uploads/')) {
@@ -157,16 +189,36 @@ async function createTrack({ userId, authorName, title, audioUrl, duration = 0, 
       cleanUrl = `/uploads/${conv.filename}`;
       cleanFormat = conv.format;
       cleanSize = conv.size;
+      if (cleanDuration <= 0 && conv.duration > 0) {
+        cleanDuration = conv.duration;
+      }
+    }
+  }
+
+  // Если длительность всё ещё 0, пробуем измерить локальный файл через ffprobe/ffmpeg
+  if (cleanDuration <= 0 && cleanUrl && cleanUrl.startsWith('/uploads/')) {
+    const fileName = path.basename(cleanUrl);
+    const filePath = path.join(UPLOADS_DIR, fileName);
+    if (fs.existsSync(filePath)) {
+      cleanDuration = probeAudioDuration(filePath) || 0;
     }
   }
 
   const result = await run(
     `INSERT INTO radio_tracks (user_id, author_name, title, audio_url, duration, size, format, type, cover_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [userId, authorName, cleanTitle, cleanUrl, Number(duration) || 0, cleanSize, cleanFormat, cleanType, coverUrl || null]
+    [userId, authorName, cleanTitle, cleanUrl, cleanDuration, cleanSize, cleanFormat, cleanType, coverUrl || null]
   );
 
   return getTrackById(result.lastID);
+}
+
+async function updateTrackDuration(id, duration) {
+  const durSec = Math.round(Number(duration));
+  if (!Number.isFinite(durSec) || durSec <= 0) return null;
+  await run('UPDATE radio_tracks SET duration = ? WHERE id = ?', [durSec, id]);
+  await run('UPDATE radio_timeline_slots SET duration = ? WHERE track_id = ? AND (duration <= 0 OR duration IS NULL)', [durSec, id]);
+  return getTrackById(id);
 }
 
 async function deleteTrack(id, actingUserId, isRootOrAdmin = false) {
@@ -855,8 +907,10 @@ module.exports = {
   listTracks,
   getTrackById,
   createTrack,
+  updateTrackDuration,
   deleteTrack,
   ensureTracksConvertedToMp3,
+  probeAudioDuration,
   getUserFavoriteTrackIds,
   getUserFavorites,
   addFavorite,

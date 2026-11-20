@@ -309,6 +309,11 @@ function initializeRadioCleanup() {
     }
   });
   console.log('[Radio Cleanup] Система ротации ленты времени радио (32ч) инициализирована');
+
+  // Сканирование медиатеки: автоконвертация и восстановление хронометража треков (00:00)
+  radioStore.ensureTracksConvertedToMp3().catch((error) => {
+    console.warn('[Radio] Начальное сканирование длительности треков:', error.message);
+  });
 }
 
 // Сущность "Категории" удалена — вычищаем устаревшее поле categories из

@@ -385,25 +385,70 @@
     return new Promise((resolve) => {
       const audio = new Audio();
       let done = false;
-      const finish = () => {
+
+      const finish = (value) => {
         if (done) return;
         done = true;
-        const dur = (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) ? Math.round(audio.duration) : 0;
+        cleanup();
+        resolve(value || 0);
+      };
+
+      const cleanup = () => {
+        audio.removeEventListener('loadedmetadata', onMetadata);
+        audio.removeEventListener('durationchange', onDurationChange);
+        audio.removeEventListener('canplay', onCanPlay);
+        audio.removeEventListener('error', onError);
         if (isObjectUrl) {
           try { URL.revokeObjectURL(url); } catch (_) {}
         }
-        audio.src = '';
-        resolve(dur);
+        audio.removeAttribute('src');
+        try { audio.load(); } catch (_) {}
       };
 
-      audio.addEventListener('loadedmetadata', finish, { once: true });
-      audio.addEventListener('error', finish, { once: true });
-      setTimeout(finish, 3000);
+      const checkDuration = () => {
+        const d = audio.duration;
+        if (Number.isFinite(d) && d > 0) {
+          finish(Math.round(d));
+          return true;
+        }
+        return false;
+      };
+
+      const onMetadata = () => {
+        if (checkDuration()) return;
+        // Если браузер вернул Infinity (классический баг WebM/VBR MP3 в Chromium),
+        // смещаем currentTime к концу для форсирования расчета хронометража
+        if (audio.duration === Infinity) {
+          try {
+            audio.currentTime = 1e101;
+            audio.ontimeupdate = () => {
+              audio.ontimeupdate = null;
+              audio.currentTime = 0;
+              checkDuration();
+            };
+          } catch (_) {}
+        }
+      };
+
+      const onDurationChange = () => checkDuration();
+      const onCanPlay = () => checkDuration();
+      const onError = () => finish(0);
+
+      audio.addEventListener('loadedmetadata', onMetadata);
+      audio.addEventListener('durationchange', onDurationChange);
+      audio.addEventListener('canplay', onCanPlay);
+      audio.addEventListener('error', onError);
+
+      setTimeout(() => {
+        const d = audio.duration;
+        finish((Number.isFinite(d) && d > 0) ? Math.round(d) : 0);
+      }, 4000);
+
       try {
         audio.preload = 'metadata';
         audio.src = url;
       } catch (_) {
-        finish();
+        finish(0);
       }
     });
   }
@@ -937,7 +982,7 @@
           </div>
         </div>
         <div class="radio-track-right">
-          <span class="radio-track-duration">${formatDuration(t.duration)}</span>
+          <span class="radio-track-duration" data-track-duration-id="${t.id}">${formatDuration(t.duration)}</span>
           <button type="button" class="radio-action-btn btn-favorite-toggle ${isFav ? 'is-added' : ''}" data-id="${t.id}" title="${isFav ? 'Удалить из «Моё»' : 'Добавить в «Моё»'}">
             <i class="fas ${isFav ? 'fa-xmark' : 'fa-plus'}"></i>
           </button>
@@ -1628,7 +1673,7 @@
         dom.trackPageFormatPill.textContent = String(track.format || 'MP3').toUpperCase();
       }
 
-      if (dom.trackPageDuration) dom.trackPageDuration.innerHTML = `<i class="far fa-clock"></i> ${formatDuration(track.duration)}`;
+      if (dom.trackPageDuration) dom.trackPageDuration.innerHTML = `<i class="far fa-clock"></i> <span data-track-duration-id="${track.id}">${formatDuration(track.duration)}</span>`;
       if (dom.trackPageSize) dom.trackPageSize.innerHTML = `<i class="fas fa-hard-drive"></i> ${(track.size / (1024 * 1024)).toFixed(1)} МБ`;
       if (dom.trackPageDate) dom.trackPageDate.innerHTML = `<i class="far fa-calendar"></i> ${new Date(track.created_at).toLocaleDateString()}`;
 
@@ -5959,7 +6004,7 @@
           }
         });
 
-        const dur = (await durPromise) || 0;
+        const dur = (await durPromise) || uploadRes.duration || 0;
 
         if (progressLabel) progressLabel.textContent = 'Завершение публикации…';
         if (progressBar) progressBar.value = 100;

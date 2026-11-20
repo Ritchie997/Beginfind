@@ -277,9 +277,40 @@
     notify();
   });
 
+  function handleDetectedDuration() {
+    const d = audio.duration;
+    if (Number.isFinite(d) && d > 0) {
+      state.duration = d;
+      updateProgressUI();
+
+      // Если у текущего трека в базе была нулевая длительность (00:00) — обновляем интерфейс и сервер
+      if (state.mode === 'track' && state.track && (Number(state.track.duration) <= 0 || !state.track.duration)) {
+        const durSec = Math.round(d);
+        state.track.duration = durSec;
+        document.querySelectorAll(`[data-track-duration-id="${state.track.id}"]`).forEach((el) => {
+          el.textContent = formatTime(durSec);
+        });
+        const trackPageDur = document.getElementById('trackPageTotalDuration');
+        if (trackPageDur) trackPageDur.textContent = formatTime(durSec);
+
+        fetch(`/api/radio/tracks/${state.track.id}/duration`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duration: durSec })
+        }).catch(() => {});
+      }
+    }
+  }
+
+  audio.addEventListener('loadedmetadata', handleDetectedDuration);
+  audio.addEventListener('durationchange', handleDetectedDuration);
+
   audio.addEventListener('timeupdate', () => {
     state.currentTime = audio.currentTime || 0;
     state.duration = audio.duration || state.duration;
+    if (audio.duration && (!state.track || !state.track.duration || state.track.duration <= 0)) {
+      handleDetectedDuration();
+    }
     updateProgressUI();
   });
 
