@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 const radioStore = require('./radio-store');
 const cleanup = require('./cleanup');
 const backup = require('./backup');
@@ -482,5 +484,52 @@ test('radio-store: startStationBroadcast, stopStationBroadcast, and slot_order t
 
   await radioStore.deleteStation(station.id, 905, true);
 });
+
+test('radio-timeline-sync: playhead, slot duration lock, and on-air alignment', async () => {
+  const freq = 98.6;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Timeline Lock Test Station',
+    ownerId: 906,
+    ownerName: 'LockDirector',
+    fallbackMode: 'loop'
+  });
+
+  // Запуск прямого эфира со слотами, как на скриншоте (142с, 40с, 52с, 40с)
+  const slots = [
+    { title: 'Волны', duration: 142, audio_url: '/uploads/waves.mp3' },
+    { title: 'Track 2', duration: 40, audio_url: '/uploads/t2.mp3' },
+    { title: 'Track 3', duration: 52, audio_url: '/uploads/t3.mp3' },
+    { title: 'Track 4', duration: 40, audio_url: '/uploads/t4.mp3' }
+  ];
+
+  const started = await radioStore.startStationBroadcast(station.id, {
+    forceNow: true,
+    slots
+  });
+
+  assert.equal(started.broadcastStatus, 'live');
+  assert.equal(started.currentSlot.title, 'Волны');
+  assert.equal(started.currentSlot.duration, 142);
+
+  // Проверяем живое состояние спустя 53 секунды: текущий слот строго «Волны»!
+  const liveAtStart = await radioStore.getStationLiveState(station.id);
+  assert.equal(liveAtStart.currentSlot.title, 'Волны', 'Первый трек должен звучать в эфире все 142 секунды');
+
+  // Проверяем скрипты плеера и клиента на наличие защиты от раннего перескока треков
+  const playerCode = fs.readFileSync(path.join(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  assert.ok(playerCode.includes('diffMs > 1200'), 'Global player must guard against premature ended events when slot has remaining time');
+  assert.ok(playerCode.includes('scheduleLiveSync(state.station, diffMs)'), 'Global player must schedule sync at true endTime when audio finishes early');
+
+  const clientCode = fs.readFileSync(path.join(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  assert.ok(clientCode.includes('onAirBlockIndex'), 'radio-client must calculate onAirBlockIndex from playhead elapsed time');
+  assert.ok(clientCode.includes('isRadioLive && isLive && onAirBlockIndex >= 0'), 'radio-client must highlight the exact clip under the playhead during live broadcast');
+
+  await radioStore.deleteStation(station.id, 906, true);
+});
+
 
 

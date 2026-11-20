@@ -284,16 +284,21 @@
       updateProgressUI();
 
       // Если у текущего трека в базе была нулевая длительность (00:00) — обновляем интерфейс и сервер
-      if (state.mode === 'track' && state.track && (Number(state.track.duration) <= 0 || !state.track.duration)) {
+      const trackId = (state.mode === 'track' && state.track)
+        ? state.track.id
+        : (state.currentSlot ? (state.currentSlot.trackId || state.currentSlot.track_id) : null);
+
+      if (trackId && ((state.track && Number(state.track.duration) <= 0) || (state.currentSlot && Number(state.currentSlot.duration) <= 0))) {
         const durSec = Math.round(d);
-        state.track.duration = durSec;
-        document.querySelectorAll(`[data-track-duration-id="${state.track.id}"]`).forEach((el) => {
+        if (state.track) state.track.duration = durSec;
+        if (state.currentSlot) state.currentSlot.duration = durSec;
+        document.querySelectorAll(`[data-track-duration-id="${trackId}"]`).forEach((el) => {
           el.textContent = formatTime(durSec);
         });
         const trackPageDur = document.getElementById('trackPageTotalDuration');
         if (trackPageDur) trackPageDur.textContent = formatTime(durSec);
 
-        fetch(`/api/radio/tracks/${state.track.id}/duration`, {
+        fetch(`/api/radio/tracks/${trackId}/duration`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ duration: durSec })
@@ -359,9 +364,22 @@
     }
 
     if (state.mode === 'radio') {
-      // В режиме радио обновляем эфир со следующим слотом, передавая ID завершившегося трека
+      // В режиме радио проверяем плановое время окончания слота в эфире
       if (state.station) {
-        const finishedId = state.currentSlot ? state.currentSlot.id : null;
+        const curSlot = state.currentSlot;
+        const endMs = curSlot ? new Date(curSlot.endTime || curSlot.end_time).getTime() : 0;
+        const nowMs = Date.now();
+        const diffMs = endMs - nowMs;
+
+        // Если аудиофайл закончился, но до планового окончания слота в сетке ещё осталось время (> 1200 мс) —
+        // НЕ перескакиваем через треки раньше времени! Ждём планового времени переключения слота на сервере.
+        if (diffMs > 1200) {
+          scheduleLiveSync(state.station, diffMs);
+          return;
+        }
+
+        // Плановое время окончания слота наступило — переходим к следующему слоту сетки
+        const finishedId = curSlot ? curSlot.id : null;
         syncRadioStationLive(state.station, true, finishedId);
       }
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
@@ -429,7 +447,7 @@
     const setTime = () => {
       try {
         const dur = audio.duration || 0;
-        const safeOffset = (dur > 0 && offset >= dur) ? (offset % dur) : offset;
+        const safeOffset = (dur > 0 && offset >= dur) ? (dur > 5 ? (offset % dur) : 0) : offset;
         if (Math.abs((audio.currentTime || 0) - safeOffset) > 1.5) {
           audio.currentTime = safeOffset;
         }
@@ -553,6 +571,16 @@
 
       // Если слот, вернувшийся с сервера, это тот самый слот, который только что завершился
       if (state.currentSlot && targetSlot && state.currentSlot.id === targetSlot.id && audio.ended) {
+        const slotEndMs = targetSlot.endTime ? new Date(targetSlot.endTime).getTime() : (targetSlot.end_time ? new Date(targetSlot.end_time).getTime() : 0);
+        const serverNowMs = live.serverTime ? new Date(live.serverTime).getTime() : Date.now();
+        const diffMs = slotEndMs - serverNowMs;
+
+        // Если плановое время слота ещё не наступило в настенных часах — не перепрыгиваем через трек!
+        if (diffMs > 1200) {
+          scheduleLiveSync(station, diffMs);
+          return;
+        }
+
         if (live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) {
           targetSlot = live.nextSlots[0];
           targetOffset = 0;

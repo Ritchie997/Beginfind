@@ -1785,7 +1785,7 @@
 
   function setEditorStartTime(date) {
     state.editorStartTime = new Date(date).toISOString();
-    if (dom.editorBroadcastStartTime) {
+    if (dom.editorBroadcastStartTime && document.activeElement !== dom.editorBroadcastStartTime) {
       const d = new Date(date);
       const pad = (n) => (n < 10 ? '0' : '') + n;
       const localStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -3219,28 +3219,74 @@
     const currentTrackId = (currentTrack && currentTrack.id) || (activeSlot && (activeSlot.trackId || activeSlot.track_id));
     const currentTitle = (currentTrack && currentTrack.title) || (activeSlot && activeSlot.title);
 
+    const isRadioLive = current.mode === 'radio';
+    const st = state.selectedStationForEdit || state.currentStation;
+    const isLive = Boolean(st && (st.broadcast_status === 'live' || st.isLive));
+
+    let onAirBlockIndex = -1;
+    let onAirSubTrackIndex = -1;
+    if (isRadioLive && isLive && state.editorBlocks && state.editorBlocks.length > 0) {
+      const nowMs = getEffectiveNowMs();
+      const startMs = new Date(state.editorStartTime || Date.now()).getTime();
+      const totalDurSec = state.editorCachedDurationSec || state.editorBlocks.reduce((s, x) => s + (Number(x.duration) || 0), 0);
+      let elapsed = (nowMs - startMs) / 1000;
+      if (totalDurSec > 0 && elapsed >= totalDurSec) {
+        elapsed = elapsed % totalDurSec;
+      }
+      if (elapsed >= 0) {
+        let accum = 0;
+        for (let i = 0; i < state.editorBlocks.length; i++) {
+          const bDur = Number(state.editorBlocks[i].duration) || 0;
+          if (elapsed >= accum && elapsed < accum + bDur) {
+            onAirBlockIndex = i;
+            const block = state.editorBlocks[i];
+            if (block.type === 'playlist' && block.items && block.items.length > 0) {
+              const insideElapsed = elapsed - accum;
+              let subAccum = 0;
+              for (let sub = 0; sub < block.items.length; sub++) {
+                const itDur = Number(block.items[sub].duration) || 0;
+                if (insideElapsed >= subAccum && insideElapsed < subAccum + itDur) {
+                  onAirSubTrackIndex = sub;
+                  break;
+                }
+                subAccum += itDur;
+              }
+            }
+            break;
+          }
+          accum += bDur;
+        }
+      }
+    }
+
     // 1. Обновляем кнопки и подсветку блоков редактора
     const listEl = dom.editorBlocksList || dom.editorSlotsList;
     if (listEl) {
       listEl.querySelectorAll('.radio-eb-block').forEach((card) => {
         const bIdx = parseInt(card.dataset.index, 10);
         const block = state.editorBlocks[bIdx];
-        const isThisBlockPlaying = isPlaying && block && (
-          (currentBlockId && block.id === currentBlockId) ||
-          (currentUrl && (
-            block.audio_url === currentUrl ||
-            (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
-            (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
-          )) ||
-          (currentTrackId && (
-            block.track_id == currentTrackId ||
-            (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
-          )) ||
-          (currentTitle && (
-            block.title === currentTitle ||
-            (block.items && block.items.some((it) => it.title === currentTitle))
-          ))
-        );
+
+        let isThisBlockPlaying = false;
+        if (isRadioLive && isLive && onAirBlockIndex >= 0) {
+          isThisBlockPlaying = isPlaying && (bIdx === onAirBlockIndex);
+        } else {
+          isThisBlockPlaying = isPlaying && block && (
+            (currentBlockId && block.id === currentBlockId) ||
+            (currentUrl && (
+              block.audio_url === currentUrl ||
+              (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
+              (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
+            )) ||
+            (currentTrackId && (
+              block.track_id == currentTrackId ||
+              (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
+            )) ||
+            (currentTitle && (
+              block.title === currentTitle ||
+              (block.items && block.items.some((it) => it.title === currentTitle))
+            ))
+          );
+        }
 
         card.classList.toggle('is-playing-block', Boolean(isThisBlockPlaying));
 
@@ -3263,11 +3309,18 @@
         card.querySelectorAll('.radio-playlist-nested-track').forEach((nTrack) => {
           const tIdx = parseInt(nTrack.dataset.trackIndex, 10);
           const it = block && block.items && block.items[tIdx];
-          const isTrackActive = isPlaying && it && (
-            (currentUrl && (it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url)))) ||
-            (currentTrackId && (it.track_id || it.id) == currentTrackId) ||
-            (currentTitle && it.title === currentTitle)
-          );
+
+          let isTrackActive = false;
+          if (isRadioLive && isLive && bIdx === onAirBlockIndex && onAirSubTrackIndex >= 0) {
+            isTrackActive = isPlaying && (tIdx === onAirSubTrackIndex);
+          } else {
+            isTrackActive = isPlaying && it && (
+              (currentUrl && (it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url)))) ||
+              (currentTrackId && (it.track_id || it.id) == currentTrackId) ||
+              (currentTitle && it.title === currentTitle)
+            );
+          }
+
           nTrack.classList.toggle('is-playing', Boolean(isTrackActive));
           const nPlayBtn = nTrack.querySelector('.btn-play-nested-track');
           if (nPlayBtn) {
@@ -3284,22 +3337,29 @@
       dom.radioTimelineTrack.querySelectorAll('.radio-timeline-clip').forEach((clip) => {
         const bIdx = parseInt(clip.dataset.index, 10);
         const block = state.editorBlocks[bIdx];
-        const isClipPlaying = isPlaying && block && (
-          (currentBlockId && block.id === currentBlockId) ||
-          (currentUrl && (
-            block.audio_url === currentUrl ||
-            (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
-            (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
-          )) ||
-          (currentTrackId && (
-            block.track_id == currentTrackId ||
-            (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
-          )) ||
-          (currentTitle && (
-            block.title === currentTitle ||
-            (block.items && block.items.some((it) => it.title === currentTitle))
-          ))
-        );
+
+        let isClipPlaying = false;
+        if (isRadioLive && isLive && onAirBlockIndex >= 0) {
+          isClipPlaying = isPlaying && (bIdx === onAirBlockIndex);
+        } else {
+          isClipPlaying = isPlaying && block && (
+            (currentBlockId && block.id === currentBlockId) ||
+            (currentUrl && (
+              block.audio_url === currentUrl ||
+              (typeof currentUrl === 'string' && block.audio_url && currentUrl.endsWith(block.audio_url)) ||
+              (block.items && block.items.some((it) => it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url))))
+            )) ||
+            (currentTrackId && (
+              block.track_id == currentTrackId ||
+              (block.items && block.items.some((it) => (it.track_id || it.id) == currentTrackId))
+            )) ||
+            (currentTitle && (
+              block.title === currentTitle ||
+              (block.items && block.items.some((it) => it.title === currentTitle))
+            ))
+          );
+        }
+
         clip.classList.toggle('is-playing', Boolean(isClipPlaying));
       });
     }
@@ -4079,11 +4139,13 @@
             badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
           }
         }
+        updateEditorPlaybackUI();
         return;
       }
     }
 
     dom.radioTimelinePlayhead.style.display = 'none';
+    updateEditorPlaybackUI();
   }
 
   async function openPickPlaylistForTimeline(targetIndex = -1) {
@@ -5206,7 +5268,6 @@
         renderEditorBlocks();
       }
     };
-    dom.editorBroadcastStartTime?.addEventListener('input', handleTimeInputChange);
     dom.editorBroadcastStartTime?.addEventListener('change', handleTimeInputChange);
 
     // Главная кнопка: Начать эфир сейчас (с 00:00 первого трека)
