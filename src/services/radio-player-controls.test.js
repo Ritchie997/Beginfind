@@ -236,3 +236,37 @@ test('radio duration: auto-detection on upload, database auto-healing, and dynam
   assert.ok(globalPlayerJs.includes('/api/radio/tracks/'), 'handleDetectedDuration must patch duration to server');
 });
 
+test('radio-studio-console: dedicated Start/Stop broadcast, schedule controls and no unintended auto-start', () => {
+  const radioHtml = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const radioRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/radio.routes.js'), 'utf8');
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+
+  // 1. Studio markup controls
+  assert.ok(radioHtml.includes('id="btnStartBroadcastNow"'), 'radio.html must include btnStartBroadcastNow');
+  assert.ok(radioHtml.includes('id="btnStopBroadcast"'), 'radio.html must include btnStopBroadcast');
+  assert.ok(radioHtml.includes('id="btnScheduleBroadcast"'), 'radio.html must include btnScheduleBroadcast');
+  assert.ok(radioHtml.includes('id="btnSaveTimelineDraft"'), 'radio.html must include btnSaveTimelineDraft');
+  assert.ok(radioHtml.includes('id="btnPresetNow"'), 'radio.html must include btnPresetNow');
+  assert.ok(radioHtml.includes('id="btnPresetPlus5"'), 'radio.html must include btnPresetPlus5');
+  assert.ok(radioHtml.includes('id="btnPresetPlus15"'), 'radio.html must include btnPresetPlus15');
+  assert.ok(radioHtml.includes('id="btnPresetNextHour"'), 'radio.html must include btnPresetNextHour');
+
+  // 2. Server API routes
+  assert.ok(radioRoutesJs.includes('/radio/stations/:id/start-broadcast'), 'radio.routes.js must have start-broadcast route');
+  assert.ok(radioRoutesJs.includes('/radio/stations/:id/stop-broadcast'), 'radio.routes.js must have stop-broadcast route');
+
+  // 3. Client JS handlers
+  assert.ok(radioClientJs.includes('async function startBroadcast('), 'radio-client.js must define startBroadcast');
+  assert.ok(radioClientJs.includes('async function stopBroadcast('), 'radio-client.js must define stopBroadcast');
+  assert.ok(radioClientJs.includes('async function saveTimelineDraft('), 'radio-client.js must define saveTimelineDraft');
+
+  // 4. Verification that accidental auto-start on time input typing is ELIMINATED
+  assert.ok(!radioClientJs.includes("editorBroadcastStartTime?.addEventListener('change', (e) => {\n      if (e.target.value) {\n        publishBroadcast"),
+    'Accidental auto-start on input change must be eliminated');
+
+  // 5. Global audio player passes finishedSlotId to eliminate boundary drift
+  assert.ok(globalPlayerJs.includes('finishedSlotId'), 'Global player must pass finishedSlotId on ended');
+});
+
+

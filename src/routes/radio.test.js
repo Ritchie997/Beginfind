@@ -178,3 +178,13 @@ test('SPA navigation & audio continuity: router resilience, script deduplication
   assert.ok(siteJs.includes("typeof currentRouteCleanup === 'function'"), 'cleanupPublicPage must safely check function type');
   assert.ok(siteJs.includes('alltellResult.then'), 'mountPublicPage must handle async AllTellClient.init');
 });
+
+test('POST /api/radio/stations/:id/start-broadcast and stop-broadcast routes require authentication', async () => {
+  const app = createApp();
+  const resStart = await callApi(app, 'POST', '/api/radio/stations/1/start-broadcast', { forceNow: true });
+  assert.equal(resStart.status, 401, 'Unauthenticated start-broadcast should return 401');
+
+  const resStop = await callApi(app, 'POST', '/api/radio/stations/1/stop-broadcast', {});
+  assert.equal(resStop.status, 401, 'Unauthenticated stop-broadcast should return 401');
+});
+

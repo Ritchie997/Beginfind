@@ -201,6 +201,15 @@
       // Редактор сетки
       editorStationSelect: document.getElementById('editorStationSelect'),
       editorBroadcastStartTime: document.getElementById('editorBroadcastStartTime'),
+      btnStartBroadcastNow: document.getElementById('btnStartBroadcastNow'),
+      btnStopBroadcast: document.getElementById('btnStopBroadcast'),
+      btnScheduleBroadcast: document.getElementById('btnScheduleBroadcast'),
+      btnSaveTimelineDraft: document.getElementById('btnSaveTimelineDraft'),
+      btnPresetNow: document.getElementById('btnPresetNow'),
+      btnPresetPlus5: document.getElementById('btnPresetPlus5'),
+      btnPresetPlus15: document.getElementById('btnPresetPlus15'),
+      btnPresetNextHour: document.getElementById('btnPresetNextHour'),
+      editorLiveStatusBadge: document.getElementById('editorLiveStatusBadge'),
       btnSetStartTimeNow: document.getElementById('btnSetStartTimeNow'),
       btnToggleBroadcastLoop: document.getElementById('btnToggleBroadcastLoop'),
       broadcastLoopBtnText: document.getElementById('broadcastLoopBtnText'),
@@ -1944,47 +1953,203 @@
 
   function updateEditorLiveStatusBadge(isLive, startMs) {
     const badge = document.getElementById('editorLiveStatusBadge');
-    if (!badge) return;
-    if (!state.selectedStationForEdit || !state.editorBlocks || state.editorBlocks.length === 0) {
-      badge.style.display = 'none';
-      return;
+    const st = state.selectedStationForEdit;
+    const status = (st && st.broadcast_status) || (isLive ? 'live' : 'offline');
+
+    // Переключение кнопок Начать эфир / Остановить эфир
+    if (dom.btnStartBroadcastNow && dom.btnStopBroadcast) {
+      if (status === 'live' && isLive) {
+        dom.btnStartBroadcastNow.style.display = 'none';
+        dom.btnStopBroadcast.style.display = 'inline-flex';
+      } else {
+        dom.btnStartBroadcastNow.style.display = 'inline-flex';
+        dom.btnStopBroadcast.style.display = 'none';
+      }
     }
+
+    if (!badge) return;
     badge.style.display = 'inline-flex';
-    badge.style.alignItems = 'center';
-    badge.style.gap = '6px';
-    if (isLive) {
-      badge.style.background = '#16a34a';
-      badge.style.color = '#fff';
-      badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> В эфире прямо сейчас';
-      badge.title = 'Вещание идет прямо сейчас по виртуальному расписанию';
-    } else {
-      badge.style.background = '#2563eb';
-      badge.style.color = '#fff';
+    badge.className = 'badge radio-live-status-badge';
+
+    if (status === 'live' && isLive) {
+      badge.classList.add('status-live');
+      badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> 🔴 В ЭФИРЕ';
+      badge.title = 'Вещание идет прямо сейчас в прямом эфире';
+    } else if (status === 'scheduled' || (!isLive && startMs && startMs > Date.now() + 5000)) {
+      badge.classList.add('status-scheduled');
       const tz = getUserTimezoneInfo();
-      badge.innerHTML = `<i class="far fa-clock"></i> Старт в ${formatClockTime(startMs)} <span style="font-size:0.7rem; opacity:0.85;">(${tz.utcOffsetStr})</span>`;
-      badge.title = `Вещание запланировано на ${formatClockTime(startMs)} по вашему системному времени (${tz.label})`;
+      badge.innerHTML = `<i class="far fa-clock"></i> 🕒 СТАРТ В ${formatClockTime(startMs)} (${tz.utcOffsetStr})`;
+      badge.title = `Вещание запланировано на ${formatClockTime(startMs)}`;
+    } else {
+      badge.classList.add('status-offline');
+      badge.innerHTML = '<i class="fas fa-power-off"></i> ⚪ ЭФИР ОСТАНОВЛЕН';
+      badge.title = 'Станция не вещает. Нажмите «Начать эфир сейчас» для запуска вещания';
     }
   }
 
-  // Запуск / публикация вещания радиостанции
-  async function publishBroadcast(startTime, options = {}) {
-    const { notify = true, autoTune = true, forceNow = false } = options;
+  // Явный запуск прямого эфира станции
+  async function startBroadcast(forceNow = true, scheduledTime = null) {
     if (!state.selectedStationForEdit) {
       if (state.myStations && state.myStations.length > 0) {
         state.selectedStationForEdit = state.myStations[0];
         if (dom.editorStationSelect) dom.editorStationSelect.value = state.myStations[0].id;
       } else {
-        if (notify) showToast('Пожалуйста, выберите радиостанцию для вещания', 'warning');
+        showToast('Пожалуйста, выберите радиостанцию для вещания', 'warning');
         return false;
       }
     }
 
     const st = state.selectedStationForEdit;
+    syncCompiledSlots();
+
+    if (!state.editorSlots || state.editorSlots.length === 0) {
+      showToast('Сетка вещания пуста. Добавьте треки или плейлисты перед стартом эфира.', 'warning');
+      return false;
+    }
+
+    const nowMs = getEffectiveNowMs();
+    let targetStartMs = forceNow ? nowMs : (scheduledTime ? new Date(scheduledTime).getTime() : nowMs);
+    if (isNaN(targetStartMs)) targetStartMs = nowMs;
+    const isLiveNow = targetStartMs <= nowMs;
+    const finalStartTimeIso = new Date(targetStartMs).toISOString();
+    setEditorStartTime(finalStartTimeIso);
+
+    try {
+      if (dom.btnStartBroadcastNow) {
+        dom.btnStartBroadcastNow.disabled = true;
+        dom.btnStartBroadcastNow.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запуск…';
+      }
+
+      await api(`/api/radio/stations/${st.id}/start-broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          forceNow: Boolean(forceNow || isLiveNow),
+          startTime: finalStartTimeIso,
+          slots: state.editorSlots
+        })
+      });
+
+      st.broadcast_status = isLiveNow ? 'live' : 'scheduled';
+      st.isLive = isLiveNow;
+      renderEditor();
+      await loadStations();
+
+      if (isLiveNow) {
+        showToast(`🔴 Вещание радиостанции «${st.name}» успешно запущено в прямой эфир!`, 'success');
+        await tuneStation(st, true);
+      } else {
+        showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(targetStartMs)} (${getUserTimezoneInfo().utcOffsetStr})`, 'info');
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[radio] Error starting broadcast:', e);
+      showToast('Ошибка запуска вещания: ' + e.message, 'error');
+      return false;
+    } finally {
+      if (dom.btnStartBroadcastNow) {
+        dom.btnStartBroadcastNow.disabled = false;
+        dom.btnStartBroadcastNow.innerHTML = '<i class="fas fa-tower-broadcast"></i> <span>Начать эфир сейчас</span>';
+      }
+    }
+  }
+
+  // Остановка вещания станции без очистки сетки блоков
+  async function stopBroadcast() {
+    if (!state.selectedStationForEdit) return false;
+    const st = state.selectedStationForEdit;
+
+    const ok = await showConfirm(`Остановить вещание радиостанции «${st.name}»? Сетка треков останется сохранена в редакторе.`, {
+      title: 'Остановить прямой эфир?',
+      confirmLabel: 'Остановить эфир',
+      danger: true
+    });
+    if (!ok) return false;
+
+    try {
+      if (dom.btnStopBroadcast) {
+        dom.btnStopBroadcast.disabled = true;
+        dom.btnStopBroadcast.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Остановка…';
+      }
+
+      await api(`/api/radio/stations/${st.id}/stop-broadcast`, {
+        method: 'POST'
+      });
+
+      st.broadcast_status = 'offline';
+      st.isLive = false;
+
+      // Если в данный момент этот эфир играет в плеере — останавливаем
+      const gAudio = getGlobalAudio();
+      if (gAudio && gAudio.getState().mode === 'radio' && gAudio.getState().station && String(gAudio.getState().station.id) === String(st.id)) {
+        gAudio.stop();
+      }
+
+      renderEditor();
+      await loadStations();
+      showToast(`Вещание радиостанции «${st.name}» остановлено. Сетка сохранена в редакторе.`, 'info');
+      return true;
+    } catch (e) {
+      console.error('[radio] Error stopping broadcast:', e);
+      showToast('Ошибка остановки эфира: ' + e.message, 'error');
+      return false;
+    } finally {
+      if (dom.btnStopBroadcast) {
+        dom.btnStopBroadcast.disabled = false;
+        dom.btnStopBroadcast.innerHTML = '<i class="fas fa-stop"></i> <span>Остановить эфир</span>';
+      }
+    }
+  }
+
+  // Сохранение черновика сетки вещания без немедленного выхода в эфир
+  async function saveTimelineDraft() {
+    if (!state.selectedStationForEdit) {
+      showToast('Выберите радиостанцию', 'warning');
+      return false;
+    }
+    const st = state.selectedStationForEdit;
+    syncCompiledSlots();
+
+    try {
+      if (dom.btnSaveTimelineDraft) {
+        dom.btnSaveTimelineDraft.disabled = true;
+        dom.btnSaveTimelineDraft.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение…';
+      }
+
+      await api(`/api/radio/stations/${st.id}/timeline`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slots: state.editorSlots,
+          startTime: state.editorStartTime || new Date().toISOString(),
+          forceNow: false
+        })
+      });
+
+      showToast('Сетка вещания радиостанции успешно сохранена', 'success');
+      return true;
+    } catch (e) {
+      console.error('[radio] Error saving timeline draft:', e);
+      showToast('Ошибка сохранения сетки: ' + e.message, 'error');
+      return false;
+    } finally {
+      if (dom.btnSaveTimelineDraft) {
+        dom.btnSaveTimelineDraft.disabled = false;
+        dom.btnSaveTimelineDraft.innerHTML = '<i class="fas fa-floppy-disk"></i> Сохранить сетку';
+      }
+    }
+  }
+
+  // Запуск / публикация вещания радиостанции (для совместимости)
+  async function publishBroadcast(startTime, options = {}) {
+    const { notify = true, autoTune = true, forceNow = false } = options;
+    const st = state.selectedStationForEdit;
     const nowMs = getEffectiveNowMs();
     let targetStartMs = startTime ? new Date(startTime).getTime() : (state.editorStartTime ? new Date(state.editorStartTime).getTime() : nowMs);
     if (isNaN(targetStartMs)) targetStartMs = nowMs;
 
-    const isStationCurrentlyLive = Boolean(st.isLive);
+    const isStationCurrentlyLive = Boolean(st && st.isLive);
     const isFutureSchedule = targetStartMs > (nowMs + 5000);
 
     // Если запрошен запуск сейчас (forceNow) ИЛИ
@@ -1997,61 +2162,7 @@
 
     const finalStartTimeIso = new Date(targetStartMs).toISOString();
     setEditorStartTime(finalStartTimeIso);
-    syncCompiledSlots();
-
-    if (!state.editorSlots || state.editorSlots.length === 0) {
-      if (notify) showToast('Сетка вещания пуста. Добавьте треки или плейлисты перед стартом эфира.', 'warning');
-      return false;
-    }
-
-    const isLiveNow = targetStartMs <= nowMs;
-
-    try {
-      if (dom.btnSaveTimeline) {
-        dom.btnSaveTimeline.disabled = true;
-        dom.btnSaveTimeline.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запуск вещания…';
-      }
-
-      await api(`/api/radio/stations/${st.id}/timeline`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slots: state.editorSlots,
-          startTime: finalStartTimeIso,
-          forceNow: Boolean(forceNow || isLiveNow)
-        })
-      });
-
-      if (isLiveNow) {
-        st.isLive = true;
-      }
-      renderEditor();
-      await loadStations();
-
-      if (notify) {
-        if (isLiveNow) {
-          showToast(`🔴 Вещание радиостанции «${st.name}» успешно запущено в прямой эфир!`, 'success');
-        } else {
-          showToast(`🕒 Старт радиостанции «${st.name}» запланирован на ${formatClockTime(targetStartMs)} (${getUserTimezoneInfo().utcOffsetStr}). Эфир запустится точно по расписанию.`, 'info');
-        }
-      }
-
-      // Если эфир активен прямо сейчас, настраиваем станцию и запускаем проигрывание с нужного времени!
-      if (isLiveNow && autoTune) {
-        await tuneStation(st, true);
-      }
-
-      return true;
-    } catch (e) {
-      console.error('[radio] Error starting broadcast:', e);
-      if (notify) showToast('Ошибка запуска вещания: ' + e.message, 'error');
-      return false;
-    } finally {
-      if (dom.btnSaveTimeline) {
-        dom.btnSaveTimeline.disabled = false;
-        dom.btnSaveTimeline.innerHTML = '<i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)';
-      }
-    }
+    return startBroadcast(Boolean(forceNow || targetStartMs <= nowMs), finalStartTimeIso);
   }
 
   async function loadStationTimeline(stationId) {
@@ -2065,6 +2176,15 @@
         type: s.type || 'track'
       }));
       state.editorBlocks = convertSlotsToBlocks(slots || []);
+
+      // Подтягиваем актуальное состояние эфира станции (live / offline / scheduled)
+      try {
+        const live = await api(`/api/radio/stations/${stationId}/live`);
+        if (live && live.station && state.selectedStationForEdit) {
+          state.selectedStationForEdit.broadcast_status = live.broadcastStatus || live.station.broadcast_status || (live.isLive ? 'live' : 'offline');
+          state.selectedStationForEdit.isLive = Boolean(live.isLive);
+        }
+      } catch (_) {}
 
       // Если в сетке уже есть слоты — сохраняем исходное время начала эфира,
       // чтобы при нажатии «Опубликовать в эфир» эфир не откатывался к началу!
@@ -3060,8 +3180,10 @@
     renderEditorBlocks();
     updateCapacityUI();
     updateEditorPlaybackUI();
+    const st = state.selectedStationForEdit;
     const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
-    updateEditorLiveStatusBadge(startMs <= Date.now() && state.editorBlocks && state.editorBlocks.length > 0, startMs);
+    const isLive = Boolean(st && st.broadcast_status === 'live' && startMs <= Date.now() && state.editorBlocks && state.editorBlocks.length > 0);
+    updateEditorLiveStatusBadge(isLive, startMs);
   }
 
   // Сохраняем имя renderEditorSlots для обратной совместимости
@@ -3766,6 +3888,10 @@
     const elapsedSec = (nowMs - startMs) / 1000;
 
     const st = state.selectedStationForEdit || state.currentStation;
+    if (st && st.broadcast_status === 'offline') {
+      dom.radioTimelinePlayhead.style.display = 'none';
+      return;
+    }
     const fallbackMode = (st && st.fallback_mode) || 'loop';
 
     if (elapsedSec >= 0) {
@@ -4886,21 +5012,84 @@
       }
     });
 
-    dom.editorBroadcastStartTime?.addEventListener('change', (e) => {
+    // Редактирование поля даты/времени: ТОЛЬКО обновляет локальное состояние редактора (БЕЗ автозапуска эфира!)
+    const handleTimeInputChange = (e) => {
       if (e.target.value) {
-        publishBroadcast(e.target.value, {
-          notify: true,
-          autoTune: new Date(e.target.value).getTime() <= Date.now()
-        });
+        state.editorStartTime = new Date(e.target.value).toISOString();
+        renderTimelineRibbon();
+        renderEditorBlocks();
+        const startMs = new Date(e.target.value).getTime();
+        updateEditorLiveStatusBadge(false, startMs);
       }
+    };
+    dom.editorBroadcastStartTime?.addEventListener('input', handleTimeInputChange);
+    dom.editorBroadcastStartTime?.addEventListener('change', handleTimeInputChange);
+
+    // Главная кнопка: Начать эфир сейчас (с 00:00 первого трека)
+    dom.btnStartBroadcastNow?.addEventListener('click', () => {
+      startBroadcast(true);
     });
 
+    // Главная кнопка: Остановить эфир (не удаляя сетку)
+    dom.btnStopBroadcast?.addEventListener('click', () => {
+      stopBroadcast();
+    });
+
+    // Кнопка: Запланировать запуск на указанное время
+    dom.btnScheduleBroadcast?.addEventListener('click', () => {
+      const timeVal = dom.editorBroadcastStartTime?.value;
+      if (!timeVal) {
+        showToast('Укажите дату и время старта в поле выше', 'warning');
+        return;
+      }
+      startBroadcast(false, timeVal);
+    });
+
+    // Кнопка: Сохранить черновик сетки (без запуска)
+    dom.btnSaveTimelineDraft?.addEventListener('click', () => {
+      saveTimelineDraft();
+    });
+
+    // Кнопка: Сейчас (Старт) (для совместимости)
     dom.btnSetStartTimeNow?.addEventListener('click', () => {
       publishBroadcast(new Date(), {
         notify: true,
         autoTune: true,
         forceNow: true
       });
+    });
+
+    // Быстрые пресеты времени старта
+    dom.btnPresetNow?.addEventListener('click', () => {
+      setEditorStartTime(new Date());
+      renderTimelineRibbon();
+      renderEditorBlocks();
+      showToast('Время старта выставлено: Прямо сейчас', 'info');
+    });
+
+    dom.btnPresetPlus5?.addEventListener('click', () => {
+      const t = new Date(Date.now() + 5 * 60 * 1000);
+      setEditorStartTime(t);
+      renderTimelineRibbon();
+      renderEditorBlocks();
+      showToast('Время старта выставлено: Через 5 минут', 'info');
+    });
+
+    dom.btnPresetPlus15?.addEventListener('click', () => {
+      const t = new Date(Date.now() + 15 * 60 * 1000);
+      setEditorStartTime(t);
+      renderTimelineRibbon();
+      renderEditorBlocks();
+      showToast('Время старта выставлено: Через 15 минут', 'info');
+    });
+
+    dom.btnPresetNextHour?.addEventListener('click', () => {
+      const nextHour = new Date(Date.now() + 60 * 60 * 1000);
+      nextHour.setMinutes(0, 0, 0);
+      setEditorStartTime(nextHour);
+      renderTimelineRibbon();
+      renderEditorBlocks();
+      showToast('Время старта выставлено: В начале следующего часа', 'info');
     });
 
     dom.btnToggleBroadcastLoop?.addEventListener('click', async () => {

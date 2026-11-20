@@ -245,10 +245,17 @@ async function listStations() {
   // Добавляем к каждой станции краткую информацию о текущем треке
   const enriched = await Promise.all(
     stations.map(async (st) => {
+      if (st.broadcast_status === 'offline') {
+        return {
+          ...st,
+          currentTrack: null,
+          isLive: false
+        };
+      }
       const currentSlot = await get(
         `SELECT * FROM radio_timeline_slots 
          WHERE station_id = ? AND start_time <= ? AND end_time > ? 
-         ORDER BY start_time ASC LIMIT 1`,
+         ORDER BY slot_order ASC, start_time ASC LIMIT 1`,
         [st.id, now, now]
       );
       return {
@@ -397,7 +404,7 @@ async function getTimelineSlots(stationId, fromTime = null, toTime = null) {
     params.push(toTime);
   }
 
-  sql += ' ORDER BY start_time ASC';
+  sql += ' ORDER BY slot_order ASC, start_time ASC';
   return all(sql, params);
 }
 
@@ -423,6 +430,7 @@ async function setTimelineSlots(stationId, slots = [], customStartTime = null, o
   const endLimit = cursor + maxDurationMs;
 
   const preparedSlots = [];
+  let orderIndex = 0;
   for (const s of slots) {
     const durSec = Math.max(1, Number(s.duration) || 0);
     const durMs = durSec * 1000;
@@ -449,6 +457,7 @@ async function setTimelineSlots(stationId, slots = [], customStartTime = null, o
     preparedSlots.push({
       stationId,
       trackId: s.track_id || s.trackId || null,
+      slotOrder: orderIndex++,
       title: String(s.title || 'Без названия').trim(),
       type: ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
       audioUrl,
@@ -460,30 +469,80 @@ async function setTimelineSlots(stationId, slots = [], customStartTime = null, o
     cursor += actualDurMs;
   }
 
-  // Если запрошен запуск "Сейчас (Старт)" — полностью очищаем слоты станции для идеального старта с 0
-  if (isForceNow) {
-    await run('DELETE FROM radio_timeline_slots WHERE station_id = ?', [stationId]);
-  } else {
-    // Удаляем старые слоты для этой станции, пересекающиеся с сохраняемым расписанием
-    const replaceThreshold = new Date(initialStartMs).toISOString();
-    await run('DELETE FROM radio_timeline_slots WHERE station_id = ? AND (start_time >= ? OR end_time > ?)', [stationId, replaceThreshold, replaceThreshold]);
-  }
+  // Полностью очищаем старые слоты станции перед сохранением новой последовательности
+  await run('DELETE FROM radio_timeline_slots WHERE station_id = ?', [stationId]);
 
   for (const p of preparedSlots) {
     await run(
-      `INSERT INTO radio_timeline_slots (station_id, track_id, title, type, audio_url, duration, start_time, end_time)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [p.stationId, p.trackId, p.title, p.type, p.audioUrl, p.duration, p.startTime, p.endTime]
+      `INSERT INTO radio_timeline_slots (station_id, track_id, slot_order, title, type, audio_url, duration, start_time, end_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.stationId, p.trackId, p.slotOrder, p.title, p.type, p.audioUrl, p.duration, p.startTime, p.endTime]
     );
   }
 
-  return getTimelineSlots(stationId, new Date(getEffectiveNow().getTime() - 8 * 3600 * 1000).toISOString());
+  if (options.status) {
+    await run('UPDATE radio_stations SET broadcast_status = ?, broadcast_started_at = ? WHERE id = ?', [
+      options.status,
+      new Date(initialStartMs).toISOString(),
+      stationId
+    ]);
+  }
+
+  return getTimelineSlots(stationId);
+}
+
+/**
+ * Запуск вещания радиостанции (мгновенный старт либо отложенный).
+ */
+async function startStationBroadcast(stationId, { forceNow = true, startTime = null, slots = null } = {}) {
+  const station = await getStationById(stationId);
+  if (!station) throw new Error('Станция не найдена');
+
+  const now = getEffectiveNow();
+  let startMs = forceNow ? now.getTime() - 250 : (startTime ? new Date(startTime).getTime() : now.getTime());
+  if (isNaN(startMs)) startMs = now.getTime();
+
+  const isLive = startMs <= now.getTime();
+  const status = isLive ? 'live' : 'scheduled';
+  const startIso = new Date(startMs).toISOString();
+
+  if (slots && Array.isArray(slots) && slots.length > 0) {
+    await setTimelineSlots(stationId, slots, startIso, { forceNow: isLive, status });
+  } else {
+    const existingSlots = await all(
+      'SELECT * FROM radio_timeline_slots WHERE station_id = ? ORDER BY slot_order ASC, start_time ASC',
+      [stationId]
+    );
+    if (existingSlots.length > 0) {
+      await setTimelineSlots(stationId, existingSlots, startIso, { forceNow: isLive, status });
+    } else {
+      await run('UPDATE radio_stations SET broadcast_status = ?, broadcast_started_at = ? WHERE id = ?', [
+        status,
+        startIso,
+        stationId
+      ]);
+    }
+  }
+
+  return getStationLiveState(stationId);
+}
+
+/**
+ * Остановка эфира радиостанции без удаления слотов сетки.
+ */
+async function stopStationBroadcast(stationId) {
+  const station = await getStationById(stationId);
+  if (!station) throw new Error('Станция не найдена');
+
+  await run("UPDATE radio_stations SET broadcast_status = 'offline' WHERE id = ?", [stationId]);
+  return { success: true, broadcastStatus: 'offline' };
 }
 
 /**
  * Получение текущего состояния прямого эфира станции
  */
-async function getStationLiveState(stationId) {
+async function getStationLiveState(stationId, options = {}) {
+  const finishedSlotId = options && (options.finishedSlotId || options.finished_slot_id);
   const station = await getStationById(stationId);
   if (!station) throw new Error('Станция не найдена');
 
@@ -491,52 +550,110 @@ async function getStationLiveState(stationId) {
   const nowIso = now.toISOString();
   const nowMs = now.getTime();
 
-  // Ищем слот, который должен играть прямо сейчас
-  let currentSlot = await get(
-    `SELECT * FROM radio_timeline_slots 
-     WHERE station_id = ? AND start_time <= ? AND end_time > ? 
-     ORDER BY start_time ASC LIMIT 1`,
-    [stationId, nowIso, nowIso]
+  const status = station.broadcast_status || 'live';
+  if (status === 'offline') {
+    return {
+      station,
+      serverTime: nowIso,
+      broadcastStatus: 'offline',
+      isLive: false,
+      isVirtualLoop: false,
+      fallback: 'silence',
+      currentSlot: null,
+      offset: 0,
+      remaining: 0,
+      nextSlots: [],
+      prevSlots: []
+    };
+  }
+
+  if (status === 'scheduled') {
+    const scheduledMs = station.broadcast_started_at ? new Date(station.broadcast_started_at).getTime() : nowMs;
+    if (nowMs < scheduledMs) {
+      const upcoming = await all(
+        'SELECT * FROM radio_timeline_slots WHERE station_id = ? ORDER BY slot_order ASC LIMIT 10',
+        [stationId]
+      );
+      return {
+        station,
+        serverTime: nowIso,
+        broadcastStatus: 'scheduled',
+        scheduledStartTime: station.broadcast_started_at,
+        isLive: false,
+        isVirtualLoop: false,
+        fallback: 'silence',
+        currentSlot: null,
+        offset: 0,
+        remaining: 0,
+        nextSlots: upcoming.map(s => ({
+          id: s.id,
+          title: s.title,
+          type: s.type,
+          audioUrl: s.audio_url,
+          duration: s.duration,
+          startTime: s.start_time,
+          endTime: s.end_time
+        })),
+        prevSlots: []
+      };
+    } else {
+      await run("UPDATE radio_stations SET broadcast_status = 'live' WHERE id = ?", [stationId]);
+      station.broadcast_status = 'live';
+    }
+  }
+
+  // Все слоты станции в порядке очереди
+  const allSlots = await all(
+    'SELECT * FROM radio_timeline_slots WHERE station_id = ? ORDER BY slot_order ASC, start_time ASC',
+    [stationId]
   );
 
+  let currentSlot = null;
   let offset = 0;
   let remaining = 0;
   let isVirtualLoop = false;
   let loopNextSlots = [];
 
-  // Защита от микро-рассинхрона (если слот стартует в пределах 4 секунд от now)
-  if (!currentSlot) {
-    const nearUpcoming = await get(
-      `SELECT * FROM radio_timeline_slots 
-       WHERE station_id = ? AND start_time > ? 
-       ORDER BY start_time ASC LIMIT 1`,
-      [stationId, nowIso]
-    );
-    if (nearUpcoming) {
-      const startMs = new Date(nearUpcoming.start_time).getTime();
-      if (startMs - nowMs <= 4000) {
-        currentSlot = nearUpcoming;
+  // Если клиент сообщил, что трек finishedSlotId завершился в браузере (ended),
+  // мгновенно переключаем на следующий слот по порядку очереди
+  if (finishedSlotId && allSlots.length > 0) {
+    const finishedIdx = allSlots.findIndex(s => String(s.id) === String(finishedSlotId));
+    if (finishedIdx >= 0) {
+      if (finishedIdx < allSlots.length - 1) {
+        currentSlot = allSlots[finishedIdx + 1];
         offset = 0;
-        remaining = Number(nearUpcoming.duration) || 0;
+        remaining = Number(currentSlot.duration) || 0;
+      } else if (station.fallback_mode === 'loop') {
+        currentSlot = allSlots[0];
+        offset = 0;
+        remaining = Number(currentSlot.duration) || 0;
+        isVirtualLoop = true;
       }
     }
   }
 
-  // Если прямо сейчас нет слота, но режим fallback_mode === 'loop'
-  if (!currentSlot && station.fallback_mode === 'loop') {
-    // Проверяем, есть ли вообще слоты для станции (за последние 32 часа)
-    const allSlots = await all(
-      `SELECT * FROM radio_timeline_slots WHERE station_id = ? ORDER BY start_time ASC`,
-      [stationId]
-    );
+  // Обычный поиск текущего слота по времени
+  if (!currentSlot && allSlots.length > 0) {
+    currentSlot = allSlots.find(s => s.start_time <= nowIso && s.end_time > nowIso) || null;
 
-    if (allSlots.length > 0) {
-      // Изолируем последний непрерывный блок расписания (последнюю опубликованную сетку)
+    if (!currentSlot) {
+      // Защита от микро-рассинхрона (если слот стартует в пределах 4 секунд от now)
+      const nearUpcoming = allSlots.find(s => s.start_time > nowIso);
+      if (nearUpcoming) {
+        const startMs = new Date(nearUpcoming.start_time).getTime();
+        if (startMs - nowMs <= 4000) {
+          currentSlot = nearUpcoming;
+          offset = 0;
+          remaining = Number(nearUpcoming.duration) || 0;
+        }
+      }
+    }
+
+    if (!currentSlot && station.fallback_mode === 'loop') {
       let scheduleStartIndex = allSlots.length - 1;
       for (let i = allSlots.length - 1; i > 0; i--) {
         const prevEndMs = new Date(allSlots[i - 1].end_time).getTime();
         const currStartMs = new Date(allSlots[i].start_time).getTime();
-        // Если между слотами нет разрыва более 5 секунд — они принадлежат одной сетке
         if (currStartMs - prevEndMs <= 5000) {
           scheduleStartIndex = i - 1;
         } else {
@@ -550,13 +667,16 @@ async function getStationLiveState(stationId) {
         const firstStartMs = new Date(activeLoopSlots[0].start_time).getTime();
         let matchedIndex = -1;
 
-        // Защита от отлета в конец при старте: если nowMs < firstStartMs, играем первый слот с 0
         if (nowMs < firstStartMs) {
-          currentSlot = { ...activeLoopSlots[0] };
-          offset = 0;
-          remaining = Number(activeLoopSlots[0].duration) || 0;
-          isVirtualLoop = true;
-          matchedIndex = 0;
+          if (firstStartMs - nowMs > 1000) {
+            currentSlot = null;
+          } else {
+            currentSlot = { ...activeLoopSlots[0] };
+            offset = 0;
+            remaining = Number(activeLoopSlots[0].duration) || 0;
+            isVirtualLoop = true;
+            matchedIndex = 0;
+          }
         } else {
           const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
           const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
@@ -577,42 +697,58 @@ async function getStationLiveState(stationId) {
           }
         }
 
-        // Если виртуальный цикл активен, генерируем следующие слоты из кольцевого цикла
-        const effectiveIndex = matchedIndex >= 0 ? matchedIndex : 0;
-        for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
-          const ns = activeLoopSlots[(effectiveIndex + i) % activeLoopSlots.length];
-          loopNextSlots.push({
-            id: ns.id,
-            title: ns.title,
-            type: ns.type,
-            audioUrl: ns.audio_url, // отдаем audio_url для бесшовного мгновенного переключения
-            duration: ns.duration,
-            startTime: ns.start_time,
-            endTime: ns.end_time
-          });
+        if (matchedIndex >= 0) {
+          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+            const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
+            loopNextSlots.push({
+              id: ns.id,
+              title: ns.title,
+              type: ns.type,
+              audioUrl: ns.audio_url,
+              duration: ns.duration,
+              startTime: ns.start_time,
+              endTime: ns.end_time
+            });
+          }
         }
       }
+    } else if (currentSlot) {
+      const startMs = new Date(currentSlot.start_time).getTime();
+      offset = Math.max(0, (nowMs - startMs) / 1000);
+      remaining = Math.max(0, (Number(currentSlot.duration) || 0) - offset);
     }
-  } else if (currentSlot) {
-    const startMs = new Date(currentSlot.start_time).getTime();
-    offset = Math.max(0, (nowMs - startMs) / 1000);
-    remaining = Math.max(0, (Number(currentSlot.duration) || 0) - offset);
   }
 
   // Ближайшие следующие слоты (до 10 шт.)
   let nextSlots = [];
   if (isVirtualLoop && loopNextSlots.length > 0) {
     nextSlots = loopNextSlots;
-  } else {
-    nextSlots = await all(
-      `SELECT * FROM radio_timeline_slots 
-       WHERE station_id = ? AND start_time > ? 
-       ORDER BY start_time ASC LIMIT 10`,
-      [stationId, nowIso]
-    );
+  } else if (allSlots.length > 0) {
+    const curIdx = currentSlot ? allSlots.findIndex(s => s.id === currentSlot.id) : -1;
+    if (curIdx >= 0) {
+      nextSlots = allSlots.slice(curIdx + 1, curIdx + 11).map(s => ({
+        id: s.id,
+        title: s.title,
+        type: s.type,
+        audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
+        duration: s.duration,
+        startTime: s.start_time,
+        endTime: s.end_time
+      }));
+    } else {
+      nextSlots = allSlots.filter(s => s.start_time > nowIso).slice(0, 10).map(s => ({
+        id: s.id,
+        title: s.title,
+        type: s.type,
+        audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
+        duration: s.duration,
+        startTime: s.start_time,
+        endTime: s.end_time
+      }));
+    }
   }
 
-  // Прошедшие слоты (до 10 шт., для перемотки/отката)
+  // Прошедшие слоты (до 10 шт.)
   const prevSlots = await all(
     `SELECT * FROM radio_timeline_slots 
      WHERE station_id = ? AND end_time <= ? 
@@ -623,6 +759,7 @@ async function getStationLiveState(stationId) {
   return {
     station,
     serverTime: nowIso,
+    broadcastStatus: station.broadcast_status || 'live',
     isLive: Boolean(currentSlot),
     isVirtualLoop,
     fallback: !currentSlot ? station.fallback_mode : null,
@@ -638,15 +775,7 @@ async function getStationLiveState(stationId) {
     } : null,
     offset: Math.round(offset * 10) / 10,
     remaining: Math.round(remaining * 10) / 10,
-    nextSlots: nextSlots.map(s => ({
-      id: s.id,
-      title: s.title,
-      type: s.type,
-      audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
-      duration: s.duration,
-      startTime: s.start_time,
-      endTime: s.end_time
-    })),
+    nextSlots,
     prevSlots: prevSlots.map(s => ({
       id: s.id,
       title: s.title,
@@ -933,6 +1062,8 @@ module.exports = {
   clearTimelineSlots,
   getTimelineSlots,
   setTimelineSlots,
+  startStationBroadcast,
+  stopStationBroadcast,
   getStationLiveState,
   getEffectiveNow,
   cleanupOldTimelineSlots

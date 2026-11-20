@@ -386,3 +386,55 @@ test('radio-store: track duration auto-probing and updateTrackDuration', async (
   await radioStore.deleteTrack(zeroTrack.id, 999, false);
 });
 
+test('radio-store: startStationBroadcast, stopStationBroadcast, and slot_order transitions', async () => {
+  const freq = 98.7;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Broadcast State Test Station',
+    ownerId: 905,
+    ownerName: 'StudioDirector',
+    fallbackMode: 'loop'
+  });
+
+  // Запуск эфира со слотами
+  const started = await radioStore.startStationBroadcast(station.id, {
+    forceNow: true,
+    slots: [
+      { title: 'Track 1', duration: 180, audio_url: '/uploads/track1.mp3' },
+      { title: 'Track 2', duration: 200, audio_url: '/uploads/track2.mp3' }
+    ]
+  });
+
+  assert.equal(started.broadcastStatus, 'live');
+  assert.equal(started.isLive, true);
+  assert.ok(started.currentSlot);
+  assert.equal(started.currentSlot.title, 'Track 1');
+
+  // Переход по завершению трека 1 (finishedSlotId):
+  const afterTrack1 = await radioStore.getStationLiveState(station.id, {
+    finishedSlotId: started.currentSlot.id
+  });
+  assert.ok(afterTrack1.currentSlot);
+  assert.equal(afterTrack1.currentSlot.title, 'Track 2', 'Должен мгновенно перейти на Track 2 по finishedSlotId');
+  assert.equal(afterTrack1.offset, 0, 'Смещение следующего слота должно начинаться с 0');
+
+  // Остановка вещания:
+  const stopped = await radioStore.stopStationBroadcast(station.id);
+  assert.equal(stopped.broadcastStatus, 'offline');
+
+  const stateOffline = await radioStore.getStationLiveState(station.id);
+  assert.equal(stateOffline.broadcastStatus, 'offline');
+  assert.equal(stateOffline.isLive, false);
+  assert.equal(stateOffline.currentSlot, null);
+
+  // Проверяем, что слоты в базе сохранились!
+  const slotsAfterStop = await radioStore.getTimelineSlots(station.id);
+  assert.equal(slotsAfterStop.length, 2, 'Слоты сетки не должны удаляться при остановке эфира');
+
+  await radioStore.deleteStation(station.id, 905, true);
+});
+
+

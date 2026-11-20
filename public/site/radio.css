@@ -1371,6 +1371,141 @@
   width: auto;
 }
 
+/* Мастер-пульт управления вещанием радиостанции */
+.radio-broadcast-master-deck {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.radio-deck-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.radio-cta-broadcast-btn {
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  padding: 10px 20px !important;
+  border-radius: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease !important;
+}
+
+.radio-cta-broadcast-btn:hover {
+  transform: translateY(-1px);
+}
+
+.radio-draft-save-btn {
+  font-weight: 600 !important;
+  font-size: 0.88rem !important;
+  padding: 10px 16px !important;
+  border-radius: 10px !important;
+}
+
+.radio-deck-schedule-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radio-schedule-time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.radio-schedule-time-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.radio-schedule-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.radio-preset-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.radio-preset-chip:hover {
+  background: rgba(99, 102, 241, 0.3);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #fff;
+}
+
+.radio-live-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+
+.radio-live-status-badge.status-live {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.radio-live-status-badge.status-offline {
+  background: rgba(148, 163, 184, 0.15) !important;
+  color: #94a3b8 !important;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.radio-live-status-badge.status-scheduled {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.radio-studio-add-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.radio-studio-add-actions,
+.radio-studio-side-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Слоты таймлайна с отображением точного времени */
 .radio-slot-time-range {
   font-family: monospace;

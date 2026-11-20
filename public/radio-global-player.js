@@ -359,9 +359,10 @@
     }
 
     if (state.mode === 'radio') {
-      // В режиме радио обновляем эфир со следующим слотом
+      // В режиме радио обновляем эфир со следующим слотом, передавая ID завершившегося трека
       if (state.station) {
-        syncRadioStationLive(state.station, true);
+        const finishedId = state.currentSlot ? state.currentSlot.id : null;
+        syncRadioStationLive(state.station, true, finishedId);
       }
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
       playTrackAt(state.currentIndex + 1);
@@ -481,13 +482,17 @@
     } catch (_) {}
   }
 
-  async function syncRadioStationLive(station, autoPlay = true) {
+  async function syncRadioStationLive(station, autoPlay = true, finishedSlotId = null) {
     if (!station || !station.id) return;
     if (isSyncingLive) return;
     isSyncingLive = true;
 
     try {
-      const res = await fetch(`/api/radio/stations/${station.id}/live`);
+      let url = `/api/radio/stations/${station.id}/live`;
+      if (finishedSlotId) {
+        url += `?finished_slot_id=${encodeURIComponent(finishedSlotId)}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) {
         cancelLiveSync();
         if (res.status === 404) {
@@ -513,6 +518,35 @@
 
       state.mode = 'radio';
       state.station = station;
+
+      // Если эфир выключен владельцем станции (offline)
+      if (live.broadcastStatus === 'offline') {
+        state.currentSlot = null;
+        state.isPlaying = false;
+        resetAudioElement();
+        cancelLiveSync();
+        updateMediaSession();
+        updateBarUI();
+        notify();
+        return;
+      }
+
+      // Если эфир запланирован на будущее (scheduled)
+      if (live.broadcastStatus === 'scheduled') {
+        state.currentSlot = null;
+        state.isPlaying = false;
+        resetAudioElement();
+        updateMediaSession();
+        updateBarUI();
+        notify();
+        if (live.scheduledStartTime) {
+          const startMs = new Date(live.scheduledStartTime).getTime();
+          const nowMs = live.serverTime ? new Date(live.serverTime).getTime() : Date.now();
+          const delay = Math.max(2000, Math.min(30000, startMs - nowMs));
+          scheduleLiveSync(station, delay);
+        }
+        return;
+      }
 
       let targetSlot = live.currentSlot;
       let targetOffset = live.offset || 0;

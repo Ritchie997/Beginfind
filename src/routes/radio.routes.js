@@ -406,7 +406,10 @@ router.delete('/radio/stations/:id', auth.authenticateToken, auth.checkApproved,
 // GET /api/radio/stations/:id/live — состояние прямого эфира станции
 router.get('/radio/stations/:id/live', async (req, res) => {
   try {
-    const state = await radioStore.getStationLiveState(req.params.id);
+    const { finishedSlotId, finished_slot_id } = req.query;
+    const state = await radioStore.getStationLiveState(req.params.id, {
+      finishedSlotId: finishedSlotId || finished_slot_id
+    });
     res.json(state);
   } catch (error) {
     if (error.message === 'Станция не найдена') {
@@ -414,6 +417,54 @@ router.get('/radio/stations/:id/live', async (req, res) => {
     }
     console.error('[radio] Error getting live state:', error);
     res.status(500).json({ error: 'Ошибка получения состояния эфира: ' + error.message });
+  }
+});
+
+// POST /api/radio/stations/:id/start-broadcast — явный запуск прямого эфира (сейчас или по расписанию)
+router.post('/radio/stations/:id/start-broadcast', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const station = await radioStore.getStationById(req.params.id);
+    if (!station) {
+      return res.status(404).json({ error: 'Радиостанция не найдена' });
+    }
+
+    const isOwner = req.user && String(station.owner_id) === String(req.user.id);
+    if (!isOwner && !isRootOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Только владелец станции может запускать эфир' });
+    }
+
+    const { forceNow, startTime, slots } = req.body;
+    const state = await radioStore.startStationBroadcast(req.params.id, {
+      forceNow: forceNow !== undefined ? Boolean(forceNow) : (!startTime || startTime === 'now'),
+      startTime,
+      slots
+    });
+
+    res.json({ success: true, message: 'Вещание успешно запущено', state });
+  } catch (error) {
+    console.error('[radio] Error starting broadcast:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// POST /api/radio/stations/:id/stop-broadcast — остановка вещания (сохраняя сетку)
+router.post('/radio/stations/:id/stop-broadcast', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const station = await radioStore.getStationById(req.params.id);
+    if (!station) {
+      return res.status(404).json({ error: 'Радиостанция не найдена' });
+    }
+
+    const isOwner = req.user && String(station.owner_id) === String(req.user.id);
+    if (!isOwner && !isRootOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Только владелец станции может останавливать эфир' });
+    }
+
+    const result = await radioStore.stopStationBroadcast(req.params.id);
+    res.json({ success: true, message: 'Вещание остановлено. Сетка сохранена.', ...result });
+  } catch (error) {
+    console.error('[radio] Error stopping broadcast:', error);
+    res.status(400).json({ error: error.message });
   }
 });
 
