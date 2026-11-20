@@ -76,6 +76,13 @@
     pollTimer: null,
     feedFilter: 'all',
     feedSearch: '',
+    feedPage: 1,
+    feedLimit: 30,
+    feedTotal: 0,
+    feedTracks: [],
+    feedHasMore: true,
+    feedLoading: false,
+    feedObserver: null,
     favoriteTrackIds: new Set(),
     mySection: 'favorites',
     userPlaylists: [],
@@ -186,6 +193,8 @@
       stationsGrid: document.getElementById('stationsGrid'),
       btnRefreshStations: document.getElementById('btnRefreshStations'),
       tracksList: document.getElementById('tracksFeedList'),
+      radioFeedSentinel: document.getElementById('radioFeedSentinel'),
+      radioFeedLoadingMore: document.getElementById('radioFeedLoadingMore'),
       trackTypeFilters: document.getElementById('trackTypeFilters'),
       tracksSearchInput: document.getElementById('tracksSearchInput'),
 
@@ -1038,10 +1047,38 @@
     });
   }
 
-  // ===== Лента треков и подкастов =====
-  async function loadTracks() {
+  // ===== Лента треков и подкастов: Бесконечная лента (по аналогии с Antropedia) =====
+  function setupFeedInfiniteScroll() {
+    if (!dom.radioFeedSentinel || !('IntersectionObserver' in window)) return;
+    if (state.feedObserver) {
+      state.feedObserver.disconnect();
+      state.feedObserver = null;
+    }
+    state.feedObserver = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        if (state.feedHasMore && !state.feedLoading && dom.tabFeed && !dom.tabFeed.hidden && state.feedFilter !== 'playlists') {
+          loadTracks(true);
+        }
+      }
+    }, { rootMargin: '400px' });
+    state.feedObserver.observe(dom.radioFeedSentinel);
+  }
+
+  async function loadTracks(append = false) {
     if (!dom.tracksList) return;
-    dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем данные…</p>';
+    if (state.feedLoading) return;
+    if (append && !state.feedHasMore) return;
+
+    state.feedLoading = true;
+    if (!append) {
+      state.feedPage = 1;
+      state.feedTracks = [];
+      state.feedHasMore = true;
+      dom.tracksList.innerHTML = '<p class="alltell-state">Загружаем данные…</p>';
+    } else {
+      if (dom.radioFeedLoadingMore) dom.radioFeedLoadingMore.hidden = false;
+    }
+
     try {
       if (state.feedFilter === 'playlists') {
         const query = new URLSearchParams();
@@ -1063,12 +1100,27 @@
 
       await loadFavoriteIds();
 
+      const pageToFetch = append ? (state.feedPage + 1) : 1;
       const query = new URLSearchParams();
       if (state.feedFilter && state.feedFilter !== 'all') query.set('type', state.feedFilter);
       if (state.feedSearch) query.set('search', state.feedSearch);
+      query.set('page', String(pageToFetch));
+      query.set('limit', String(state.feedLimit || 30));
 
       const data = await api(`/api/radio/tracks?${query.toString()}`);
-      if (!data.tracks || data.tracks.length === 0) {
+      state.feedTotal = data.total || 0;
+      state.feedPage = pageToFetch;
+
+      const newBatch = data.tracks || [];
+      if (!append) {
+        state.feedTracks = newBatch;
+      } else {
+        state.feedTracks = state.feedTracks.concat(newBatch);
+      }
+
+      state.feedHasMore = newBatch.length > 0 && state.feedTracks.length < state.feedTotal;
+
+      if (!state.feedTracks || state.feedTracks.length === 0) {
         dom.tracksList.innerHTML = `
           <div style="text-align:center; padding:40px; color:#94a3b8;">
             <i class="fas fa-music" style="font-size:2rem; margin-bottom:12px; display:block; color:#64748b;"></i>
@@ -1078,11 +1130,27 @@
         return;
       }
 
-      dom.tracksList.innerHTML = data.tracks.map((t, idx) => renderTrackItemHtml(t, idx, data.tracks)).join('');
-      attachTrackItemListeners(dom.tracksList, data.tracks);
+      let html = state.feedTracks.map((t, idx) => renderTrackItemHtml(t, idx, state.feedTracks)).join('');
+      if (!state.feedHasMore && state.feedTracks.length > 0) {
+        html += `
+          <div style="text-align:center; padding:20px; color:#64748b; font-size:0.85rem;">
+            <i class="fas fa-check-circle"></i> Показаны все аудиозаписи (${state.feedTotal})
+          </div>
+        `;
+      }
+      dom.tracksList.innerHTML = html;
+      attachTrackItemListeners(dom.tracksList, state.feedTracks);
     } catch (e) {
-      if (dom.tracksList) {
+      if (dom.tracksList && !append) {
         dom.tracksList.innerHTML = `<p class="alltell-error">Ошибка загрузки: ${escapeHtml(e.message)}</p>`;
+      }
+    } finally {
+      state.feedLoading = false;
+      if (dom.radioFeedLoadingMore) dom.radioFeedLoadingMore.hidden = true;
+
+      // Как в Антропедии: если после загрузки sentinel всё ещё на виду (мало треков / высокий экран) — подгружаем следующую порцию
+      if (state.feedHasMore && dom.radioFeedSentinel && dom.tabFeed && !dom.tabFeed.hidden && dom.radioFeedSentinel.getBoundingClientRect().top < window.innerHeight + 400) {
+        setTimeout(() => { loadTracks(true); }, 50);
       }
     }
   }
@@ -4456,7 +4524,10 @@
       loadStations();
       updateDeckUI();
     }
-    if (tabName === 'feed') loadTracks();
+    if (tabName === 'feed') {
+      loadTracks(false);
+      setupFeedInfiniteScroll();
+    }
     if (tabName === 'my') loadMySection();
     if (tabName === 'editor') initEditor();
 
@@ -6068,7 +6139,8 @@
       openTrackPage(trackIdToOpen);
     } else {
       loadStations();
-      loadTracks();
+      loadTracks(false);
+      setupFeedInfiniteScroll();
     }
 
     // Фоновое обновление сетки вещания без прерывания играющего аудио
@@ -6121,6 +6193,10 @@
       if (typeof state.globalUnsub === 'function') {
         state.globalUnsub();
         state.globalUnsub = null;
+      }
+      if (state.feedObserver) {
+        state.feedObserver.disconnect();
+        state.feedObserver = null;
       }
       window.RadioClient._mounted = false;
 

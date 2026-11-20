@@ -91,12 +91,12 @@ async function ensureTracksConvertedToMp3() {
   }
 }
 
-async function listTracks({ type = null, search = '', page = 1, limit = 30, userId = null } = {}) {
+async function listTracks({ type = null, search = '', page = 1, limit = 50, userId = null } = {}) {
   // Гарантируем, что любые ранее добавленные не-mp3 треки будут сконвертированы в mp3
   await ensureTracksConvertedToMp3();
 
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+  const l = Math.min(500, Math.max(1, parseInt(limit, 10) || 50));
   const offset = (p - 1) * l;
 
   const conditions = [];

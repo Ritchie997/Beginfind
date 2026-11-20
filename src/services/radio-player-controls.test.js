@@ -137,3 +137,19 @@ test('radio UI: broadcast loop toggle, custom host pseudonyms, and cover file/ur
   assert.ok(radioHtml.includes('id="playlistCoverInput"'), 'Modal create playlist must have cover file input');
   assert.ok(radioHtml.includes('id="playlistCoverUrlInput"'), 'Modal create playlist must have cover URL input');
 });
+
+test('radio UI: infinite scroll in feed matches Antropedia implementation with IntersectionObserver and sentinel', () => {
+  const radioHtml = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  // 1. HTML markup parity: sentinel and loading more indicator
+  assert.ok(radioHtml.includes('id="radioFeedSentinel"'), 'radio.html must include sentinel element for infinite scrolling');
+  assert.ok(radioHtml.includes('id="radioFeedLoadingMore"'), 'radio.html must include loading more spinner element');
+
+  // 2. Client JS implementation parity with Antropedia
+  assert.ok(radioClientJs.includes('setupFeedInfiniteScroll'), 'radio-client.js must define setupFeedInfiniteScroll');
+  assert.ok(radioClientJs.includes('new IntersectionObserver'), 'Must use IntersectionObserver for infinite scrolling');
+  assert.ok(radioClientJs.includes('rootMargin: \'400px\''), 'Must use 400px rootMargin identical to Antropedia');
+  assert.ok(radioClientJs.includes('state.feedObserver.observe(dom.radioFeedSentinel)'), 'Must observe radioFeedSentinel element');
+  assert.ok(radioClientJs.includes('state.feedObserver.disconnect()'), 'Must disconnect observer in cleanup');
+});

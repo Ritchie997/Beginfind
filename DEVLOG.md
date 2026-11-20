@@ -28,6 +28,11 @@
 - **Добавление обложек файлом и по ссылке (URL):**
   - В модалки создания/редактирования радиостанций, треков и плейлистов добавлены параллельные поля: загрузка локального файла через форму (`FormData` -> `/api/upload-image`) и прямое указание внешней ссылки (URL).
   - Реализован моментальный интерактивный предпросмотр выбранного изображения (`URL.createObjectURL` для файлов и живое превью для URL).
+- **Бесконечная лента треков по архитектуре Antropedia (`IntersectionObserver` + sentinel):**
+  - Изучена реализация ленты статей в Antropedia ([public/site/site.js](file:///c:/Warning/Project/Beginfind/public/site/site.js), [public/antropedia.js](file:///c:/Warning/Project/Beginfind/public/antropedia.js)).
+  - В [public/site/radio.html](file:///c:/Warning/Project/Beginfind/public/site/radio.html) добавлен элемент-доводчик `#radioFeedSentinel` и индикатор загрузки `#radioFeedLoadingMore`.
+  - В [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js) внедрена функция `setupFeedInfiniteScroll()` с `IntersectionObserver` (`rootMargin: '400px'`), отслеживающая прокрутку и плавно подгружающая следующие пачки треков без ручных кликов и сброса позиции.
+  - Добавлена автоподгрузка для высоких экранов (`sentinel.getBoundingClientRect().top < window.innerHeight + 400`), корректный сброс страницы при смене фильтра/поиска и очистка observer при уходе с вкладки.
 - **Тестирование и проверка:**
   - Добавлены новые тесты в [src/services/radio-player-controls.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-player-controls.test.js). Все 116 тестов проекта выполняются успешно (`npm test`).
   - Проведено интерактивное браузерное тестирование в Chromium webview с подтверждением фактов хоста (`BROWSER_HOST_FACTS`).
