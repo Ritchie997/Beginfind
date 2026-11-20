@@ -175,6 +175,7 @@
       deckLoopBtn: document.getElementById('deckLoopBtn'),
       deckUnfreezeBtn: document.getElementById('deckUnfreezeBtn'),
       deckLiveSyncBtn: document.getElementById('deckLiveSyncBtn'),
+      deckLiveSyncLabel: document.getElementById('deckLiveSyncLabel'),
       deckSkipBtn: document.getElementById('deckNextBtn') || document.getElementById('deckSkipBtn'),
       deckProgressBar: document.getElementById('deckProgressBar'),
       deckProgressFill: document.getElementById('deckProgressFill'),
@@ -607,13 +608,20 @@
       state.currentSlot = gState.currentSlot;
     }
 
+    const isPlaying = gState.isPlaying && (gState.mode === 'radio' && gState.station && gState.station.id === st.id);
+
     if (dom.deckStatus) {
       if (state.isTimeshift) {
         dom.deckStatus.className = 'radio-status-tag is-timeshift';
-        dom.deckStatus.textContent = 'Таймшифт';
+        dom.deckStatus.textContent = isPlaying ? 'Таймшифт' : 'Таймшифт (пауза)';
       } else if (slot) {
-        dom.deckStatus.className = 'radio-status-tag is-live';
-        dom.deckStatus.textContent = 'В эфире';
+        if (isPlaying) {
+          dom.deckStatus.className = 'radio-status-tag is-live';
+          dom.deckStatus.textContent = '🔴 В эфире';
+        } else {
+          dom.deckStatus.className = 'radio-status-tag is-timeshift';
+          dom.deckStatus.textContent = '⏸ Пауза (эфир идёт)';
+        }
       } else {
         dom.deckStatus.className = 'radio-status-tag is-offline';
         dom.deckStatus.textContent = st.fallback_mode === 'loop' ? 'Зациклено' : 'Офлайн';
@@ -631,8 +639,6 @@
       if (dom.deckTrackTitle) dom.deckTrackTitle.textContent = st.fallback_mode === 'loop' ? 'Эфир зациклен' : 'Нет запланированных треков';
       if (dom.deckTrackSub) dom.deckTrackSub.textContent = 'Ожидание выхода в эфир';
     }
-
-    const isPlaying = gState.isPlaying && (gState.mode === 'radio' && gState.station && gState.station.id === st.id);
 
     if (dom.deckPlayBtn) {
       dom.deckPlayBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
@@ -657,8 +663,16 @@
     }
 
     if (dom.deckLiveSyncBtn) {
-      dom.deckLiveSyncBtn.style.display = state.isTimeshift ? 'inline-flex' : 'none';
-      dom.deckLiveSyncBtn.title = 'Вернуться в прямой эфир станции';
+      dom.deckLiveSyncBtn.style.display = 'inline-flex';
+      const needsSync = Boolean(state.isTimeshift || !isPlaying);
+      dom.deckLiveSyncBtn.classList.toggle('is-needs-sync', needsSync);
+      dom.deckLiveSyncBtn.classList.toggle('is-live-synced', !needsSync && Boolean(isPlaying));
+      if (dom.deckLiveSyncLabel) {
+        dom.deckLiveSyncLabel.textContent = needsSync ? 'Восстановить эфир' : 'В эфире';
+      }
+      dom.deckLiveSyncBtn.title = needsSync 
+        ? 'Отставание или пауза. Нажмите, чтобы мгновенно восстановить прямой эфир станции!' 
+        : 'Синхронизировано с прямым эфиром станции';
     }
 
     if (dom.deckNextBtn) {
@@ -5062,8 +5076,16 @@
 
     const globalAudio = getGlobalAudio();
 
-    // Подписка на глобальный аудиоплеер AllTell
+    // Подписка на глобальный аудиоплеер AllTell и первичное восстановление эфира
     if (globalAudio) {
+      const gInitialState = globalAudio.getState();
+      if (gInitialState && gInitialState.station) {
+        state.currentStation = gInitialState.station;
+        state.currentSlot = gInitialState.currentSlot;
+        state.isTimeshift = Boolean(gInitialState.isTimeshift);
+        updateDeckUI();
+      }
+
       state.globalUnsub = globalAudio.subscribe((gState) => {
         if (!state.isTimeshift && gState.mode === 'radio' && gState.currentSlot) {
           state.currentSlot = gState.currentSlot;

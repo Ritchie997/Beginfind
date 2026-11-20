@@ -399,12 +399,36 @@
 }
 
 .radio-action-btn.btn-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #2ed573;
   border-color: rgba(46, 213, 115, 0.35);
+  transition: all 0.2s ease;
 }
 
 .radio-action-btn.btn-live:hover {
   background: rgba(46, 213, 115, 0.15);
+}
+
+.radio-action-btn.btn-live.is-live-synced {
+  color: #2ed573;
+  border-color: rgba(46, 213, 115, 0.45);
+  background: rgba(46, 213, 115, 0.12);
+}
+
+.radio-action-btn.btn-live.is-needs-sync {
+  background: #ef4444 !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.75) !important;
+  animation: pulse-live-air 1.8s infinite ease-in-out !important;
+}
+
+.radio-action-btn.btn-live.is-needs-sync:hover {
+  background: #dc2626 !important;
+  transform: scale(1.04);
 }
 
 .radio-volume-control {

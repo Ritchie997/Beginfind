@@ -1220,13 +1220,22 @@
     domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
+      const needsSync = Boolean(state.isTimeshift || !state.isPlaying);
+      if (domBar.goLiveBtn) {
+        domBar.goLiveBtn.style.display = 'inline-flex';
+        domBar.goLiveBtn.classList.toggle('is-needs-sync', needsSync);
+        domBar.goLiveBtn.innerHTML = needsSync 
+          ? '<i class="fas fa-rotate"></i> <span>Восстановить эфир</span>' 
+          : '<i class="fas fa-tower-broadcast"></i> <span>В эфире</span>';
+        domBar.goLiveBtn.title = needsSync 
+          ? 'Отставание или пауза. Нажмите, чтобы мгновенно восстановить прямой эфир станции' 
+          : 'Прямой эфир (синхронизировано)';
+      }
+
       if (state.isTimeshift) {
         if (domBar.badge) {
           domBar.badge.textContent = '⏳ ТАЙМШИФТ';
           domBar.badge.classList.add('is-timeshift');
-        }
-        if (domBar.goLiveBtn) {
-          domBar.goLiveBtn.style.display = 'inline-flex';
         }
         if (domBar.title) {
           domBar.title.textContent = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');
@@ -1234,15 +1243,12 @@
         }
         if (domBar.sub) {
           const lagStr = state.timeshiftDeltaSec > 0 ? ` (-${formatTime(state.timeshiftDeltaSec)})` : '';
-          domBar.sub.textContent = `Таймшифт${lagStr} • Нажмите «В ЭФИР» для прямого вещания`;
+          domBar.sub.textContent = `Таймшифт${lagStr} • Нажмите «Восстановить эфир» для прямого вещания`;
         }
       } else {
         if (domBar.badge) {
           domBar.badge.textContent = `${state.station ? state.station.frequency : '---'} FM`;
           domBar.badge.classList.remove('is-timeshift');
-        }
-        if (domBar.goLiveBtn) {
-          domBar.goLiveBtn.style.display = 'none';
         }
         if (domBar.title) {
           domBar.title.textContent = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');

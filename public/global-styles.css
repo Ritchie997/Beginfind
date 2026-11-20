@@ -4321,7 +4321,20 @@ body.articles-page .content-body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+.alltell-global-live-btn.is-needs-sync {
+  background: #ef4444;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
   animation: pulseGlobalLive 1.8s infinite ease-in-out;
+}
+
+.alltell-global-live-btn:not(.is-needs-sync) {
+  background: rgba(46, 213, 115, 0.15);
+  color: #2ed573;
+  border: 1px solid rgba(46, 213, 115, 0.35);
+  animation: none;
 }
 
 .alltell-global-live-btn:hover {
