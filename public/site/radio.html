@@ -350,6 +350,7 @@
             <label><i class="far fa-clock"></i> Старт вещания:</label>
             <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
             <button type="button" class="btn btn-primary btn-sm" id="btnSetStartTimeNow" title="Запустить вещание в прямой эфир прямо сейчас"><i class="fas fa-play"></i> Сейчас (Старт)</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnToggleBroadcastLoop" title="Зацикливать вещание радиостанции по кругу (бесконечный эфир)"><i class="fas fa-repeat"></i> <span id="broadcastLoopBtnText">Зациклить эфир</span></button>
             <span id="editorLiveStatusBadge" class="badge" style="display:none; font-size:0.75rem; padding:4px 8px; border-radius:6px;"></span>
             <div class="radio-time-sync-widget" id="radioTimeSyncWidget" style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#94a3b8; margin-left:6px;" title="Системное время вашего устройства и часовой пояс">
               <span id="radioServerClock"><i class="fas fa-clock"></i> Эфир: --:--:--</span>
@@ -516,6 +517,10 @@
             <input type="text" id="trackTitleInput" class="radio-form-input form-input" placeholder="Название..." required>
           </div>
           <div class="radio-form-group">
+            <label>Исполнитель / Ведущий / Автор (необязательно)</label>
+            <input type="text" id="trackAuthorInput" class="radio-form-input form-input" placeholder="Имя исполнителя или ведущего (по умолчанию ваше имя)">
+          </div>
+          <div class="radio-form-group">
             <label>Тип записи</label>
             <select id="trackTypeSelect" class="radio-form-select form-select">
               <option value="track">🎵 Музыкальный трек</option>
@@ -524,12 +529,14 @@
             </select>
           </div>
           <div class="radio-form-group">
-            <label>Обложка записи (изображение JPG, PNG, WEBP — необязательно)</label>
+            <label>Обложка записи (файл или ссылка — необязательно)</label>
             <input type="file" id="trackCoverInput" class="radio-form-input form-input" accept="image/*">
             <div id="trackCoverPreviewBox" style="margin-top:8px; display:none; align-items:center; gap:12px;">
               <img id="trackCoverPreviewImg" src="" alt="Обложка" style="width:64px; height:64px; border-radius:10px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);">
               <span style="font-size:0.85rem; color:#94a3b8;">Обложка выбрана</span>
             </div>
+            <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-top:6px; margin-bottom:4px;">Или укажите ссылку на изображение (URL):</label>
+            <input type="url" id="trackCoverUrlInput" class="radio-form-input form-input" placeholder="https://... или оставьте пустым">
           </div>
         </div>
         <div class="modal-footer">
@@ -556,6 +563,23 @@
           <div class="radio-form-group">
             <label>Название радиостанции</label>
             <input type="text" id="stationNameInput" class="radio-form-input form-input" placeholder="Например: Радио Хроники" required>
+          </div>
+          <div class="radio-form-group">
+            <label>Ведущий / Псевдоним (необязательно)</label>
+            <input type="text" id="stationHostInput" class="radio-form-input form-input" placeholder="Например: DJ Shadow / Хроникер (по умолчанию ваше имя)">
+            <p style="font-size:0.82rem; color:#94a3b8; margin:4px 0 0 0;">Укажите ваш псевдоним или имя ведущего радиоволны</p>
+          </div>
+          <div class="radio-form-group">
+            <label>Аватар / Обложка радиостанции (необязательно)</label>
+            <div style="margin-bottom:8px;">
+              <input type="file" id="createStationAvatarFile" class="radio-form-input form-input" accept="image/*">
+            </div>
+            <div id="createStationAvatarPreviewBox" style="margin-bottom:8px; display:none; align-items:center; gap:12px;">
+              <img id="createStationAvatarPreviewImg" src="" alt="Обложка" style="width:64px; height:64px; border-radius:10px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);">
+              <span style="font-size:0.85rem; color:#94a3b8;">Обложка выбрана</span>
+            </div>
+            <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-bottom:4px;">Или укажите ссылку на изображение (URL):</label>
+            <input type="url" id="createStationAvatarUrl" class="radio-form-input form-input" placeholder="https://... или оставьте пустым">
           </div>
           <div class="radio-form-group">
             <label>Краткое описание формата эфира</label>
@@ -706,11 +730,13 @@
             </p>
           </div>
           <div class="radio-form-group">
-            <label>Обложка плейлиста (необязательно)</label>
+            <label>Обложка плейлиста (файл или ссылка — необязательно)</label>
             <input type="file" id="playlistCoverInput" class="radio-form-input form-input" accept="image/*">
             <div id="playlistCoverPreviewBox" style="display:none; margin-top:8px;">
               <img id="playlistCoverPreviewImg" src="" alt="Превью" style="width:70px; height:70px; object-fit:cover; border-radius:8px;">
             </div>
+            <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-top:6px; margin-bottom:4px;">Или укажите ссылку на изображение (URL):</label>
+            <input type="url" id="playlistCoverUrlInput" class="radio-form-input form-input" placeholder="https://... или оставьте пустым">
           </div>
         </div>
         <div class="modal-footer">
@@ -858,6 +884,10 @@
             <input type="text" id="editStationName" class="radio-form-input form-control" required placeholder="Например: Звериная Коробка FM">
           </div>
           <div class="radio-form-group">
+            <label>Ведущий / Псевдоним</label>
+            <input type="text" id="editStationHost" class="radio-form-input form-control" placeholder="Имя или псевдоним ведущего эфира">
+          </div>
+          <div class="radio-form-group">
             <label>Описание станции</label>
             <textarea id="editStationDescription" class="radio-form-textarea form-control" rows="3" placeholder="Расскажите о формате вашей радиостанции..."></textarea>
           </div>
@@ -870,7 +900,15 @@
             </select>
           </div>
           <div class="radio-form-group">
-            <label>Аватар / Обложка радиостанции (URL)</label>
+            <label>Аватар / Обложка радиостанции</label>
+            <div style="margin-bottom:8px;">
+              <input type="file" id="editStationAvatarFile" class="radio-form-input form-control" accept="image/*">
+            </div>
+            <div id="editStationAvatarPreviewBox" style="margin-bottom:8px; display:none; align-items:center; gap:12px;">
+              <img id="editStationAvatarPreviewImg" src="" alt="Обложка" style="width:64px; height:64px; border-radius:10px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);">
+              <span style="font-size:0.85rem; color:#94a3b8;">Обложка выбрана</span>
+            </div>
+            <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-bottom:4px;">Или укажите ссылку на изображение (URL):</label>
             <input type="url" id="editStationAvatar" class="radio-form-input form-control" placeholder="https://... или оставьте пустым">
           </div>
         </div>

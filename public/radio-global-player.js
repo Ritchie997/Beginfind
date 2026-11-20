@@ -209,6 +209,11 @@
         }
       } else if (msg.type === 'CMD_SET_LOOP') {
         setLoop(msg.isLoop);
+      } else if (msg.type === 'CMD_SET_MUTE') {
+        state.muted = Boolean(msg.muted);
+        if (audio) audio.muted = state.muted;
+        updateBarUI();
+        notify();
       } else if (msg.type === 'LEADER_LEAVING') {
         if (msg.tabId === remoteLeaderTabId) {
           remoteLeaderTabId = null;
@@ -418,13 +423,23 @@
 
       // Если слот, вернувшийся с сервера, это тот самый слот, который только что завершился
       if (state.currentSlot && targetSlot && state.currentSlot.id === targetSlot.id && audio.ended) {
-        // Сервер еще не успел перешагнуть end_time текущего слота: подождем полсекунды и обновим live
-        setTimeout(() => {
-          if (state.mode === 'radio' && state.station && state.station.id === station.id) {
-            syncRadioStationLive(station, autoPlay);
-          }
-        }, 500);
-        return;
+        if (live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) {
+          targetSlot = live.nextSlots[0];
+          targetOffset = 0;
+        } else {
+          setTimeout(() => {
+            if (state.mode === 'radio' && state.station && state.station.id === station.id) {
+              syncRadioStationLive(station, autoPlay);
+            }
+          }, 300);
+          return;
+        }
+      }
+
+      // Если текущего слота нет (стык треков), но есть следующий слот в очереди эфира
+      if (!targetSlot && live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) {
+        targetSlot = live.nextSlots[0];
+        targetOffset = 0;
       }
 
       state.currentSlot = targetSlot;
@@ -492,7 +507,7 @@
               if (state.mode === 'radio' && state.station && state.station.id === station.id) {
                 syncRadioStationLive(station, true);
               }
-            }, 3000);
+            }, 400);
           }
         }
       }
@@ -745,6 +760,11 @@
   function toggleMute() {
     state.muted = !state.muted;
     audio.muted = state.muted;
+    if (broadcast) {
+      broadcast.postMessage({ type: 'CMD_SET_MUTE', muted: state.muted });
+    }
+    updateBarUI();
+    saveState();
     notify();
   }
 
@@ -983,6 +1003,18 @@
     if (domBar.loopBtn) {
       domBar.loopBtn.classList.toggle('is-active', Boolean(state.isLoop));
       domBar.loopBtn.title = state.isLoop ? 'Зацикливание включено (нажмите, чтобы выключить)' : 'Зациклить';
+    }
+
+    if (domBar.muteBtn) {
+      domBar.muteBtn.classList.toggle('is-active', Boolean(state.muted));
+      domBar.muteBtn.classList.toggle('is-muted', Boolean(state.muted));
+      domBar.muteBtn.innerHTML = state.muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
+      domBar.muteBtn.title = state.muted ? 'Включить звук' : 'Выключить звук';
+      domBar.muteBtn.setAttribute('aria-label', state.muted ? 'Включить звук' : 'Выключить звук');
+    }
+
+    if (domBar.volSlider) {
+      domBar.volSlider.value = state.muted ? 0 : state.volume;
     }
 
     if (domBar.playBtn) {

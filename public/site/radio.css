@@ -376,6 +376,9 @@
   color: #fff;
 }
 
+.radio-action-btn.is-muted,
+.standalone-action-btn.is-muted,
+.feed-player-sub-btn.is-muted,
 .radio-action-btn.is-active,
 .standalone-action-btn.is-active,
 .feed-player-sub-btn.is-active,

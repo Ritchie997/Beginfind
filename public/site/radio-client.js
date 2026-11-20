@@ -179,6 +179,8 @@
       feedPlayerPlayBtn: document.getElementById('feedPlayerPlayBtn'),
       feedPlayerNextBtn: document.getElementById('feedPlayerNextBtn'),
       feedPlayerLoopBtn: document.getElementById('feedPlayerLoopBtn'),
+      feedPlayerMuteBtn: document.getElementById('feedPlayerMuteBtn'),
+      feedPlayerVolume: document.getElementById('feedPlayerVolume'),
 
       // Станции и лента
       stationsGrid: document.getElementById('stationsGrid'),
@@ -191,6 +193,8 @@
       editorStationSelect: document.getElementById('editorStationSelect'),
       editorBroadcastStartTime: document.getElementById('editorBroadcastStartTime'),
       btnSetStartTimeNow: document.getElementById('btnSetStartTimeNow'),
+      btnToggleBroadcastLoop: document.getElementById('btnToggleBroadcastLoop'),
+      broadcastLoopBtnText: document.getElementById('broadcastLoopBtnText'),
       btnClearTimelineBtn: document.getElementById('btnClearTimelineBtn'),
       btnReleaseStationBtn: document.getElementById('btnReleaseStationBtn'),
       editorSlotsList: document.getElementById('editorSlotsList'),
@@ -258,6 +262,7 @@
       playlistCoverInput: document.getElementById('playlistCoverInput'),
       playlistCoverPreviewBox: document.getElementById('playlistCoverPreviewBox'),
       playlistCoverPreviewImg: document.getElementById('playlistCoverPreviewImg'),
+      playlistCoverUrlInput: document.getElementById('playlistCoverUrlInput'),
       btnSubmitCreatePlaylist: document.getElementById('btnSubmitCreatePlaylist'),
       modalPickPlaylistForTrack: document.getElementById('modalPickPlaylistForTrack'),
       pickPlaylistForTrackList: document.getElementById('pickPlaylistForTrackList'),
@@ -267,16 +272,27 @@
       playlistViewHeader: document.getElementById('playlistViewHeader'),
       playlistViewTracksList: document.getElementById('playlistViewTracksList'),
       formUploadTrack: document.getElementById('formUploadTrack'),
+      trackAuthorInput: document.getElementById('trackAuthorInput'),
+      trackCoverUrlInput: document.getElementById('trackCoverUrlInput'),
       formCreateStation: document.getElementById('formCreateStation'),
+      stationHostInput: document.getElementById('stationHostInput'),
+      createStationAvatarFile: document.getElementById('createStationAvatarFile'),
+      createStationAvatarPreviewBox: document.getElementById('createStationAvatarPreviewBox'),
+      createStationAvatarPreviewImg: document.getElementById('createStationAvatarPreviewImg'),
+      createStationAvatarUrl: document.getElementById('createStationAvatarUrl'),
       btnDeckEditStation: document.getElementById('btnDeckEditStation'),
       btnEditStationSettings: document.getElementById('btnEditStationSettings'),
       modalEditStation: document.getElementById('modalEditStation'),
       formEditStation: document.getElementById('formEditStation'),
       editStationId: document.getElementById('editStationId'),
       editStationName: document.getElementById('editStationName'),
+      editStationHost: document.getElementById('editStationHost'),
       editStationDescription: document.getElementById('editStationDescription'),
       editStationFallback: document.getElementById('editStationFallback'),
       editStationAvatar: document.getElementById('editStationAvatar'),
+      editStationAvatarFile: document.getElementById('editStationAvatarFile'),
+      editStationAvatarPreviewBox: document.getElementById('editStationAvatarPreviewBox'),
+      editStationAvatarPreviewImg: document.getElementById('editStationAvatarPreviewImg'),
       btnSubmitEditStation: document.getElementById('btnSubmitEditStation'),
       btnSyncClock: document.getElementById('btnSyncClock'),
       radioServerClock: document.getElementById('radioServerClock'),
@@ -527,6 +543,54 @@
     if (dom.feedPlayerLoopBtn) {
       dom.feedPlayerLoopBtn.classList.toggle('is-active', isLoopActive);
       dom.feedPlayerLoopBtn.title = loopTitle;
+    }
+
+    const isMuted = Boolean(gState.muted);
+    const muteIcon = isMuted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
+    const muteTitle = isMuted ? 'Включить звук' : 'Выключить звук';
+
+    if (dom.deckMuteBtn) {
+      dom.deckMuteBtn.classList.toggle('is-active', isMuted);
+      dom.deckMuteBtn.classList.toggle('is-muted', isMuted);
+      dom.deckMuteBtn.innerHTML = muteIcon;
+      dom.deckMuteBtn.title = muteTitle;
+    }
+    if (dom.feedPlayerMuteBtn) {
+      dom.feedPlayerMuteBtn.classList.toggle('is-active', isMuted);
+      dom.feedPlayerMuteBtn.classList.toggle('is-muted', isMuted);
+      dom.feedPlayerMuteBtn.innerHTML = muteIcon;
+      dom.feedPlayerMuteBtn.title = muteTitle;
+    }
+    if (dom.trackPageMuteBtn) {
+      dom.trackPageMuteBtn.classList.toggle('is-active', isMuted);
+      dom.trackPageMuteBtn.classList.toggle('is-muted', isMuted);
+      dom.trackPageMuteBtn.innerHTML = muteIcon;
+      dom.trackPageMuteBtn.title = muteTitle;
+    }
+
+    const currentVolume = isMuted ? 0 : (gState.volume !== undefined ? gState.volume : 0.9);
+    if (dom.deckVolumeSlider && document.activeElement !== dom.deckVolumeSlider) {
+      dom.deckVolumeSlider.value = currentVolume;
+    }
+    if (dom.feedPlayerVolume && document.activeElement !== dom.feedPlayerVolume) {
+      dom.feedPlayerVolume.value = currentVolume;
+    }
+    if (dom.trackPageVolumeSlider && document.activeElement !== dom.trackPageVolumeSlider) {
+      dom.trackPageVolumeSlider.value = currentVolume;
+    }
+
+    if (dom.btnToggleBroadcastLoop) {
+      const edStation = state.selectedStationForEdit || state.currentStation;
+      const isLoopMode = Boolean(edStation && edStation.fallback_mode === 'loop');
+      dom.btnToggleBroadcastLoop.classList.toggle('btn-primary', isLoopMode);
+      dom.btnToggleBroadcastLoop.classList.toggle('is-active', isLoopMode);
+      dom.btnToggleBroadcastLoop.classList.toggle('btn-secondary', !isLoopMode);
+      if (dom.broadcastLoopBtnText) {
+        dom.broadcastLoopBtnText.textContent = isLoopMode ? 'Эфир зациклен (24/7)' : 'Зациклить эфир';
+      }
+      dom.btnToggleBroadcastLoop.title = isLoopMode 
+        ? 'Зацикливание эфира включено (сетка воспроизводится по кругу). Нажмите, чтобы выключить.' 
+        : 'Зацикливать вещание радиостанции по кругу (бесконечный эфир)';
     }
   }
 
@@ -1762,10 +1826,14 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slots: state.editorSlots,
-          startTime: finalStartTimeIso
+          startTime: finalStartTimeIso,
+          forceNow: Boolean(forceNow || isLiveNow)
         })
       });
 
+      if (isLiveNow) {
+        st.isLive = true;
+      }
       renderEditor();
       await loadStations();
 
@@ -3098,6 +3166,17 @@
     if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
     if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
     if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
+    if (dom.editStationHost) dom.editStationHost.value = st.owner_name || '';
+    if (dom.editStationAvatarFile) dom.editStationAvatarFile.value = '';
+    if (dom.editStationAvatarPreviewBox && dom.editStationAvatarPreviewImg) {
+      if (st.avatar_url) {
+        dom.editStationAvatarPreviewImg.src = st.avatar_url;
+        dom.editStationAvatarPreviewBox.style.display = 'block';
+      } else {
+        dom.editStationAvatarPreviewImg.src = '';
+        dom.editStationAvatarPreviewBox.style.display = 'none';
+      }
+    }
     showModal('modalEditStation');
   }
 
@@ -4310,6 +4389,9 @@
       showToast('Для загрузки аудиозаписей необходимо войти в аккаунт AllTell', 'warning');
       return;
     }
+    if (dom.trackAuthorInput && !dom.trackAuthorInput.value) {
+      dom.trackAuthorInput.value = user.displayName || user.username || '';
+    }
     showModal('modalUploadTrack');
   }
 
@@ -4318,6 +4400,9 @@
     if (!user) {
       showToast('Для занятия радиочастоты необходимо войти в аккаунт AllTell', 'warning');
       return;
+    }
+    if (dom.stationHostInput && !dom.stationHostInput.value) {
+      dom.stationHostInput.value = user.displayName || user.username || '';
     }
     showModal('modalCreateStation');
   }
@@ -4622,6 +4707,18 @@
         autoTune: true,
         forceNow: true
       });
+    });
+
+    dom.btnToggleBroadcastLoop?.addEventListener('click', async () => {
+      const targetStation = state.selectedStationForEdit || state.currentStation;
+      if (!targetStation) {
+        showToast('Радиостанция не выбрана', 'info');
+        return;
+      }
+      const currentMode = targetStation.fallback_mode || 'loop';
+      const newMode = currentMode === 'loop' ? 'noise' : 'loop';
+      await quickUpdateFallbackMode(targetStation, newMode);
+      updateDeckUI();
     });
 
     dom.btnClearTimelineBtn?.addEventListener('click', async () => {
@@ -5365,6 +5462,19 @@
       }
     });
 
+    dom.feedPlayerMuteBtn?.addEventListener('click', () => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) {
+        gAudio.toggleMute();
+        updateDeckUI();
+      }
+    });
+
+    dom.feedPlayerVolume?.addEventListener('input', (e) => {
+      const gAudio = getGlobalAudio();
+      if (gAudio) gAudio.setVolume(parseFloat(e.target.value));
+    });
+
     dom.trackPageProgressBar?.addEventListener('click', (e) => {
       const gAudio = getGlobalAudio();
       if (!gAudio) return;
@@ -5470,6 +5580,7 @@
       const description = dom.playlistDescInput?.value?.trim();
       const isPublic = parseInt(dom.playlistPublicSelect?.value || '1', 10);
       const coverFile = dom.playlistCoverInput?.files[0];
+      const coverUrlInput = dom.playlistCoverUrlInput?.value?.trim() || null;
 
       if (!title) {
         showToast('Укажите название плейлиста', 'warning');
@@ -5482,7 +5593,7 @@
           dom.btnSubmitCreatePlaylist.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохраняем…';
         }
 
-        let coverUrl = null;
+        let coverUrl = coverUrlInput;
         if (coverFile) {
           const formData = new FormData();
           formData.append('image', coverFile);
@@ -5590,6 +5701,48 @@
       }
     });
 
+    dom.trackCoverUrlInput?.addEventListener('input', (e) => {
+      const url = e.target.value?.trim();
+      const previewBox = document.getElementById('trackCoverPreviewBox');
+      const previewImg = document.getElementById('trackCoverPreviewImg');
+      if (url && !document.getElementById('trackCoverInput')?.files?.[0] && previewBox && previewImg) {
+        previewImg.src = url;
+        previewBox.style.display = 'flex';
+      }
+    });
+
+    dom.createStationAvatarFile?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && dom.createStationAvatarPreviewBox && dom.createStationAvatarPreviewImg) {
+        dom.createStationAvatarPreviewImg.src = URL.createObjectURL(file);
+        dom.createStationAvatarPreviewBox.style.display = 'block';
+      }
+    });
+
+    dom.createStationAvatarUrl?.addEventListener('input', (e) => {
+      const url = e.target.value?.trim();
+      if (url && !dom.createStationAvatarFile?.files?.[0] && dom.createStationAvatarPreviewBox && dom.createStationAvatarPreviewImg) {
+        dom.createStationAvatarPreviewImg.src = url;
+        dom.createStationAvatarPreviewBox.style.display = 'block';
+      }
+    });
+
+    dom.editStationAvatarFile?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && dom.editStationAvatarPreviewBox && dom.editStationAvatarPreviewImg) {
+        dom.editStationAvatarPreviewImg.src = URL.createObjectURL(file);
+        dom.editStationAvatarPreviewBox.style.display = 'block';
+      }
+    });
+
+    dom.editStationAvatar?.addEventListener('input', (e) => {
+      const url = e.target.value?.trim();
+      if (url && !dom.editStationAvatarFile?.files?.[0] && dom.editStationAvatarPreviewBox && dom.editStationAvatarPreviewImg) {
+        dom.editStationAvatarPreviewImg.src = url;
+        dom.editStationAvatarPreviewBox.style.display = 'block';
+      }
+    });
+
     // ФЛАГ-БЛОКИРОВЩИК ОТ ПОВТОРНОЙ ОТПРАВКИ И ДВОЕНИЯ УВЕДОМЛЕНИЙ
     let isUploadingTrack = false;
     dom.formUploadTrack?.addEventListener('submit', async (e) => {
@@ -5600,7 +5753,9 @@
       const file = document.getElementById('trackFileInput')?.files[0];
       const title = document.getElementById('trackTitleInput')?.value.trim();
       const type = document.getElementById('trackTypeSelect')?.value;
+      const host = dom.trackAuthorInput?.value?.trim() || null;
       const coverFile = document.getElementById('trackCoverInput')?.files[0];
+      const coverUrlInput = dom.trackCoverUrlInput?.value?.trim() || null;
       const submitBtn = document.getElementById('btnSubmitUploadTrack');
 
       if (!file) {
@@ -5614,7 +5769,7 @@
       }
 
       try {
-        let coverUrl = null;
+        let coverUrl = coverUrlInput;
         if (coverFile) {
           const coverForm = new FormData();
           coverForm.append('image', coverFile);
@@ -5657,7 +5812,8 @@
             size: uploadRes.size || file.size,
             format: uploadRes.format || 'mp3',
             type,
-            coverUrl
+            coverUrl,
+            authorName: host
           })
         });
 
@@ -5689,6 +5845,9 @@
       const name = document.getElementById('stationNameInput')?.value.trim();
       const desc = document.getElementById('stationDescInput')?.value.trim();
       const fallback = document.getElementById('stationFallbackSelect')?.value;
+      const host = dom.stationHostInput?.value?.trim() || null;
+      const avatarFile = dom.createStationAvatarFile?.files?.[0];
+      const avatarUrlInput = dom.createStationAvatarUrl?.value?.trim() || null;
       const submitBtn = document.getElementById('btnSubmitCreateStation');
 
       if (submitBtn) {
@@ -5697,6 +5856,17 @@
       }
 
       try {
+        let avatarUrl = avatarUrlInput;
+        if (avatarFile) {
+          const avatarForm = new FormData();
+          avatarForm.append('image', avatarFile);
+          const upRes = await api('/api/upload-image', {
+            method: 'POST',
+            body: avatarForm
+          });
+          avatarUrl = upRes.url;
+        }
+
         const newStation = await api('/api/radio/stations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5704,12 +5874,16 @@
             frequency: freq,
             name,
             description: desc,
-            fallbackMode: fallback
+            fallbackMode: fallback,
+            avatarUrl,
+            ownerName: host
           })
         });
 
         showToast(`Частота ${newStation.frequency} FM успешно занята радиостанцией «${newStation.name}»!`, 'success');
         dom.formCreateStation?.reset();
+        if (dom.createStationAvatarPreviewBox) dom.createStationAvatarPreviewBox.style.display = 'none';
+        if (dom.createStationAvatarPreviewImg) dom.createStationAvatarPreviewImg.src = '';
         hideModal('modalCreateStation');
         loadStations();
         document.getElementById('tabEditorBtn')?.click();
@@ -5788,7 +5962,9 @@
       const name = dom.editStationName?.value?.trim();
       const description = dom.editStationDescription?.value?.trim();
       const fallbackMode = dom.editStationFallback?.value || 'loop';
-      const avatarUrl = dom.editStationAvatar?.value?.trim() || null;
+      const host = dom.editStationHost?.value?.trim() || null;
+      const avatarFile = dom.editStationAvatarFile?.files?.[0];
+      let avatarUrl = dom.editStationAvatar?.value?.trim() || null;
 
       if (!id || !name) {
         showToast('Укажите название радиостанции', 'warning');
@@ -5802,10 +5978,20 @@
       }
 
       try {
+        if (avatarFile) {
+          const avatarForm = new FormData();
+          avatarForm.append('image', avatarFile);
+          const upRes = await api('/api/upload-image', {
+            method: 'POST',
+            body: avatarForm
+          });
+          avatarUrl = upRes.url;
+        }
+
         const updated = await api(`/api/radio/stations/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description, fallbackMode, avatarUrl })
+          body: JSON.stringify({ name, description, fallbackMode, avatarUrl, ownerName: host })
         });
 
         if (state.currentStation && String(state.currentStation.id) === String(id)) {

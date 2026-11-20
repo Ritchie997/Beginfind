@@ -224,7 +224,7 @@ async function getStationByFrequency(frequency) {
   return get('SELECT * FROM radio_stations WHERE frequency = ?', [frequency]);
 }
 
-async function createStation({ frequency, name, description = '', ownerId, ownerName, avatarUrl = null, fallbackMode = 'loop' }) {
+async function createStation({ frequency, name, description = '', ownerId, ownerName, avatarUrl = null, fallbackMode = 'loop', hostName, host_name }) {
   const numFreq = Number(frequency);
   if (isNaN(numFreq) || numFreq <= 0) {
     throw new Error('Некорректная частота. Укажите положительное число (например, 101.5 или 42)');
@@ -240,18 +240,19 @@ async function createStation({ frequency, name, description = '', ownerId, owner
     throw new Error('Укажите название радиостанции');
   }
 
+  const chosenOwner = String(hostName || host_name || '').trim() || ownerName;
   const cleanFallback = ['loop', 'noise', 'silence'].includes(fallbackMode) ? fallbackMode : 'loop';
 
   const result = await run(
     `INSERT INTO radio_stations (frequency, name, description, owner_id, owner_name, avatar_url, fallback_mode)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [numFreq, cleanName, String(description || '').trim(), ownerId, ownerName, avatarUrl || null, cleanFallback]
+    [numFreq, cleanName, String(description || '').trim(), ownerId, chosenOwner, avatarUrl || null, cleanFallback]
   );
 
   return getStationById(result.lastID);
 }
 
-async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive }) {
+async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive, ownerName, owner_name, host, host_name }) {
   const station = await getStationById(id);
   if (!station) throw new Error('Станция не найдена');
 
@@ -266,6 +267,14 @@ async function updateStation(id, actingUserId, isRootOrAdmin, { name, descriptio
   if (name !== undefined) {
     updates.push('name = ?');
     params.push(String(name).trim() || station.name);
+  }
+  const customHost = ownerName !== undefined ? ownerName : (owner_name !== undefined ? owner_name : (host !== undefined ? host : host_name));
+  if (customHost !== undefined) {
+    const cleanHost = String(customHost || '').trim();
+    if (cleanHost) {
+      updates.push('owner_name = ?');
+      params.push(cleanHost);
+    }
   }
   if (description !== undefined) {
     updates.push('description = ?');
@@ -344,12 +353,19 @@ async function getTimelineSlots(stationId, fromTime = null, toTime = null) {
  * Сохранение / замена сетки вещания для радиостанции.
  * Рассчитывает слоты последовательно, максимум до 24 часов вперед.
  */
-async function setTimelineSlots(stationId, slots = [], customStartTime = null) {
+async function setTimelineSlots(stationId, slots = [], customStartTime = null, options = {}) {
   const station = await getStationById(stationId);
   if (!station) throw new Error('Станция не найдена');
 
-  let cursor = customStartTime ? new Date(customStartTime).getTime() : getEffectiveNow().getTime();
-  if (isNaN(cursor)) cursor = getEffectiveNow().getTime();
+  const isForceNow = Boolean(options.forceNow || customStartTime === 'now');
+  let cursor;
+  if (isForceNow) {
+    cursor = getEffectiveNow().getTime() - 250;
+  } else {
+    cursor = customStartTime ? new Date(customStartTime).getTime() : getEffectiveNow().getTime();
+    if (isNaN(cursor)) cursor = getEffectiveNow().getTime();
+  }
+  const initialStartMs = cursor;
 
   const maxDurationMs = 24 * 60 * 60 * 1000; // 24 часа максимум
   const endLimit = cursor + maxDurationMs;
@@ -392,9 +408,14 @@ async function setTimelineSlots(stationId, slots = [], customStartTime = null) {
     cursor += actualDurMs;
   }
 
-  // Удаляем старые слоты для этой станции, пересекающиеся с сохраняемым расписанием
-  const replaceThreshold = new Date(customStartTime ? new Date(customStartTime).getTime() : getEffectiveNow().getTime()).toISOString();
-  await run('DELETE FROM radio_timeline_slots WHERE station_id = ? AND (start_time >= ? OR end_time > ?)', [stationId, replaceThreshold, replaceThreshold]);
+  // Если запрошен запуск "Сейчас (Старт)" — полностью очищаем слоты станции для идеального старта с 0
+  if (isForceNow) {
+    await run('DELETE FROM radio_timeline_slots WHERE station_id = ?', [stationId]);
+  } else {
+    // Удаляем старые слоты для этой станции, пересекающиеся с сохраняемым расписанием
+    const replaceThreshold = new Date(initialStartMs).toISOString();
+    await run('DELETE FROM radio_timeline_slots WHERE station_id = ? AND (start_time >= ? OR end_time > ?)', [stationId, replaceThreshold, replaceThreshold]);
+  }
 
   for (const p of preparedSlots) {
     await run(
@@ -431,6 +452,24 @@ async function getStationLiveState(stationId) {
   let isVirtualLoop = false;
   let loopNextSlots = [];
 
+  // Защита от микро-рассинхрона (если слот стартует в пределах 4 секунд от now)
+  if (!currentSlot) {
+    const nearUpcoming = await get(
+      `SELECT * FROM radio_timeline_slots 
+       WHERE station_id = ? AND start_time > ? 
+       ORDER BY start_time ASC LIMIT 1`,
+      [stationId, nowIso]
+    );
+    if (nearUpcoming) {
+      const startMs = new Date(nearUpcoming.start_time).getTime();
+      if (startMs - nowMs <= 4000) {
+        currentSlot = nearUpcoming;
+        offset = 0;
+        remaining = Number(nearUpcoming.duration) || 0;
+      }
+    }
+  }
+
   // Если прямо сейчас нет слота, но режим fallback_mode === 'loop'
   if (!currentSlot && station.fallback_mode === 'loop') {
     // Проверяем, есть ли вообще слоты для станции (за последние 32 часа)
@@ -457,39 +496,48 @@ async function getStationLiveState(stationId) {
       const totalDurationSec = activeLoopSlots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
       if (totalDurationSec > 0) {
         const firstStartMs = new Date(activeLoopSlots[0].start_time).getTime();
-        const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
-        const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
-
-        let accumulator = 0;
         let matchedIndex = -1;
-        for (let idx = 0; idx < activeLoopSlots.length; idx++) {
-          const slot = activeLoopSlots[idx];
-          const slotDur = Number(slot.duration) || 0;
-          if (accumulator + slotDur > normalizedElapsed) {
-            currentSlot = { ...slot };
-            offset = normalizedElapsed - accumulator;
-            remaining = slotDur - offset;
-            isVirtualLoop = true;
-            matchedIndex = idx;
-            break;
+
+        // Защита от отлета в конец при старте: если nowMs < firstStartMs, играем первый слот с 0
+        if (nowMs < firstStartMs) {
+          currentSlot = { ...activeLoopSlots[0] };
+          offset = 0;
+          remaining = Number(activeLoopSlots[0].duration) || 0;
+          isVirtualLoop = true;
+          matchedIndex = 0;
+        } else {
+          const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
+          const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
+
+          let accumulator = 0;
+          for (let idx = 0; idx < activeLoopSlots.length; idx++) {
+            const slot = activeLoopSlots[idx];
+            const slotDur = Number(slot.duration) || 0;
+            if (accumulator + slotDur > normalizedElapsed) {
+              currentSlot = { ...slot };
+              offset = normalizedElapsed - accumulator;
+              remaining = slotDur - offset;
+              isVirtualLoop = true;
+              matchedIndex = idx;
+              break;
+            }
+            accumulator += slotDur;
           }
-          accumulator += slotDur;
         }
 
         // Если виртуальный цикл активен, генерируем следующие слоты из кольцевого цикла
-        if (matchedIndex >= 0) {
-          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
-            const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
-            loopNextSlots.push({
-              id: ns.id,
-              title: ns.title,
-              type: ns.type,
-              audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
-              duration: ns.duration,
-              startTime: ns.start_time,
-              endTime: ns.end_time
-            });
-          }
+        const effectiveIndex = matchedIndex >= 0 ? matchedIndex : 0;
+        for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+          const ns = activeLoopSlots[(effectiveIndex + i) % activeLoopSlots.length];
+          loopNextSlots.push({
+            id: ns.id,
+            title: ns.title,
+            type: ns.type,
+            audioUrl: ns.audio_url, // отдаем audio_url для бесшовного мгновенного переключения
+            duration: ns.duration,
+            startTime: ns.start_time,
+            endTime: ns.end_time
+          });
         }
       }
     }

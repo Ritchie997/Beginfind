@@ -97,3 +97,43 @@ test('radio player: looping repeats active playing track instead of skipping to 
   assert.ok(radioClientJs.includes('dom.deckLoopBtn.classList.toggle(\'is-active\', isLoopActive)'), 'deckLoopBtn must sync active state');
   assert.ok(radioClientJs.includes('dom.trackPageLoopBtn.classList.toggle(\'is-active\', isLoopActive)'), 'trackPageLoopBtn must sync active state');
 });
+
+test('radio player: mute button visual state syncs with is-muted and volume controls', () => {
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const globalCss = fs.readFileSync(path.resolve(__dirname, '../../public/global-styles.css'), 'utf8');
+  const radioCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  // 1. Global bottom bar mute button visual sync
+  assert.ok(globalPlayerJs.includes("domBar.muteBtn.classList.toggle('is-muted', Boolean(state.muted))"), 'Global mute button must toggle is-muted class');
+  assert.ok(globalPlayerJs.includes('fa-volume-xmark'), 'Global mute button must render volume-xmark when muted');
+  assert.ok(globalCss.includes('.alltell-global-tool-btn.is-muted'), 'Global CSS must style .is-muted state');
+
+  // 2. Deck and feed mute sync
+  assert.ok(radioClientJs.includes('dom.deckMuteBtn.classList.toggle(\'is-muted\', isMuted)'), 'Deck mute button must toggle is-muted class');
+  assert.ok(radioCss.includes('.radio-action-btn.is-muted'), 'Radio CSS must style .is-muted state');
+});
+
+test('radio UI: broadcast loop toggle, custom host pseudonyms, and cover file/url inputs', () => {
+  const radioHtml = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  // 1. Broadcast loop button in editor toolbar
+  assert.ok(radioHtml.includes('id="btnToggleBroadcastLoop"'), 'radio.html must include btnToggleBroadcastLoop button');
+  assert.ok(radioClientJs.includes('dom.btnToggleBroadcastLoop'), 'radio-client.js must bind btnToggleBroadcastLoop');
+
+  // 2. Custom radio host / pseudonym inputs in modals
+  assert.ok(radioHtml.includes('id="stationHostInput"'), 'Modal create station must have stationHostInput');
+  assert.ok(radioHtml.includes('id="editStationHost"'), 'Modal edit station must have editStationHost');
+  assert.ok(radioHtml.includes('id="trackAuthorInput"'), 'Modal upload track must have trackAuthorInput');
+
+  // 3. Cover upload file and URL inputs
+  assert.ok(radioHtml.includes('id="createStationAvatarFile"'), 'Modal create station must have avatar file input');
+  assert.ok(radioHtml.includes('id="createStationAvatarUrl"'), 'Modal create station must have avatar URL input');
+  assert.ok(radioHtml.includes('id="editStationAvatarFile"'), 'Modal edit station must have avatar file input');
+  assert.ok(radioHtml.includes('id="editStationAvatar"'), 'Modal edit station must have avatar URL input');
+  assert.ok(radioHtml.includes('id="trackCoverInput"'), 'Modal upload track must have cover file input');
+  assert.ok(radioHtml.includes('id="trackCoverUrlInput"'), 'Modal upload track must have cover URL input');
+  assert.ok(radioHtml.includes('id="playlistCoverInput"'), 'Modal create playlist must have cover file input');
+  assert.ok(radioHtml.includes('id="playlistCoverUrlInput"'), 'Modal create playlist must have cover URL input');
+});

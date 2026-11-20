@@ -4432,6 +4432,12 @@ body.articles-page .content-body {
   color: #fff;
 }
 
+.alltell-global-tool-btn.is-muted,
+.alltell-global-tool-btn.is-active {
+  color: #ff4757;
+  background: rgba(255, 71, 87, 0.16);
+}
+
 .alltell-global-vol-slider {
   width: 70px;
   accent-color: #ff4757;

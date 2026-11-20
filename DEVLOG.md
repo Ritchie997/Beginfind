@@ -5,6 +5,33 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-20 — исправление эфира Радио («Сейчас (Старт)», бесшовные переходы треков, синхронизация Mute, зацикливание, кастомные ведущие и загрузка обложек)
+
+- **Исправление старта эфира без смещения («Сейчас (Старт)»):**
+  - Устранена причина отлёта эфира на несколько минут вперёд: в [src/services/radio-store.js](file:///c:/Warning/Project/Beginfind/src/services/radio-store.js) в функции `getStationLiveState` при `nowMs < firstStartMs` дельта времени по модулю давала отрицательное смещение, нормализовавшееся в хвост плейлиста. Добавлена явная защита первого слота со стартом с 0:00.
+  - В `setTimelineSlots` добавлена поддержка флага `forceNow` / `customStartTime === 'now'`: перед сохранением новой сетки очищаются устаревшие слоты станции, а начальный курсор синхронизируется точно с текущим временем сервера.
+  - В [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js) кнопка «Сейчас (Старт)» (`#btnSetStartTimeNow`) передаёт `forceNow: true` и калибрует сетку к текущему моменту без сдвига в будущее или прошлое.
+- **Устранение подвисаний и задержек при смене треков в потоке:**
+  - В [public/radio-global-player.js](file:///c:/Warning/Project/Beginfind/public/radio-global-player.js) оптимизирован переход между слотами по событию `ended`: устранены искусственные блокирующие таймауты (500мс и 3000мс). Если сервер возвращает тот же слот или границу, плеер немедленно переключается на предзагруженный следующий слот (`live.nextSlots[0]`).
+  - В `getStationLiveState` для слотов виртуального цикла отдаётся `audio_url`, что исключает паузы на дополнительный поиск трека в БД при переходе.
+  - В 30-секундном поллинге [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js) исключен принудительный перезапуск аудиотрека посреди проигрывания: трек спокойно доигрывает и переключается плавно.
+- **Синхронизация состояния и визуального отображения кнопки звука (Mute):**
+  - Устранён рассинхрон состояния звука и интерфейса: кнопка выключения звука в нижнем глобальном баре (`#globalAudioMuteBtn`), на деке радио (`#deckMuteBtn`) и в ленте синхронно переключают класс `.is-muted`, динамически меняют иконку (`fa-volume-high` / `fa-volume-xmark`), всплывающую подсказку и ползунок громкости.
+  - Добавлена кросс-вкладочная синхронизация `CMD_SET_MUTE` через `BroadcastChannel` / `localStorage`.
+  - Стилизовано визуальное состояние `.is-muted` в [public/global-styles.css](file:///c:/Warning/Project/Beginfind/public/global-styles.css) и [public/site/radio.css](file:///c:/Warning/Project/Beginfind/public/site/radio.css).
+- **Кнопка «Зациклить эфир» в панели редактора:**
+  - В тулбар сетки вещания [public/site/radio.html](file:///c:/Warning/Project/Beginfind/public/site/radio.html) добавлена кнопка `#btnToggleBroadcastLoop` рядом с «Сейчас (Старт)».
+  - По клику станция мгновенно переключает свой режим эфира (`fallback_mode`: `'loop'` / `'noise'`) с автосинхронизацией бейджа («Зациклен» / «Без повтора»).
+- **Кастомные ведущие и псевдонимы:**
+  - В модальные окна создания радиостанции (`#stationHostInput`), редактирования станции (`#editStationHost`) и публикации трека (`#trackAuthorInput`) добавлена возможность вбивать произвольный псевдоним / имя ведущего.
+  - Серверные маршруты [src/routes/radio.routes.js](file:///c:/Warning/Project/Beginfind/src/routes/radio.routes.js) и методы [src/services/radio-store.js](file:///c:/Warning/Project/Beginfind/src/services/radio-store.js) сохраняют кастомное имя в `owner_name` / `author_name`.
+- **Добавление обложек файлом и по ссылке (URL):**
+  - В модалки создания/редактирования радиостанций, треков и плейлистов добавлены параллельные поля: загрузка локального файла через форму (`FormData` -> `/api/upload-image`) и прямое указание внешней ссылки (URL).
+  - Реализован моментальный интерактивный предпросмотр выбранного изображения (`URL.createObjectURL` для файлов и живое превью для URL).
+- **Тестирование и проверка:**
+  - Добавлены новые тесты в [src/services/radio-player-controls.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-player-controls.test.js). Все 116 тестов проекта выполняются успешно (`npm test`).
+  - Проведено интерактивное браузерное тестирование в Chromium webview с подтверждением фактов хоста (`BROWSER_HOST_FACTS`).
+
 ## 2026-11-19 — исправление поиска по авторам (@Качуа, ники с пробелами) и разблокировка прокрутки сниппетов
 
 - **Разблокировка прокрутки сниппетов под карточками статей (`public/site/site.css`, `public/antropedia.css`, `public/quick-switcher.css`, `public/site/site.js`, `public/antropedia.js`, `public/quick-switcher.js`):**

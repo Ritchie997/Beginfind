@@ -60,16 +60,17 @@ router.get('/radio/tracks/:id', async (req, res) => {
 // POST /api/radio/tracks — публикация аудиозаписи
 router.post('/radio/tracks', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { title, audioUrl, audio_url, duration, size, format, type, coverUrl, cover_url } = req.body;
+    const { title, audioUrl, audio_url, duration, size, format, type, coverUrl, cover_url, authorName, author_name, host } = req.body;
     const url = audioUrl || audio_url;
 
     if (!url) {
       return res.status(400).json({ error: 'Укажите ссылку на аудиофайл (audioUrl)' });
     }
 
+    const customAuthor = String(authorName || author_name || host || '').trim();
     const track = await radioStore.createTrack({
       userId: req.user.id,
-      authorName: getDisplayName(req.user),
+      authorName: customAuthor || getDisplayName(req.user),
       title: title || 'Новая аудиозапись',
       audioUrl: url,
       duration: duration || 0,
@@ -315,14 +316,15 @@ router.get('/radio/stations', async (req, res) => {
 // POST /api/radio/stations — регистрация новой радиостанции / занятие частоты
 router.post('/radio/stations', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { frequency, name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode } = req.body;
+    const { frequency, name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, ownerName, owner_name, host, host_name } = req.body;
+    const customHost = String(ownerName || owner_name || host || host_name || '').trim();
 
     const station = await radioStore.createStation({
       frequency,
       name,
       description,
       ownerId: req.user.id,
-      ownerName: getDisplayName(req.user),
+      ownerName: customHost || getDisplayName(req.user),
       avatarUrl: avatarUrl || avatar_url || null,
       fallbackMode: fallbackMode || fallback_mode || 'loop'
     });
@@ -351,13 +353,14 @@ router.get('/radio/stations/:id', async (req, res) => {
 // PUT /api/radio/stations/:id — обновление настроек станции владельцем
 router.put('/radio/stations/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, isActive } = req.body;
+    const { name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, isActive, ownerName, owner_name, host, host_name } = req.body;
     const updated = await radioStore.updateStation(req.params.id, req.user.id, isRootOrAdmin(req.user), {
       name,
       description,
       avatarUrl: avatarUrl || avatar_url,
       fallbackMode: fallbackMode || fallback_mode,
-      isActive
+      isActive,
+      ownerName: ownerName !== undefined ? ownerName : (owner_name !== undefined ? owner_name : (host !== undefined ? host : host_name))
     });
     res.json(updated);
   } catch (error) {
@@ -433,12 +436,14 @@ router.put('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApp
       return res.status(403).json({ error: 'Только владелец станции может редактировать ленту времени' });
     }
 
-    const { slots, startTime } = req.body;
+    const { slots, startTime, forceNow } = req.body;
     if (!Array.isArray(slots)) {
       return res.status(400).json({ error: 'slots должен быть массивом элементов эфира' });
     }
 
-    const updatedSlots = await radioStore.setTimelineSlots(req.params.id, slots, startTime);
+    const updatedSlots = await radioStore.setTimelineSlots(req.params.id, slots, startTime, {
+      forceNow: Boolean(forceNow || startTime === 'now')
+    });
     res.json({ success: true, slots: updatedSlots });
   } catch (error) {
     console.error('[radio] Error updating timeline:', error);
