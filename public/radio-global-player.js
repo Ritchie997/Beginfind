@@ -577,6 +577,9 @@
       if (targetSlot && targetSlot.audioUrl) {
         syncRetryCount = 0;
         cancelLiveSync();
+        updateMediaSession();
+        updateBarUI();
+        notify();
 
         const currentSrc = audio.src || '';
         const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);

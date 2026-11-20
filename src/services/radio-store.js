@@ -692,6 +692,9 @@ async function getStationLiveState(stationId, options = {}) {
   let remaining = 0;
   let isVirtualLoop = false;
   let loopNextSlots = [];
+  let loopPrevSlots = [];
+  let currentCycleStartMs = null;
+  let currentCycleEndMs = null;
 
   // Если клиент сообщил, что трек finishedSlotId завершился в браузере (ended),
   // мгновенно переключаем на следующий слот по порядку очереди
@@ -699,14 +702,22 @@ async function getStationLiveState(stationId, options = {}) {
     const finishedIdx = allSlots.findIndex(s => String(s.id) === String(finishedSlotId));
     if (finishedIdx >= 0) {
       if (finishedIdx < allSlots.length - 1) {
-        currentSlot = allSlots[finishedIdx + 1];
-        offset = 0;
-        remaining = Number(currentSlot.duration) || 0;
+        currentSlot = { ...allSlots[finishedIdx + 1] };
       } else if (station.fallback_mode === 'loop') {
-        currentSlot = allSlots[0];
-        offset = 0;
-        remaining = Number(currentSlot.duration) || 0;
+        currentSlot = { ...allSlots[0] };
         isVirtualLoop = true;
+      }
+
+      if (currentSlot) {
+        offset = 0;
+        const dur = Number(currentSlot.duration) || 0;
+        remaining = dur;
+        const rawEndMs = new Date(currentSlot.end_time).getTime();
+        if (rawEndMs <= nowMs || isVirtualLoop) {
+          currentSlot.start_time = nowIso;
+          currentSlot.end_time = new Date(nowMs + (dur * 1000)).toISOString();
+          isVirtualLoop = true;
+        }
       }
     }
   }
@@ -721,7 +732,7 @@ async function getStationLiveState(stationId, options = {}) {
       if (nearUpcoming) {
         const startMs = new Date(nearUpcoming.start_time).getTime();
         if (startMs - nowMs <= 4000) {
-          currentSlot = nearUpcoming;
+          currentSlot = { ...nearUpcoming };
           offset = 0;
           remaining = Number(nearUpcoming.duration) || 0;
         }
@@ -755,17 +766,27 @@ async function getStationLiveState(stationId, options = {}) {
             remaining = Number(activeLoopSlots[0].duration) || 0;
             isVirtualLoop = true;
             matchedIndex = 0;
+            currentCycleStartMs = firstStartMs;
+            currentCycleEndMs = firstStartMs + (totalDurationSec * 1000);
           }
         } else {
           const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
           const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
+          currentCycleStartMs = nowMs - Math.round(normalizedElapsed * 1000);
+          currentCycleEndMs = currentCycleStartMs + (totalDurationSec * 1000);
 
           let accumulator = 0;
           for (let idx = 0; idx < activeLoopSlots.length; idx++) {
             const slot = activeLoopSlots[idx];
             const slotDur = Number(slot.duration) || 0;
             if (accumulator + slotDur > normalizedElapsed) {
-              currentSlot = { ...slot };
+              const slotStartMs = currentCycleStartMs + Math.round(accumulator * 1000);
+              const slotEndMs = slotStartMs + Math.round(slotDur * 1000);
+              currentSlot = {
+                ...slot,
+                start_time: new Date(slotStartMs).toISOString(),
+                end_time: new Date(slotEndMs).toISOString()
+              };
               offset = normalizedElapsed - accumulator;
               remaining = slotDur - offset;
               isVirtualLoop = true;
@@ -776,17 +797,45 @@ async function getStationLiveState(stationId, options = {}) {
           }
         }
 
-        if (matchedIndex >= 0) {
+        if (matchedIndex >= 0 && currentSlot) {
+          let nextCursorMs = new Date(currentSlot.end_time).getTime();
           for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
             const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
+            const nsDur = Number(ns.duration) || 0;
+            const nsStartMs = nextCursorMs;
+            const nsEndMs = nextCursorMs + Math.round(nsDur * 1000);
+            nextCursorMs = nsEndMs;
+
             loopNextSlots.push({
               id: ns.id,
               title: ns.title,
               type: ns.type,
               audioUrl: ns.audio_url,
               duration: ns.duration,
-              startTime: ns.start_time,
-              endTime: ns.end_time
+              startTime: new Date(nsStartMs).toISOString(),
+              endTime: new Date(nsEndMs).toISOString(),
+              trackId: ns.track_id
+            });
+          }
+
+          let prevCursorMs = new Date(currentSlot.start_time).getTime();
+          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+            const pIdx = (matchedIndex - i + activeLoopSlots.length * 100) % activeLoopSlots.length;
+            const ps = activeLoopSlots[pIdx];
+            const psDur = Number(ps.duration) || 0;
+            const psEndMs = prevCursorMs;
+            const psStartMs = prevCursorMs - Math.round(psDur * 1000);
+            prevCursorMs = psStartMs;
+
+            loopPrevSlots.push({
+              id: ps.id,
+              title: ps.title,
+              type: ps.type,
+              audioUrl: ps.audio_url,
+              duration: ps.duration,
+              startTime: new Date(psStartMs).toISOString(),
+              endTime: new Date(psEndMs).toISOString(),
+              trackId: ps.track_id
             });
           }
         }
@@ -796,6 +845,37 @@ async function getStationLiveState(stationId, options = {}) {
       offset = Math.max(0, (nowMs - startMs) / 1000);
       remaining = Math.max(0, (Number(currentSlot.duration) || 0) - offset);
     }
+  }
+
+  // Если был переход по finishedSlotId в режиме зацикливания, дополняем loopNextSlots
+  if (isVirtualLoop && loopNextSlots.length === 0 && currentSlot && allSlots.length > 0) {
+    const curIdx = allSlots.findIndex(s => s.id === currentSlot.id);
+    if (curIdx >= 0) {
+      let nextCursorMs = new Date(currentSlot.end_time).getTime();
+      for (let i = 1; i <= Math.min(10, allSlots.length); i++) {
+        const ns = allSlots[(curIdx + i) % allSlots.length];
+        const nsDur = Number(ns.duration) || 0;
+        const nsStartMs = nextCursorMs;
+        const nsEndMs = nextCursorMs + Math.round(nsDur * 1000);
+        nextCursorMs = nsEndMs;
+
+        loopNextSlots.push({
+          id: ns.id,
+          title: ns.title,
+          type: ns.type,
+          audioUrl: ns.audio_url,
+          duration: ns.duration,
+          startTime: new Date(nsStartMs).toISOString(),
+          endTime: new Date(nsEndMs).toISOString(),
+          trackId: ns.track_id
+        });
+      }
+    }
+  }
+
+  if (!currentCycleStartMs && allSlots.length > 0) {
+    currentCycleStartMs = new Date(allSlots[0].start_time).getTime();
+    currentCycleEndMs = new Date(allSlots[allSlots.length - 1].end_time).getTime();
   }
 
   // Ближайшие следующие слоты (до 10 шт.)
@@ -812,7 +892,8 @@ async function getStationLiveState(stationId, options = {}) {
         audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
         duration: s.duration,
         startTime: s.start_time,
-        endTime: s.end_time
+        endTime: s.end_time,
+        trackId: s.track_id
       }));
     } else {
       nextSlots = allSlots.filter(s => s.start_time > nowIso).slice(0, 10).map(s => ({
@@ -822,7 +903,8 @@ async function getStationLiveState(stationId, options = {}) {
         audioUrl: null, // Защита: не отдаем аудиофайл будущих треков до их выхода в эфир
         duration: s.duration,
         startTime: s.start_time,
-        endTime: s.end_time
+        endTime: s.end_time,
+        trackId: s.track_id
       }));
     }
   }
@@ -840,8 +922,12 @@ async function getStationLiveState(stationId, options = {}) {
     serverTime: nowIso,
     broadcastStatus: station.broadcast_status || 'live',
     isLive: Boolean(currentSlot),
+    broadcastStatus: station.broadcast_status || 'live',
+    isLive: Boolean(currentSlot),
     isVirtualLoop,
     fallback: !currentSlot ? station.fallback_mode : null,
+    cycleStartTime: currentCycleStartMs ? new Date(currentCycleStartMs).toISOString() : null,
+    cycleEndTime: currentCycleEndMs ? new Date(currentCycleEndMs).toISOString() : null,
     currentSlot: currentSlot ? {
       id: currentSlot.id,
       title: currentSlot.title,
@@ -855,14 +941,15 @@ async function getStationLiveState(stationId, options = {}) {
     offset: Math.round(offset * 10) / 10,
     remaining: Math.round(remaining * 10) / 10,
     nextSlots,
-    prevSlots: prevSlots.map(s => ({
+    prevSlots: (isVirtualLoop && loopPrevSlots.length > 0) ? loopPrevSlots : prevSlots.map(s => ({
       id: s.id,
       title: s.title,
       type: s.type,
       audioUrl: s.audio_url,
       duration: s.duration,
       startTime: s.start_time,
-      endTime: s.end_time
+      endTime: s.end_time,
+      trackId: s.track_id
     }))
   };
 }

@@ -2298,17 +2298,32 @@
       state.editorBlocks = convertSlotsToBlocks(slots || []);
 
       // Подтягиваем актуальное состояние эфира станции (live / offline / scheduled)
+      let live = null;
       try {
-        const live = await api(`/api/radio/stations/${stationId}/live`);
+        live = await api(`/api/radio/stations/${stationId}/live`);
         if (live && live.station && state.selectedStationForEdit) {
           state.selectedStationForEdit.broadcast_status = live.broadcastStatus || live.station.broadcast_status || (live.isLive ? 'live' : 'offline');
           state.selectedStationForEdit.isLive = Boolean(live.isLive);
         }
       } catch (_) {}
 
-      // Если в сетке уже есть слоты — сохраняем исходное время начала эфира,
-      // чтобы при нажатии «Опубликовать в эфир» эфир не откатывался к началу!
-      if (slots && slots.length > 0 && slots[0].start_time) {
+      // Определяем точку отсчета шкалы времени редактора:
+      // Если станция вещает прямо сейчас (live) — синхронизируем таймлайн с текущим циклом вещания!
+      const isLiveNow = Boolean(live && (live.broadcastStatus === 'live' || live.isLive));
+      if (isLiveNow && live && live.cycleStartTime) {
+        setEditorStartTime(live.cycleStartTime);
+      } else if (isLiveNow && slots && slots.length > 0 && slots[0].start_time) {
+        const totalDurSec = slots.reduce((s, x) => s + (Number(x.duration) || 0), 0);
+        const origStartMs = new Date(slots[0].start_time).getTime();
+        const nowMs = getEffectiveNowMs();
+        if (totalDurSec > 0 && nowMs >= origStartMs) {
+          const elapsedSec = (nowMs - origStartMs) / 1000;
+          const cycleOffsetSec = elapsedSec % totalDurSec;
+          setEditorStartTime(new Date(nowMs - cycleOffsetSec * 1000).toISOString());
+        } else {
+          setEditorStartTime(slots[0].start_time);
+        }
+      } else if (slots && slots.length > 0 && slots[0].start_time) {
         setEditorStartTime(slots[0].start_time);
       } else {
         setEditorStartTime(getEffectiveNowMs());
@@ -4033,6 +4048,18 @@
       if (elapsedSec > totalDurationSec && fallbackMode === 'loop' && totalDurationSec > 0) {
         activeElapsed = elapsedSec % totalDurationSec;
         isLooping = true;
+
+        // Если сетка не в режиме редактирования черновика — перелистываем шкалу времени на актуальный цикл эфира
+        if (!state.isEditorDirty && st && (st.broadcast_status === 'live' || st.isLive)) {
+          const cycles = Math.floor(elapsedSec / totalDurationSec);
+          if (cycles > 0) {
+            const nextCycleStartMs = startMs + (cycles * totalDurationSec * 1000);
+            setEditorStartTime(new Date(nextCycleStartMs).toISOString());
+            renderTimelineRibbon();
+            renderEditorBlocks();
+            return;
+          }
+        }
       }
 
       if (activeElapsed <= effectiveScale) {

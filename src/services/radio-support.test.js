@@ -281,6 +281,52 @@ test('radio-store: virtual loop loops broadcast after schedule ends and populate
   assert.ok(liveState.nextSlots.length > 0, 'В режиме зацикливания nextSlots не должен быть пустым');
   assert.equal(liveState.nextSlots[0].title, 'Loop Track 3', 'Следующим слотом должен быть Track 3');
 
+  // Проверка проекции меток времени к реальному времени вещания (устранение рассинхрона)
+  const curStart = new Date(liveState.currentSlot.startTime).getTime();
+  const curEnd = new Date(liveState.currentSlot.endTime).getTime();
+  const nextStart = new Date(liveState.nextSlots[0].startTime).getTime();
+  assert.ok(curStart <= now, `currentSlot.startTime (${curStart}) должен быть <= now (${now})`);
+  assert.ok(curEnd > now, `currentSlot.endTime (${curEnd}) должен быть > now (${now})`);
+  assert.equal(curEnd, nextStart, 'Конец текущего слота должен совпадать со стартом следующего');
+  assert.ok(liveState.cycleStartTime, 'cycleStartTime должен быть определен');
+
+  await radioStore.deleteStation(station.id, 901, true);
+});
+
+test('radio-store: finishedSlotId in loop mode advances cleanly with current wall-clock timestamps', async () => {
+  const freq = 99.35;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Advance Test Station',
+    ownerId: 901,
+    ownerName: 'AdvanceMaster',
+    fallbackMode: 'loop'
+  });
+
+  const now = radioStore.getEffectiveNow().getTime();
+  const startTime = new Date(now - 60000).toISOString();
+
+  await radioStore.setTimelineSlots(station.id, [
+    { title: 'Track A', duration: 15, audio_url: '/uploads/a.mp3', type: 'track' },
+    { title: 'Track B', duration: 15, audio_url: '/uploads/b.mp3', type: 'track' }
+  ], startTime);
+
+  const timeline = await radioStore.getTimelineSlots(station.id);
+  const trackASlotId = timeline[0].id;
+
+  // Имитируем завершение Track A
+  const advanced = await radioStore.getStationLiveState(station.id, { finishedSlotId: trackASlotId });
+  assert.equal(advanced.currentSlot.title, 'Track B');
+  const bStart = new Date(advanced.currentSlot.startTime).getTime();
+  const bEnd = new Date(advanced.currentSlot.endTime).getTime();
+  assert.ok(bStart <= now + 1000, 'bStart must be aligned with current time');
+  assert.ok(bEnd > now, 'bEnd must be in future');
+  assert.ok(advanced.nextSlots.length > 0, 'nextSlots must be populated');
+  assert.equal(advanced.nextSlots[0].title, 'Track A', 'Next slot in loop must be Track A');
+
   await radioStore.deleteStation(station.id, 901, true);
 });
 
