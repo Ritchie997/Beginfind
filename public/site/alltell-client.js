@@ -3298,7 +3298,7 @@
                 </div>
 
                 <label class="alltell-image-dropzone">
-                  <input name="images" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden ${state.uploadingImages ? 'disabled' : ''}>
+                  <input name="images" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple hidden ${state.uploadingImages ? 'disabled' : ''}>
                   <div class="alltell-image-dropzone-content">
                     <div class="alltell-image-dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
                     <div class="alltell-image-dropzone-text">
@@ -4645,10 +4645,14 @@
     }
 
     function addPostImages(fileList) {
+      var IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif)$/i;
       var files = Array.from(fileList || []).filter(function (file) {
-        return /^image\/(jpeg|png|webp|gif)$/.test(file.type);
+        if (!file) return false;
+        if (file.type && /^image\/(jpe?g|png|webp|gif|pjpeg|x-png)$/i.test(file.type)) return true;
+        if (file.name && IMAGE_EXT_RE.test(file.name)) return true;
+        return false;
       }).sort(function (a, b) {
-        return a.name.localeCompare(b.name, undefined, { numeric: true });
+        return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
       });
       if (fileList && fileList.length && !files.length) {
         notifyError('Подходят только изображения JPG, PNG, WEBP или GIF');

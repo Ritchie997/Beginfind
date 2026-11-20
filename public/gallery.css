@@ -1918,9 +1918,40 @@ body.gallery-viewer-open .antropedia-sticker-picker {
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
+  user-select: none;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
 }
-.ge-add-pages:hover { border-color: var(--blurple); color: var(--text-normal); }
+.ge-add-pages:hover, .ge-add-pages:focus-visible {
+  border-color: var(--blurple);
+  color: var(--text-normal);
+  background: rgba(88, 101, 242, 0.06);
+  outline: none;
+}
 .ge-add-pages i { font-size: 18px; }
+
+.ge-add-pages.ge-add-pages-empty {
+  aspect-ratio: auto;
+  grid-column: 1 / -1;
+  min-height: 110px;
+  padding: 20px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: center;
+}
+.ge-add-pages.ge-add-pages-empty i {
+  font-size: 28px;
+  color: var(--blurple);
+  margin-bottom: 6px;
+}
+.ge-add-pages.ge-add-pages-empty strong {
+  display: block;
+  color: var(--text-normal);
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+.ge-add-pages.ge-add-pages-empty span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .ge-more { margin-top: 6px; }
 .ge-desc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
