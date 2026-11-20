@@ -2536,12 +2536,12 @@
       const box = this.$('pages');
       if (!this.pages.length) {
         box.innerHTML = `
-          <div class="ge-add-pages ge-add-pages-empty" data-ge-add-pages role="button" tabindex="0" title="Нажмите для выбора изображений или перетащите файлы сюда">
-            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-pages style="display:none">
+          <label class="ge-add-pages ge-add-pages-empty" data-ge-add-pages title="Нажмите для выбора изображений или перетащите файлы сюда">
+            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-pages style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0;" onchange="window.galleryEditor && window.galleryEditor.onAddPagesChange(this)">
             <i class="fas fa-cloud-arrow-up"></i>
             <strong>Нажмите для выбора изображений</strong>
             <span>или перетащите файлы в эту область (JPG, PNG, WEBP, GIF)</span>
-          </div>`;
+          </label>`;
       } else {
         box.innerHTML = this.pages.map((p, i) => {
           const first = p.variants[0];
@@ -2557,12 +2557,30 @@
               <button type="button" class="ge-page-remove" data-act="page-remove" title="Убрать страницу со всеми вариациями">&times;</button>
             </div>`;
         }).join('') + `
-          <div class="ge-add-pages" data-ge-add-pages role="button" tabindex="0" title="Добавить страницы (можно выбрать много файлов или перетащить их сюда)">
-            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-pages style="display:none">
+          <label class="ge-add-pages" data-ge-add-pages title="Добавить страницы (можно выбрать много файлов или перетащить их сюда)">
+            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-pages style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0;" onchange="window.galleryEditor && window.galleryEditor.onAddPagesChange(this)">
             <i class="fas fa-plus"></i><span>Страницы</span>
-          </div>`;
+          </label>`;
       }
       this.renderDetail();
+    }
+
+    onAddPagesChange(input) {
+      if (!input || !input.files || !input.files.length) return;
+      const files = Array.from(input.files);
+      input.value = '';
+      this.addPages(files);
+    }
+
+    onAddVariantsChange(input) {
+      if (!input || !input.files || !input.files.length) return;
+      const files = this.filterImageFiles(input.files);
+      input.value = '';
+      const page = this.pages[this.selectedPage];
+      if (!files.length || !page) return;
+      this.syncDetail();
+      files.forEach((file) => page.variants.push(this.newVariant(file)));
+      this.renderPages();
     }
 
     filterImageFiles(fileList) {
@@ -2598,18 +2616,11 @@
     bindPagesEvents(box) {
       box.addEventListener('change', (e) => {
         const input = e.target.closest('[data-add-pages]');
-        if (input) {
-          this.addPages(input.files);
-          input.value = '';
+        if (input && input.files && input.files.length) {
+          this.onAddPagesChange(input);
         }
       });
       box.addEventListener('click', (e) => {
-        const addBtn = e.target.closest('[data-ge-add-pages], .ge-add-pages');
-        if (addBtn && !e.target.matches('input[type="file"]')) {
-          const input = addBtn.querySelector('input[data-add-pages]');
-          if (input) input.click();
-          return;
-        }
         const tile = e.target.closest('[data-page]');
         if (!tile) return;
         const i = parseInt(tile.dataset.page, 10);
@@ -2622,16 +2633,6 @@
           this.selectedPage = i;
         }
         this.renderPages();
-      });
-      box.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          const addBtn = e.target.closest('[data-ge-add-pages], .ge-add-pages');
-          if (addBtn) {
-            e.preventDefault();
-            const input = addBtn.querySelector('input[data-add-pages]');
-            if (input) input.click();
-          }
-        }
       });
 
       // Перетаскивание плиток (порядок страниц) и файлов с диска (новые страницы).
@@ -2681,10 +2682,10 @@
       box.innerHTML = `
         <div class="ge-detail-head">
           <b>Страница ${this.selectedPage + 1} — вариации</b>
-          <button type="button" class="btn btn-secondary btn-sm ge-add-variant" data-ge-add-variant title="Другая версия этой же страницы (можно несколько файлов)">
-            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-variants style="display:none">
+          <label class="btn btn-secondary btn-sm ge-add-variant" title="Другая версия этой же страницы (можно несколько файлов)">
+            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" multiple data-add-variants style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0;" onchange="window.galleryEditor && window.galleryEditor.onAddVariantsChange(this)">
             <i class="fas fa-plus"></i> Вариация
-          </button>
+          </label>
         </div>
         <p class="form-label-hint">Имя вариации читатель видит в переключателе. Роли — кому эта вариация видна (пусто — всем, кому видна работа); страницу без единой доступной вариации читатель не увидит.</p>
         ${page.variants.map((v, vi) => `
@@ -2743,22 +2744,11 @@
       });
       box.addEventListener('change', (e) => {
         const input = e.target.closest('[data-add-variants]');
-        if (!input) return;
-        const files = this.filterImageFiles(input.files);
-        input.value = '';
-        const page = this.pages[this.selectedPage];
-        if (!files.length || !page) return;
-        this.syncDetail();
-        files.forEach((file) => page.variants.push(this.newVariant(file)));
-        this.renderPages();
+        if (input && input.files && input.files.length) {
+          this.onAddVariantsChange(input);
+        }
       });
       box.addEventListener('click', (e) => {
-        const addVarBtn = e.target.closest('[data-ge-add-variant], .ge-add-variant');
-        if (addVarBtn && !e.target.matches('input[type="file"]')) {
-          const input = addVarBtn.querySelector('input[data-add-variants]');
-          if (input) input.click();
-          return;
-        }
         const btn = e.target.closest('[data-act]');
         const page = this.pages[this.selectedPage];
         if (!btn || !page) return;
