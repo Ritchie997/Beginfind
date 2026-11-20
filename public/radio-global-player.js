@@ -26,6 +26,30 @@
     })[m]);
   }
 
+  function showToast(text, type = 'info') {
+    if (window.toast && typeof window.toast.show === 'function') {
+      return window.toast.show(text, type);
+    }
+    if (typeof window.showToast === 'function') {
+      return window.showToast(text, type);
+    }
+    if (typeof window.showMessage === 'function') {
+      return window.showMessage(text, type);
+    }
+    let toast = document.getElementById('alltellGlobalToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'alltellGlobalToast';
+      toast.style.cssText = 'position:fixed; top:20px; right:20px; z-index:9999; padding:10px 18px; border-radius:8px; font-size:0.88rem; font-weight:600; color:#fff; background:#1e293b; border:1px solid rgba(255,255,255,0.15); box-shadow:0 8px 24px rgba(0,0,0,0.5); transition:opacity 0.2s; pointer-events:none;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.style.background = type === 'warning' ? '#b45309' : type === 'error' ? '#b91c1c' : type === 'success' ? '#15803d' : '#1e293b';
+    toast.style.opacity = '1';
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+  }
+
   const STORAGE_KEY = 'alltell_global_radio_state';
   const tabId = 'tab_' + Math.random().toString(36).substring(2, 9);
   const broadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('alltell_global_audio') : null;
@@ -377,9 +401,13 @@
       // В режиме радио проверяем плановое время окончания слота в эфире
       if (state.station) {
         const curSlot = state.currentSlot;
-        const endMs = curSlot ? new Date(curSlot.endTime || curSlot.end_time).getTime() : 0;
+        const endMs = (curSlot && (curSlot.endTime || curSlot.end_time))
+          ? new Date(curSlot.endTime || curSlot.end_time).getTime()
+          : (curSlot && (curSlot.startTime || curSlot.start_time))
+            ? new Date(curSlot.startTime || curSlot.start_time).getTime() + (Number(curSlot.duration) || 0) * 1000
+            : 0;
         const nowMs = Date.now();
-        const diffMs = endMs - nowMs;
+        const diffMs = endMs > 0 ? (endMs - nowMs) : 0;
 
         // Если аудиофайл закончился, но до планового окончания слота в сетке ещё осталось время (> 1200 мс) —
         // НЕ перескакиваем через треки раньше времени! Ждём планового времени переключения слота на сервере.
@@ -816,9 +844,14 @@
     if (state.mode === 'radio') {
       if (window.RadioClient && typeof window.RadioClient.skipSlot === 'function') {
         window.RadioClient.skipSlot();
-      } else if (state.station) {
-        syncRadioStationLive(state.station, true);
+        return;
       }
+      if (!state.isTimeshift) {
+        showToast('Будущие треки станут доступны только после выхода в эфир', 'info');
+        return;
+      }
+      goLive();
+      showToast('Вы вернулись в прямой эфир станции', 'info');
       return;
     }
     if (state.playlist && state.playlist.length > 0) {
@@ -847,6 +880,7 @@
         window.RadioClient.prevSlot();
       } else {
         seek(0);
+        showToast('Трек запущен с начала (таймшифт)', 'info');
       }
       return;
     }
@@ -952,23 +986,30 @@
     if (isAudioLeader) {
       const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
       if (dur > 0 && Number.isFinite(ratio)) {
-        const targetTime = Math.max(0, Math.min(dur, ratio * dur));
+        let targetTime = Math.max(0, Math.min(dur, ratio * dur));
 
         if (state.mode === 'radio') {
-          // Если мы в радио-режиме, проверяем позицию относительно реального живого времени
-          if (state.currentSlot && state.currentSlot.startTime) {
-            const startMs = new Date(state.currentSlot.startTime).getTime();
+          // В режиме радио строго запрещено перематывать вперед в несыгранное будущее эфира!
+          let liveOffset = dur;
+          if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
+            const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
             const nowMs = Date.now();
-            const liveOffset = Math.max(0, (nowMs - startMs) / 1000);
-            if (targetTime < liveOffset - 2.5) {
-              state.isTimeshift = true;
-              state.timeshiftDeltaSec = Math.round(liveOffset - targetTime);
-            } else {
-              state.isTimeshift = false;
-              state.timeshiftDeltaSec = 0;
-            }
-          } else if (targetTime < (audio.currentTime || 0) - 2) {
+            liveOffset = Math.max(0, (nowMs - startMs) / 1000);
+          } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
+            liveOffset = state.currentSlot.offset;
+          }
+
+          if (targetTime > liveOffset + 1.2) {
+            showToast('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире', 'warning');
+            targetTime = Math.min(dur, liveOffset);
+            state.isTimeshift = false;
+            state.timeshiftDeltaSec = 0;
+          } else if (targetTime < liveOffset - 2.5) {
             state.isTimeshift = true;
+            state.timeshiftDeltaSec = Math.round(liveOffset - targetTime);
+          } else {
+            state.isTimeshift = false;
+            state.timeshiftDeltaSec = 0;
           }
         }
 
@@ -1081,6 +1122,7 @@
               <span class="alltell-global-time" id="globalAudioTimeCurrent">00:00</span>
               <div class="alltell-global-progress-bar" id="globalAudioProgressBar">
                 <div class="alltell-global-progress-fill" id="globalAudioProgressFill"></div>
+                <div class="alltell-global-live-edge" id="globalAudioLiveEdge" style="display:none;" title="Граница прямого эфира"></div>
               </div>
               <span class="alltell-global-time" id="globalAudioTimeDuration">00:00</span>
             </div>
@@ -1114,6 +1156,7 @@
       timeCurrent: bar.querySelector('#globalAudioTimeCurrent'),
       timeDuration: bar.querySelector('#globalAudioTimeDuration'),
       progressFill: bar.querySelector('#globalAudioProgressFill'),
+      liveEdge: bar.querySelector('#globalAudioLiveEdge'),
       progressBar: bar.querySelector('#globalAudioProgressBar'),
       muteBtn: bar.querySelector('#globalAudioMuteBtn'),
       volSlider: bar.querySelector('#globalAudioVolumeSlider'),
@@ -1167,6 +1210,23 @@
       if (domBar.progressFill && dur > 0) {
         const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
         domBar.progressFill.style.width = `${pct}%`;
+      }
+      if (domBar.liveEdge) {
+        if (state.mode === 'radio' && dur > 0) {
+          let liveOffset = dur;
+          if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
+            const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
+            const nowMs = Date.now();
+            liveOffset = Math.max(0, (nowMs - startMs) / 1000);
+          } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
+            liveOffset = state.currentSlot.offset;
+          }
+          const edgePct = Math.min(100, Math.max(0, (liveOffset / dur) * 100));
+          domBar.liveEdge.style.display = 'block';
+          domBar.liveEdge.style.left = `${edgePct}%`;
+        } else {
+          domBar.liveEdge.style.display = 'none';
+        }
       }
     }
 
@@ -1232,6 +1292,26 @@
           : 'Прямой эфир (синхронизировано)';
       }
 
+      if (domBar.nextBtn) {
+        if (!state.isTimeshift) {
+          domBar.nextBtn.disabled = true;
+          domBar.nextBtn.style.opacity = '0.35';
+          domBar.nextBtn.style.cursor = 'not-allowed';
+          domBar.nextBtn.title = 'Будущие треки станут доступны только после выхода в эфир';
+        } else {
+          domBar.nextBtn.disabled = false;
+          domBar.nextBtn.style.opacity = '1';
+          domBar.nextBtn.style.cursor = 'pointer';
+          domBar.nextBtn.title = 'В прямой эфир станции';
+        }
+      }
+      if (domBar.prevBtn) {
+        domBar.prevBtn.disabled = false;
+        domBar.prevBtn.style.opacity = '1';
+        domBar.prevBtn.style.cursor = 'pointer';
+        domBar.prevBtn.title = 'Слушать трек с начала (таймшифт)';
+      }
+
       if (state.isTimeshift) {
         if (domBar.badge) {
           domBar.badge.textContent = '⏳ ТАЙМШИФТ';
@@ -1269,6 +1349,18 @@
       // Режим трека
       if (domBar.badge) domBar.badge.classList.remove('is-timeshift');
       if (domBar.goLiveBtn) domBar.goLiveBtn.style.display = 'none';
+      if (domBar.nextBtn) {
+        domBar.nextBtn.disabled = false;
+        domBar.nextBtn.style.opacity = '1';
+        domBar.nextBtn.style.cursor = 'pointer';
+        domBar.nextBtn.title = 'Следующий трек';
+      }
+      if (domBar.prevBtn) {
+        domBar.prevBtn.disabled = false;
+        domBar.prevBtn.style.opacity = '1';
+        domBar.prevBtn.style.cursor = 'pointer';
+        domBar.prevBtn.title = 'Предыдущий трек';
+      }
       const t = state.track;
       if (domBar.badge) domBar.badge.textContent = t ? String(t.format || 'MP3').toUpperCase() : 'ТРЕК';
       if (domBar.title) {

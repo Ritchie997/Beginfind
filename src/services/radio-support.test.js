@@ -546,5 +546,30 @@ test('radio-timeshift: live vs timeshift playback, UI badges and goLive synchron
   assert.ok(clientCode.includes('gAudio.goLive()'), 'radio-client must trigger gAudio.goLive() when user clicks go live');
 });
 
+test('radio-global-player: strict prohibition of seeking into future and next button guard on all pages', () => {
+  const playerCode = fs.readFileSync(path.join(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const cssCode = fs.readFileSync(path.join(__dirname, '../../public/global-styles.css'), 'utf8');
+  const radioHtml = fs.readFileSync(path.join(__dirname, '../../public/site/radio.html'), 'utf8');
+
+  // 1. Запрет перемотки вперед в будущее эфира в seek(ratio)
+  assert.ok(playerCode.includes('targetTime > liveOffset + 1.2'), 'seek must detect attempt to seek beyond current live offset');
+  assert.ok(playerCode.includes('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире'), 'seek must warn user and prevent seeking into unbroadcasted future');
+  assert.ok(playerCode.includes('targetTime = Math.min(dur, liveOffset)'), 'seek must clamp targetTime to liveOffset on forward seek attempt');
+
+  // 2. Блокировка кнопки Next при прослушивании прямого эфира
+  assert.ok(playerCode.includes('Будущие треки станут доступны только после выхода в эфир'), 'playNext must block future track skipping in radio mode');
+  assert.ok(playerCode.includes("domBar.nextBtn.disabled = true;"), 'updateBarUI must disable nextBtn when not in timeshift');
+  assert.ok(playerCode.includes("domBar.nextBtn.style.opacity = '0.35'"), 'updateBarUI must visually dim disabled nextBtn');
+
+  // 3. Индикатор границы прямого эфира (live edge) на общем прогресс-баре
+  assert.ok(playerCode.includes('globalAudioLiveEdge'), 'globalAudioProgressBar must include live edge marker');
+  assert.ok(playerCode.includes('domBar.liveEdge.style.left = `${edgePct}%`'), 'updateProgressUI must position live edge marker at live offset');
+  assert.ok(cssCode.includes('.alltell-global-live-edge'), 'global-styles.css must style .alltell-global-live-edge');
+
+  // 4. Понятная метка суммарного хронометража ленты в шапке
+  assert.ok(radioHtml.includes('Хронометраж:'), 'radio.html must label timeline total duration as Хронометраж instead of confusing Эфир');
+});
+
+
 
 
