@@ -4301,6 +4301,43 @@ body.articles-page .content-body {
   white-space: nowrap;
 }
 
+.alltell-global-audio-badge.is-timeshift {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.alltell-global-live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ef4444;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  animation: pulseGlobalLive 1.8s infinite ease-in-out;
+}
+
+.alltell-global-live-btn:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+@keyframes pulseGlobalLive {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.9);
+  }
+}
+
 .alltell-global-audio-title {
   color: #fff;
   font-weight: 600;

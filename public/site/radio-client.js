@@ -239,6 +239,7 @@
       timelineScaleBadge: document.getElementById('timelineScaleBadge'),
       timelineTotalDuration: document.getElementById('timelineTotalDuration'),
       timelineEndTime: document.getElementById('timelineEndTime'),
+      timelineGoLiveBtn: document.getElementById('timelineGoLiveBtn'),
       btnTimelineZoomOut: document.getElementById('btnTimelineZoomOut'),
       btnTimelineZoomReset: document.getElementById('btnTimelineZoomReset'),
       btnTimelineZoomIn: document.getElementById('btnTimelineZoomIn'),
@@ -3220,12 +3221,13 @@
     const currentTitle = (currentTrack && currentTrack.title) || (activeSlot && activeSlot.title);
 
     const isRadioLive = current.mode === 'radio';
+    const isTimeshift = Boolean(current.isTimeshift || state.isTimeshift);
     const st = state.selectedStationForEdit || state.currentStation;
     const isLive = Boolean(st && (st.broadcast_status === 'live' || st.isLive));
 
     let onAirBlockIndex = -1;
     let onAirSubTrackIndex = -1;
-    if (isRadioLive && isLive && state.editorBlocks && state.editorBlocks.length > 0) {
+    if (isLive && state.editorBlocks && state.editorBlocks.length > 0) {
       const nowMs = getEffectiveNowMs();
       const startMs = new Date(state.editorStartTime || Date.now()).getTime();
       const totalDurSec = state.editorCachedDurationSec || state.editorBlocks.reduce((s, x) => s + (Number(x.duration) || 0), 0);
@@ -3259,6 +3261,11 @@
       }
     }
 
+    // Кнопка возврата в прямой эфир в шапке таймлайна
+    if (dom.timelineGoLiveBtn) {
+      dom.timelineGoLiveBtn.style.display = (isLive && isTimeshift) ? 'inline-flex' : 'none';
+    }
+
     // 1. Обновляем кнопки и подсветку блоков редактора
     const listEl = dom.editorBlocksList || dom.editorSlotsList;
     if (listEl) {
@@ -3266,11 +3273,12 @@
         const bIdx = parseInt(card.dataset.index, 10);
         const block = state.editorBlocks[bIdx];
 
-        let isThisBlockPlaying = false;
-        if (isRadioLive && isLive && onAirBlockIndex >= 0) {
-          isThisBlockPlaying = isPlaying && (bIdx === onAirBlockIndex);
+        const isThisOnAir = Boolean(isLive && onAirBlockIndex >= 0 && bIdx === onAirBlockIndex);
+        let isThisHearing = false;
+        if (isRadioLive && !isTimeshift) {
+          isThisHearing = isPlaying && isThisOnAir;
         } else {
-          isThisBlockPlaying = isPlaying && block && (
+          isThisHearing = isPlaying && block && (
             (currentBlockId && block.id === currentBlockId) ||
             (currentUrl && (
               block.audio_url === currentUrl ||
@@ -3288,21 +3296,23 @@
           );
         }
 
-        card.classList.toggle('is-playing-block', Boolean(isThisBlockPlaying));
+        card.classList.toggle('is-on-air-block', isThisOnAir);
+        card.classList.toggle('is-playing-block', Boolean(isThisHearing));
+        card.classList.toggle('is-timeshift-block', Boolean(isThisHearing && isRadioLive && isTimeshift));
 
         // Кнопка предпрослушивания блока
         const previewBtn = card.querySelector('.btn-preview-block');
         if (previewBtn) {
-          previewBtn.classList.toggle('is-playing', Boolean(isThisBlockPlaying));
-          previewBtn.innerHTML = `<i class="fas ${isThisBlockPlaying ? 'fa-pause' : 'fa-play'}"></i>`;
-          previewBtn.title = isThisBlockPlaying ? 'Пауза' : 'Воспроизвести в общем плеере';
+          previewBtn.classList.toggle('is-playing', Boolean(isThisHearing));
+          previewBtn.innerHTML = `<i class="fas ${isThisHearing ? 'fa-pause' : 'fa-play'}"></i>`;
+          previewBtn.title = isThisHearing ? 'Пауза' : 'Воспроизвести в общем плеере';
         }
 
         // Кнопка плейлиста в аккордеоне
         const plPlayBtn = card.querySelector('.btn-play-playlist-block');
         if (plPlayBtn) {
-          plPlayBtn.classList.toggle('is-playing', Boolean(isThisBlockPlaying));
-          plPlayBtn.innerHTML = `<i class="fas ${isThisBlockPlaying ? 'fa-pause' : 'fa-play'}"></i> ${isThisBlockPlaying ? 'Пауза' : 'Слушать'}`;
+          plPlayBtn.classList.toggle('is-playing', Boolean(isThisHearing));
+          plPlayBtn.innerHTML = `<i class="fas ${isThisHearing ? 'fa-pause' : 'fa-play'}"></i> ${isThisHearing ? 'Пауза' : 'Слушать'}`;
         }
 
         // Вложенные треки плейлиста
@@ -3310,23 +3320,27 @@
           const tIdx = parseInt(nTrack.dataset.trackIndex, 10);
           const it = block && block.items && block.items[tIdx];
 
-          let isTrackActive = false;
-          if (isRadioLive && isLive && bIdx === onAirBlockIndex && onAirSubTrackIndex >= 0) {
-            isTrackActive = isPlaying && (tIdx === onAirSubTrackIndex);
+          const isSubOnAir = Boolean(isLive && onAirBlockIndex >= 0 && bIdx === onAirBlockIndex && onAirSubTrackIndex >= 0 && tIdx === onAirSubTrackIndex);
+          let isSubHearing = false;
+          if (isRadioLive && !isTimeshift) {
+            isSubHearing = isPlaying && isSubOnAir;
           } else {
-            isTrackActive = isPlaying && it && (
+            isSubHearing = isPlaying && it && (
               (currentUrl && (it.audio_url === currentUrl || (typeof currentUrl === 'string' && it.audio_url && currentUrl.endsWith(it.audio_url)))) ||
               (currentTrackId && (it.track_id || it.id) == currentTrackId) ||
               (currentTitle && it.title === currentTitle)
             );
           }
 
-          nTrack.classList.toggle('is-playing', Boolean(isTrackActive));
+          nTrack.classList.toggle('is-on-air', isSubOnAir);
+          nTrack.classList.toggle('is-playing', Boolean(isSubHearing));
+          nTrack.classList.toggle('is-timeshift-playing', Boolean(isSubHearing && isRadioLive && isTimeshift));
+
           const nPlayBtn = nTrack.querySelector('.btn-play-nested-track');
           if (nPlayBtn) {
-            nPlayBtn.classList.toggle('is-playing', Boolean(isTrackActive));
-            nPlayBtn.innerHTML = `<i class="fas ${isTrackActive ? 'fa-pause' : 'fa-play'}"></i>`;
-            nPlayBtn.title = isTrackActive ? 'Пауза' : 'Воспроизвести в общем плеере';
+            nPlayBtn.classList.toggle('is-playing', Boolean(isSubHearing));
+            nPlayBtn.innerHTML = `<i class="fas ${isSubHearing ? 'fa-pause' : 'fa-play'}"></i>`;
+            nPlayBtn.title = isSubHearing ? 'Пауза' : 'Воспроизвести в общем плеере';
           }
         });
       });
@@ -3338,11 +3352,12 @@
         const bIdx = parseInt(clip.dataset.index, 10);
         const block = state.editorBlocks[bIdx];
 
-        let isClipPlaying = false;
-        if (isRadioLive && isLive && onAirBlockIndex >= 0) {
-          isClipPlaying = isPlaying && (bIdx === onAirBlockIndex);
+        const isClipOnAir = Boolean(isLive && onAirBlockIndex >= 0 && bIdx === onAirBlockIndex);
+        let isClipHearing = false;
+        if (isRadioLive && !isTimeshift) {
+          isClipHearing = isPlaying && isClipOnAir;
         } else {
-          isClipPlaying = isPlaying && block && (
+          isClipHearing = isPlaying && block && (
             (currentBlockId && block.id === currentBlockId) ||
             (currentUrl && (
               block.audio_url === currentUrl ||
@@ -3360,7 +3375,10 @@
           );
         }
 
-        clip.classList.toggle('is-playing', Boolean(isClipPlaying));
+        clip.classList.toggle('is-on-air', isClipOnAir);
+        clip.classList.toggle('is-playing', Boolean(isClipHearing));
+        clip.classList.toggle('is-timeshift-playing', Boolean(isClipHearing && isRadioLive && isTimeshift));
+        clip.classList.toggle('is-preview-playing', Boolean(isClipHearing && current.mode === 'track'));
       });
     }
 
@@ -4134,9 +4152,15 @@
           if (state.isEditorDirty) {
             badge.textContent = `🔴 ЭФИР ${liveTimeStr} • ✍️ ЧЕРНОВИК`;
             badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr}). В рабочей области открыт черновик.`;
+            badge.classList.remove('is-timeshift-playhead');
+          } else if (state.isTimeshift) {
+            badge.textContent = `🔴 ЭФИР ${liveTimeStr} • ⏳ ТАЙМШИФТ`;
+            badge.title = `Текущее время прямого вещания: ${liveTimeStr} (${tz.utcOffsetStr}). Нажмите сюда, чтобы мгновенно вернуться в прямой эфир!`;
+            badge.classList.add('is-timeshift-playhead');
           } else {
             badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
             badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
+            badge.classList.remove('is-timeshift-playhead');
           }
         }
         updateEditorPlaybackUI();
@@ -5122,16 +5146,12 @@
       if (curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
         gAudio.pause();
       } else if (!curr.isPlaying && curr.mode === 'radio' && curr.station && curr.station.id === state.currentStation.id) {
-        // Разжимаем паузу: продолжаем играть с того места, где звук стоял (не пропуская эфир!)
-        gAudio.resume();
-
-        // Проверяем отставание от живого эфира: если реальный эфир ушел вперед, переходим в таймшифт
-        if (state.currentSlot && state.currentSlot.startTime) {
-          const liveOffset = Math.max(0, (Date.now() - new Date(state.currentSlot.startTime).getTime()) / 1000);
-          const curTime = (gAudio.audio ? gAudio.audio.currentTime : curr.currentTime) || 0;
-          if (liveOffset > curTime + 2.5) {
-            state.isTimeshift = true;
-          }
+        if (state.isTimeshift || curr.isTimeshift) {
+          // Если слушатель находится в таймшифте: продолжаем воспроизведение с текущей точки
+          gAudio.resume();
+        } else {
+          // В живом эфире: разжатие паузы возвращает в реальный прямой эфир по настенным часам
+          tuneStation(state.currentStation, true);
         }
         updateDeckUI();
       } else {
@@ -5166,12 +5186,46 @@
     dom.deckLiveSyncBtn?.addEventListener('click', () => {
       state.isTimeshift = false;
       state.timeshiftForwardSlots = [];
+      const gAudio = getGlobalAudio();
+      if (gAudio && typeof gAudio.goLive === 'function') {
+        gAudio.goLive();
+      }
       if (state.currentStation) {
         tuneStation(state.currentStation, true);
         showToast(`Вы вернулись в прямой эфир станции «${state.currentStation.name}»`, 'info');
       } else {
         const firstCard = document.querySelector('.radio-station-card');
         if (firstCard) firstCard.click();
+      }
+    });
+
+    dom.timelineGoLiveBtn?.addEventListener('click', () => {
+      state.isTimeshift = false;
+      state.timeshiftForwardSlots = [];
+      const gAudio = getGlobalAudio();
+      if (gAudio && typeof gAudio.goLive === 'function') {
+        gAudio.goLive();
+      }
+      const st = state.selectedStationForEdit || state.currentStation;
+      if (st) {
+        tuneStation(st, true);
+        showToast(`Вы вернулись в прямой эфир станции «${st.name}»`, 'info');
+      }
+    });
+
+    dom.radioTimelinePlayhead?.addEventListener('click', () => {
+      if (state.isTimeshift) {
+        state.isTimeshift = false;
+        state.timeshiftForwardSlots = [];
+        const gAudio = getGlobalAudio();
+        if (gAudio && typeof gAudio.goLive === 'function') {
+          gAudio.goLive();
+        }
+        const st = state.selectedStationForEdit || state.currentStation;
+        if (st) {
+          tuneStation(st, true);
+          showToast(`Синхронизировано с прямым эфиром «${st.name}»`, 'info');
+        }
       }
     });
 

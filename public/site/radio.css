@@ -2545,11 +2545,54 @@
   color: #fff;
 }
 
+/* Подсветка блока, который прямо сейчас звучит в прямом эфире станции (On Air) */
+.radio-eb-block.is-on-air-block {
+  border-color: rgba(239, 68, 68, 0.75) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25) !important;
+}
+
 /* Подсветка активного блока, играющего в общем плеере */
 .radio-eb-block.is-playing-block {
   border-color: rgba(99, 102, 241, 0.8) !important;
   box-shadow: 0 0 18px rgba(99, 102, 241, 0.3) !important;
   background: rgba(30, 27, 75, 0.4) !important;
+}
+
+.radio-eb-block.is-timeshift-block {
+  border-color: rgba(245, 158, 11, 0.85) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3) !important;
+  background: rgba(69, 26, 3, 0.35) !important;
+}
+
+/* Клип, который сейчас находится под красной линией прямого эфира (On-Air) */
+.radio-timeline-clip.is-on-air {
+  border: 1px solid #ef4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.5) !important;
+  z-index: 2;
+}
+
+/* Живое воспроизведение: трек под плейхедом и играет синхронно в плеере */
+.radio-timeline-clip.is-on-air.is-playing {
+  outline: 2px solid #ef4444 !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.85) !important;
+  animation: pulse-on-air-glow 1.8s infinite ease-in-out;
+  z-index: 3;
+}
+
+/* Таймшифт: трек играет с отставанием от прямого эфира */
+.radio-timeline-clip.is-timeshift-playing {
+  outline: 2px solid #f59e0b !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.8) !important;
+  animation: pulse-timeshift-glow 2s infinite ease-in-out;
+  z-index: 2;
+}
+
+/* Предпрослушивание трека из медиатеки / редактора */
+.radio-timeline-clip.is-preview-playing {
+  outline: 2px solid #a855f7 !important;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.8) !important;
+  animation: pulse-clip-glow 2s infinite ease-in-out;
+  z-index: 2;
 }
 
 .radio-timeline-clip.is-playing {
@@ -2559,9 +2602,48 @@
   z-index: 2;
 }
 
+@keyframes pulse-on-air-glow {
+  0%, 100% { filter: brightness(1.2); box-shadow: 0 0 14px rgba(239, 68, 68, 0.6); }
+  50% { filter: brightness(1.4); box-shadow: 0 0 22px rgba(239, 68, 68, 0.95); }
+}
+
+@keyframes pulse-timeshift-glow {
+  0%, 100% { filter: brightness(1.15); box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); }
+  50% { filter: brightness(1.35); box-shadow: 0 0 18px rgba(245, 158, 11, 0.85); }
+}
+
 @keyframes pulse-clip-glow {
   0%, 100% { filter: brightness(1.2); }
   50% { filter: brightness(1.45); }
+}
+
+.radio-timeline-btn-golive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ef4444;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  animation: pulse-on-air-glow 1.8s infinite ease-in-out;
+}
+
+.radio-timeline-btn-golive:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+.radio-timeline-playhead-badge.is-timeshift-playhead {
+  background: #f59e0b !important;
+  color: #000 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.9) !important;
 }
 
 .radio-nested-play-btn {

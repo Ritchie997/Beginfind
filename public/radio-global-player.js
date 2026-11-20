@@ -51,6 +51,8 @@
     volume: 0.9,
     muted: false,
     isLoop: false,
+    isTimeshift: false,
+    timeshiftDeltaSec: 0,
     savedAt: 0
   };
 
@@ -84,6 +86,8 @@
       volume: state.volume,
       muted: state.muted,
       isLoop: state.isLoop,
+      isTimeshift: Boolean(state.isTimeshift),
+      timeshiftDeltaSec: Number(state.timeshiftDeltaSec) || 0,
       savedAt: Date.now(),
       leaderTabId: isAudioLeader ? tabId : remoteLeaderTabId
     };
@@ -100,6 +104,8 @@
     state.currentIndex = data.currentIndex !== undefined ? data.currentIndex : -1;
     state.currentTime = Number.isFinite(data.currentTime) ? data.currentTime : 0;
     state.duration = Number.isFinite(data.duration) ? data.duration : 0;
+    state.isTimeshift = Boolean(data.isTimeshift);
+    state.timeshiftDeltaSec = Number(data.timeshiftDeltaSec) || 0;
     if (data.volume !== undefined) state.volume = Math.max(0, Math.min(1, data.volume));
     if (data.muted !== undefined) state.muted = Boolean(data.muted);
     if (data.isLoop !== undefined) {
@@ -192,6 +198,10 @@
       } else if (msg.type === 'CMD_SEEK') {
         if (isAudioLeader && Number.isFinite(msg.ratio)) {
           seek(msg.ratio);
+        }
+      } else if (msg.type === 'CMD_GO_LIVE') {
+        if (isAudioLeader) {
+          goLive();
         }
       } else if (msg.type === 'CMD_STOP') {
         stop();
@@ -700,7 +710,7 @@
     }
   }
 
-  function playRadio(station, slot = null, offset = 0) {
+  function playRadio(station, slot = null, offset = 0, isTimeshift = false) {
     cancelLiveSync();
     syncRetryCount = 0;
     isAudioLeader = true;
@@ -709,6 +719,10 @@
     state.station = station;
     state.currentSlot = slot;
     state.track = null;
+    state.isTimeshift = Boolean(isTimeshift);
+    if (!state.isTimeshift) {
+      state.timeshiftDeltaSec = 0;
+    }
 
     if (slot && slot.audioUrl) {
       const currentSrc = audio.src || '';
@@ -760,6 +774,8 @@
     state.track = track;
     state.station = null;
     state.currentSlot = null;
+    state.isTimeshift = false;
+    state.timeshiftDeltaSec = 0;
     state.playlist = playlist && playlist.length ? playlist : [track];
     state.currentIndex = index >= 0 ? index : state.playlist.findIndex((t) => t.id === track.id);
 
@@ -889,6 +905,12 @@
     remoteLeaderTabId = null;
 
     if (state.mode === 'radio') {
+      // Если слушатель не в таймшифте, разжатие паузы возвращает в текущий живой эфир на актуальное время
+      if (!state.isTimeshift && state.station) {
+        syncRadioStationLive(state.station, true);
+        return;
+      }
+
       if (state.currentSlot && state.currentSlot.audioUrl) {
         const currentSrc = audio.src || '';
         const isSameSrc = currentSrc === state.currentSlot.audioUrl || currentSrc.endsWith(state.currentSlot.audioUrl);
@@ -930,14 +952,50 @@
     if (isAudioLeader) {
       const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
       if (dur > 0 && Number.isFinite(ratio)) {
-        audio.currentTime = Math.max(0, Math.min(dur, ratio * dur));
-        state.currentTime = audio.currentTime;
+        const targetTime = Math.max(0, Math.min(dur, ratio * dur));
+
+        if (state.mode === 'radio') {
+          // Если мы в радио-режиме, проверяем позицию относительно реального живого времени
+          if (state.currentSlot && state.currentSlot.startTime) {
+            const startMs = new Date(state.currentSlot.startTime).getTime();
+            const nowMs = Date.now();
+            const liveOffset = Math.max(0, (nowMs - startMs) / 1000);
+            if (targetTime < liveOffset - 2.5) {
+              state.isTimeshift = true;
+              state.timeshiftDeltaSec = Math.round(liveOffset - targetTime);
+            } else {
+              state.isTimeshift = false;
+              state.timeshiftDeltaSec = 0;
+            }
+          } else if (targetTime < (audio.currentTime || 0) - 2) {
+            state.isTimeshift = true;
+          }
+        }
+
+        audio.currentTime = targetTime;
+        state.currentTime = targetTime;
         updateProgressUI();
+        updateBarUI();
+        notify();
         announceState();
       }
     } else if (broadcast) {
       broadcast.postMessage({ type: 'CMD_SEEK', ratio });
     }
+  }
+
+  function goLive() {
+    state.isTimeshift = false;
+    state.timeshiftDeltaSec = 0;
+    if (isAudioLeader) {
+      if (state.mode === 'radio' && state.station) {
+        syncRadioStationLive(state.station, true);
+      }
+    } else if (broadcast) {
+      broadcast.postMessage({ type: 'CMD_GO_LIVE' });
+    }
+    updateBarUI();
+    notify();
   }
 
   function setVolume(val) {
@@ -1004,6 +1062,9 @@
             <div class="alltell-global-audio-meta">
               <div class="alltell-global-audio-title-wrap">
                 <span class="alltell-global-audio-badge" id="globalAudioBadge">FM</span>
+                <button type="button" class="alltell-global-live-btn" id="globalAudioGoLiveBtn" title="Вернуться в прямой эфир" style="display:none;">
+                  <i class="fas fa-tower-broadcast"></i> <span>В ЭФИР</span>
+                </button>
                 <a href="/radio" class="alltell-global-audio-title" id="globalAudioTitle">Эфир AllTell</a>
               </div>
               <div class="alltell-global-audio-sub" id="globalAudioSub">Вещание активно</div>
@@ -1043,6 +1104,7 @@
       bar,
       icon: bar.querySelector('#globalAudioIcon'),
       badge: bar.querySelector('#globalAudioBadge'),
+      goLiveBtn: bar.querySelector('#globalAudioGoLiveBtn'),
       title: bar.querySelector('#globalAudioTitle'),
       sub: bar.querySelector('#globalAudioSub'),
       prevBtn: bar.querySelector('#globalAudioPrevBtn'),
@@ -1058,6 +1120,10 @@
       radioLink: bar.querySelector('#globalAudioRadioLink'),
       closeBtn: bar.querySelector('#globalAudioCloseBtn')
     };
+
+    domBar.goLiveBtn?.addEventListener('click', () => {
+      goLive();
+    });
 
     domBar.playBtn?.addEventListener('click', () => {
       if (state.isPlaying) pause();
@@ -1154,13 +1220,37 @@
     domBar.bar.hidden = !shouldShow;
 
     if (state.mode === 'radio') {
-      if (domBar.badge) domBar.badge.textContent = `${state.station ? state.station.frequency : '---'} FM`;
-      if (domBar.title) {
-        domBar.title.textContent = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');
-        domBar.title.href = '/radio';
-      }
-      if (domBar.sub) {
-        domBar.sub.textContent = state.station ? `Волна «${state.station.name}» • Ведущий: ${state.station.owner_name}` : 'Прямой эфир AllTell';
+      if (state.isTimeshift) {
+        if (domBar.badge) {
+          domBar.badge.textContent = '⏳ ТАЙМШИФТ';
+          domBar.badge.classList.add('is-timeshift');
+        }
+        if (domBar.goLiveBtn) {
+          domBar.goLiveBtn.style.display = 'inline-flex';
+        }
+        if (domBar.title) {
+          domBar.title.textContent = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');
+          domBar.title.href = '/radio';
+        }
+        if (domBar.sub) {
+          const lagStr = state.timeshiftDeltaSec > 0 ? ` (-${formatTime(state.timeshiftDeltaSec)})` : '';
+          domBar.sub.textContent = `Таймшифт${lagStr} • Нажмите «В ЭФИР» для прямого вещания`;
+        }
+      } else {
+        if (domBar.badge) {
+          domBar.badge.textContent = `${state.station ? state.station.frequency : '---'} FM`;
+          domBar.badge.classList.remove('is-timeshift');
+        }
+        if (domBar.goLiveBtn) {
+          domBar.goLiveBtn.style.display = 'none';
+        }
+        if (domBar.title) {
+          domBar.title.textContent = state.currentSlot ? state.currentSlot.title : (state.station ? state.station.name : 'Радио эфир');
+          domBar.title.href = '/radio';
+        }
+        if (domBar.sub) {
+          domBar.sub.textContent = state.station ? `Волна «${state.station.name}» • Ведущий: ${state.station.owner_name}` : 'Прямой эфир AllTell';
+        }
       }
       if (domBar.icon) {
         if (state.station && state.station.avatar_url) {
@@ -1171,6 +1261,8 @@
       }
     } else {
       // Режим трека
+      if (domBar.badge) domBar.badge.classList.remove('is-timeshift');
+      if (domBar.goLiveBtn) domBar.goLiveBtn.style.display = 'none';
       const t = state.track;
       if (domBar.badge) domBar.badge.textContent = t ? String(t.format || 'MP3').toUpperCase() : 'ТРЕК';
       if (domBar.title) {
@@ -1233,6 +1325,8 @@
       state.volume = saved.volume !== undefined ? saved.volume : 0.9;
       state.muted = Boolean(saved.muted);
       state.isLoop = Boolean(saved.isLoop);
+      state.isTimeshift = Boolean(saved.isTimeshift);
+      state.timeshiftDeltaSec = Number(saved.timeshiftDeltaSec) || 0;
       audio.volume = state.volume;
       audio.muted = state.muted;
       audio.loop = state.isLoop;
@@ -1326,6 +1420,7 @@
     pause,
     resume,
     seek,
+    goLive,
     setVolume,
     toggleMute,
     stop,

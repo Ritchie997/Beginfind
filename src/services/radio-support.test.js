@@ -526,9 +526,24 @@ test('radio-timeline-sync: playhead, slot duration lock, and on-air alignment', 
 
   const clientCode = fs.readFileSync(path.join(__dirname, '../../public/site/radio-client.js'), 'utf8');
   assert.ok(clientCode.includes('onAirBlockIndex'), 'radio-client must calculate onAirBlockIndex from playhead elapsed time');
-  assert.ok(clientCode.includes('isRadioLive && isLive && onAirBlockIndex >= 0'), 'radio-client must highlight the exact clip under the playhead during live broadcast');
+  assert.ok(clientCode.includes('is-on-air'), 'radio-client must highlight the exact clip under the playhead with is-on-air during live broadcast');
+  assert.ok(playerCode.includes('isTimeshift'), 'Global player must track isTimeshift in state and UI');
+  assert.ok(playerCode.includes('goLive'), 'Global player must expose goLive method');
 
   await radioStore.deleteStation(station.id, 906, true);
+});
+
+test('radio-timeshift: live vs timeshift playback, UI badges and goLive synchronization', async () => {
+  const playerCode = fs.readFileSync(path.join(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  assert.ok(playerCode.includes('goLiveBtn'), 'Global player bar must include goLiveBtn');
+  assert.ok(playerCode.includes('CMD_GO_LIVE'), 'Global player broadcast channel must handle CMD_GO_LIVE');
+  assert.ok(playerCode.includes('isTimeshift'), 'Global player state must have isTimeshift');
+  assert.ok(playerCode.includes('!state.isTimeshift && state.station'), 'Global player resume() must snap to live broadcast when not in timeshift');
+
+  const clientCode = fs.readFileSync(path.join(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  assert.ok(clientCode.includes('is-timeshift-playing'), 'radio-client must highlight timeshift playing clips with is-timeshift-playing');
+  assert.ok(clientCode.includes('timelineGoLiveBtn'), 'radio-client must support timelineGoLiveBtn to return to on-air stream');
+  assert.ok(clientCode.includes('gAudio.goLive()'), 'radio-client must trigger gAudio.goLive() when user clicks go live');
 });
 
 
