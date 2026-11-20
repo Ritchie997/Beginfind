@@ -554,7 +554,7 @@ test('radio-global-player: strict prohibition of seeking into future and next bu
   // 1. Запрет перемотки вперед в будущее эфира в seek(ratio)
   assert.ok(playerCode.includes('targetTime > liveOffset + 1.2'), 'seek must detect attempt to seek beyond current live offset');
   assert.ok(playerCode.includes('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире'), 'seek must warn user and prevent seeking into unbroadcasted future');
-  assert.ok(playerCode.includes('targetTime = Math.min(dur, liveOffset)'), 'seek must clamp targetTime to liveOffset on forward seek attempt');
+  assert.ok(playerCode.includes("showToast('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире', 'warning');\n            return;"), 'seek must ignore click into future and return without disrupting playing audio');
 
   // 2. Блокировка кнопки Next при прослушивании прямого эфира
   assert.ok(playerCode.includes('Будущие треки станут доступны только после выхода в эфир'), 'playNext must block future track skipping in radio mode');

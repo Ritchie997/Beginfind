@@ -1001,9 +1001,7 @@
 
           if (targetTime > liveOffset + 1.2) {
             showToast('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире', 'warning');
-            targetTime = Math.min(dur, liveOffset);
-            state.isTimeshift = false;
-            state.timeshiftDeltaSec = 0;
+            return;
           } else if (targetTime < liveOffset - 2.5) {
             state.isTimeshift = true;
             state.timeshiftDeltaSec = Math.round(liveOffset - targetTime);
