@@ -1372,6 +1372,99 @@
 }
 
 /* Мастер-пульт управления вещанием радиостанции */
+.radio-editor-draft-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.22) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);
+  animation: draftBannerSlideIn 0.25s ease-out;
+}
+
+@keyframes draftBannerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.radio-draft-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.radio-draft-banner-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.radio-draft-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.radio-draft-banner-text strong {
+  color: #fef3c7;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.radio-draft-banner-text span {
+  color: #fde68a;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.radio-draft-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.radio-cta-apply-btn,
+.radio-draft-apply-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: #111827 !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  padding: 9px 16px !important;
+  border-radius: 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.35);
+  transition: all 0.2s ease !important;
+}
+
+.radio-cta-apply-btn:hover,
+.radio-draft-apply-btn:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.5);
+}
+
 .radio-broadcast-master-deck {
   display: flex;
   justify-content: space-between;

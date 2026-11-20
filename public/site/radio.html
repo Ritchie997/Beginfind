@@ -368,6 +368,25 @@
           </div>
         </div>
 
+        <!-- БАННЕР АСИНХРОННОГО РЕДАКТИРОВАНИЯ ЧЕРНОВИКА (DRAFT BANNER) -->
+        <div class="radio-editor-draft-banner" id="radioEditorDraftBanner" style="display:none;">
+          <div class="radio-draft-banner-content">
+            <div class="radio-draft-banner-icon"><i class="fas fa-pen-ruler"></i></div>
+            <div class="radio-draft-banner-text">
+              <strong>Режим редактирования черновика (асинхронный)</strong>
+              <span>Сетка в редакторе изменена. Текущий прямой эфир не затронут, пока вы не примените изменения.</span>
+            </div>
+          </div>
+          <div class="radio-draft-banner-actions">
+            <button type="button" class="btn btn-warning radio-cta-apply-btn" id="btnApplyDraftToLive" title="Бесшовно применить изменения сетки в текущий эфир (без прерывания играющего трека)">
+              <i class="fas fa-bolt"></i> <span>Применить в текущий эфир</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDiscardDraft" title="Сбросить все несохранённые правки черновика и вернуть актуальную сетку вещания из эфира">
+              <i class="fas fa-rotate-left"></i> <span>Сбросить к эфиру</span>
+            </button>
+          </div>
+        </div>
+
         <!-- ГЛАВНЫЙ ПУЛЬТ УПРАВЛЕНИЯ ВЕЩАНИЕМ (MASTER BROADCAST CONSOLE) -->
         <div class="radio-broadcast-master-deck" id="radioBroadcastMasterDeck">
           <!-- Левая колонка: Прямой запуск и остановка эфира -->
@@ -377,6 +396,9 @@
             </button>
             <button type="button" class="btn btn-danger radio-cta-broadcast-btn" id="btnStopBroadcast" style="display:none;" title="Приостановить вещание радиостанции. Составленная сетка треков сохраняется!">
               <i class="fas fa-stop"></i> <span>Остановить эфир</span>
+            </button>
+            <button type="button" class="btn btn-warning radio-draft-apply-btn" id="btnMasterApplyDraft" style="display:none;" title="Бесшовно применить изменения сетки в текущий эфир (со следующего трека)">
+              <i class="fas fa-bolt"></i> <span>Применить в эфир</span>
             </button>
             <button type="button" class="btn btn-primary btn-sm" id="btnSetStartTimeNow" style="display:none;" title="Запустить с 00:00">
               <i class="fas fa-play"></i> Сейчас (Старт)

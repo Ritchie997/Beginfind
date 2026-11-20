@@ -91,6 +91,9 @@
     editorSlots: [],
     editorBlocks: [],
     editorStartTime: null,
+    isEditorDirty: false,
+    editorInitialized: false,
+    editorCachedDurationSec: 0,
     timelineZoom: 1.0,
     baseScaleSec: 1200,
     mediaDrawerOpen: false,
@@ -201,6 +204,10 @@
       // Редактор сетки
       editorStationSelect: document.getElementById('editorStationSelect'),
       editorBroadcastStartTime: document.getElementById('editorBroadcastStartTime'),
+      radioEditorDraftBanner: document.getElementById('radioEditorDraftBanner'),
+      btnApplyDraftToLive: document.getElementById('btnApplyDraftToLive'),
+      btnDiscardDraft: document.getElementById('btnDiscardDraft'),
+      btnMasterApplyDraft: document.getElementById('btnMasterApplyDraft'),
       btnStartBroadcastNow: document.getElementById('btnStartBroadcastNow'),
       btnStopBroadcast: document.getElementById('btnStopBroadcast'),
       btnScheduleBroadcast: document.getElementById('btnScheduleBroadcast'),
@@ -1766,6 +1773,7 @@
       }
 
       state.selectedStationForEdit = state.myStations[0];
+      state.editorInitialized = true;
       setEditorStartTime(new Date());
       loadStationTimeline(state.selectedStationForEdit.id);
     } catch (e) {
@@ -1948,7 +1956,30 @@
     });
     const compiled = compileBlocksToSlots(state.editorBlocks, state.editorStartTime);
     state.editorSlots = compiled.slots;
+    state.editorCachedDurationSec = compiled.totalDurationSec;
     return compiled;
+  }
+
+  function markEditorDirty(isDirty = true) {
+    state.isEditorDirty = Boolean(isDirty);
+    updateEditorDraftBannerUI();
+  }
+
+  function updateEditorDraftBannerUI() {
+    const isDirty = Boolean(state.isEditorDirty);
+    const st = state.selectedStationForEdit;
+    const isLive = Boolean(st && (st.broadcast_status === 'live' || st.isLive));
+
+    if (dom.radioEditorDraftBanner) {
+      dom.radioEditorDraftBanner.style.display = isDirty ? 'flex' : 'none';
+    }
+
+    if (dom.btnMasterApplyDraft) {
+      dom.btnMasterApplyDraft.style.display = (isDirty && isLive) ? 'inline-flex' : 'none';
+    }
+
+    const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
+    updateEditorLiveStatusBadge(isLive, startMs);
   }
 
   function updateEditorLiveStatusBadge(isLive, startMs) {
@@ -1967,14 +1998,23 @@
       }
     }
 
+    if (dom.btnMasterApplyDraft) {
+      dom.btnMasterApplyDraft.style.display = (state.isEditorDirty && status === 'live' && isLive) ? 'inline-flex' : 'none';
+    }
+
     if (!badge) return;
     badge.style.display = 'inline-flex';
     badge.className = 'badge radio-live-status-badge';
 
     if (status === 'live' && isLive) {
       badge.classList.add('status-live');
-      badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> 🔴 В ЭФИРЕ';
-      badge.title = 'Вещание идет прямо сейчас в прямом эфире';
+      if (state.isEditorDirty) {
+        badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> 🔴 В ЭФИРЕ • ✍️ ЧЕРНОВИК ИЗМЕНЁН';
+        badge.title = 'Вещание идет прямо сейчас в прямом эфире. В редакторе открыт черновик с неприменёнными правками — нажмите «Применить в эфир», чтобы обновить расписание.';
+      } else {
+        badge.innerHTML = '<i class="fas fa-tower-broadcast fa-fade"></i> 🔴 В ЭФИРЕ';
+        badge.title = 'Вещание идет прямо сейчас в прямом эфире. Сетка редактора синхронизирована с эфиром.';
+      }
     } else if (status === 'scheduled' || (!isLive && startMs && startMs > Date.now() + 5000)) {
       badge.classList.add('status-scheduled');
       const tz = getUserTimezoneInfo();
@@ -2032,6 +2072,7 @@
 
       st.broadcast_status = isLiveNow ? 'live' : 'scheduled';
       st.isLive = isLiveNow;
+      markEditorDirty(false);
       renderEditor();
       await loadStations();
 
@@ -2086,6 +2127,7 @@
         gAudio.stop();
       }
 
+      markEditorDirty(false);
       renderEditor();
       await loadStations();
       showToast(`Вещание радиостанции «${st.name}» остановлено. Сетка сохранена в редакторе.`, 'info');
@@ -2111,6 +2153,8 @@
     const st = state.selectedStationForEdit;
     syncCompiledSlots();
 
+    const isLive = Boolean(st.broadcast_status === 'live' || st.isLive);
+
     try {
       if (dom.btnSaveTimelineDraft) {
         dom.btnSaveTimelineDraft.disabled = true;
@@ -2123,10 +2167,12 @@
         body: JSON.stringify({
           slots: state.editorSlots,
           startTime: state.editorStartTime || new Date().toISOString(),
-          forceNow: false
+          forceNow: false,
+          hotUpdate: isLive
         })
       });
 
+      markEditorDirty(false);
       showToast('Сетка вещания радиостанции успешно сохранена', 'success');
       return true;
     } catch (e) {
@@ -2139,6 +2185,80 @@
         dom.btnSaveTimelineDraft.innerHTML = '<i class="fas fa-floppy-disk"></i> Сохранить сетку';
       }
     }
+  }
+
+  // Асинхронное применение черновика в текущий эфир (горячее бесшовное обновление)
+  async function applyDraftToLive() {
+    if (!state.selectedStationForEdit) {
+      showToast('Выберите радиостанцию', 'warning');
+      return false;
+    }
+    const st = state.selectedStationForEdit;
+    syncCompiledSlots();
+
+    const isLive = Boolean(st.broadcast_status === 'live' || st.isLive);
+
+    try {
+      if (dom.btnApplyDraftToLive) {
+        dom.btnApplyDraftToLive.disabled = true;
+        dom.btnApplyDraftToLive.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Применение…';
+      }
+      if (dom.btnMasterApplyDraft) {
+        dom.btnMasterApplyDraft.disabled = true;
+        dom.btnMasterApplyDraft.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Применение…';
+      }
+
+      await api(`/api/radio/stations/${st.id}/timeline`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slots: state.editorSlots,
+          startTime: state.editorStartTime || new Date().toISOString(),
+          forceNow: false,
+          hotUpdate: isLive
+        })
+      });
+
+      markEditorDirty(false);
+
+      if (isLive) {
+        showToast(`Сетка прямого эфира «${st.name}» успешно обновлена! Текущий трек продолжает играть, следующие треки заменены.`, 'success');
+      } else {
+        showToast('Сетка вещания радиостанции успешно сохранена', 'success');
+      }
+
+      await loadStationTimeline(st.id);
+      return true;
+    } catch (e) {
+      console.error('[radio] Error applying draft to live:', e);
+      showToast('Ошибка применения изменений в эфир: ' + e.message, 'error');
+      return false;
+    } finally {
+      if (dom.btnApplyDraftToLive) {
+        dom.btnApplyDraftToLive.disabled = false;
+        dom.btnApplyDraftToLive.innerHTML = '<i class="fas fa-bolt"></i> <span>Применить в текущий эфир</span>';
+      }
+      if (dom.btnMasterApplyDraft) {
+        dom.btnMasterApplyDraft.disabled = false;
+        dom.btnMasterApplyDraft.innerHTML = '<i class="fas fa-bolt"></i> <span>Применить в эфир</span>';
+      }
+    }
+  }
+
+  // Сброс всех изменений черновика и возврат к актуальному эфиру
+  async function discardDraftChanges() {
+    if (!state.selectedStationForEdit) return false;
+    const ok = await showConfirm('Сбросить все несохранённые изменения черновика и вернуть актуальную сетку вещания из эфира?', {
+      title: 'Сбросить изменения черновика?',
+      confirmLabel: 'Сбросить изменения',
+      danger: true
+    });
+    if (!ok) return false;
+
+    markEditorDirty(false);
+    await loadStationTimeline(state.selectedStationForEdit.id);
+    showToast('Черновик успешно сброшен к актуальному состоянию эфира', 'info');
+    return true;
   }
 
   // Запуск / публикация вещания радиостанции (для совместимости)
@@ -2194,6 +2314,7 @@
         setEditorStartTime(getEffectiveNowMs());
       }
 
+      markEditorDirty(false);
       renderEditor();
     } catch (e) {
       console.error('[radio] Error loading timeline:', e);
@@ -2365,6 +2486,7 @@
               const item = state.editorBlocks.splice(fromIdx, 1)[0];
               const actualTargetIdx = fromIdx < insertIdx ? insertIdx - 1 : insertIdx;
               state.editorBlocks.splice(actualTargetIdx, 0, item);
+              markEditorDirty(true);
               renderEditor();
               showToast(`Блок «${item.title || 'Элемент'}» перемещен на ленте`, 'info');
               return;
@@ -2815,6 +2937,7 @@
           const temp = state.editorBlocks[idx];
           state.editorBlocks[idx] = state.editorBlocks[idx - 1];
           state.editorBlocks[idx - 1] = temp;
+          markEditorDirty(true);
           renderEditor();
         }
       });
@@ -2827,6 +2950,7 @@
           const temp = state.editorBlocks[idx];
           state.editorBlocks[idx] = state.editorBlocks[idx + 1];
           state.editorBlocks[idx + 1] = temp;
+          markEditorDirty(true);
           renderEditor();
         }
       });
@@ -2841,6 +2965,7 @@
           const clone = JSON.parse(JSON.stringify(orig));
           clone.id = genBlockId();
           state.editorBlocks.splice(idx + 1, 0, clone);
+          markEditorDirty(true);
           renderEditor();
           showToast(`Блок «${orig.title}» продублирован`, 'info');
         }
@@ -2852,6 +2977,7 @@
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.index, 10);
         state.editorBlocks.splice(idx, 1);
+        markEditorDirty(true);
         renderEditor();
       });
     });
@@ -2913,6 +3039,7 @@
         if (state.draggedBlockIndex !== null && state.draggedBlockIndex !== targetIdx) {
           const item = state.editorBlocks.splice(state.draggedBlockIndex, 1)[0];
           state.editorBlocks.splice(targetIdx, 0, item);
+          markEditorDirty(true);
           renderEditor();
         }
       });
@@ -3180,10 +3307,7 @@
     renderEditorBlocks();
     updateCapacityUI();
     updateEditorPlaybackUI();
-    const st = state.selectedStationForEdit;
-    const startMs = state.editorStartTime ? new Date(state.editorStartTime).getTime() : Date.now();
-    const isLive = Boolean(st && st.broadcast_status === 'live' && startMs <= Date.now() && state.editorBlocks && state.editorBlocks.length > 0);
-    updateEditorLiveStatusBadge(isLive, startMs);
+    updateEditorDraftBannerUI();
   }
 
   // Сохраняем имя renderEditorSlots для обратной совместимости
@@ -3198,6 +3322,7 @@
     } else {
       state.editorBlocks.push(block);
     }
+    markEditorDirty(true);
     renderEditor();
   }
 
@@ -3260,6 +3385,7 @@
     }
 
     state.editorBlocks.splice(blockIndex, 1, ...replacements);
+    markEditorDirty(true);
     renderEditor();
     showToast('Плейлист успешно разделен! Следующие треки сохранили строгую очередность.', 'success');
   }
@@ -3597,6 +3723,7 @@
     clone.title = `${block.title} (Часть 2)`;
     clone.duration = dur2;
     state.editorBlocks.splice(blockIndex + 1, 0, clone);
+    markEditorDirty(true);
     renderEditor();
     showToast('Блок успешно разделен на 2 части', 'info');
   }
@@ -3619,6 +3746,7 @@
             const clone = JSON.parse(JSON.stringify(orig));
             clone.id = genBlockId();
             state.editorBlocks.splice(blockIndex + 1, 0, clone);
+            markEditorDirty(true);
             renderEditor();
             showToast(`Блок «${orig.title}» продублирован`, 'info');
           }
@@ -3640,6 +3768,7 @@
             const temp = state.editorBlocks[blockIndex];
             state.editorBlocks[blockIndex] = state.editorBlocks[blockIndex - 1];
             state.editorBlocks[blockIndex - 1] = temp;
+            markEditorDirty(true);
             renderEditor();
           }
         }
@@ -3653,6 +3782,7 @@
             const temp = state.editorBlocks[blockIndex];
             state.editorBlocks[blockIndex] = state.editorBlocks[blockIndex + 1];
             state.editorBlocks[blockIndex + 1] = temp;
+            markEditorDirty(true);
             renderEditor();
           }
         }
@@ -3664,6 +3794,7 @@
         danger: true,
         onClick: () => {
           state.editorBlocks.splice(blockIndex, 1);
+          markEditorDirty(true);
           renderEditor();
         }
       }
@@ -3803,6 +3934,7 @@
     state.editorBlocks.forEach((b) => {
       b.id = genBlockId();
     });
+    markEditorDirty(true);
     renderEditor();
     hideModal('modalRadioTemplates');
     showToast(`Шаблон «${tpl.name}» успешно загружен в эфир!`, 'success');
@@ -3873,7 +4005,7 @@
       return;
     }
 
-    const { totalDurationSec } = syncCompiledSlots();
+    const totalDurationSec = state.editorCachedDurationSec || (state.editorSlots || []).reduce((s, x) => s + (Number(x.duration) || 0), 0);
     if (totalDurationSec <= 0) {
       dom.radioTimelinePlayhead.style.display = 'none';
       return;
@@ -3912,8 +4044,13 @@
         if (badge) {
           const tz = getUserTimezoneInfo();
           const liveTimeStr = formatClockTime(nowMs);
-          badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
-          badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
+          if (state.isEditorDirty) {
+            badge.textContent = `🔴 ЭФИР ${liveTimeStr} • ✍️ ЧЕРНОВИК`;
+            badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr}). В рабочей области открыт черновик.`;
+          } else {
+            badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
+            badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
+          }
         }
         return;
       }
@@ -4263,6 +4400,7 @@
 
       if (state.activeGapInfo.targetIndex >= 0 && state.editorBlocks[state.activeGapInfo.targetIndex] && state.editorBlocks[state.activeGapInfo.targetIndex].type === 'gap') {
         state.editorBlocks.splice(state.activeGapInfo.targetIndex, 1, compositeBlock);
+        markEditorDirty(true);
         renderEditor();
       } else {
         addBlockToEditor(compositeBlock, state.activeGapInfo.targetIndex);
@@ -4778,7 +4916,13 @@
       setupFeedInfiniteScroll();
     }
     if (tabName === 'my') loadMySection();
-    if (tabName === 'editor') initEditor();
+    if (tabName === 'editor') {
+      if (!state.editorInitialized) {
+        initEditor();
+      } else {
+        renderEditor();
+      }
+    }
 
     const gAudio = getGlobalAudio();
     if (gAudio) {
@@ -5003,11 +5147,25 @@
 
     // 4. Редактор сетки вещания
 
-    dom.editorStationSelect?.addEventListener('change', (e) => {
+    dom.editorStationSelect?.addEventListener('change', async (e) => {
       const id = e.target.value;
       const found = state.myStations.find((s) => s.id == id);
       if (found) {
+        if (state.isEditorDirty) {
+          const ok = await showConfirm('В редакторе есть неприменённые изменения черновика. Переключить станцию и сбросить черновик?', {
+            title: 'Сбросить черновик?',
+            confirmLabel: 'Переключить станцию',
+            danger: true
+          });
+          if (!ok) {
+            if (state.selectedStationForEdit) {
+              e.target.value = state.selectedStationForEdit.id;
+            }
+            return;
+          }
+        }
         state.selectedStationForEdit = found;
+        markEditorDirty(false);
         loadStationTimeline(found.id);
       }
     });
@@ -5016,10 +5174,9 @@
     const handleTimeInputChange = (e) => {
       if (e.target.value) {
         state.editorStartTime = new Date(e.target.value).toISOString();
+        markEditorDirty(true);
         renderTimelineRibbon();
         renderEditorBlocks();
-        const startMs = new Date(e.target.value).getTime();
-        updateEditorLiveStatusBadge(false, startMs);
       }
     };
     dom.editorBroadcastStartTime?.addEventListener('input', handleTimeInputChange);
@@ -5050,6 +5207,20 @@
       saveTimelineDraft();
     });
 
+    // Кнопка: Применить изменения черновика в прямой эфир (горячее бесшовное обновление)
+    dom.btnApplyDraftToLive?.addEventListener('click', () => {
+      applyDraftToLive();
+    });
+
+    dom.btnMasterApplyDraft?.addEventListener('click', () => {
+      applyDraftToLive();
+    });
+
+    // Кнопка: Сбросить черновик к актуальному состоянию эфира
+    dom.btnDiscardDraft?.addEventListener('click', () => {
+      discardDraftChanges();
+    });
+
     // Кнопка: Сейчас (Старт) (для совместимости)
     dom.btnSetStartTimeNow?.addEventListener('click', () => {
       publishBroadcast(new Date(), {
@@ -5062,6 +5233,7 @@
     // Быстрые пресеты времени старта
     dom.btnPresetNow?.addEventListener('click', () => {
       setEditorStartTime(new Date());
+      markEditorDirty(true);
       renderTimelineRibbon();
       renderEditorBlocks();
       showToast('Время старта выставлено: Прямо сейчас', 'info');
@@ -5070,6 +5242,7 @@
     dom.btnPresetPlus5?.addEventListener('click', () => {
       const t = new Date(Date.now() + 5 * 60 * 1000);
       setEditorStartTime(t);
+      markEditorDirty(true);
       renderTimelineRibbon();
       renderEditorBlocks();
       showToast('Время старта выставлено: Через 5 минут', 'info');
@@ -5078,6 +5251,7 @@
     dom.btnPresetPlus15?.addEventListener('click', () => {
       const t = new Date(Date.now() + 15 * 60 * 1000);
       setEditorStartTime(t);
+      markEditorDirty(true);
       renderTimelineRibbon();
       renderEditorBlocks();
       showToast('Время старта выставлено: Через 15 минут', 'info');
@@ -5087,6 +5261,7 @@
       const nextHour = new Date(Date.now() + 60 * 60 * 1000);
       nextHour.setMinutes(0, 0, 0);
       setEditorStartTime(nextHour);
+      markEditorDirty(true);
       renderTimelineRibbon();
       renderEditorBlocks();
       showToast('Время старта выставлено: В начале следующего часа', 'info');
@@ -5243,10 +5418,12 @@
           if (targetSec + item.duration > baseScale) {
             state.baseScaleSec = Math.max(state.baseScaleSec, Math.ceil((targetSec + item.duration) * 1.15));
           }
+          markEditorDirty(true);
           renderEditor();
           showToast(`Блок отодвинут за край. Создана пауза ${formatDuration(gapSec)}, временная линия увеличена!`, 'info');
         } else {
           state.editorBlocks.push(item);
+          markEditorDirty(true);
           renderEditor();
           showToast(`Блок «${item.title}» перемещен в конец эфира`, 'info');
         }
@@ -6562,6 +6739,9 @@
     splitPlaylistBlock,
     setTimelineZoom,
     renderEditor,
+    applyDraftToLive,
+    discardDraftChanges,
+    markEditorDirty,
     openPickPlaylistForTimeline,
     openSmartGapFillModal,
     openStationContextMenu,

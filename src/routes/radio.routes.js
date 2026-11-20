@@ -508,13 +508,14 @@ router.put('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApp
       return res.status(403).json({ error: 'Только владелец станции может редактировать ленту времени' });
     }
 
-    const { slots, startTime, forceNow } = req.body;
+    const { slots, startTime, forceNow, hotUpdate } = req.body;
     if (!Array.isArray(slots)) {
       return res.status(400).json({ error: 'slots должен быть массивом элементов эфира' });
     }
 
     const updatedSlots = await radioStore.setTimelineSlots(req.params.id, slots, startTime, {
-      forceNow: Boolean(forceNow || startTime === 'now')
+      forceNow: Boolean(forceNow || startTime === 'now'),
+      hotUpdate: Boolean(hotUpdate)
     });
     res.json({ success: true, slots: updatedSlots });
   } catch (error) {

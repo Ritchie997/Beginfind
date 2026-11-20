@@ -299,7 +299,7 @@ async function createStation({ frequency, name, description = '', ownerId, owner
     throw new Error('Укажите название радиостанции');
   }
 
-  const chosenOwner = String(hostName || host_name || '').trim() || ownerName;
+  const chosenOwner = String(hostName || host_name || '').trim() || ownerName || 'Ведущий';
   const cleanFallback = ['loop', 'noise', 'silence'].includes(fallbackMode) ? fallbackMode : 'loop';
 
   const result = await run(
@@ -415,6 +415,85 @@ async function getTimelineSlots(stationId, fromTime = null, toTime = null) {
 async function setTimelineSlots(stationId, slots = [], customStartTime = null, options = {}) {
   const station = await getStationById(stationId);
   if (!station) throw new Error('Станция не найдена');
+
+  const now = getEffectiveNow();
+  const nowIso = now.toISOString();
+  const nowMs = now.getTime();
+
+  // Бесшовное горячее обновление сетки прямого эфира (асинхронное редактирование)
+  // Сохраняет текущий воспроизводимый трек в эфире без прерывания звучания!
+  if (options.hotUpdate && (station.broadcast_status === 'live' || options.isLive)) {
+    const liveState = await getStationLiveState(stationId);
+    const activeSlot = liveState && liveState.currentSlot;
+
+    if (activeSlot && activeSlot.id) {
+      const activeEndMs = new Date(activeSlot.end_time || activeSlot.endTime).getTime();
+      // Если активный слот ещё звучит (до конца осталось больше 1 секунды)
+      if (activeEndMs > nowMs + 1000) {
+        // 1. Оставляем активный слот и предшествующую историю вещания, удаляем только будущие запланированные слоты
+        await run(
+          'DELETE FROM radio_timeline_slots WHERE station_id = ? AND slot_order > ?',
+          [stationId, activeSlot.slot_order || 0]
+        );
+
+        // 2. Определяем, с какого места черновика подставлять треки
+        let upcomingDraftSlots = slots;
+        const activeTrackId = activeSlot.track_id || activeSlot.trackId;
+        const activeTitle = activeSlot.title;
+        const activeIdx = slots.findIndex(s =>
+          (activeTrackId && (s.track_id == activeTrackId || s.trackId == activeTrackId)) ||
+          (activeTitle && s.title === activeTitle)
+        );
+
+        if (activeIdx >= 0) {
+          upcomingDraftSlots = slots.slice(activeIdx + 1);
+        }
+
+        // 3. Выстраиваем новые слоты начиная ровно с момента окончания активного трека
+        let cursor = activeEndMs;
+        let orderIndex = (activeSlot.slot_order || 0) + 1;
+        const maxDurationMs = 24 * 60 * 60 * 1000;
+        const endLimit = cursor + maxDurationMs;
+
+        for (const s of upcomingDraftSlots) {
+          const durSec = Math.max(1, Number(s.duration) || 0);
+          const durMs = durSec * 1000;
+          if (cursor >= endLimit) break;
+
+          const actualDurMs = Math.min(durMs, endLimit - cursor);
+          const startTimeIso = new Date(cursor).toISOString();
+          const endTimeIso = new Date(cursor + actualDurMs).toISOString();
+
+          let audioUrl = s.audio_url || s.audioUrl;
+          if (!audioUrl && (s.track_id || s.trackId)) {
+            const dbTrack = await get('SELECT audio_url FROM radio_tracks WHERE id = ?', [s.track_id || s.trackId]);
+            if (dbTrack && dbTrack.audio_url) audioUrl = dbTrack.audio_url;
+          }
+          if (!audioUrl) audioUrl = '';
+
+          await run(
+            `INSERT INTO radio_timeline_slots (station_id, track_id, slot_order, title, type, audio_url, duration, start_time, end_time)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              stationId,
+              s.track_id || s.trackId || null,
+              orderIndex++,
+              String(s.title || 'Без названия').trim(),
+              ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
+              audioUrl,
+              actualDurMs / 1000,
+              startTimeIso,
+              endTimeIso
+            ]
+          );
+
+          cursor += actualDurMs;
+        }
+
+        return getTimelineSlots(stationId);
+      }
+    }
+  }
 
   const isForceNow = Boolean(options.forceNow || customStartTime === 'now');
   let cursor;

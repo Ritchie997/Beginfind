@@ -269,4 +269,99 @@ test('radio-studio-console: dedicated Start/Stop broadcast, schedule controls an
   assert.ok(globalPlayerJs.includes('finishedSlotId'), 'Global player must pass finishedSlotId on ended');
 });
 
+test('radio-editor-asynchronous: draft banner, hot-apply button, discard action and tab preservation', () => {
+  const radioHtml = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  // 1. UI Markup: Draft banner and actions
+  assert.ok(radioHtml.includes('id="radioEditorDraftBanner"'), 'radio.html must include radioEditorDraftBanner');
+  assert.ok(radioHtml.includes('id="btnApplyDraftToLive"'), 'radio.html must include btnApplyDraftToLive');
+  assert.ok(radioHtml.includes('id="btnDiscardDraft"'), 'radio.html must include btnDiscardDraft');
+  assert.ok(radioHtml.includes('id="btnMasterApplyDraft"'), 'radio.html must include btnMasterApplyDraft in master console');
+
+  // 2. CSS Styles for draft mode
+  assert.ok(radioCss.includes('.radio-editor-draft-banner'), 'radio.css must style .radio-editor-draft-banner');
+  assert.ok(radioCss.includes('.radio-cta-apply-btn'), 'radio.css must style .radio-cta-apply-btn');
+  assert.ok(radioCss.includes('.radio-draft-apply-btn'), 'radio.css must style .radio-draft-apply-btn');
+
+  // 3. Client JS: State, helpers, and exports
+  assert.ok(radioClientJs.includes('isEditorDirty: false'), 'state must include isEditorDirty flag');
+  assert.ok(radioClientJs.includes('editorInitialized: false'), 'state must include editorInitialized flag');
+  assert.ok(radioClientJs.includes('function markEditorDirty('), 'radio-client.js must define markEditorDirty helper');
+  assert.ok(radioClientJs.includes('function updateEditorDraftBannerUI('), 'radio-client.js must define updateEditorDraftBannerUI');
+  assert.ok(radioClientJs.includes('async function applyDraftToLive('), 'radio-client.js must define applyDraftToLive');
+  assert.ok(radioClientJs.includes('async function discardDraftChanges('), 'radio-client.js must define discardDraftChanges');
+  assert.ok(radioClientJs.includes('applyDraftToLive,'), 'window.RadioClient must export applyDraftToLive');
+  assert.ok(radioClientJs.includes('discardDraftChanges,'), 'window.RadioClient must export discardDraftChanges');
+  assert.ok(radioClientJs.includes('markEditorDirty,'), 'window.RadioClient must export markEditorDirty');
+
+  // 4. Tab switching must preserve initialized editor draft without wiping state
+  assert.ok(radioClientJs.includes('if (tabName === \'editor\') {\n      if (!state.editorInitialized) {\n        initEditor();\n      } else {\n        renderEditor();\n      }\n    }'),
+    'switchTab must preserve initialized editor state without re-invoking initEditor');
+});
+
+test('radio-store: hotUpdate seamlessly updates upcoming slots without interrupting active playing track', async () => {
+  const radioStore = require('./radio-store');
+
+  const testFreq = 93.7;
+  const existing = await radioStore.getStationByFrequency(testFreq);
+  if (existing) {
+    await radioStore.deleteStation(existing.id, existing.owner_id || 9999);
+  }
+
+  // 1. Create a test radio station
+  const station = await radioStore.createStation({
+    name: 'Asynchronous Test FM',
+    frequency: testFreq,
+    ownerId: 9999,
+    ownerName: 'DJ Tester'
+  });
+  assert.ok(station && station.id, 'Station must be created');
+
+  try {
+    // 2. Schedule 3 initial tracks
+    const initialSlots = [
+      { title: 'Active Track 1', duration: 180, audio_url: '/audio/track1.mp3', type: 'track' },
+      { title: 'Upcoming Track 2', duration: 200, audio_url: '/audio/track2.mp3', type: 'track' },
+      { title: 'Upcoming Track 3', duration: 210, audio_url: '/audio/track3.mp3', type: 'track' }
+    ];
+
+    await radioStore.setTimelineSlots(station.id, initialSlots, 'now', { forceNow: true, status: 'live' });
+    const liveStateBefore = await radioStore.getStationLiveState(station.id);
+    assert.ok(liveStateBefore.isLive, 'Station must be live');
+    assert.ok(liveStateBefore.currentSlot, 'Active slot must exist');
+    assert.equal(liveStateBefore.currentSlot.title, 'Active Track 1');
+    const activeSlotId = liveStateBefore.currentSlot.id;
+    const activeEndTime = liveStateBefore.currentSlot.endTime || liveStateBefore.currentSlot.end_time;
+
+    // 3. User modifies the draft in editor: replaces upcoming tracks with new ones
+    const newDraftSlots = [
+      { title: 'Active Track 1', duration: 180, audio_url: '/audio/track1.mp3', type: 'track' },
+      { title: 'Brand New Track B', duration: 240, audio_url: '/audio/trackB.mp3', type: 'track' },
+      { title: 'Brand New Track C', duration: 190, audio_url: '/audio/trackC.mp3', type: 'track' }
+    ];
+
+    // 4. Hot-apply draft to live broadcast
+    const updatedSlots = await radioStore.setTimelineSlots(station.id, newDraftSlots, null, { hotUpdate: true });
+
+    // 5. Verify the active slot was NOT interrupted or deleted
+    const liveStateAfter = await radioStore.getStationLiveState(station.id);
+    assert.ok(liveStateAfter.isLive, 'Station must still be live');
+    assert.ok(liveStateAfter.currentSlot, 'Active slot must still be active');
+    assert.equal(liveStateAfter.currentSlot.id, activeSlotId, 'Active slot ID must remain unchanged');
+    assert.equal(liveStateAfter.currentSlot.title, 'Active Track 1', 'Active track title must remain unchanged');
+    assert.equal(liveStateAfter.currentSlot.endTime, activeEndTime, 'Active slot endTime must be preserved');
+
+    // 6. Verify upcoming slots are seamlessly replaced with the new draft
+    assert.ok(liveStateAfter.nextSlots && liveStateAfter.nextSlots.length >= 2, 'Must have nextSlots from new draft');
+    assert.equal(liveStateAfter.nextSlots[0].title, 'Brand New Track B', 'Next slot must be the new draft track');
+    assert.equal(liveStateAfter.nextSlots[1].title, 'Brand New Track C', 'Second upcoming slot must match new draft');
+    assert.equal(liveStateAfter.nextSlots[0].startTime, activeEndTime, 'Next slot must start exactly at the end of active slot');
+  } finally {
+    // Cleanup station
+    await radioStore.deleteStation(station.id, 9999);
+  }
+});
+
 
