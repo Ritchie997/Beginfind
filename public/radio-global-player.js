@@ -289,13 +289,22 @@
   });
 
   audio.addEventListener('error', () => {
+    // Не реагируем, если у аудио нет src, плеер не играет или ошибка вызвана сбросом источника
+    if (!audio.src || !state.isPlaying || state.mode !== 'radio' || !state.station) return;
+    const errCode = audio.error ? audio.error.code : 0;
+    if (errCode === 4 && (!audio.currentSrc || audio.currentSrc === window.location.href)) return;
+
     console.warn('[GlobalRadio] Audio element error:', audio.error);
-    if (state.mode === 'radio' && state.station) {
-      setTimeout(() => {
-        if (state.mode === 'radio' && state.station) {
-          syncRadioStationLive(state.station, true);
-        }
-      }, 1000);
+    if (syncRetryCount < MAX_SYNC_RETRIES) {
+      syncRetryCount++;
+      const backoff = Math.min(10000, 1500 * Math.pow(1.5, syncRetryCount));
+      scheduleLiveSync(state.station, backoff);
+    } else {
+      console.warn('[GlobalRadio] Max live sync retries reached, pausing');
+      state.isPlaying = false;
+      resetAudioElement();
+      updateBarUI();
+      notify();
     }
   });
 
@@ -409,11 +418,67 @@
   }
 
   // ===== Синхронизация прямого эфира радиостанции =====
+  let isSyncingLive = false;
+  let syncLiveTimer = null;
+  let syncRetryCount = 0;
+  const MAX_SYNC_RETRIES = 5;
+
+  function cancelLiveSync() {
+    if (syncLiveTimer) {
+      clearTimeout(syncLiveTimer);
+      syncLiveTimer = null;
+    }
+  }
+
+  function scheduleLiveSync(station, delayMs = 2000) {
+    cancelLiveSync();
+    if (!station || state.mode !== 'radio') return;
+    const delay = Math.max(1000, delayMs);
+    syncLiveTimer = setTimeout(() => {
+      syncLiveTimer = null;
+      if (state.mode === 'radio' && state.station && String(state.station.id) === String(station.id)) {
+        syncRadioStationLive(station, state.isPlaying);
+      }
+    }, delay);
+  }
+
+  function resetAudioElement() {
+    audio.pause();
+    audio.removeAttribute('src');
+    try {
+      audio.load();
+    } catch (_) {}
+  }
+
   async function syncRadioStationLive(station, autoPlay = true) {
+    if (!station || !station.id) return;
+    if (isSyncingLive) return;
+    isSyncingLive = true;
+
     try {
       const res = await fetch(`/api/radio/stations/${station.id}/live`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        cancelLiveSync();
+        if (res.status === 404) {
+          console.warn(`[GlobalRadio] Station ${station.id} not found (404), stopping live`);
+          state.station = null;
+          state.currentSlot = null;
+          state.isPlaying = false;
+          resetAudioElement();
+          updateBarUI();
+          notify();
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch (_) {}
+        }
+        return;
+      }
       const live = await res.json();
+
+      // Если за время запроса пользователь переключил режим или станцию
+      if (state.mode !== 'radio' || (state.station && String(state.station.id) !== String(station.id))) {
+        return;
+      }
 
       state.mode = 'radio';
       state.station = station;
@@ -427,11 +492,11 @@
           targetSlot = live.nextSlots[0];
           targetOffset = 0;
         } else {
-          setTimeout(() => {
-            if (state.mode === 'radio' && state.station && state.station.id === station.id) {
-              syncRadioStationLive(station, autoPlay);
-            }
-          }, 300);
+          // Ждем завершения слота на сервере с безопасным интервалом (минимум 2 секунды)
+          if (syncRetryCount < MAX_SYNC_RETRIES) {
+            syncRetryCount++;
+            scheduleLiveSync(station, 2000);
+          }
           return;
         }
       }
@@ -445,6 +510,9 @@
       state.currentSlot = targetSlot;
 
       if (targetSlot && targetSlot.audioUrl) {
+        syncRetryCount = 0;
+        cancelLiveSync();
+
         const currentSrc = audio.src || '';
         const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);
         if (!isSameSrc) {
@@ -494,29 +562,51 @@
           notify();
         }
       } else {
-        if (audio.ended || !state.isPlaying) {
-          audio.pause();
-          audio.src = '';
-          state.isPlaying = false;
-          updateMediaSession();
-          updateBarUI();
-          notify();
-          // Если станция в режиме loop или есть следующие слоты, повторяем опрос
-          if (station.fallback_mode === 'loop' || (live.nextSlots && live.nextSlots.length > 0)) {
-            setTimeout(() => {
-              if (state.mode === 'radio' && state.station && state.station.id === station.id) {
-                syncRadioStationLive(station, true);
-              }
-            }, 400);
+        // На станции нет активного слота в данный момент (эфир молчит или пуст)
+        state.currentSlot = null;
+        state.isPlaying = false;
+        resetAudioElement();
+        updateMediaSession();
+        updateBarUI();
+        notify();
+
+        // Безопасное планирование проверки:
+        // Если есть следующий слот, опрашиваем к моменту его старта (не чаще раза в 2 секунды)
+        if (live.nextSlots && live.nextSlots.length > 0) {
+          const nextSlot = live.nextSlots[0];
+          let delayMs = 5000;
+          if (nextSlot.startTime) {
+            const startMs = new Date(nextSlot.startTime).getTime();
+            const nowMs = live.serverTime ? new Date(live.serverTime).getTime() : Date.now();
+            const diff = startMs - nowMs;
+            if (diff > 0) {
+              delayMs = Math.min(30000, Math.max(2000, diff));
+            }
           }
+          scheduleLiveSync(station, delayMs);
+        } else if (station.fallback_mode === 'loop') {
+          // Если зациклена, но слотов нет вообще — опрашиваем раз в 10 секунд
+          scheduleLiveSync(station, 10000);
+        } else {
+          cancelLiveSync();
         }
       }
     } catch (e) {
       console.error('[GlobalRadio] Sync error:', e);
+      if (syncRetryCount < MAX_SYNC_RETRIES) {
+        syncRetryCount++;
+        scheduleLiveSync(station, 5000);
+      } else {
+        cancelLiveSync();
+      }
+    } finally {
+      isSyncingLive = false;
     }
   }
 
   function playRadio(station, slot = null, offset = 0) {
+    cancelLiveSync();
+    syncRetryCount = 0;
     isAudioLeader = true;
     remoteLeaderTabId = null;
     state.mode = 'radio';
@@ -561,6 +651,8 @@
 
   function playTrack(track, playlist = [], index = -1) {
     if (!track) return;
+    cancelLiveSync();
+    syncRetryCount = 0;
     isAudioLeader = true;
     remoteLeaderTabId = null;
 
@@ -680,6 +772,7 @@
   }
 
   function pause() {
+    cancelLiveSync();
     if (isAudioLeader) {
       audio.pause();
       state.isPlaying = false;
@@ -769,8 +862,8 @@
   }
 
   function stop() {
-    audio.pause();
-    audio.src = '';
+    cancelLiveSync();
+    resetAudioElement();
     state.mode = null;
     state.isPlaying = false;
     state.station = null;

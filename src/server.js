@@ -167,12 +167,18 @@ app.use('/api', galleryRoutes);
 app.use('/api', radioRoutes);
 app.use('/api', globalSearchRoutes);
 
-// Обработка ошибок multer (загрузка изображений/бэкапов) — единый обработчик
+// Обработка ошибок multer (загрузка изображений/бэкапов) и Range-запросов (416) — единый обработчик
 // для всех маршрутов, использующих multer. Раньше он был подключён между
 // маршрутами и не покрывал часть из них (например /api/backups/upload),
 // из-за чего ошибки multer там улетали в дефолтный HTML-обработчик Express
 // вместо аккуратного JSON-ответа.
 app.use((err, req, res, next) => {
+  if (err.status === 416 || err.statusCode === 416 || err.name === 'RangeNotSatisfiableError') {
+    if (err.headers) {
+      res.set(err.headers);
+    }
+    return res.status(416).end();
+  }
   if (err instanceof multer.MulterError) {
     console.error('Multer error:', err);
     if (err.code === 'LIMIT_FILE_SIZE') {

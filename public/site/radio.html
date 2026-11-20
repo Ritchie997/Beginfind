@@ -542,6 +542,13 @@
             <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-top:6px; margin-bottom:4px;">Или укажите ссылку на изображение (URL):</label>
             <input type="url" id="trackCoverUrlInput" class="radio-form-input form-input" placeholder="https://... или оставьте пустым">
           </div>
+          <div class="alltell-upload-progress" id="trackUploadProgress" hidden style="margin-top: 14px;">
+            <div>
+              <span id="trackUploadProgressLabel">Загрузка аудиофайла…</span>
+              <span id="trackUploadProgressCount">0%</span>
+            </div>
+            <progress max="100" value="0" id="trackUploadProgressBar"></progress>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-close="modalUploadTrack">Отмена</button>

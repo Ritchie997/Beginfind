@@ -31,8 +31,9 @@ router.get('/upload-limits', (req, res) => {
 
 router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadImage.single('image'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Файл не загружен' });
+    if (!req.file || req.file.size === 0) {
+      if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Файл изображения не загружен или пуст' });
     }
 
     // Проверяем, что файл действительно существует
@@ -41,6 +42,12 @@ router.post('/upload-image', auth.authenticateToken, auth.checkApproved, uploadI
     if (!fs.existsSync(filePath)) {
       console.error('Uploaded file not found:', filePath);
       return res.status(500).json({ error: 'Ошибка сохранения файла' });
+    }
+
+    const stat = await fs.promises.stat(filePath);
+    if (stat.size === 0) {
+      fs.unlink(filePath, () => {});
+      return res.status(400).json({ error: 'Файл изображения имеет нулевой размер' });
     }
 
     // Настраиваемый владельцем лимит (Настройки → "Максимальный размер
@@ -116,14 +123,21 @@ router.post('/upload-images', auth.authenticateToken, auth.checkApproved, upload
 
 router.post('/upload-audio', auth.authenticateToken, auth.checkApproved, uploadAudio.single('audio'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Аудиофайл не загружен' });
+    if (!req.file || req.file.size === 0) {
+      if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Аудиофайл не загружен или пуст' });
     }
 
     const filePath = path.join(UPLOADS_DIR, req.file.filename);
     if (!fs.existsSync(filePath)) {
       console.error('Uploaded audio file not found:', filePath);
       return res.status(500).json({ error: 'Ошибка сохранения аудиофайла' });
+    }
+
+    const stat = await fs.promises.stat(filePath);
+    if (stat.size === 0) {
+      fs.unlink(filePath, () => {});
+      return res.status(400).json({ error: 'Загруженный аудиофайл имеет нулевой размер' });
     }
 
     // Автоматическая конвертация аудио в MP3 для экономии дискового пространства сервера

@@ -27,6 +27,9 @@ async function convertToMp3(inputPath) {
 
   const ext = path.extname(inputPath).toLowerCase();
   const stat = await fs.promises.stat(inputPath);
+  if (!stat.size || stat.size === 0) {
+    throw new Error('Файл для конвертации пуст (0 байт)');
+  }
 
   // mp3 в mp3 не переделываем
   if (ext === '.mp3') {
@@ -92,6 +95,16 @@ async function convertToMp3(inputPath) {
       if (code === 0 && fs.existsSync(outputPath)) {
         try {
           const newStat = await fs.promises.stat(outputPath);
+          if (newStat.size === 0) {
+            await fs.promises.unlink(outputPath).catch(() => {});
+            return resolve({
+              converted: false,
+              outputPath: inputPath,
+              filename: path.basename(inputPath),
+              size: stat.size,
+              format: ext.replace('.', '')
+            });
+          }
           // Удаляем исходный тяжелый файл (например .wav, .flac) для экономии места на сервере
           await fs.promises.unlink(inputPath).catch(() => {});
           resolve({

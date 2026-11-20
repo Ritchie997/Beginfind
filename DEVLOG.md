@@ -5,6 +5,40 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-20 — ликвидация лавинообразного бесконечного цикла запросов эфира (net::ERR_INSUFFICIENT_RESOURCES) и MEDIA_ELEMENT_ERROR
+
+- **Устранение рекурсивного DDoS-шторма запросов `/api/radio/stations/:id/live` (`public/radio-global-player.js`, `src/routes/radio.routes.js`):**
+  - Выявлена цепочка лавинообразного зацикливания:
+    1. При отсутствии активного слота на станции или зацикленном режиме `fallback_mode === 'loop'` на пустой сетке плеер ставил агрессивный таймер повтора 400мс и вызывал `audio.src = ''`.
+    2. Присваивание пустой строки `audio.src = ''` вызывало штатное событие ошибки браузера `MEDIA_ELEMENT_ERROR: Empty src attribute` (`code: 4`).
+    3. Обработчик `audio.addEventListener('error')` в ответ снова планировал `syncRadioStationLive` через 1000мс.
+    4. Параллельные вызовы `syncRadioStationLive` не имели мьютекса (`isSyncingLive`) и сброса старых таймеров (`clearTimeout`), экспоненциально порождая сотни одновременных `fetch`-запросов в секунду. Это исчерпывало пул сетевых сокетов браузера (`net::ERR_INSUFFICIENT_RESOURCES`), приводило к `TypeError: Failed to fetch` и перегрузке сервера AllTell.
+  - В [public/radio-global-player.js](file:///c:/Warning/Project/Beginfind/public/radio-global-player.js):
+    - Внедрен мьютекс `isSyncingLive`, исключающий параллельное выполнение сетевой синхронизации эфира.
+    - Внедрен централизованный планировщик `scheduleLiveSync(station, delayMs)` с обязательным предварительным сбросом `cancelLiveSync()` (в очереди может быть только 1 активный таймер).
+    - Убраны опасные 300мс и 400мс таймауты: если на станции нет слотов, задержка рассчитывается до момента старта следующего слота (минимум 2с, максимум 30с) либо раз в 10 секунд при пустом зацикленном эфире.
+    - Добавлен лимит повторных попыток `syncRetryCount < MAX_SYNC_RETRIES (5)` с экспоненциальной задержкой. При превышении лимита воспроизведение безопасно останавливается.
+    - Метод `resetAudioElement()` заменяет `audio.src = ''` на `audio.pause(); audio.removeAttribute('src'); audio.load();`, устраняя ложное событие ошибки `<audio>`.
+    - Обработчик `audio.error` больше не реагирует на отсутствие `src` или остановленный плеер.
+  - В [src/routes/radio.routes.js](file:///c:/Warning/Project/Beginfind/src/routes/radio.routes.js) маршрут `/api/radio/stations/:id/live` при обращении к несуществующей или удаленной станции возвращает HTTP 404 вместо 500, а плеер очищает сохраненную станцию из `localStorage` и останавливает дальнейшие запросы.
+- **Тестирование:**
+  - В [src/services/radio-player-controls.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-player-controls.test.js) добавлен тест `radio live sync: prevention of infinite fetch loop and net::ERR_INSUFFICIENT_RESOURCES storm`. Все 119 тестов проходят успешно (`npm test`).
+
+## 2026-11-20 — устранение ошибки RangeNotSatisfiableError (416) и добавление индикации загрузки файлов Радио (как в галерее)
+
+- **Устранение RangeNotSatisfiableError и падения в 500 при загрузке аудио (`src/server.js`, `src/routes/uploads.routes.js`, `src/services/audio-converter.js`, `public/site/radio-client.js`):**
+  - Выявлена первопричина: при запросах браузера с заголовком `Range: bytes=0-` (стандартное поведение тега `<audio>`) к 0-байтным или только созданным файлам модуль `send` Express выбрасывает исключение с кодом HTTP 416 (`Content-Range: bytes */0`), которое в `server.js` ошибочно перехватывалось глобальным обработчиком как 500 `General upload error`.
+  - В [src/server.js](file:///c:/Warning/Project/Beginfind/src/server.js) добавлен перехват и корректный возврат HTTP 416 `Range Not Satisfiable` с заголовками `err.headers` без ложного вывода 500 в консоль сервера.
+  - В [src/routes/uploads.routes.js](file:///c:/Warning/Project/Beginfind/src/routes/uploads.routes.js) и [src/services/audio-converter.js](file:///c:/Warning/Project/Beginfind/src/services/audio-converter.js) добавлена строгая проверка на нулевой размер аудиофайлов (`stat.size === 0`), предотвращающая сохранение пустых или поврежденных записей.
+  - В [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js) ликвидированы сетевые Range-запросы метаданных через `new Audio(uploadRes.url)`: добавлена функция `getAudioDuration(file)`, мгновенно считывающая длительность трека на клиенте напрямую из локального `File` / `Blob` через `URL.createObjectURL`.
+- **Индикация прогресса загрузки аудиофайла в модальном окне Радио (как в галерее):**
+  - В [public/site/radio.html](file:///c:/Warning/Project/Beginfind/public/site/radio.html) в форму `#formUploadTrack` добавлен блок с галерейным классом `.alltell-upload-progress`, прогресс-баром `#trackUploadProgressBar`, текстовым описанием шага `#trackUploadProgressLabel` и процентным индикатором `#trackUploadProgressCount`.
+  - В [public/site/radio-client.js](file:///c:/Warning/Project/Beginfind/public/site/radio-client.js) реализована функция `uploadWithProgress(url, formData, onProgress)` на базе `XMLHttpRequest` с отслеживанием `xhr.upload.onprogress`.
+  - При отправке отображается реальный прогресс загрузки обложки (0–15%), передачи аудиофайла (15–100%) и статус серверной обработки («Конвертация и сохранение на сервере…»).
+- **Тестирование:**
+  - В [src/services/radio-player-controls.test.js](file:///c:/Warning/Project/Beginfind/src/services/radio-player-controls.test.js) добавлен автоматический тест проверки верстки индикатора загрузки и защиты Range 416 / 0-byte audio. Все 118 тестов проходят успешно (`npm test`).
+  - Проведено визуальное тестирование в браузере.
+
 ## 2026-11-20 — исправление эфира Радио («Сейчас (Старт)», бесшовные переходы треков, синхронизация Mute, зацикливание, кастомные ведущие и загрузка обложек)
 
 - **Исправление старта эфира без смещения («Сейчас (Старт)»):**

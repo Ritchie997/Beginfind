@@ -153,3 +153,52 @@ test('radio UI: infinite scroll in feed matches Antropedia implementation with I
   assert.ok(radioClientJs.includes('state.feedObserver.observe(dom.radioFeedSentinel)'), 'Must observe radioFeedSentinel element');
   assert.ok(radioClientJs.includes('state.feedObserver.disconnect()'), 'Must disconnect observer in cleanup');
 });
+
+test('radio UI & upload: file upload progress indicator and Range / empty audio safety', () => {
+  const radioHtml = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const serverJs = fs.readFileSync(path.resolve(__dirname, '../../src/server.js'), 'utf8');
+  const uploadsRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/uploads.routes.js'), 'utf8');
+  const audioConverterJs = fs.readFileSync(path.resolve(__dirname, '../../src/services/audio-converter.js'), 'utf8');
+
+  // 1. HTML markup: progress indicator identical to gallery
+  assert.ok(radioHtml.includes('id="trackUploadProgress"'), 'radio.html must include trackUploadProgress container');
+  assert.ok(radioHtml.includes('id="trackUploadProgressBar"'), 'radio.html must include trackUploadProgressBar element');
+  assert.ok(radioHtml.includes('id="trackUploadProgressLabel"'), 'radio.html must include trackUploadProgressLabel element');
+  assert.ok(radioHtml.includes('id="trackUploadProgressCount"'), 'radio.html must include trackUploadProgressCount element');
+  assert.ok(radioHtml.includes('class="alltell-upload-progress"'), 'Must use gallery standard alltell-upload-progress class');
+
+  // 2. Client JS: uploadWithProgress and local getAudioDuration (preventing Range requests to new files)
+  assert.ok(radioClientJs.includes('function uploadWithProgress('), 'radio-client.js must define uploadWithProgress helper');
+  assert.ok(radioClientJs.includes('xhr.upload.onprogress'), 'uploadWithProgress must track xhr.upload.onprogress');
+  assert.ok(radioClientJs.includes('function getAudioDuration('), 'radio-client.js must define getAudioDuration helper');
+  assert.ok(radioClientJs.includes('URL.createObjectURL(fileOrUrl)'), 'getAudioDuration must inspect local Blob/File directly');
+
+  // 3. Server: RangeNotSatisfiableError (416) safety and 0-byte file prevention
+  assert.ok(serverJs.includes('RangeNotSatisfiableError') || serverJs.includes('status === 416'), 'server.js must cleanly respond to 416 Range requests');
+  assert.ok(uploadsRoutesJs.includes("req.file.size === 0"), 'uploads.routes.js must validate non-empty file size');
+  assert.ok(audioConverterJs.includes("stat.size === 0"), 'audio-converter.js must reject 0-byte input/output');
+});
+
+test('radio live sync: prevention of infinite fetch loop and net::ERR_INSUFFICIENT_RESOURCES storm', () => {
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+  const radioRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/radio.routes.js'), 'utf8');
+
+  // 1. Guard against in-flight concurrent fetch storms
+  assert.ok(globalPlayerJs.includes('isSyncingLive'), 'radio-global-player must maintain isSyncingLive mutex');
+  assert.ok(globalPlayerJs.includes('cancelLiveSync()'), 'radio-global-player must provide cancelLiveSync');
+  assert.ok(globalPlayerJs.includes('scheduleLiveSync('), 'radio-global-player must provide centralized scheduleLiveSync');
+  assert.ok(globalPlayerJs.includes('syncRetryCount'), 'radio-global-player must track syncRetryCount');
+  assert.ok(globalPlayerJs.includes('MAX_SYNC_RETRIES'), 'radio-global-player must define MAX_SYNC_RETRIES limit');
+
+  // 2. Removal of dangerous rapid-fire 300ms / 400ms recursive timeouts
+  assert.ok(!globalPlayerJs.includes('setTimeout(() => {\n            if (state.mode === \'radio\' && state.station && state.station.id === station.id) {\n              syncRadioStationLive(station, autoPlay);\n            }\n          }, 300)'), 'Must not have 300ms unthrottled recursion');
+  assert.ok(!globalPlayerJs.includes('setTimeout(() => {\n              if (state.mode === \'radio\' && state.station && state.station.id === station.id) {\n                syncRadioStationLive(station, true);\n              }\n            }, 400)'), 'Must not have 400ms unthrottled recursion');
+
+  // 3. Clean reset without audio.src = '' error event explosion
+  assert.ok(globalPlayerJs.includes('resetAudioElement()'), 'Must use resetAudioElement to avoid MEDIA_ELEMENT_ERROR: Empty src attribute');
+  assert.ok(globalPlayerJs.includes("audio.removeAttribute('src')"), 'resetAudioElement must removeAttribute instead of assigning empty string');
+
+  // 4. Server returns 404 for deleted/unknown station live state
+  assert.ok(radioRoutesJs.includes("error.message === 'Станция не найдена'") && radioRoutesJs.includes('status(404)'), 'radio.routes.js must return 404 when station is not found');
+});

@@ -330,6 +330,84 @@
     return res.json();
   }
 
+  function uploadWithProgress(url, formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      if (window.authManager && window.authManager.getToken()) {
+        xhr.setRequestHeader('Authorization', 'Bearer ' + window.authManager.getToken());
+      }
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          onProgress(pct, e.loaded, e.total);
+        }
+      };
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText || '{}');
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(data.error || `HTTP ${xhr.status}`));
+          }
+        } catch (_) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve({});
+          } else {
+            reject(new Error(`HTTP ${xhr.status} ${xhr.statusText}`));
+          }
+        }
+      };
+      xhr.onerror = () => reject(new Error('Сетевая ошибка при передаче файла'));
+      xhr.ontimeout = () => reject(new Error('Превышено время ожидания передачи файла'));
+      xhr.send(formData);
+    });
+  }
+
+  async function getAudioDuration(fileOrUrl) {
+    if (!fileOrUrl) return 0;
+    let url = '';
+    let isObjectUrl = false;
+    if (typeof fileOrUrl === 'string') {
+      url = fileOrUrl;
+    } else if (fileOrUrl instanceof Blob) {
+      try {
+        url = URL.createObjectURL(fileOrUrl);
+        isObjectUrl = true;
+      } catch (_) {
+        return 0;
+      }
+    } else {
+      return 0;
+    }
+
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        const dur = (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) ? Math.round(audio.duration) : 0;
+        if (isObjectUrl) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
+        audio.src = '';
+        resolve(dur);
+      };
+
+      audio.addEventListener('loadedmetadata', finish, { once: true });
+      audio.addEventListener('error', finish, { once: true });
+      setTimeout(finish, 3000);
+      try {
+        audio.preload = 'metadata';
+        audio.src = url;
+      } catch (_) {
+        finish();
+      }
+    });
+  }
+
   // ===== 1. Управление воспроизведением деки прямого эфира =====
 
   function updateDeckUI() {
@@ -5036,6 +5114,7 @@
           if (progressFill) progressFill.style.width = `${Math.round(((i) / files.length) * 100)}%`;
 
           try {
+            const durPromise = getAudioDuration(file);
             const formData = new FormData();
             formData.append('audio', file);
             if (file && file.name) {
@@ -5046,12 +5125,7 @@
               body: formData
             });
 
-            const tempAudio = new Audio(uploadRes.url);
-            const dur = await new Promise((res) => {
-              tempAudio.addEventListener('loadedmetadata', () => res(Math.round(tempAudio.duration) || 180));
-              tempAudio.addEventListener('error', () => res(180));
-              setTimeout(() => res(180), 3000);
-            });
+            const dur = (await durPromise) || 180;
 
             addSlotToEditor({
               title: uploadRes.title || file.name.replace(/\.[^/.]+$/, ''),
@@ -5088,20 +5162,18 @@
         }
 
         try {
+          const durPromise = getAudioDuration(file);
           const uploadRes = await api('/api/upload-audio', {
             method: 'POST',
             body: formData
           });
 
-          const tempAudio = new Audio(uploadRes.url);
-          tempAudio.addEventListener('loadedmetadata', () => {
-            const dur = Math.round(tempAudio.duration) || 180;
-            addSlotToEditor({
-              title: uploadRes.title || file.name.replace(/\.[^/.]+$/, ''),
-              type: 'track',
-              audio_url: uploadRes.url,
-              duration: dur
-            });
+          const dur = (await durPromise) || 180;
+          addSlotToEditor({
+            title: uploadRes.title || file.name.replace(/\.[^/.]+$/, ''),
+            type: 'track',
+            audio_url: uploadRes.url,
+            duration: dur
           });
         } catch (e) {
           showToast('Ошибка загрузки файла: ' + e.message, 'error');
@@ -5142,20 +5214,18 @@
           }
 
           try {
+            const durPromise = getAudioDuration(file);
             const res = await api('/api/upload-audio', {
               method: 'POST',
               body: formData
             });
 
-            const tempAudio = new Audio(res.url);
-            tempAudio.addEventListener('loadedmetadata', () => {
-              const dur = Math.round(tempAudio.duration) || 5;
-              addSlotToEditor({
-                title: `Слова ведущего (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
-                type: 'speech',
-                audio_url: res.url,
-                duration: dur
-              });
+            const dur = (await durPromise) || 5;
+            addSlotToEditor({
+              title: `Слова ведущего (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
+              type: 'speech',
+              audio_url: res.url,
+              duration: dur
             });
           } catch (uploadErr) {
             showToast('Не удалось загрузить аудиозапись с микрофона: ' + uploadErr.message, 'error');
@@ -5421,16 +5491,12 @@
         const fileInput = document.getElementById('speechFileInput');
         if (fileInput && fileInput.files[0] && !finalAudioUrl) {
           const file = fileInput.files[0];
+          const durPromise = getAudioDuration(file);
           const formData = new FormData();
           formData.append('audio', file);
           const uploadRes = await api('/api/upload-audio', { method: 'POST', body: formData });
           finalAudioUrl = uploadRes.url;
-
-          const tempAudio = new Audio(uploadRes.url);
-          finalDuration = await new Promise((res) => {
-            tempAudio.addEventListener('loadedmetadata', () => res(Math.round(tempAudio.duration) || 10));
-            setTimeout(() => res(10), 2000);
-          });
+          finalDuration = (await durPromise) || 10;
         }
 
         if (!finalAudioUrl) {
@@ -5828,29 +5894,52 @@
       const coverFile = document.getElementById('trackCoverInput')?.files[0];
       const coverUrlInput = dom.trackCoverUrlInput?.value?.trim() || null;
       const submitBtn = document.getElementById('btnSubmitUploadTrack');
+      const progressBox = document.getElementById('trackUploadProgress');
+      const progressBar = document.getElementById('trackUploadProgressBar');
+      const progressLabel = document.getElementById('trackUploadProgressLabel');
+      const progressCount = document.getElementById('trackUploadProgressCount');
 
       if (!file) {
         isUploadingTrack = false;
         return;
       }
 
+      if (file.size === 0) {
+        showToast('Выбранный аудиофайл пуст (0 байт)', 'error');
+        isUploadingTrack = false;
+        return;
+      }
+
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка аудиофайла…';
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка…';
+      }
+
+      if (progressBox) {
+        progressBox.hidden = false;
+        if (progressBar) progressBar.value = 0;
+        if (progressCount) progressCount.textContent = '0%';
+        if (progressLabel) progressLabel.textContent = 'Подготовка к отправке…';
       }
 
       try {
+        // Локальное чтение длительности аудиозаписи без сетевых Range-запросов к серверу
+        const durPromise = getAudioDuration(file);
+
         let coverUrl = coverUrlInput;
         if (coverFile) {
+          if (progressLabel) progressLabel.textContent = 'Загрузка обложки…';
           const coverForm = new FormData();
           coverForm.append('image', coverFile);
-          const coverRes = await api('/api/upload-image', {
-            method: 'POST',
-            body: coverForm
+          const coverRes = await uploadWithProgress('/api/upload-image', coverForm, (pct) => {
+            const mapped = Math.round(pct * 0.15);
+            if (progressBar) progressBar.value = mapped;
+            if (progressCount) progressCount.textContent = mapped + '%';
           });
           coverUrl = coverRes.url;
         }
 
+        if (progressLabel) progressLabel.textContent = 'Загрузка аудиофайла…';
         const formData = new FormData();
         formData.append('audio', file);
         if (title) {
@@ -5859,19 +5948,22 @@
           formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
         }
 
-        const uploadRes = await api('/api/upload-audio', {
-          method: 'POST',
-          body: formData
+        const uploadRes = await uploadWithProgress('/api/upload-audio', formData, (pct) => {
+          const basePct = coverFile ? 15 : 0;
+          const factor = coverFile ? 0.85 : 1.0;
+          const mapped = Math.min(100, Math.round(basePct + (pct * factor)));
+          if (progressBar) progressBar.value = mapped;
+          if (progressCount) progressCount.textContent = mapped + '%';
+          if (pct >= 100 && progressLabel) {
+            progressLabel.textContent = 'Обработка и сохранение на сервере…';
+          }
         });
 
-        const tempAudio = new Audio(uploadRes.url);
-        await new Promise((res) => {
-          tempAudio.addEventListener('loadedmetadata', res);
-          tempAudio.addEventListener('error', res);
-          setTimeout(res, 2000);
-        });
+        const dur = (await durPromise) || 0;
 
-        const dur = Math.round(tempAudio.duration) || 0;
+        if (progressLabel) progressLabel.textContent = 'Завершение публикации…';
+        if (progressBar) progressBar.value = 100;
+        if (progressCount) progressCount.textContent = '100%';
 
         await api('/api/radio/tracks', {
           method: 'POST',
@@ -5899,6 +5991,7 @@
         showToast('Ошибка публикации аудиозаписи: ' + err.message, 'error');
       } finally {
         isUploadingTrack = false;
+        if (progressBox) progressBox.hidden = true;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Опубликовать';

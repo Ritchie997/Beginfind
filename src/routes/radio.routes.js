@@ -391,6 +391,9 @@ router.get('/radio/stations/:id/live', async (req, res) => {
     const state = await radioStore.getStationLiveState(req.params.id);
     res.json(state);
   } catch (error) {
+    if (error.message === 'Станция не найдена') {
+      return res.status(404).json({ error: 'Станция не найдена' });
+    }
     console.error('[radio] Error getting live state:', error);
     res.status(500).json({ error: 'Ошибка получения состояния эфира: ' + error.message });
   }
