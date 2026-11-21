@@ -4226,10 +4226,10 @@
       const gAudio = getGlobalAudio();
       const gState = gAudio ? gAudio.getState() : {};
       const isRadioLive = gState.mode === 'radio';
-      const isPlaying = Boolean(gState.isPlaying);
       const isTimeshift = Boolean(gState.isTimeshift || state.isTimeshift);
+      const isThisStation = Boolean(st && gState.station && String(gState.station.id) === String(st.id));
 
-      if (isRadioLive && !isTimeshift && isPlaying && gState.currentSlot && state.editorBlocks && state.editorBlocks.length > 0) {
+      if (isRadioLive && !isTimeshift && (isThisStation || !st) && gState.currentSlot && state.editorBlocks && state.editorBlocks.length > 0) {
         const slotTrackId = gState.currentSlot.trackId || gState.currentSlot.track_id;
         const slotTitle = gState.currentSlot.title;
         const slotAudioUrl = gState.currentSlot.audioUrl || gState.currentSlot.audio_url;
@@ -5218,6 +5218,7 @@
         }
         updateDeckUI();
         updateFeedPlayButtons();
+        updateTimelinePlayhead();
 
         // Обновление плеера на странице трека
         if (currentViewingTrack) {
