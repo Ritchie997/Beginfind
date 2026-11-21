@@ -3253,32 +3253,47 @@
       // 1. Приоритет прямого эфира: если прямо сейчас звучит радиостанция,
       // сопоставляем активный слот плеера с блоками сетки!
       if (isRadioLive && activeSlot) {
+        if (state.editorSlots && state.editorSlots.length > 0 && activeSlot.id) {
+          const sIdx = state.editorSlots.findIndex(s => String(s.id) === String(activeSlot.id));
+          if (sIdx >= 0) {
+            const slotObj = state.editorSlots[sIdx];
+            if (slotObj && slotObj.blockId) {
+              const bIdx = state.editorBlocks.findIndex(b => b.id === slotObj.blockId);
+              if (bIdx >= 0) onAirBlockIndex = bIdx;
+            } else if (sIdx < state.editorBlocks.length) {
+              onAirBlockIndex = sIdx;
+            }
+          }
+        }
+
         const slotTrackId = activeSlot.trackId || activeSlot.track_id;
         const slotTitle = activeSlot.title;
         const slotAudioUrl = activeSlot.audioUrl || activeSlot.audio_url;
         const slotOrder = activeSlot.slot_order !== undefined ? Number(activeSlot.slot_order) : -1;
 
-        for (let i = 0; i < state.editorBlocks.length; i++) {
-          const b = state.editorBlocks[i];
-          if (b.type === 'playlist' && b.items && b.items.length > 0) {
-            const subIdx = b.items.findIndex(it =>
-              (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
-              (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
-              (slotTitle && it.title === slotTitle)
-            );
-            if (subIdx >= 0) {
-              onAirBlockIndex = i;
-              onAirSubTrackIndex = subIdx;
-              break;
-            }
-          } else {
-            const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
-            const matchTrack = slotTrackId && b.track_id == slotTrackId;
-            const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
-            const matchTitle = slotTitle && b.title === slotTitle;
-            if (matchOrder || matchTrack || matchUrl || matchTitle) {
-              onAirBlockIndex = i;
-              break;
+        if (onAirBlockIndex < 0) {
+          for (let i = 0; i < state.editorBlocks.length; i++) {
+            const b = state.editorBlocks[i];
+            if (b.type === 'playlist' && b.items && b.items.length > 0) {
+              const subIdx = b.items.findIndex(it =>
+                (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
+                (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
+                (slotTitle && it.title === slotTitle)
+              );
+              if (subIdx >= 0) {
+                onAirBlockIndex = i;
+                onAirSubTrackIndex = subIdx;
+                break;
+              }
+            } else {
+              const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
+              const matchTrack = slotTrackId && b.track_id == slotTrackId;
+              const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
+              const matchTitle = slotTitle && b.title === slotTitle;
+              if (matchOrder || matchTrack || matchUrl || matchTitle) {
+                onAirBlockIndex = i;
+                break;
+              }
             }
           }
         }
@@ -4230,34 +4245,51 @@
       const isThisStation = Boolean(st && gState.station && String(gState.station.id) === String(st.id));
 
       if (isRadioLive && !isTimeshift && (isThisStation || !st) && gState.currentSlot && state.editorBlocks && state.editorBlocks.length > 0) {
-        const slotTrackId = gState.currentSlot.trackId || gState.currentSlot.track_id;
-        const slotTitle = gState.currentSlot.title;
-        const slotAudioUrl = gState.currentSlot.audioUrl || gState.currentSlot.audio_url;
-        const slotOrder = gState.currentSlot.slot_order !== undefined ? Number(gState.currentSlot.slot_order) : -1;
-
         let curBlockIdx = -1;
         let curSubTrackIdx = -1;
-        for (let i = 0; i < state.editorBlocks.length; i++) {
-          const b = state.editorBlocks[i];
-          if (b.type === 'playlist' && b.items && b.items.length > 0) {
-            const subIdx = b.items.findIndex(it =>
-              (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
-              (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
-              (slotTitle && it.title === slotTitle)
-            );
-            if (subIdx >= 0) {
-              curBlockIdx = i;
-              curSubTrackIdx = subIdx;
-              break;
+
+        // 1. Приоритетный поиск по точному ID слота в скомпилированной сетке слотов
+        if (state.editorSlots && state.editorSlots.length > 0 && gState.currentSlot && gState.currentSlot.id) {
+          const sIdx = state.editorSlots.findIndex(s => String(s.id) === String(gState.currentSlot.id));
+          if (sIdx >= 0) {
+            const slotObj = state.editorSlots[sIdx];
+            if (slotObj && slotObj.blockId) {
+              const bIdx = state.editorBlocks.findIndex(b => b.id === slotObj.blockId);
+              if (bIdx >= 0) curBlockIdx = bIdx;
+            } else if (sIdx < state.editorBlocks.length) {
+              curBlockIdx = sIdx;
             }
-          } else {
-            const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
-            const matchTrack = slotTrackId && b.track_id == slotTrackId;
-            const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
-            const matchTitle = slotTitle && b.title === slotTitle;
-            if (matchOrder || matchTrack || matchUrl || matchTitle) {
-              curBlockIdx = i;
-              break;
+          }
+        }
+
+        if (curBlockIdx < 0) {
+          const slotTrackId = gState.currentSlot.trackId || gState.currentSlot.track_id;
+          const slotTitle = gState.currentSlot.title;
+          const slotAudioUrl = gState.currentSlot.audioUrl || gState.currentSlot.audio_url;
+          const slotOrder = gState.currentSlot.slot_order !== undefined ? Number(gState.currentSlot.slot_order) : -1;
+
+          for (let i = 0; i < state.editorBlocks.length; i++) {
+            const b = state.editorBlocks[i];
+            if (b.type === 'playlist' && b.items && b.items.length > 0) {
+              const subIdx = b.items.findIndex(it =>
+                (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
+                (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
+                (slotTitle && it.title === slotTitle)
+              );
+              if (subIdx >= 0) {
+                curBlockIdx = i;
+                curSubTrackIdx = subIdx;
+                break;
+              }
+            } else {
+              const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
+              const matchTrack = slotTrackId && b.track_id == slotTrackId;
+              const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
+              const matchTitle = slotTitle && b.title === slotTitle;
+              if (matchOrder || matchTrack || matchUrl || matchTitle) {
+                curBlockIdx = i;
+                break;
+              }
             }
           }
         }
@@ -4276,6 +4308,33 @@
             ? gAudio.audio.currentTime
             : (gState.currentTime || 0);
           activeElapsed = accumulatedSec + audioSec;
+
+          // Позиционируем плейхед напрямую по физическому положению клипа на ленте в DOM!
+          // Это гарантирует стопроцентное попадание линии на играющий клип, исключая любые визуальные зазоры и отставания.
+          const activeClip = dom.radioTimelineTrack.querySelector(`.radio-timeline-clip[data-index="${curBlockIdx}"]`);
+          if (activeClip) {
+            const clipLeft = activeClip.offsetLeft;
+            const clipWidth = activeClip.offsetWidth;
+            const blockDur = Number(state.editorBlocks[curBlockIdx].duration) || 1;
+            const clipRatio = Math.max(0, Math.min(1, audioSec / blockDur));
+            const targetPx = clipLeft + (clipRatio * clipWidth);
+            const trackWidth = dom.radioTimelineTrack.clientWidth || 1;
+            const playheadPct = (targetPx / trackWidth) * 100;
+
+            dom.radioTimelinePlayhead.style.display = 'block';
+            dom.radioTimelinePlayhead.style.left = `${playheadPct.toFixed(2)}%`;
+
+            const badge = dom.radioTimelinePlayhead.querySelector('.radio-timeline-playhead-badge');
+            if (badge) {
+              const tz = getUserTimezoneInfo();
+              const liveTimeStr = formatClockTime(nowMs);
+              badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
+              badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
+              badge.classList.remove('is-timeshift-playhead');
+            }
+            updateEditorPlaybackUI();
+            return;
+          }
         }
       }
 
