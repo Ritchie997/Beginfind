@@ -785,7 +785,8 @@ async function getStationLiveState(stationId, options = {}) {
 
           // Будущие слоты цикла с URL для бесшовного предзагрузки
           let nextCursorMs = slotEndMs;
-          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+          const maxNextSlots = Math.min(10, Math.max(1, activeLoopSlots.length - 1));
+          for (let i = 1; i <= maxNextSlots; i++) {
             const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
             const nsDur = Number(ns.duration) || 0;
             const nsStartMs = nextCursorMs;
@@ -806,7 +807,8 @@ async function getStationLiveState(stationId, options = {}) {
 
           // Прошедшие слоты цикла
           let prevCursorMs = slotStartMs;
-          for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
+          const maxPrevSlots = Math.min(10, Math.max(1, activeLoopSlots.length - 1));
+          for (let i = 1; i <= maxPrevSlots; i++) {
             const pIdx = (matchedIndex - i + activeLoopSlots.length * 100) % activeLoopSlots.length;
             const ps = activeLoopSlots[pIdx];
             const psDur = Number(ps.duration) || 0;
@@ -865,7 +867,7 @@ async function getStationLiveState(stationId, options = {}) {
 
   // Ближайшие следующие слоты (до 10 шт.)
   let nextSlots = [];
-  if (isVirtualLoop && loopNextSlots.length > 0) {
+  if ((station.fallback_mode === 'loop' || isVirtualLoop) && loopNextSlots.length > 0) {
     nextSlots = loopNextSlots;
   } else if (allSlots.length > 0) {
     const curIdx = currentSlot ? allSlots.findIndex(s => s.id === currentSlot.id) : -1;
@@ -926,7 +928,7 @@ async function getStationLiveState(stationId, options = {}) {
     offset: Math.round(offset * 10) / 10,
     remaining: Math.round(remaining * 10) / 10,
     nextSlots,
-    prevSlots: (isVirtualLoop && loopPrevSlots.length > 0) ? loopPrevSlots : prevSlots.map(s => ({
+    prevSlots: ((station.fallback_mode === 'loop' || isVirtualLoop) && loopPrevSlots.length > 0) ? loopPrevSlots : prevSlots.map(s => ({
       id: s.id,
       title: s.title,
       type: s.type,

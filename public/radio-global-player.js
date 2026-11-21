@@ -409,14 +409,17 @@
         const nowMs = Date.now();
         const diffMs = endMs > 0 ? (endMs - nowMs) : 0;
 
-        // Если аудиофайл закончился, но до планового окончания слота в сетке ещё осталось время (> 1200 мс) —
+        const isNaturalTrackEnd = (audio.duration > 0 && (audio.currentTime >= audio.duration - 1.5 || audio.ended)) ||
+                                  (curSlot && curSlot.duration > 0 && audio.currentTime >= curSlot.duration - 2.5);
+
+        // Если аудиофайл оборвался задолго до планового окончания слота в сетке (ошибка сети/файла) —
         // НЕ перескакиваем через треки раньше времени! Ждём планового времени переключения слота на сервере.
-        if (diffMs > 1200) {
+        if (!isNaturalTrackEnd && diffMs > 1200) {
           scheduleLiveSync(state.station, diffMs);
           return;
         }
 
-        // Плановое время окончания слота наступило — переходим к следующему слоту сетки
+        // Плановое время окончания слота наступило или трек завершился естественно — переходим к следующему слоту сетки
         const finishedId = curSlot ? curSlot.id : null;
 
         // Если в кэше уже есть следующий слот с готовым audioUrl — мгновенно стартуем его без тишины и задержек!
@@ -433,6 +436,7 @@
           } else {
             audio.currentTime = 0;
           }
+          state.isPlaying = true;
           audio.play().then(() => {
             state.isPlaying = true;
             updateMediaSession();
@@ -634,20 +638,20 @@
 
       // Если слот, вернувшийся с сервера, это тот самый слот, который только что завершился
       if (state.currentSlot && targetSlot && state.currentSlot.id === targetSlot.id && audio.ended) {
-        const slotEndMs = targetSlot.endTime ? new Date(targetSlot.endTime).getTime() : (targetSlot.end_time ? new Date(targetSlot.end_time).getTime() : 0);
-        const serverNowMs = live.serverTime ? new Date(live.serverTime).getTime() : Date.now();
-        const diffMs = slotEndMs - serverNowMs;
-
-        // Если плановое время слота ещё не наступило в настенных часах — не перепрыгиваем через трек!
-        if (diffMs > 1200) {
-          scheduleLiveSync(station, diffMs);
-          return;
-        }
-
         if (live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) {
           targetSlot = live.nextSlots[0];
           targetOffset = 0;
         } else {
+          const slotEndMs = targetSlot.endTime ? new Date(targetSlot.endTime).getTime() : (targetSlot.end_time ? new Date(targetSlot.end_time).getTime() : 0);
+          const serverNowMs = live.serverTime ? new Date(live.serverTime).getTime() : Date.now();
+          const diffMs = slotEndMs - serverNowMs;
+
+          // Если плановое время слота ещё не наступило в настенных часах — не перепрыгиваем через трек!
+          if (diffMs > 1200) {
+            scheduleLiveSync(station, diffMs);
+            return;
+          }
+
           // Ждем завершения слота на сервере с безопасным интервалом (минимум 2 секунды)
           if (syncRetryCount < MAX_SYNC_RETRIES) {
             syncRetryCount++;
@@ -1042,6 +1046,11 @@
             liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
           }
 
+          if (!state.isTimeshift) {
+            const cur = audio.currentTime || 0;
+            liveOffset = Math.max(cur, liveOffset);
+          }
+
           if (targetTime > liveOffset + 1.2) {
             showToast('Нельзя перемотать вперед: эта часть трека еще не проиграна в эфире', 'warning');
             return;
@@ -1262,8 +1271,16 @@
           } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
             liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
           }
+
+          if (!state.isTimeshift) {
+            const cur = audio.currentTime || 0;
+            liveOffset = Math.max(cur, liveOffset);
+          }
           const edgePct = Math.min(100, Math.max(0, (liveOffset / dur) * 100));
-          domBar.liveEdge.style.display = 'block';
+          // В прямом эфире слушатель уже на фронтире вещания — отдельная засечка нужна только в таймшифте,
+          // чтобы показать границу, до которой можно перемотать вперед. В живом эфире она скрывается,
+          // предотвращая иллюзию "отстающей черточки".
+          domBar.liveEdge.style.display = state.isTimeshift ? 'block' : 'none';
           domBar.liveEdge.style.left = `${edgePct}%`;
         } else {
           domBar.liveEdge.style.display = 'none';
