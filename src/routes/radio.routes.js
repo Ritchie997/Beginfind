@@ -488,6 +488,19 @@ router.get('/radio/stations/:id/timeline', optionalUser, async (req, res) => {
       return s;
     });
 
+    if (station && (station.broadcast_status === 'live' || station.isLive) && station.fallback_mode === 'loop' && safeSlots.length > 0) {
+      const liveState = await radioStore.getStationLiveState(station.id);
+      if (liveState && liveState.cycleStartTime) {
+        let cursorMs = new Date(liveState.cycleStartTime).getTime();
+        safeSlots.forEach((s) => {
+          const durMs = Math.round((Number(s.duration) || 0) * 1000);
+          s.start_time = new Date(cursorMs).toISOString();
+          s.end_time = new Date(cursorMs + durMs).toISOString();
+          cursorMs += durMs;
+        });
+      }
+    }
+
     res.json(safeSlots);
   } catch (error) {
     console.error('[radio] Error getting timeline:', error);

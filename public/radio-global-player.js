@@ -418,6 +418,31 @@
 
         // Плановое время окончания слота наступило — переходим к следующему слоту сетки
         const finishedId = curSlot ? curSlot.id : null;
+
+        // Если в кэше уже есть следующий слот с готовым audioUrl — мгновенно стартуем его без тишины и задержек!
+        if (state.cachedNextSlot && state.cachedNextSlot.audioUrl && (!state.cachedNextSlot.id || String(state.cachedNextSlot.id) !== String(finishedId))) {
+          const next = state.cachedNextSlot;
+          state.cachedNextSlot = null;
+          state.currentSlot = next;
+          state.currentTime = 0;
+          state.duration = Number(next.duration) || 0;
+          const currentSrc = audio.src || '';
+          const isSameSrc = currentSrc === next.audioUrl || currentSrc.endsWith(next.audioUrl);
+          if (!isSameSrc) {
+            audio.src = next.audioUrl;
+          } else {
+            audio.currentTime = 0;
+          }
+          audio.play().then(() => {
+            state.isPlaying = true;
+            updateMediaSession();
+            updateBarUI();
+            updateProgressUI();
+            notify();
+            announcePlay();
+          }).catch(() => {});
+        }
+
         syncRadioStationLive(state.station, true, finishedId);
       }
     } else if (state.currentIndex >= 0 && state.currentIndex < state.playlist.length - 1) {
@@ -639,6 +664,7 @@
       }
 
       state.currentSlot = targetSlot;
+      state.cachedNextSlot = (live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) ? live.nextSlots[0] : null;
 
       if (targetSlot && targetSlot.audioUrl) {
         syncRetryCount = 0;
@@ -651,11 +677,19 @@
         const isSameSrc = currentSrc === targetSlot.audioUrl || currentSrc.endsWith(targetSlot.audioUrl);
         if (!isSameSrc) {
           audio.src = targetSlot.audioUrl;
-        } else if (audio.ended) {
-          audio.currentTime = 0;
+          audio.loop = Boolean(state.isLoop);
+          applyAudioOffset(targetOffset);
+        } else if (audio.ended || audio.paused) {
+          audio.loop = Boolean(state.isLoop);
+          applyAudioOffset(targetOffset);
+        } else {
+          // Уже плавно воспроизводит нужный трек: не сбиваем звук микро-перемотками
+          audio.loop = Boolean(state.isLoop);
+          const cur = audio.currentTime || 0;
+          if (Math.abs(cur - targetOffset) > 3.0 && !state.isTimeshift) {
+            applyAudioOffset(targetOffset);
+          }
         }
-        audio.loop = Boolean(state.isLoop);
-        applyAudioOffset(targetOffset);
 
         if (autoPlay) {
           isAudioLeader = true;
@@ -757,9 +791,18 @@
       const isSameSrc = currentSrc === slot.audioUrl || currentSrc.endsWith(slot.audioUrl);
       if (!isSameSrc) {
         audio.src = slot.audioUrl;
+        audio.loop = Boolean(state.isLoop);
+        applyAudioOffset(offset);
+      } else if (audio.ended || audio.paused) {
+        audio.loop = Boolean(state.isLoop);
+        applyAudioOffset(offset);
+      } else {
+        audio.loop = Boolean(state.isLoop);
+        const cur = audio.currentTime || 0;
+        if (Math.abs(cur - offset) > 3.0 && !state.isTimeshift) {
+          applyAudioOffset(offset);
+        }
       }
-      audio.loop = Boolean(state.isLoop);
-      applyAudioOffset(offset);
 
       audio.play().then(() => {
         state.isPlaying = true;
@@ -994,9 +1037,9 @@
           if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
             const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
             const nowMs = Date.now();
-            liveOffset = Math.max(0, (nowMs - startMs) / 1000);
+            liveOffset = Math.max(0, Math.min(dur, (nowMs - startMs) / 1000));
           } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
-            liveOffset = state.currentSlot.offset;
+            liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
           }
 
           if (targetTime > liveOffset + 1.2) {
@@ -1215,9 +1258,9 @@
           if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
             const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
             const nowMs = Date.now();
-            liveOffset = Math.max(0, (nowMs - startMs) / 1000);
+            liveOffset = Math.max(0, Math.min(dur, (nowMs - startMs) / 1000));
           } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
-            liveOffset = state.currentSlot.offset;
+            liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
           }
           const edgePct = Math.min(100, Math.max(0, (liveOffset / dur) * 100));
           domBar.liveEdge.style.display = 'block';

@@ -2000,12 +2000,13 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   min-height: 52px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px dashed rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  padding: 4px;
+  padding: 0;
+  overflow: hidden;
 }
 
 .radio-timeline-empty-hint {
@@ -2018,9 +2019,9 @@
 
 .radio-timeline-clip {
   position: relative;
-  height: 44px;
-  border-radius: 8px;
-  padding: 4px 14px 4px 10px;
+  height: 48px;
+  border-radius: 0;
+  padding: 4px 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2034,7 +2035,8 @@
   text-overflow: ellipsis;
   box-sizing: border-box;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.45);
   user-select: none;
 }
 

@@ -696,109 +696,95 @@ async function getStationLiveState(stationId, options = {}) {
   let currentCycleStartMs = null;
   let currentCycleEndMs = null;
 
-  // Если клиент сообщил, что трек finishedSlotId завершился в браузере (ended),
-  // мгновенно переключаем на следующий слот по порядку очереди
-  if (finishedSlotId && allSlots.length > 0) {
-    const finishedIdx = allSlots.findIndex(s => String(s.id) === String(finishedSlotId));
-    if (finishedIdx >= 0) {
-      if (finishedIdx < allSlots.length - 1) {
-        currentSlot = { ...allSlots[finishedIdx + 1] };
-      } else if (station.fallback_mode === 'loop') {
-        currentSlot = { ...allSlots[0] };
-        isVirtualLoop = true;
-      }
-
-      if (currentSlot) {
-        offset = 0;
-        const dur = Number(currentSlot.duration) || 0;
-        remaining = dur;
-        const rawEndMs = new Date(currentSlot.end_time).getTime();
-        if (rawEndMs <= nowMs || isVirtualLoop) {
-          currentSlot.start_time = nowIso;
-          currentSlot.end_time = new Date(nowMs + (dur * 1000)).toISOString();
-          isVirtualLoop = true;
-        }
+  if (allSlots.length > 0) {
+    let scheduleStartIndex = allSlots.length - 1;
+    for (let i = allSlots.length - 1; i > 0; i--) {
+      const prevEndMs = new Date(allSlots[i - 1].end_time).getTime();
+      const currStartMs = new Date(allSlots[i].start_time).getTime();
+      if (currStartMs - prevEndMs <= 5000) {
+        scheduleStartIndex = i - 1;
+      } else {
+        break;
       }
     }
-  }
+    const activeLoopSlots = allSlots.slice(scheduleStartIndex);
 
-  // Обычный поиск текущего слота по времени
-  if (!currentSlot && allSlots.length > 0) {
-    currentSlot = allSlots.find(s => s.start_time <= nowIso && s.end_time > nowIso) || null;
+    const totalDurationSec = activeLoopSlots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+    const totalDurationMs = Math.round(totalDurationSec * 1000);
+    const scheduleStartMs = new Date(activeLoopSlots[0].start_time).getTime();
 
-    if (!currentSlot) {
-      // Защита от микро-рассинхрона (если слот стартует в пределах 4 секунд от now)
-      const nearUpcoming = allSlots.find(s => s.start_time > nowIso);
-      if (nearUpcoming) {
-        const startMs = new Date(nearUpcoming.start_time).getTime();
-        if (startMs - nowMs <= 4000) {
-          currentSlot = { ...nearUpcoming };
+    if (station.fallback_mode === 'loop' && totalDurationSec > 0) {
+      if (nowMs < scheduleStartMs) {
+        if (scheduleStartMs - nowMs <= 4000) {
+          // Защита от микро-рассинхрона (если старт через пару секунд)
+          currentCycleStartMs = scheduleStartMs;
+          currentCycleEndMs = scheduleStartMs + totalDurationMs;
+          currentSlot = {
+            ...activeLoopSlots[0],
+            start_time: activeLoopSlots[0].start_time,
+            end_time: activeLoopSlots[0].end_time
+          };
           offset = 0;
-          remaining = Number(nearUpcoming.duration) || 0;
-        }
-      }
-    }
-
-    if (!currentSlot && station.fallback_mode === 'loop') {
-      let scheduleStartIndex = allSlots.length - 1;
-      for (let i = allSlots.length - 1; i > 0; i--) {
-        const prevEndMs = new Date(allSlots[i - 1].end_time).getTime();
-        const currStartMs = new Date(allSlots[i].start_time).getTime();
-        if (currStartMs - prevEndMs <= 5000) {
-          scheduleStartIndex = i - 1;
+          remaining = Number(activeLoopSlots[0].duration) || 0;
+          isVirtualLoop = false;
         } else {
-          break;
+          // Запланировано на будущее
+          currentSlot = null;
         }
-      }
-      const activeLoopSlots = allSlots.slice(scheduleStartIndex);
+      } else {
+        // Мы в активном вещании (цикл 0, 1, 2, ...)
+        const elapsedSinceStartMs = Math.max(0, nowMs - scheduleStartMs);
+        const cycleIndex = Math.floor(elapsedSinceStartMs / totalDurationMs);
+        currentCycleStartMs = scheduleStartMs + (cycleIndex * totalDurationMs);
+        currentCycleEndMs = currentCycleStartMs + totalDurationMs;
+        const cycleElapsedSec = (nowMs - currentCycleStartMs) / 1000;
+        isVirtualLoop = cycleIndex > 0;
 
-      const totalDurationSec = activeLoopSlots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
-      if (totalDurationSec > 0) {
-        const firstStartMs = new Date(activeLoopSlots[0].start_time).getTime();
         let matchedIndex = -1;
 
-        if (nowMs < firstStartMs) {
-          if (firstStartMs - nowMs > 1000) {
-            currentSlot = null;
-          } else {
-            currentSlot = { ...activeLoopSlots[0] };
+        if (finishedSlotId) {
+          const finishedIdx = activeLoopSlots.findIndex(s => String(s.id) === String(finishedSlotId));
+          if (finishedIdx >= 0) {
+            matchedIndex = (finishedIdx + 1) % activeLoopSlots.length;
+            const accBefore = activeLoopSlots.slice(0, matchedIndex).reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+            currentCycleStartMs = nowMs - Math.round(accBefore * 1000);
+            currentCycleEndMs = currentCycleStartMs + totalDurationMs;
+            if (currentCycleStartMs > scheduleStartMs || matchedIndex === 0) {
+              isVirtualLoop = true;
+            }
             offset = 0;
-            remaining = Number(activeLoopSlots[0].duration) || 0;
-            isVirtualLoop = true;
-            matchedIndex = 0;
-            currentCycleStartMs = firstStartMs;
-            currentCycleEndMs = firstStartMs + (totalDurationSec * 1000);
+            remaining = Number(activeLoopSlots[matchedIndex].duration) || 0;
           }
-        } else {
-          const elapsedSec = ((nowMs - firstStartMs) / 1000) % totalDurationSec;
-          const normalizedElapsed = elapsedSec >= 0 ? elapsedSec : (totalDurationSec + elapsedSec);
-          currentCycleStartMs = nowMs - Math.round(normalizedElapsed * 1000);
-          currentCycleEndMs = currentCycleStartMs + (totalDurationSec * 1000);
+        }
 
+        if (matchedIndex < 0) {
           let accumulator = 0;
           for (let idx = 0; idx < activeLoopSlots.length; idx++) {
             const slot = activeLoopSlots[idx];
             const slotDur = Number(slot.duration) || 0;
-            if (accumulator + slotDur > normalizedElapsed) {
-              const slotStartMs = currentCycleStartMs + Math.round(accumulator * 1000);
-              const slotEndMs = slotStartMs + Math.round(slotDur * 1000);
-              currentSlot = {
-                ...slot,
-                start_time: new Date(slotStartMs).toISOString(),
-                end_time: new Date(slotEndMs).toISOString()
-              };
-              offset = normalizedElapsed - accumulator;
-              remaining = slotDur - offset;
-              isVirtualLoop = true;
+            if (accumulator + slotDur > cycleElapsedSec || idx === activeLoopSlots.length - 1) {
               matchedIndex = idx;
+              offset = Math.max(0, cycleElapsedSec - accumulator);
+              remaining = Math.max(0, slotDur - offset);
               break;
             }
             accumulator += slotDur;
           }
         }
 
-        if (matchedIndex >= 0 && currentSlot) {
-          let nextCursorMs = new Date(currentSlot.end_time).getTime();
+        if (matchedIndex >= 0) {
+          const accBeforeMatched = activeLoopSlots.slice(0, matchedIndex).reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+          const slotStartMs = currentCycleStartMs + Math.round(accBeforeMatched * 1000);
+          const slotEndMs = slotStartMs + Math.round((Number(activeLoopSlots[matchedIndex].duration) || 0) * 1000);
+
+          currentSlot = {
+            ...activeLoopSlots[matchedIndex],
+            start_time: new Date(slotStartMs).toISOString(),
+            end_time: new Date(slotEndMs).toISOString()
+          };
+
+          // Будущие слоты цикла с URL для бесшовного предзагрузки
+          let nextCursorMs = slotEndMs;
           for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
             const ns = activeLoopSlots[(matchedIndex + i) % activeLoopSlots.length];
             const nsDur = Number(ns.duration) || 0;
@@ -818,7 +804,8 @@ async function getStationLiveState(stationId, options = {}) {
             });
           }
 
-          let prevCursorMs = new Date(currentSlot.start_time).getTime();
+          // Прошедшие слоты цикла
+          let prevCursorMs = slotStartMs;
           for (let i = 1; i <= Math.min(10, activeLoopSlots.length); i++) {
             const pIdx = (matchedIndex - i + activeLoopSlots.length * 100) % activeLoopSlots.length;
             const ps = activeLoopSlots[pIdx];
@@ -840,35 +827,33 @@ async function getStationLiveState(stationId, options = {}) {
           }
         }
       }
-    } else if (currentSlot) {
-      const startMs = new Date(currentSlot.start_time).getTime();
-      offset = Math.max(0, (nowMs - startMs) / 1000);
-      remaining = Math.max(0, (Number(currentSlot.duration) || 0) - offset);
-    }
-  }
+    } else {
+      // Режим без зацикливания (линейное расписание)
+      if (finishedSlotId) {
+        const finishedIdx = allSlots.findIndex(s => String(s.id) === String(finishedSlotId));
+        if (finishedIdx >= 0 && finishedIdx < allSlots.length - 1) {
+          currentSlot = { ...allSlots[finishedIdx + 1] };
+          offset = 0;
+          remaining = Number(currentSlot.duration) || 0;
+        }
+      }
 
-  // Если был переход по finishedSlotId в режиме зацикливания, дополняем loopNextSlots
-  if (isVirtualLoop && loopNextSlots.length === 0 && currentSlot && allSlots.length > 0) {
-    const curIdx = allSlots.findIndex(s => s.id === currentSlot.id);
-    if (curIdx >= 0) {
-      let nextCursorMs = new Date(currentSlot.end_time).getTime();
-      for (let i = 1; i <= Math.min(10, allSlots.length); i++) {
-        const ns = allSlots[(curIdx + i) % allSlots.length];
-        const nsDur = Number(ns.duration) || 0;
-        const nsStartMs = nextCursorMs;
-        const nsEndMs = nextCursorMs + Math.round(nsDur * 1000);
-        nextCursorMs = nsEndMs;
+      if (!currentSlot) {
+        currentSlot = allSlots.find(s => s.start_time <= nowIso && s.end_time > nowIso) || null;
+        if (!currentSlot) {
+          const nearUpcoming = allSlots.find(s => s.start_time > nowIso);
+          if (nearUpcoming && new Date(nearUpcoming.start_time).getTime() - nowMs <= 4000) {
+            currentSlot = { ...nearUpcoming };
+            offset = 0;
+            remaining = Number(nearUpcoming.duration) || 0;
+          }
+        }
+      }
 
-        loopNextSlots.push({
-          id: ns.id,
-          title: ns.title,
-          type: ns.type,
-          audioUrl: ns.audio_url,
-          duration: ns.duration,
-          startTime: new Date(nsStartMs).toISOString(),
-          endTime: new Date(nsEndMs).toISOString(),
-          trackId: ns.track_id
-        });
+      if (currentSlot) {
+        const sStart = new Date(currentSlot.start_time).getTime();
+        offset = Math.max(0, (nowMs - sStart) / 1000);
+        remaining = Math.max(0, (Number(currentSlot.duration) || 0) - offset);
       }
     }
   }
