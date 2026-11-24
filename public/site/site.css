@@ -1387,6 +1387,8 @@
 
 /* ---- Панель каталога: фильтры, сортировка, вид (порт панели админ-Antropedia) ---- */
 .pub-toolbar {
+    position: relative;
+    z-index: 60;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -1395,6 +1397,12 @@
     border-radius: var(--site-radius-md);
     background: var(--background-secondary);
     border: 1px solid var(--background-accent);
+}
+
+.pub-toolbar:focus-within,
+.pub-toolbar.has-open-dropdown,
+.pub-toolbar:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 150;
 }
 
 .pub-toolbar-row {
@@ -9861,17 +9869,32 @@ a.site-profile-media-row:hover {
 
 /* --- Floating Glass Toolbar --- */
 .antropedia-toolbar-container {
+    position: relative;
+    z-index: 60;
     margin-bottom: 28px;
+}
+
+.antropedia-toolbar-container:focus-within,
+.antropedia-toolbar-container.has-open-dropdown,
+.antropedia-toolbar-container:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 150;
 }
 
 .antropedia-toolbar {
     position: relative;
+    z-index: 60;
     padding: 22px 24px;
     border-radius: var(--site-radius-lg, 18px);
     background: rgba(32, 34, 37, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(14px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.antropedia-toolbar:focus-within,
+.antropedia-toolbar.has-open-dropdown,
+.antropedia-toolbar:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 150;
 }
 
 .antropedia-toolbar-header {
@@ -10142,12 +10165,20 @@ a.site-profile-media-row:hover {
 /* Expandable Advanced Filters Panel */
 .antropedia-filters-panel {
     display: none;
+    position: relative;
+    z-index: 70;
     margin-top: 18px;
     padding-top: 16px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     gap: 16px;
     align-items: flex-end;
     flex-wrap: wrap;
+}
+
+.antropedia-filters-panel:focus-within,
+.antropedia-filters-panel.has-open-dropdown,
+.antropedia-filters-panel:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 130;
 }
 
 .antropedia-filters-panel.is-open {
@@ -10158,6 +10189,13 @@ a.site-profile-media-row:hover {
     display: flex;
     flex-direction: column;
     gap: 7px;
+}
+
+.antropedia-filter:focus-within,
+.antropedia-filter.has-open-dropdown,
+.antropedia-filter:has(.chip-field-dropdown:not([hidden])) {
+    position: relative;
+    z-index: 140;
 }
 
 .antropedia-filter label {
@@ -10176,8 +10214,16 @@ a.site-profile-media-row:hover {
 }
 
 .antropedia-filter-tags {
+    position: relative;
+    z-index: 80;
     flex: 1 1 280px;
     min-width: 220px;
+}
+
+.antropedia-filter-tags:focus-within,
+.antropedia-filter-tags.has-open-dropdown,
+.antropedia-filter-tags:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 140;
 }
 
 .antropedia-chip-field .chip-field-box {

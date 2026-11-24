@@ -5,6 +5,19 @@
 сгруппированы. История отражает сообщения и состояние репозитория, а не заменяет
 просмотр diff.
 
+## 2026-11-24 — исправление наложения выпадающего списка поиска по тегам под карточки статей в Antropedia
+
+- **Z-index и контексты наложения в панели фильтров Antropedia (`public/site/site.css`, `public/site/antropedia-mobile.css`, `public/antropedia.css`):**
+  - Устранена проблема, из-за которой выпадающее окно подсказок поиска по тегу (`#antropediaTagField .chip-field-dropdown` в админке и `#pubTagField .chip-field-dropdown` в основе) перекрывалось блоками и карточками статей (`.antropedia-card`, `.public-wiki-card`).
+  - В основе (`public/site/site.css`, `public/site/antropedia-mobile.css`) контейнеру `.antropedia-toolbar-container`, панели `.antropedia-toolbar` и `.pub-toolbar` задано явное позиционирование `position: relative; z-index: 60;`, а при фокусе или открытом списке (`:focus-within`, `.has-open-dropdown`) — повышенный `z-index: 150`, благодаря чему тулбар всегда остаётся над сеткой статей.
+  - Вложенным панелям `.antropedia-filters-panel` и `.antropedia-filter-tags` добавлены повышенные уровни наложения (`z-index: 70–80`, при фокусе — `130–140`).
+  - В админ-панели (`public/antropedia.css`) базовый `z-index` тулбара повышен с `50` до `100` (при открытом списке — `150`), а в адаптивном режиме для экранов $\le 1024$px правило `position: static` заменено на `position: relative; z-index: 100`, что предотвратило отключение контекста наложения и потерю z-index на планшетах и ноутбуках.
+- **Компонент чипового поля (`public/chip-field.js`, `public/global-styles.css`):**
+  - При открытии и закрытии выпадающего списка тегов чиповое поле (`.chip-field`) теперь переключает класс `.has-open-dropdown`.
+  - В `global-styles.css` для `.chip-field:focus-within` и `.chip-field.has-open-dropdown` установлен `z-index: 1100`, а для `.chip-field-dropdown` — `z-index: 1200`.
+- **Тестирование:**
+  - В `src/services/tags-upgrade.test.js` добавлен тест контроля z-index тулбаров и выпадающего списка подсказок. Все 153 теста успешно пройдены.
+
 ## 2026-11-24 — применение цветов тегов из админ-панели во всех представлениях (статьи, лента AllTell, витрина и редактор)
 
 - **Клиентский реестр цветов тегов (`public/tag-colors.js`):**

@@ -4071,6 +4071,18 @@ body.articles-page .content-body {
   max-width: min(100%, 32rem);
 }
 
+.chip-field:focus-within,
+.chip-field.has-open-dropdown {
+  z-index: 1100;
+}
+
+.antropedia-filter:focus-within,
+.antropedia-filter:has(.chip-field.has-open-dropdown),
+.antropedia-filter:has(.chip-field:focus-within) {
+  position: relative;
+  z-index: 1100;
+}
+
 .input-action-wrapper .chip-field {
   flex: 1;
   min-width: 0;
@@ -4170,7 +4182,7 @@ body.articles-page .content-body {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: 1200;
   max-height: 240px;
   overflow-y: auto;
   background: var(--background-secondary);

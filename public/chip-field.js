@@ -312,11 +312,13 @@
         });
       }
       this.dropdownEl.hidden = false;
+      this.root?.classList.add('has-open-dropdown');
     }
 
     _closeDropdown() {
       this._open = false;
       if (this.dropdownEl) this.dropdownEl.hidden = true;
+      this.root?.classList.remove('has-open-dropdown');
     }
 
     _syncHidden() {

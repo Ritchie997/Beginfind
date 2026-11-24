@@ -120,15 +120,31 @@
      3. Панель каталога (Toolbar), поиск, действия и теги
      -------------------------------------------------------------------------- */
   .antropedia-toolbar-container {
+    position: relative !important;
+    z-index: 60 !important;
     margin-bottom: 8px !important;
   }
 
+  .antropedia-toolbar-container:focus-within,
+  .antropedia-toolbar-container.has-open-dropdown,
+  .antropedia-toolbar-container:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 150 !important;
+  }
+
   .antropedia-toolbar {
+    position: relative !important;
+    z-index: 60 !important;
     padding: 8px 10px 10px !important;
     border-radius: 12px !important;
     background: var(--background-secondary, #2b2d31) !important;
     border: 1px solid rgba(255, 255, 255, 0.07) !important;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .antropedia-toolbar:focus-within,
+  .antropedia-toolbar.has-open-dropdown,
+  .antropedia-toolbar:has(.chip-field-dropdown:not([hidden])) {
+    z-index: 150 !important;
   }
 
   .antropedia-toolbar-header {

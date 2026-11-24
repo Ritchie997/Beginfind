@@ -36,7 +36,7 @@
      оставлял бы над панелью пустое место после того, как шапка проскроллила
      мимо. Панель должна упираться в самый верх окна. */
   top: 0;
-  z-index: 50;
+  z-index: 100;
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   border-radius: 10px;
@@ -45,6 +45,12 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.antropedia-toolbar:focus-within,
+.antropedia-toolbar.has-open-dropdown,
+.antropedia-toolbar:has(.chip-field-dropdown:not([hidden])) {
+  z-index: 150;
 }
 
 .antropedia-toolbar-row {
@@ -184,17 +190,32 @@
 }
 
 .antropedia-toolbar-row-filters {
+  position: relative;
+  z-index: 105;
   align-items: flex-end;
   padding-top: 12px;
   border-top: 1px solid var(--background-accent);
   order: 1;
 }
 
+.antropedia-toolbar-row-filters:focus-within,
+.antropedia-toolbar-row-filters.has-open-dropdown,
+.antropedia-toolbar-row-filters:has(.chip-field-dropdown:not([hidden])) {
+  z-index: 120;
+}
+
 .antropedia-filter {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 160px;
+}
+
+.antropedia-filter:focus-within,
+.antropedia-filter.has-open-dropdown,
+.antropedia-filter:has(.chip-field-dropdown:not([hidden])) {
+  z-index: 130;
 }
 
 .antropedia-filter label {
@@ -2568,7 +2589,8 @@ mark.antropedia-search-hit.antropedia-search-hit-current {
    уже не оправдано (на десктопе панель компактнее — там sticky остаётся). === */
 @media (max-width: 1024px) {
   .antropedia-toolbar {
-    position: static;
+    position: relative;
+    z-index: 100;
   }
 
   .antropedia-grid {

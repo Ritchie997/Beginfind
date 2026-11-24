@@ -303,3 +303,20 @@ test('reading view and antropedia feed: tags take colors in detail view, cards a
   assert.ok(antropediaJs.includes('antropedia-card-tags'), 'antropedia.js must render antropedia-card-tags on catalog cards');
   assert.ok(antropediaJs.includes('TagColors'), 'antropedia.js must integrate with TagColors');
 });
+
+test('antropedia tag dropdown z-index: toolbar and chip-field dropdown stay above article cards', () => {
+  const globalCss = fs.readFileSync(path.resolve(__dirname, '../../public/global-styles.css'), 'utf8');
+  assert.ok(globalCss.includes('.chip-field.has-open-dropdown'), 'global-styles.css must style .chip-field.has-open-dropdown');
+  assert.ok(globalCss.includes('z-index: 1200'), 'global-styles.css must set high z-index on chip-field-dropdown');
+
+  const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
+  assert.ok(siteCss.includes('.antropedia-toolbar-container') && siteCss.includes('z-index: 60'), 'site.css must give toolbar container explicit z-index');
+  assert.ok(siteCss.includes('.antropedia-toolbar-container:focus-within') || siteCss.includes('.antropedia-toolbar:focus-within'), 'site.css must elevate toolbar z-index on focus');
+
+  const antropediaCss = fs.readFileSync(path.resolve(__dirname, '../../public/antropedia.css'), 'utf8');
+  assert.ok(antropediaCss.includes('z-index: 100'), 'antropedia.css must give .antropedia-toolbar z-index of 100');
+  assert.ok(!antropediaCss.includes('.antropedia-toolbar {\n    position: static;'), 'antropedia.css must not use position: static for toolbar on tablet/mobile');
+
+  const chipFieldJs = fs.readFileSync(path.resolve(__dirname, '../../public/chip-field.js'), 'utf8');
+  assert.ok(chipFieldJs.includes('has-open-dropdown'), 'chip-field.js must toggle has-open-dropdown class');
+});
