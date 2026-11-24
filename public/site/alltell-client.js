@@ -1067,6 +1067,268 @@
     inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  // ===== Автодополнение тегов (#тег) и wiki-ссылок ([[статья]]) в ленте публикаций =====
+  var tagSuggestEl = null;
+  var tagSuggestState = null;
+  var tagSuggestTimer = null;
+  var tagSuggestSeq = 0;
+  var cachedFeedTags = null;
+  var cachedFeedArticles = null;
+  var FEED_TAG_OPEN_RE = /(?:^|[\s\u00a0(])#(?:\[([^\]\n]*)|([a-zA-Zа-яА-ЯёЁ0-9_-]*))$/;
+  var FEED_WIKILINK_OPEN_RE = /(?:\]\(\(|\[\[)([^()#\n\[\]]*)$/;
+
+  async function loadFeedTags() {
+    if (cachedFeedTags && cachedFeedTags.length) return cachedFeedTags;
+    try {
+      if (window.apiClient && typeof window.apiClient.getTags === 'function') {
+        var res = await window.apiClient.getTags();
+        if (res && res.success && Array.isArray(res.data)) {
+          cachedFeedTags = res.data;
+          return cachedFeedTags;
+        }
+      }
+    } catch (_) {}
+    try {
+      var tok = (window.authManager && window.authManager.getToken && window.authManager.getToken()) ||
+                localStorage.getItem('token') || localStorage.getItem('alltell_auth_token');
+      var url = tok ? '/api/tags' : '/api/public/tags';
+      var resp = await fetch(url, { headers: tok ? { Authorization: 'Bearer ' + tok } : {} });
+      var json = await resp.json();
+      var list = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : []);
+      cachedFeedTags = list;
+      return cachedFeedTags;
+    } catch (_) {
+      cachedFeedTags = [];
+      return [];
+    }
+  }
+
+  async function loadFeedArticles() {
+    if (cachedFeedArticles && cachedFeedArticles.length) return cachedFeedArticles;
+    try {
+      var tok = (window.authManager && window.authManager.getToken && window.authManager.getToken()) ||
+                localStorage.getItem('token') || localStorage.getItem('alltell_auth_token');
+      var url = tok ? '/api/articles-index' : '/api/public/articles-index';
+      var resp = await fetch(url, { headers: tok ? { Authorization: 'Bearer ' + tok } : {} });
+      var json = await resp.json();
+      var data = (json && json.data) || json || {};
+      var list = Array.isArray(data.accessible) ? data.accessible : (Array.isArray(data) ? data : []);
+      cachedFeedArticles = list;
+      return cachedFeedArticles;
+    } catch (_) {
+      cachedFeedArticles = [];
+      return [];
+    }
+  }
+
+  function ensureTagSuggest() {
+    if (tagSuggestEl) return tagSuggestEl;
+    var el = document.createElement('div');
+    el.className = 'eb-wikilink-suggest eb-tag-suggest alltell-tag-suggest';
+    el.hidden = true;
+    el.addEventListener('mousedown', function (e) {
+      var btn = e.target.closest('button[data-suggest-val]');
+      if (!btn) return;
+      e.preventDefault();
+      applyTagSuggest(btn);
+    });
+    document.body.appendChild(el);
+    tagSuggestEl = el;
+    return el;
+  }
+
+  function closeTagSuggest() {
+    if (tagSuggestEl) tagSuggestEl.hidden = true;
+    tagSuggestState = null;
+  }
+
+  function tagQueryAtCaret(inputEl) {
+    if (!inputEl) return null;
+    var val = inputEl.value;
+    if (typeof val !== 'string') return null;
+    var caret = inputEl.selectionStart;
+    if (inputEl.selectionEnd !== caret) return null;
+    var before = val.slice(0, caret);
+
+    // 1. Проверяем тег: #query или #[query
+    var mTag = FEED_TAG_OPEN_RE.exec(before);
+    if (mTag) {
+      var query = (mTag[1] !== undefined ? mTag[1] : mTag[2]) || '';
+      var queryLen = query.length;
+      var prefixLen = mTag[1] !== undefined ? 2 : 1;
+      var start = caret - queryLen - prefixLen;
+      return { type: 'tag', inputEl: inputEl, start: start, end: caret, query: query, isBracket: mTag[1] !== undefined };
+    }
+
+    // 2. Проверяем wiki-ссылку: [[query или [подпись]((query
+    var mWiki = FEED_WIKILINK_OPEN_RE.exec(before);
+    if (mWiki) {
+      var wQuery = mWiki[1] || '';
+      var wStart = caret - wQuery.length;
+      var isDoubleBracket = before.endsWith('[[' + wQuery);
+      return { type: 'wikilink', inputEl: inputEl, start: wStart, end: caret, query: wQuery, isBracket: isDoubleBracket };
+    }
+
+    return null;
+  }
+
+  function updateTagSuggest(inputEl) {
+    var qState = tagQueryAtCaret(inputEl);
+    if (!qState) { closeTagSuggest(); return; }
+
+    clearTimeout(tagSuggestTimer);
+    tagSuggestTimer = setTimeout(async function () {
+      var seq = ++tagSuggestSeq;
+      var query = qState.query.toLowerCase().trim();
+
+      if (qState.type === 'tag') {
+        var tags = await loadFeedTags();
+        if (seq !== tagSuggestSeq || document.activeElement !== inputEl) return;
+        var fresh = tagQueryAtCaret(inputEl);
+        if (!fresh || fresh.type !== 'tag') { closeTagSuggest(); return; }
+
+        var options = [];
+        if (!query) {
+          options = tags.slice().sort(function (a, b) { return (b.count || 0) - (a.count || 0); }).slice(0, 15);
+        } else {
+          options = tags.filter(function (t) { return String(t.tag).toLowerCase().includes(query); });
+          options.sort(function (a, b) {
+            var aLower = String(a.tag).toLowerCase();
+            var bLower = String(b.tag).toLowerCase();
+            var aStarts = aLower.startsWith(query) ? 1 : 0;
+            var bStarts = bLower.startsWith(query) ? 1 : 0;
+            if (aStarts !== bStarts) return bStarts - aStarts;
+            return (b.count || 0) - (a.count || 0) || aLower.localeCompare(bLower, 'ru');
+          });
+          options = options.slice(0, 15);
+        }
+
+        if (!options.length) { closeTagSuggest(); return; }
+
+        var el = ensureTagSuggest();
+        var plural = function (n, one, few, many) {
+          var m10 = n % 10;
+          var m100 = n % 100;
+          if (m10 === 1 && m100 !== 11) return one;
+          if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+          return many;
+        };
+
+        el.innerHTML = options.map(function (t, i) {
+          var color = t.color || '#5865f2';
+          var count = Number(t.count) || 0;
+          var countStr = count > 0 ? count + ' ' + plural(count, 'статья', 'статьи', 'статей') : '';
+          return '<button type="button" class="eb-suggest-tag-item ' + (i === 0 ? 'eb-suggest-active' : '') + '" data-suggest-type="tag" data-suggest-val="' + escapeHtml(t.tag) + '">' +
+            '<span class="eb-suggest-tag-icon" style="background:' + color + '26;color:' + color + '"><i class="fas fa-hashtag"></i></span>' +
+            '<span class="eb-suggest-tag-name">' + escapeHtml(t.tag) + '</span>' +
+            (countStr ? '<span class="eb-suggest-tag-meta">' + countStr + '</span>' : '') +
+          '</button>';
+        }).join('');
+      } else if (qState.type === 'wikilink') {
+        var articles = await loadFeedArticles();
+        if (seq !== tagSuggestSeq || document.activeElement !== inputEl) return;
+        var freshW = tagQueryAtCaret(inputEl);
+        if (!freshW || freshW.type !== 'wikilink') { closeTagSuggest(); return; }
+
+        var wOptions = articles.filter(function (a) { return String(a.title).toLowerCase().includes(query); }).slice(0, 15);
+        if (!wOptions.length) { closeTagSuggest(); return; }
+
+        var el = ensureTagSuggest();
+        el.innerHTML = wOptions.map(function (a, i) {
+          return '<button type="button" class="eb-suggest-tag-item ' + (i === 0 ? 'eb-suggest-active' : '') + '" data-suggest-type="wikilink" data-suggest-val="' + escapeHtml(a.title) + '" data-suggest-slug="' + escapeHtml(a.slug) + '">' +
+            '<span class="eb-suggest-tag-icon" style="background:rgba(88,101,242,0.15);color:var(--blurple)"><i class="fas fa-book-bookmark"></i></span>' +
+            '<span class="eb-suggest-tag-name">' + escapeHtml(a.title) + '</span>' +
+          '</button>';
+        }).join('');
+      }
+
+      var el = ensureTagSuggest();
+      el.querySelectorAll('button').forEach(function (btn) {
+        btn.addEventListener('mouseenter', function () {
+          el.querySelector('button.eb-suggest-active')?.classList.remove('eb-suggest-active');
+          btn.classList.add('eb-suggest-active');
+        });
+      });
+
+      var box = inputEl.getBoundingClientRect();
+      var left = Math.max(8, Math.min(box.left + 12, window.innerWidth - 270));
+      var top = box.bottom + 6;
+      if (top + 220 > window.innerHeight && box.top > 230) {
+        top = Math.max(8, box.top - 225);
+      }
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      el.hidden = false;
+      tagSuggestState = { type: qState.type, inputEl: inputEl, start: qState.start, end: qState.end, isBracket: qState.isBracket };
+    }, 80);
+  }
+
+  function handleTagKeydown(e, inputEl) {
+    var el = tagSuggestEl;
+    if (!el || el.hidden || !tagSuggestState || tagSuggestState.inputEl !== inputEl) return false;
+    var buttons = Array.from(el.querySelectorAll('button'));
+    if (!buttons.length) return false;
+    var i = buttons.findIndex(function (b) { return b.classList.contains('eb-suggest-active'); });
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (buttons[i]) buttons[i].classList.remove('eb-suggest-active');
+      i = (i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[i].classList.add('eb-suggest-active');
+      buttons[i].scrollIntoView({ block: 'nearest' });
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      applyTagSuggest(buttons[i >= 0 ? i : 0]);
+      return true;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTagSuggest();
+      return true;
+    }
+    return false;
+  }
+
+  function applyTagSuggest(btn) {
+    var state = tagSuggestState;
+    if (!btn || !state) { closeTagSuggest(); return; }
+    var inputEl = state.inputEl;
+    var val = inputEl.value;
+    var type = btn.dataset.suggestType;
+    var targetVal = btn.dataset.suggestVal;
+
+    if (type === 'tag') {
+      var clean = targetVal.replace(/^#+/, '').replace(/^\[+|\]+$/g, '').trim();
+      var needsBrackets = /[\s[\]#]/.test(clean) || clean.toLowerCase() === 'данные удалены';
+      var insert = (needsBrackets ? '#[' + clean + ']' : '#' + clean) + ' ';
+
+      var after = val.slice(state.end);
+      if (needsBrackets && after.charAt(0) === ']') after = after.slice(1);
+      if (after.charAt(0) === ' ') after = after.slice(1);
+
+      inputEl.value = val.slice(0, state.start) + insert + after;
+      var newCaret = state.start + insert.length;
+      inputEl.setSelectionRange(newCaret, newCaret);
+    } else if (type === 'wikilink') {
+      var slug = btn.dataset.suggestSlug || targetVal;
+      var afterW = val.slice(state.end);
+      var closeStr = state.isBracket ? ']] ' : ')) ';
+      if (afterW.startsWith(']]') || afterW.startsWith('))')) afterW = afterW.slice(2);
+      var insertW = targetVal + closeStr;
+      inputEl.value = val.slice(0, state.start) + insertW + afterW;
+      var newCaretW = state.start + insertW.length;
+      inputEl.setSelectionRange(newCaretW, newCaretW);
+    }
+
+    closeTagSuggest();
+    inputEl.focus();
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   function renderReactionBar(reactions, targetType, targetId) {
     var pills = (reactions || []).map(function (reaction) {
       return `<button class="alltell-reaction-pill${reaction.reacted ? ' active' : ''}" type="button" data-action="toggle-reaction" data-target-type="${targetType}" data-target-id="${Number(targetId)}" data-shortcode="${escapeHtml(reaction.shortcode)}" title="${escapeHtml(reaction.packTitle || reaction.shortcode)}">
@@ -2219,9 +2481,12 @@
         recordPostEditorHistory(opts.state, false);
         syncPostEditorState(opts.state);
       }
+      updateTagSuggest(ta);
     });
 
     ta.addEventListener('keydown', function (e) {
+      if (handleTagKeydown(e, ta)) return;
+      if (handleMentionKeydown(e, ta)) return;
       if (opts.splitOnEnter && e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         splitPostTextBlockAtCursor(ta, opts.block, opts.state);
@@ -6808,6 +7073,7 @@
     function onInput(event) {
       if (event.target.tagName === 'TEXTAREA') {
         updateMentionSuggest(event.target);
+        updateTagSuggest(event.target);
       }
       if (event.target.matches('[data-article-search]')) renderArticleOptions(event.target);
       if (event.target.matches('[data-map-search]')) renderMapOptions(event.target);
@@ -6840,6 +7106,7 @@
 
     function onKeyDown(event) {
       if (event.target.tagName === 'TEXTAREA') {
+        if (handleTagKeydown(event, event.target)) return;
         if (handleMentionKeydown(event, event.target)) return;
       }
       if (event.target.matches('#new-map-title-input')) {
@@ -7253,6 +7520,9 @@
       if (mentionSuggestEl && !mentionSuggestEl.hidden && !mentionSuggestEl.contains(event.target)) {
         closeMentionSuggest();
       }
+      if (tagSuggestEl && !tagSuggestEl.hidden && !tagSuggestEl.contains(event.target)) {
+        closeTagSuggest();
+      }
       if (event.target.closest('#alltell-modal-container') || event.target.closest('.alltell-modal-overlay')) {
         return;
       }
@@ -7334,9 +7604,14 @@
       state.disposed = true;
       closePostHighlightPicker();
       closeMentionSuggest();
+      closeTagSuggest();
       if (mentionSuggestEl && mentionSuggestEl.parentNode) {
         mentionSuggestEl.parentNode.removeChild(mentionSuggestEl);
         mentionSuggestEl = null;
+      }
+      if (tagSuggestEl && tagSuggestEl.parentNode) {
+        tagSuggestEl.parentNode.removeChild(tagSuggestEl);
+        tagSuggestEl = null;
       }
       window.removeEventListener('hashchange', onHashChange);
       if (window.AllTellClient.focusComment === focusPostOrComment) {

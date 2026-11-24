@@ -56,6 +56,7 @@
   }
 
   const WIKILINK_OPEN_RE = /\]\(\(([^()#\n]*)$/; // "[подпись]((частичный текст" перед курсором, без закрытия
+  const HASHTAG_OPEN_RE = /(?:^|[\s\u00a0(])#(?:\[([^\]\n]*)|([a-zA-Zа-яА-ЯёЁ0-9_-]*))$/; // "#тег" или "#[длинный тег" перед курсором
   const DEFAULT_FRAME_COLOR = '#5865f2';
 
   // Цвет выделения "по умолчанию" (без (#hex) в markdown — см. .mk-hl в
@@ -441,6 +442,8 @@
       this._lastObservedArticleId = undefined;
       this._loadedArticleTitle = null;
       this._suggestEl = null;
+      this._suggestMode = null;
+      this.tagsIndex = null;
       this._selectedIds = new Set(); // выделенные блоки для массового удаления (см. toggleBlockSelection)
       this._selectAnchor = null; // { list, block } — от него Shift+клик выделяет диапазон
       this._history = [];
@@ -465,7 +468,7 @@
       this.doc = this._pendingDoc || { version: 1, blocks: [] };
       this._pendingDoc = null;
 
-      await this.loadArticlesIndex();
+      await Promise.all([this.loadArticlesIndex(), this.loadTagsIndex()]);
 
       this.setupToolbar();
       this.setupModeTabs();
@@ -586,6 +589,30 @@
         this.restrictedSlugs = new Set();
       }
       this.articlesIndexBySlug = new Map(this.articlesIndex.map(a => [a.slug, a]));
+    }
+
+    async loadTagsIndex() {
+      try {
+        const result = (window.apiClient && typeof window.apiClient.getTags === 'function')
+          ? await window.apiClient.getTags()
+          : null;
+        if (result && result.success && Array.isArray(result.data)) {
+          this.tagsIndex = result.data;
+          return this.tagsIndex;
+        }
+      } catch (_) {}
+      try {
+        const token = (window.authManager && window.authManager.getToken?.()) || localStorage.getItem('token') || localStorage.getItem('alltell_auth_token');
+        const url = token ? '/api/tags' : '/api/public/tags';
+        const resp = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const json = await resp.json();
+        const list = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : []);
+        this.tagsIndex = list;
+        return this.tagsIndex;
+      } catch (_) {
+        this.tagsIndex = [];
+        return [];
+      }
     }
 
     cleanup() {
@@ -1389,7 +1416,7 @@
         autosize();
         if (onInput) onInput(ta.value);
         this.scheduleRenderPreview();
-        this.updateWikilinkSuggest(ta);
+        this.updateSuggest(ta);
         this.recordHistory(false);
       });
       ta.addEventListener('keydown', (e) => this.handleTextKeydown(e, ta));
@@ -1409,7 +1436,7 @@
     wireWikilinkField(el, list, block) {
       el.addEventListener('focus', () => this.setActive(list, block, el));
       el.addEventListener('input', () => {
-        this.updateWikilinkSuggest(el);
+        this.updateSuggest(el);
         this.recordHistory(false);
       });
       el.addEventListener('keydown', (e) => this.handleTextKeydown(e, el));
@@ -1758,24 +1785,43 @@
     }
 
     closeSuggest() {
+      this._suggestMode = null;
       if (this._suggestEl) this._suggestEl.hidden = true;
     }
 
+    updateSuggest(ta) {
+      const before = ta.value.slice(0, ta.selectionStart);
+      const mWiki = WIKILINK_OPEN_RE.exec(before);
+      if (mWiki) {
+        this.updateWikilinkSuggest(ta);
+        return;
+      }
+      const mTag = HASHTAG_OPEN_RE.exec(before);
+      if (mTag) {
+        this.updateHashtagSuggest(ta);
+        return;
+      }
+      this.closeSuggest();
+    }
+
     updateWikilinkSuggest(ta) {
+      this._suggestMode = 'wikilink';
       const before = ta.value.slice(0, ta.selectionStart);
       const m = WIKILINK_OPEN_RE.exec(before);
       if (!m) { this.closeSuggest(); return; }
       const query = m[1].toLowerCase();
-      const options = this.articlesIndex.filter((a) => a.title.toLowerCase().includes(query)).slice(0, 20);
+      const options = (this.articlesIndex || []).filter((a) => a.title.toLowerCase().includes(query)).slice(0, 20);
       if (!options.length) { this.closeSuggest(); return; }
 
       const el = this.ensureSuggestEl();
+      el.className = 'eb-wikilink-suggest';
       el.innerHTML = '';
       options.forEach((a, i) => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = a.title;
         btn.dataset.slug = a.slug;
+        btn.dataset.suggestType = 'wikilink';
         if (i === 0) btn.classList.add('eb-suggest-active');
         // Активный пункт по умолчанию — первый (для Enter/Tab), поэтому клик
         // обязан передавать именно нажатую кнопку, а не искать "активную":
@@ -1789,6 +1835,89 @@
       });
       // position:fixed — чистые viewport-координаты, без +scrollX/Y (см.
       // комментарий у .eb-wikilink-suggest в editor-blocks.css).
+      this._suggestTarget = ta;
+      el.hidden = false;
+      el.scrollTop = 0;
+      this.placeSuggest();
+    }
+
+    async updateHashtagSuggest(ta) {
+      const before = ta.value.slice(0, ta.selectionStart);
+      const m = HASHTAG_OPEN_RE.exec(before);
+      if (!m) { this.closeSuggest(); return; }
+
+      const rawQuery = (m[1] !== undefined ? m[1] : m[2]) || '';
+      const query = rawQuery.toLowerCase().trim();
+
+      let allTags = this.tagsIndex;
+      if (!allTags) {
+        allTags = await this.loadTagsIndex();
+      }
+      if (!allTags) allTags = [];
+
+      const currentBefore = ta.value.slice(0, ta.selectionStart);
+      const mCheck = HASHTAG_OPEN_RE.exec(currentBefore);
+      if (!mCheck) { this.closeSuggest(); return; }
+
+      let options = [];
+      if (!query) {
+        options = allTags.slice().sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 15);
+      } else {
+        options = allTags.filter((t) => String(t.tag).toLowerCase().includes(query));
+        options.sort((a, b) => {
+          const aLower = String(a.tag).toLowerCase();
+          const bLower = String(b.tag).toLowerCase();
+          const aStarts = aLower.startsWith(query) ? 1 : 0;
+          const bStarts = bLower.startsWith(query) ? 1 : 0;
+          if (aStarts !== bStarts) return bStarts - aStarts;
+          return (b.count || 0) - (a.count || 0) || aLower.localeCompare(bLower, 'ru');
+        });
+        options = options.slice(0, 15);
+      }
+
+      if (!options.length) { this.closeSuggest(); return; }
+
+      this._suggestMode = 'tag';
+      const el = this.ensureSuggestEl();
+      el.className = 'eb-wikilink-suggest eb-tag-suggest';
+      el.innerHTML = '';
+
+      const plural = (n, one, few, many) => {
+        const m10 = n % 10;
+        const m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return one;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+        return many;
+      };
+
+      options.forEach((t, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'eb-suggest-tag-item' + (i === 0 ? ' eb-suggest-active' : '');
+        btn.dataset.tag = t.tag;
+        btn.dataset.suggestType = 'tag';
+
+        const color = t.color || '#5865f2';
+        const count = Number(t.count) || 0;
+        const countStr = count > 0 ? `${count} ${plural(count, 'статья', 'статьи', 'статей')}` : '';
+
+        btn.innerHTML = `
+          <span class="eb-suggest-tag-icon" style="background:${color}26;color:${color}"><i class="fas fa-hashtag"></i></span>
+          <span class="eb-suggest-tag-name">${escapeHtml(t.tag)}</span>
+          ${countStr ? `<span class="eb-suggest-tag-meta">${countStr}</span>` : ''}
+        `;
+
+        btn.addEventListener('mouseenter', () => {
+          el.querySelector('button.eb-suggest-active')?.classList.remove('eb-suggest-active');
+          btn.classList.add('eb-suggest-active');
+        });
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          this.applySuggestSelection(ta, btn);
+        });
+        el.appendChild(btn);
+      });
+
       this._suggestTarget = ta;
       el.hidden = false;
       el.scrollTop = 0;
@@ -1809,6 +1938,39 @@
       const el = this._suggestEl;
       const active = chosenBtn || (el && el.querySelector('button.eb-suggest-active'));
       if (!active) { this.closeSuggest(); return; }
+
+      if (this._suggestMode === 'tag' || active.dataset.suggestType === 'tag') {
+        const rawTag = active.dataset.tag;
+        const before = ta.value.slice(0, ta.selectionStart);
+        const m = HASHTAG_OPEN_RE.exec(before);
+        if (!m) { this.closeSuggest(); return; }
+
+        const queryLen = m[1] !== undefined ? m[1].length : m[2].length;
+        const prefixLen = m[1] !== undefined ? 2 : 1; // "#[" vs "#"
+        const openStart = ta.selectionStart - queryLen - prefixLen;
+        const after = ta.value.slice(ta.selectionStart);
+
+        const cleanTag = rawTag.replace(/^#+/, '').replace(/^\[+|\]+$/g, '').trim();
+        const needsBrackets = /[\s[\]#]/.test(cleanTag) || cleanTag.toLowerCase() === 'данные удалены';
+        const insert = (needsBrackets ? `#[${cleanTag}]` : `#${cleanTag}`) + ' ';
+
+        let afterText = after;
+        if (needsBrackets && afterText.startsWith(']')) {
+          afterText = afterText.slice(1);
+        }
+        if (afterText.startsWith(' ')) {
+          afterText = afterText.slice(1);
+        }
+
+        ta.value = ta.value.slice(0, openStart) + insert + afterText;
+        const newPos = openStart + insert.length;
+        ta.selectionStart = ta.selectionEnd = newPos;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        this.closeSuggest();
+        ta.focus({ preventScroll: true });
+        return;
+      }
+
       const title = active.textContent;
       const before = ta.value.slice(0, ta.selectionStart);
       const m = WIKILINK_OPEN_RE.exec(before);
@@ -1816,16 +1978,6 @@
       const openStart = ta.selectionStart - m[1].length;
       const after = ta.value.slice(ta.selectionStart);
       const closeAlready = after.startsWith('))');
-      // Название с ( ) # в ссылку не записать — ими ссылка разбирается
-      // (см. mentionTarget в articles-store.js), поэтому вместо него slug.
-      // Второе условие — то же самое, что уже делает mentionTarget на
-      // сервере: название годится как цель ссылки, только если оно САМО
-      // slugify()-ится обратно в правильный slug. Для обычной статьи так и
-      // есть (slug и получен из title при создании), но title в этом списке
-      // — уже резолвнутый ПОД ЧИТАТЕЛЯ заголовок слоя многослойной статьи
-      // (см. /api/articles-index), а он может вообще не совпадать с тем
-      // заголовком, из которого когда-то получился slug — тогда без этой
-      // проверки ссылка вела бы в никуда.
       const slug = active.dataset.slug;
       const titleRoundTrips = !!slug && slugify(title) === slug;
       const target = (titleRoundTrips && !/[()#]/.test(title)) ? title : (slug || title);
@@ -1836,10 +1988,6 @@
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       this.closeSuggest();
       ta.focus({ preventScroll: true });
-      // Цель только что стала известна — если в подписи перед ней остались
-      // плейсхолдеры "/N" (слой по позиции, набранный вслепую, см.
-      // обсуждение "многослойные статьи", фаза 2), заменяем их на настоящие
-      // названия слоёв этой статьи.
       if (active.dataset.slug) this.resolveWikilinkLayerPlaceholders(ta, openStart, active.dataset.slug);
     }
 

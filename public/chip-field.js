@@ -57,7 +57,12 @@
         if (e.key === 'Enter') {
           e.preventDefault();
           if (this.freeText) {
-            this._commitTyped();
+            const active = this.dropdownEl?.querySelector('.chip-field-dropdown-item:hover, .chip-field-dropdown-item.is-active');
+            if (active) {
+              active.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            } else {
+              this._commitTyped();
+            }
           } else {
             const first = this.dropdownEl?.querySelector('.chip-field-dropdown-item');
             if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));

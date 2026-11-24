@@ -145,3 +145,50 @@ test('tags upgrade: app.js ApiClient supports deleteTags and bulk setTagColor wi
   assert.ok(js.includes('deleteTags(tagOrTags)'), 'ApiClient must implement deleteTags');
   assert.ok(js.includes('Array.isArray(tagOrTags)'), 'setTagColor must support array of tags');
 });
+
+test('tags autocomplete: editor-manager.js implements hashtag suggestion alongside wikilinks', () => {
+  const js = fs.readFileSync(path.resolve(__dirname, '../../public/editor-manager.js'), 'utf8');
+
+  // Verify regex and methods
+  assert.ok(js.includes('const HASHTAG_OPEN_RE'), 'Must define HASHTAG_OPEN_RE');
+  assert.ok(js.includes('loadTagsIndex('), 'Must implement loadTagsIndex');
+  assert.ok(js.includes('updateSuggest('), 'Must implement unified updateSuggest');
+  assert.ok(js.includes('updateHashtagSuggest('), 'Must implement updateHashtagSuggest');
+  assert.ok(js.includes('eb-suggest-tag-item'), 'Must render eb-suggest-tag-item buttons');
+  assert.ok(js.includes('eb-tag-suggest'), 'Must apply eb-tag-suggest class to floating popup');
+
+  // Test HASHTAG_OPEN_RE regex matching behavior
+  const HASHTAG_OPEN_RE = /(?:^|[\s\u00a0(])#(?:\[([^\]\n]*)|([a-zA-Zа-яА-ЯёЁ0-9_-]*))$/;
+  assert.ok(HASHTAG_OPEN_RE.test('Текст #'), 'Matches # at end of line');
+  assert.ok(HASHTAG_OPEN_RE.test('Текст #магия'), 'Matches #магия at end of line');
+  assert.ok(HASHTAG_OPEN_RE.test('Текст #[данные'), 'Matches bracketed #[данные at end of line');
+  assert.ok(HASHTAG_OPEN_RE.test('#первое'), 'Matches # at beginning of string');
+  assert.ok(HASHTAG_OPEN_RE.test('(#в_скобках'), 'Matches # after opening parenthesis');
+  assert.ok(!HASHTAG_OPEN_RE.test('user#notatag'), 'Must NOT match anchor without space');
+  assert.ok(!HASHTAG_OPEN_RE.test('Текст #готово '), 'Must NOT match after trailing space');
+});
+
+test('tags autocomplete: alltell-client.js implements hashtag and wikilink suggestions in publication feed', () => {
+  const js = fs.readFileSync(path.resolve(__dirname, '../../public/site/alltell-client.js'), 'utf8');
+
+  assert.ok(js.includes('FEED_TAG_OPEN_RE'), 'Must define FEED_TAG_OPEN_RE');
+  assert.ok(js.includes('FEED_WIKILINK_OPEN_RE'), 'Must define FEED_WIKILINK_OPEN_RE');
+  assert.ok(js.includes('loadFeedTags('), 'Must implement loadFeedTags');
+  assert.ok(js.includes('loadFeedArticles('), 'Must implement loadFeedArticles');
+  assert.ok(js.includes('updateTagSuggest('), 'Must implement updateTagSuggest');
+  assert.ok(js.includes('handleTagKeydown('), 'Must implement handleTagKeydown');
+  assert.ok(js.includes('applyTagSuggest('), 'Must implement applyTagSuggest');
+  assert.ok(js.includes('alltell-tag-suggest'), 'Must render alltell-tag-suggest popup');
+});
+
+test('tags autocomplete: CSS styling exists for tag suggest in editor-blocks.css and site.css', () => {
+  const editorBlocksCss = fs.readFileSync(path.resolve(__dirname, '../../public/editor-blocks.css'), 'utf8');
+  assert.ok(editorBlocksCss.includes('.eb-wikilink-suggest.eb-tag-suggest'), 'Must style eb-tag-suggest in editor-blocks.css');
+  assert.ok(editorBlocksCss.includes('.eb-suggest-tag-item'), 'Must style eb-suggest-tag-item in editor-blocks.css');
+  assert.ok(editorBlocksCss.includes('.eb-suggest-tag-icon'), 'Must style eb-suggest-tag-icon in editor-blocks.css');
+  assert.ok(editorBlocksCss.includes('.eb-suggest-tag-name'), 'Must style eb-suggest-tag-name in editor-blocks.css');
+  assert.ok(editorBlocksCss.includes('.eb-suggest-tag-meta'), 'Must style eb-suggest-tag-meta in editor-blocks.css');
+
+  const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
+  assert.ok(siteCss.includes('.alltell-tag-suggest'), 'Must style alltell-tag-suggest in site.css');
+});

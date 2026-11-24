@@ -913,6 +913,13 @@ class SPARouter {
       freeText: true,
       placeholder: 'Введите тег и нажмите Enter...'
     }) : null;
+    if (this.tagsField && window.apiClient) {
+      window.apiClient.getTags().then((res) => {
+        if (res && res.success && Array.isArray(res.data) && this.tagsField) {
+          this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}` })));
+        }
+      }).catch(() => {});
+    }
 
     // Многослойность (см. article-layers.js на сервере) — значения ролей
     // здесь строки вида "system:7"/"server:3" (см. encodeRoleRef/decodeRoleRef),

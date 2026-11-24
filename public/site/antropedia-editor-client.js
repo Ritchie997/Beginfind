@@ -210,6 +210,13 @@
           freeText: true,
           placeholder: 'Введите тег и нажмите Enter...'
         });
+        if (window.apiClient) {
+          window.apiClient.makeAuthenticatedRequest('/api/tags').then((res) => {
+            if (res && res.success && Array.isArray(res.data) && this.tagsField) {
+              this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}` })));
+            }
+          }).catch(() => {});
+        }
       }
 
       const layerRolesRoot = document.getElementById('articleLayerRolesField');

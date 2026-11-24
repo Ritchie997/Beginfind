@@ -1025,6 +1025,49 @@ body.eb-drag-active .eb-column .eb-nested-blocklist:empty {
 .eb-wikilink-suggest button:hover,
 .eb-wikilink-suggest button.eb-suggest-active { background: var(--blurple); color: #fff; }
 
+/* --- автодополнение #хэштегов --- */
+.eb-wikilink-suggest.eb-tag-suggest {
+  min-width: 220px;
+  max-width: 320px;
+}
+.eb-suggest-tag-item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px !important;
+  box-sizing: border-box;
+}
+.eb-suggest-tag-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.eb-suggest-tag-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+.eb-suggest-tag-meta {
+  font-size: 11px;
+  opacity: 0.65;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.eb-suggest-tag-item:hover .eb-suggest-tag-meta,
+.eb-suggest-tag-item.eb-suggest-active .eb-suggest-tag-meta {
+  opacity: 0.9;
+  color: #fff;
+}
+
 /* --- меню "+ добавить блок" для вложенных списков (колонка/спойлер-секция),
    см. openBlockTypeMenu — тот же вид, что и у автодополнения ссылок выше --- */
 .eb-block-type-menu {

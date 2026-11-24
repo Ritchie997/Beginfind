@@ -3354,7 +3354,8 @@ input::-ms-clear {
     display: block;
 }
 
-.alltell-mention-suggest {
+.alltell-mention-suggest,
+.alltell-tag-suggest {
     position: fixed;
     z-index: 2500;
     background: var(--background-floating, #2b2d31);
@@ -3367,7 +3368,8 @@ input::-ms-clear {
     max-width: 280px;
 }
 
-.alltell-mention-suggest button {
+.alltell-mention-suggest button,
+.alltell-tag-suggest button {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -3385,7 +3387,9 @@ input::-ms-clear {
 }
 
 .alltell-mention-suggest button:hover,
-.alltell-mention-suggest button.is-active {
+.alltell-mention-suggest button.is-active,
+.alltell-tag-suggest button:hover,
+.alltell-tag-suggest button.eb-suggest-active {
     background: var(--blurple, #5865f2);
     color: #ffffff;
 }
