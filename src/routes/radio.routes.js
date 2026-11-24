@@ -570,4 +570,116 @@ router.delete('/radio/stations/:id/timeline', auth.authenticateToken, auth.check
   }
 });
 
+// ===== 4. Календарное расписание эфиров (Schedule / Calendar) =====
+
+// GET /api/radio/stations/:id/schedule — список запланированных передач станции
+router.get('/radio/stations/:id/schedule', optionalUser, async (req, res) => {
+  try {
+    const { fromTime, toTime } = req.query;
+    const events = await radioStore.getScheduledBroadcasts(req.params.id, fromTime, toTime);
+    res.json(events);
+  } catch (error) {
+    console.error('[radio] Error getting scheduled broadcasts:', error);
+    res.status(500).json({ error: 'Ошибка получения расписания: ' + error.message });
+  }
+});
+
+// POST /api/radio/stations/:id/schedule — планирование передачи на дату/время
+router.post('/radio/stations/:id/schedule', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      startTime,
+      start_time,
+      slots,
+      slots_data,
+      isLoop,
+      is_loop,
+      fallbackAction,
+      fallback_action,
+      coverUrl,
+      cover_url
+    } = req.body || {};
+
+    const event = await radioStore.createScheduledBroadcast(req.params.id, req.user.id, isRootOrAdmin(req.user), {
+      title,
+      description,
+      startTime: startTime || start_time,
+      slots: slots || slots_data,
+      isLoop: isLoop !== undefined ? isLoop : is_loop,
+      fallbackAction: fallbackAction || fallback_action,
+      coverUrl: coverUrl || cover_url
+    });
+    res.status(201).json(event);
+  } catch (error) {
+    console.error('[radio] Error creating scheduled broadcast:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// GET /api/radio/stations/:id/schedule/:eventId — просмотр конкретной передачи
+router.get('/radio/stations/:id/schedule/:eventId', optionalUser, async (req, res) => {
+  try {
+    const event = await radioStore.getScheduledBroadcastById(req.params.eventId);
+    if (!event || String(event.station_id) !== String(req.params.id)) {
+      return res.status(404).json({ error: 'Запланированная передача не найдена' });
+    }
+    res.json(event);
+  } catch (error) {
+    console.error('[radio] Error getting scheduled broadcast:', error);
+    res.status(500).json({ error: 'Ошибка получения передачи: ' + error.message });
+  }
+});
+
+// PUT /api/radio/stations/:id/schedule/:eventId — обновление запланированной передачи
+router.put('/radio/stations/:id/schedule/:eventId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      startTime,
+      start_time,
+      slots,
+      slots_data,
+      isLoop,
+      is_loop,
+      fallbackAction,
+      fallback_action,
+      status,
+      coverUrl,
+      cover_url
+    } = req.body || {};
+
+    const updated = await radioStore.updateScheduledBroadcast(req.params.eventId, req.user.id, isRootOrAdmin(req.user), {
+      title,
+      description,
+      startTime: startTime || start_time,
+      slots: slots || slots_data,
+      isLoop: isLoop !== undefined ? isLoop : is_loop,
+      fallbackAction: fallbackAction || fallback_action,
+      status,
+      coverUrl: coverUrl || cover_url
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error('[radio] Error updating scheduled broadcast:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE /api/radio/stations/:id/schedule/:eventId — удаление/отмена запланированной передачи
+router.delete('/radio/stations/:id/schedule/:eventId', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    const success = await radioStore.deleteScheduledBroadcast(req.params.eventId, req.user.id, isRootOrAdmin(req.user));
+    if (!success) {
+      return res.status(404).json({ error: 'Запланированная передача не найдена' });
+    }
+    res.json({ success: true, message: 'Запланированная передача удалена' });
+  } catch (error) {
+    console.error('[radio] Error deleting scheduled broadcast:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 module.exports = router;

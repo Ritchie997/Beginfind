@@ -369,6 +369,19 @@
           </div>
         </div>
 
+        <!-- ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМОВ РЕДАКТОРА: ЛЕНТА НА 24Ч vs КАЛЕНДАРЬ РАСПИСАНИЯ -->
+        <div class="radio-editor-subnav" id="radioEditorSubnav">
+          <button type="button" class="radio-editor-subnav-btn is-active" id="btnSubnavTimeline" data-submode="timeline">
+            <i class="fas fa-sliders"></i> <span>Лента на 24ч</span>
+          </button>
+          <button type="button" class="radio-editor-subnav-btn" id="btnSubnavCalendar" data-submode="calendar">
+            <i class="fas fa-calendar-days"></i> <span>Календарь расписания</span>
+            <span class="badge radio-subnav-badge" id="editorScheduleCountBadge" style="display:none;">0</span>
+          </button>
+        </div>
+
+        <!-- 1. РЕЖИМ: МОНТАЖНАЯ ЛЕНТА НА 24 ЧАСА -->
+        <div class="radio-editor-mode-container" id="radioEditorTimelineMode">
         <!-- БАННЕР АСИНХРОННОГО РЕДАКТИРОВАНИЯ ЧЕРНОВИКА (DRAFT BANNER) -->
         <div class="radio-editor-draft-banner" id="radioEditorDraftBanner" style="display:none;">
           <div class="radio-draft-banner-content">
@@ -541,6 +554,73 @@
         </div>
         <!-- Невидимый псевдо-элемент для сохранения совместимости -->
         <div id="editorSlotsList" style="display:none;" hidden></div>
+        </div>
+
+        <!-- 2. РЕЖИМ: КАЛЕНДАРЬ РАСПИСАНИЯ И ЗАПЛАНИРОВАННЫХ ЭФИРОВ -->
+        <div class="radio-editor-mode-container" id="radioEditorCalendarMode" style="display:none;">
+          <!-- Верхняя панель управления календарем -->
+          <div class="radio-cal-header-bar">
+            <div class="radio-cal-nav-group">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnCalPrevMonth" title="Предыдущий месяц">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnCalToday" title="Текущий месяц и день">
+                Сегодня
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnCalNextMonth" title="Следующий месяц">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+              <h3 class="radio-cal-month-title" id="calMonthYearTitle">Ноябрь 2026</h3>
+            </div>
+
+            <div class="radio-cal-actions-group">
+              <div class="radio-cal-tz-info" id="calTzInfo" title="Часы пользователя синхронизированы со временем сервера">
+                <i class="fas fa-globe"></i>
+                <span>Часовой пояс: <strong id="calUserTzDisplay">UTC</strong></span>
+                <span class="badge" id="calServerSkewBadge" style="font-size:0.75rem; background:rgba(16,185,129,0.15); color:#34d399;">синхронно</span>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="btnOpenCreateScheduleModal">
+                <i class="fas fa-calendar-plus"></i> Запланировать эфир
+              </button>
+            </div>
+          </div>
+
+          <!-- Сетка календаря + боковая колонка выбранного дня -->
+          <div class="radio-cal-layout">
+            <!-- Сетка месяца -->
+            <div class="radio-cal-main">
+              <div class="radio-cal-weekdays">
+                <div class="radio-cal-weekday">Пн</div>
+                <div class="radio-cal-weekday">Вт</div>
+                <div class="radio-cal-weekday">Ср</div>
+                <div class="radio-cal-weekday">Чт</div>
+                <div class="radio-cal-weekday">Пт</div>
+                <div class="radio-cal-weekday">Сб</div>
+                <div class="radio-cal-weekday">Вс</div>
+              </div>
+              <div class="radio-cal-days-grid" id="radioCalendarDaysGrid">
+                <!-- Заполняется динамически -->
+              </div>
+            </div>
+
+            <!-- Боковая колонка выбранной даты -->
+            <div class="radio-cal-sidebar" id="radioCalendarSidebar">
+              <div class="radio-cal-sidebar-header">
+                <div>
+                  <h4 id="calSelectedDayTitle" style="margin:0 0 4px 0; font-size:1.05rem; color:#fff;">24 ноября 2026</h4>
+                  <span style="font-size:0.8rem; color:#94a3b8;" id="calSelectedDaySubtitle">Запланированные передачи</span>
+                </div>
+                <button type="button" class="btn btn-secondary btn-xs" id="btnAddEventForSelectedDay" title="Запланировать на этот день">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+
+              <div class="radio-cal-day-events" id="calDayEventsList">
+                <p class="radio-cal-empty-msg">На этот день эфиров не запланировано. Станция будет играть обычную сетку вещания.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1047,6 +1127,85 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-close="modalRadioTemplates">Закрыть</button>
       </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ЗАПЛАНИРОВАТЬ ЭФИР В КАЛЕНДАРЬ -->
+  <div class="modal-overlay" id="modalScheduleBroadcast" hidden style="display: none;">
+    <div class="modal-box modal-box-wide" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="schedModalHeaderTitle"><i class="fas fa-calendar-plus"></i> Запланировать эфир</h3>
+        <button type="button" class="modal-close" data-close="modalScheduleBroadcast" aria-label="Закрыть">&times;</button>
+      </div>
+      <form id="formScheduleBroadcast">
+        <input type="hidden" id="schedEventId" value="">
+        <div class="modal-body">
+          <div class="radio-form-group">
+            <label for="schedEventTitle">Название передачи / эфира *</label>
+            <input type="text" id="schedEventTitle" class="radio-form-input form-control" placeholder="Например: Ночной эфир эмбиента, Праздничный выпуск" required>
+          </div>
+          <div class="radio-form-group">
+            <label for="schedEventDesc">Описание передачи (необязательно)</label>
+            <textarea id="schedEventDesc" class="radio-form-input form-control" rows="2" placeholder="Краткое описание для слушателей в расписании"></textarea>
+          </div>
+          <div class="radio-form-row" style="display:flex; gap:12px; margin-bottom:14px;">
+            <div style="flex:1;">
+              <label for="schedEventStartTime" style="display:block; margin-bottom:4px; font-weight:600;">Время старта *</label>
+              <input type="datetime-local" id="schedEventStartTime" class="radio-form-input form-control" required>
+              <div style="font-size:0.75rem; color:#94a3b8; margin-top:3px;">
+                <i class="fas fa-clock"></i> В вашем часовом поясе (<span id="schedUserTzLabel">UTC</span>)
+              </div>
+            </div>
+            <div style="flex:1;">
+              <label style="display:block; margin-bottom:4px; font-weight:600;">Хронометраж и финал</label>
+              <div style="background:rgba(255,255,255,0.05); padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); font-size:0.85rem;">
+                <div>Длительность: <strong id="schedEventDurationDisplay">00:00:00</strong></div>
+                <div style="color:#94a3b8; font-size:0.8rem; margin-top:2px;">Окончание: <strong id="schedEventEndTimeDisplay">--:--</strong></div>
+              </div>
+            </div>
+          </div>
+          <div class="radio-form-group">
+            <label style="font-weight:600;">Источник треков сетки</label>
+            <div class="radio-sched-source-options" style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
+              <label class="radio-sched-radio-label">
+                <input type="radio" name="schedSourceMode" value="timeline" id="schedSourceTimeline" checked>
+                <span>Использовать текущую сетку из ленты редактора (<span id="schedSourceTimelineCount">0</span> треков/блоков)</span>
+              </label>
+              <label class="radio-sched-radio-label">
+                <input type="radio" name="schedSourceMode" value="template" id="schedSourceTemplate">
+                <span>Использовать сохранённый шаблон эфира</span>
+              </label>
+              <div id="schedTemplateSelectWrap" style="display:none; margin-left:24px;">
+                <select id="schedTemplateSelect" class="radio-form-select form-control" style="width:100%;"></select>
+              </div>
+              <label class="radio-sched-radio-label">
+                <input type="radio" name="schedSourceMode" value="empty" id="schedSourceEmpty">
+                <span>Создать пустую передачу (наполнить в редакторе позже)</span>
+              </label>
+            </div>
+          </div>
+          <div class="radio-form-group" style="margin-top:12px;">
+            <label class="radio-checkbox-label" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="schedEventIsLoop" style="margin-top:3px;">
+              <div>
+                <strong>Зацикливать передачу по кругу</strong>
+                <div style="font-size:0.8rem; color:#94a3b8;">Если эфир длится дольше треков передачи, они продолжат играть по кругу до времени окончания</div>
+              </div>
+            </label>
+          </div>
+          <div class="radio-form-group" style="margin-top:10px;">
+            <label for="schedEventFallback" style="font-weight:600;">Действие по завершении передачи:</label>
+            <select id="schedEventFallback" class="radio-form-select form-control">
+              <option value="return_to_normal">Бесшовно вернуться к регулярной сетке / вечному эфиру станции</option>
+              <option value="stop">Остановить вещание радиостанции</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalScheduleBroadcast">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitScheduleBroadcast"><i class="fas fa-check"></i> Сохранить в расписание</button>
+        </div>
+      </form>
     </div>
   </div>
 

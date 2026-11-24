@@ -210,6 +210,10 @@
 - `POST /gallery/works/:id/comments/:commentId/reactions/toggle`
 - `DELETE /gallery/works/:id/comments/:commentId`
 
+## `global-search.routes.js`
+
+- `GET /global-search`
+
 ## `maps.routes.js`
 
 - `GET /servers/:id/world`
@@ -257,6 +261,7 @@
 
 - `GET /radio/tracks`
 - `GET /radio/tracks/:id`
+- `PATCH /radio/tracks/:id/duration`
 - `POST /radio/tracks`
 - `DELETE /radio/tracks/:id`
 - `GET /radio/favorites`
@@ -278,9 +283,16 @@
 - `PUT /radio/stations/:id`
 - `DELETE /radio/stations/:id`
 - `GET /radio/stations/:id/live`
+- `POST /radio/stations/:id/start-broadcast`
+- `POST /radio/stations/:id/stop-broadcast`
 - `GET /radio/stations/:id/timeline`
 - `PUT /radio/stations/:id/timeline`
 - `DELETE /radio/stations/:id/timeline`
+- `GET /radio/stations/:id/schedule`
+- `POST /radio/stations/:id/schedule`
+- `GET /radio/stations/:id/schedule/:eventId`
+- `PUT /radio/stations/:id/schedule/:eventId`
+- `DELETE /radio/stations/:id/schedule/:eventId`
 
 ## `servers.routes.js`
 
@@ -319,8 +331,10 @@
 - `PUT /system-settings`
 - `GET /maintenance-status`
 - `GET /system-settings/public`
+- `POST /system-settings/sync-time`
 - `POST /maintenance-continue`
 - `POST /maintenance-logout`
+- `GET /system-settings/join-log`
 
 ## `stickers.routes.js`
 

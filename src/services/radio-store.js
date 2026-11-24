@@ -411,6 +411,317 @@ async function clearTimelineSlots(stationId, actingUserId, isRootOrAdmin) {
   return true;
 }
 
+// ===== Календарное планирование эфиров (radio_scheduled_broadcasts) =====
+
+async function createScheduledBroadcast(stationId, actingUserId, isRootOrAdmin, data = {}) {
+  const station = await getStationById(stationId);
+  if (!station) throw new Error('Станция не найдена');
+
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
+    throw new Error('Только владелец станции может планировать эфиры');
+  }
+
+  const title = data.title;
+  const description = data.description || '';
+  const startTime = data.startTime || data.start_time;
+  const slots = data.slots || data.slots_data || [];
+  const isLoop = Boolean(data.isLoop !== undefined ? data.isLoop : data.is_loop);
+  const fallbackAction = data.fallbackAction || data.fallback_action || 'return_to_normal';
+  const coverUrl = data.coverUrl || data.cover_url || null;
+
+  const cleanTitle = String(title || '').trim();
+  if (!cleanTitle) {
+    throw new Error('Укажите название запланированной передачи');
+  }
+
+  if (!Array.isArray(slots) || slots.length === 0) {
+    throw new Error('Сетка передачи должна содержать хотя бы один трек');
+  }
+
+  const startMs = new Date(startTime).getTime();
+  if (isNaN(startMs)) {
+    throw new Error('Укажите корректную дату и время старта передачи');
+  }
+
+  const preparedSlots = [];
+  let orderIndex = 0;
+  let cursor = startMs;
+
+  for (const s of slots) {
+    const durSec = Math.max(1, Number(s.duration) || 0);
+    const durMs = Math.round(durSec * 1000);
+    const sStart = new Date(cursor).toISOString();
+    const sEnd = new Date(cursor + durMs).toISOString();
+
+    let audioUrl = s.audio_url || s.audioUrl;
+    if (!audioUrl && (s.track_id || s.trackId)) {
+      const dbTrack = await get('SELECT audio_url FROM radio_tracks WHERE id = ?', [s.track_id || s.trackId]);
+      if (dbTrack && dbTrack.audio_url) audioUrl = dbTrack.audio_url;
+    }
+    if (!audioUrl) audioUrl = '';
+
+    preparedSlots.push({
+      slotOrder: orderIndex++,
+      trackId: s.track_id || s.trackId || null,
+      title: String(s.title || 'Без названия').trim(),
+      type: ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
+      audioUrl,
+      duration: durSec,
+      startTime: sStart,
+      endTime: sEnd
+    });
+
+    cursor += durMs;
+  }
+
+  const totalDurationSec = preparedSlots.reduce((sum, s) => sum + s.duration, 0);
+  const startIso = new Date(startMs).toISOString();
+  const endIso = new Date(cursor).toISOString();
+
+  // Проверка наложения по времени с другими передачами этой же станции
+  const overlap = await get(
+    `SELECT id, title, start_time, end_time FROM radio_scheduled_broadcasts 
+     WHERE station_id = ? AND status != 'cancelled' 
+       AND start_time < ? AND end_time > ? LIMIT 1`,
+    [stationId, endIso, startIso]
+  );
+  if (overlap) {
+    throw new Error(`Пересечение по времени с передачей «${overlap.title}» (${overlap.start_time} — ${overlap.end_time})`);
+  }
+
+  const cleanFallbackAction = ['return_to_regular', 'silence', 'noise'].includes(fallbackAction) ? fallbackAction : 'return_to_regular';
+
+  const res = await run(
+    `INSERT INTO radio_scheduled_broadcasts (
+      station_id, title, description, start_time, end_time, duration, 
+      status, is_loop, fallback_action, slots_data, cover_url
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      stationId,
+      cleanTitle,
+      String(description || '').trim(),
+      startIso,
+      endIso,
+      totalDurationSec,
+      'planned',
+      isLoop ? 1 : 0,
+      cleanFallbackAction,
+      JSON.stringify(preparedSlots),
+      coverUrl || null
+    ]
+  );
+
+  return getScheduledBroadcastById(res.lastID);
+}
+
+async function getScheduledBroadcasts(stationId, fromTime = null, toTime = null) {
+  let sql = "SELECT * FROM radio_scheduled_broadcasts WHERE station_id = ? AND status != 'cancelled'";
+  const params = [stationId];
+
+  if (fromTime) {
+    sql += ' AND end_time >= ?';
+    params.push(fromTime);
+  }
+  if (toTime) {
+    sql += ' AND start_time <= ?';
+    params.push(toTime);
+  }
+
+  sql += ' ORDER BY start_time ASC';
+  const rows = await all(sql, params);
+  return rows.map((r) => {
+    let slots = [];
+    try { slots = JSON.parse(r.slots_data || '[]'); } catch (_) {}
+    return {
+      ...r,
+      is_loop: Boolean(r.is_loop),
+      slots
+    };
+  });
+}
+
+async function getScheduledBroadcastById(id) {
+  const row = await get('SELECT * FROM radio_scheduled_broadcasts WHERE id = ?', [id]);
+  if (!row) return null;
+  let slots = [];
+  try { slots = JSON.parse(row.slots_data || '[]'); } catch (_) {}
+  return {
+    ...row,
+    is_loop: Boolean(row.is_loop),
+    slots
+  };
+}
+
+async function updateScheduledBroadcast(id, actingUserId, isRootOrAdmin, data = {}) {
+  const existing = await getScheduledBroadcastById(id);
+  if (!existing) throw new Error('Запланированная передача не найдена');
+
+  const station = await getStationById(existing.station_id);
+  if (!station) throw new Error('Станция не найдена');
+
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
+    throw new Error('Только владелец станции может изменять расписание');
+  }
+
+  const title = data.title;
+  const description = data.description;
+  const startTime = data.startTime !== undefined ? data.startTime : data.start_time;
+  const slots = data.slots !== undefined ? data.slots : data.slots_data;
+  const isLoop = data.isLoop !== undefined ? data.isLoop : data.is_loop;
+  const fallbackAction = data.fallbackAction !== undefined ? data.fallbackAction : data.fallback_action;
+  const status = data.status;
+  const coverUrl = data.coverUrl !== undefined ? data.coverUrl : data.cover_url;
+
+  let startIso = existing.start_time;
+  let endIso = existing.end_time;
+  let totalDur = existing.duration;
+  let slotsJson = existing.slots_data;
+
+  let preparedSlots = existing.slots;
+  let needRecalc = false;
+
+  if (startTime) {
+    const sMs = new Date(startTime).getTime();
+    if (!isNaN(sMs)) {
+      startIso = new Date(sMs).toISOString();
+      needRecalc = true;
+    }
+  }
+
+  if (Array.isArray(slots) && slots.length > 0) {
+    preparedSlots = [];
+    let orderIndex = 0;
+    const baseMs = new Date(startIso).getTime();
+    let cursor = baseMs;
+
+    for (const s of slots) {
+      const durSec = Math.max(1, Number(s.duration) || 0);
+      const durMs = Math.round(durSec * 1000);
+      const sStart = new Date(cursor).toISOString();
+      const sEnd = new Date(cursor + durMs).toISOString();
+
+      let audioUrl = s.audio_url || s.audioUrl;
+      if (!audioUrl && (s.track_id || s.trackId)) {
+        const dbTrack = await get('SELECT audio_url FROM radio_tracks WHERE id = ?', [s.track_id || s.trackId]);
+        if (dbTrack && dbTrack.audio_url) audioUrl = dbTrack.audio_url;
+      }
+      if (!audioUrl) audioUrl = '';
+
+      preparedSlots.push({
+        slotOrder: orderIndex++,
+        trackId: s.track_id || s.trackId || null,
+        title: String(s.title || 'Без названия').trim(),
+        type: ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
+        audioUrl,
+        duration: durSec,
+        startTime: sStart,
+        endTime: sEnd
+      });
+
+      cursor += durMs;
+    }
+
+    totalDur = preparedSlots.reduce((sum, s) => sum + s.duration, 0);
+    endIso = new Date(cursor).toISOString();
+    slotsJson = JSON.stringify(preparedSlots);
+    needRecalc = false;
+  } else if (needRecalc) {
+    const baseMs = new Date(startIso).getTime();
+    let cursor = baseMs;
+    preparedSlots = preparedSlots.map((s) => {
+      const durMs = Math.round((Number(s.duration) || 0) * 1000);
+      const sStart = new Date(cursor).toISOString();
+      const sEnd = new Date(cursor + durMs).toISOString();
+      cursor += durMs;
+      return { ...s, startTime: sStart, endTime: sEnd };
+    });
+    endIso = new Date(cursor).toISOString();
+    slotsJson = JSON.stringify(preparedSlots);
+  }
+
+  // Проверка наложения при изменении временных рамок
+  const overlap = await get(
+    `SELECT id, title, start_time, end_time FROM radio_scheduled_broadcasts 
+     WHERE station_id = ? AND id != ? AND status != 'cancelled' 
+       AND start_time < ? AND end_time > ? LIMIT 1`,
+    [existing.station_id, id, endIso, startIso]
+  );
+  if (overlap) {
+    throw new Error(`Пересечение по времени с передачей «${overlap.title}» (${overlap.start_time} — ${overlap.end_time})`);
+  }
+
+  const updates = [];
+  const params = [];
+
+  if (title !== undefined) {
+    updates.push('title = ?');
+    params.push(String(title).trim() || existing.title);
+  }
+  if (description !== undefined) {
+    updates.push('description = ?');
+    params.push(String(description).trim());
+  }
+  if (startIso !== existing.start_time) {
+    updates.push('start_time = ?');
+    params.push(startIso);
+  }
+  if (endIso !== existing.end_time) {
+    updates.push('end_time = ?');
+    params.push(endIso);
+  }
+  if (totalDur !== existing.duration) {
+    updates.push('duration = ?');
+    params.push(totalDur);
+  }
+  if (slotsJson !== existing.slots_data) {
+    updates.push('slots_data = ?');
+    params.push(slotsJson);
+  }
+  if (isLoop !== undefined) {
+    updates.push('is_loop = ?');
+    params.push(isLoop ? 1 : 0);
+  }
+  if (fallbackAction !== undefined && ['return_to_regular', 'silence', 'noise'].includes(fallbackAction)) {
+    updates.push('fallback_action = ?');
+    params.push(fallbackAction);
+  }
+  if (status !== undefined && ['planned', 'live', 'finished', 'cancelled'].includes(status)) {
+    updates.push('status = ?');
+    params.push(status);
+  }
+  if (coverUrl !== undefined) {
+    updates.push('cover_url = ?');
+    params.push(coverUrl || null);
+  }
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(id);
+
+  if (updates.length > 1) {
+    await run(`UPDATE radio_scheduled_broadcasts SET ${updates.join(', ')} WHERE id = ?`, params);
+  }
+
+  return getScheduledBroadcastById(id);
+}
+
+async function deleteScheduledBroadcast(id, actingUserId, isRootOrAdmin) {
+  const existing = await getScheduledBroadcastById(id);
+  if (!existing) return false;
+
+  const station = await getStationById(existing.station_id);
+  if (!station) throw new Error('Станция не найдена');
+
+  const isOwner = actingUserId != null && String(station.owner_id) === String(actingUserId);
+  if (!isOwner && !isRootOrAdmin) {
+    throw new Error('Недостаточно прав для удаления запланированного эфира');
+  }
+
+  await run('DELETE FROM radio_scheduled_broadcasts WHERE id = ?', [id]);
+  return true;
+}
+
 // ===== Управление лентой времени (24h редактор и эфирные слоты) =====
 
 async function getTimelineSlots(stationId, fromTime = null, toTime = null) {
@@ -651,6 +962,137 @@ async function getStationLiveState(stationId, options = {}) {
   const nowIso = now.toISOString();
   const nowMs = now.getTime();
 
+  // 1. Приоритет 1: Календарное расписание (radio_scheduled_broadcasts)
+  // Проверяем наличие активной запланированной передачи на текущий момент nowIso
+  const activeEvent = await get(
+    `SELECT * FROM radio_scheduled_broadcasts 
+     WHERE station_id = ? AND status != 'cancelled' 
+       AND start_time <= ? AND end_time > ? 
+     ORDER BY start_time ASC LIMIT 1`,
+    [stationId, nowIso, nowIso]
+  );
+
+  // Находим ближайший следующий запланированный эфир (для подсказок интерфейса и предзагрузки)
+  const nextEvent = await get(
+    `SELECT id, title, start_time, end_time, duration, cover_url FROM radio_scheduled_broadcasts 
+     WHERE station_id = ? AND status != 'cancelled' AND start_time > ? 
+     ORDER BY start_time ASC LIMIT 1`,
+    [stationId, nowIso]
+  );
+
+  // Автоматически помечаем прошедшие передачи как finished
+  run(
+    "UPDATE radio_scheduled_broadcasts SET status = 'finished' WHERE station_id = ? AND status IN ('planned', 'live') AND end_time <= ?",
+    [stationId, nowIso]
+  ).catch(() => {});
+
+  if (activeEvent) {
+    let eventSlots = [];
+    try { eventSlots = JSON.parse(activeEvent.slots_data || '[]'); } catch (_) {}
+    if (eventSlots.length > 0) {
+      if (activeEvent.status === 'planned') {
+        run("UPDATE radio_scheduled_broadcasts SET status = 'live' WHERE id = ?", [activeEvent.id]).catch(() => {});
+      }
+
+      const eventStartMs = new Date(activeEvent.start_time).getTime();
+      const eventTotalDurSec = Number(activeEvent.duration) || 0;
+      const eventTotalDurMs = Math.round(eventTotalDurSec * 1000);
+
+      let eventCurrentSlot = null;
+      let eventOffset = 0;
+      let eventRemaining = 0;
+      let eventMatchedIdx = -1;
+
+      if (activeEvent.is_loop && eventTotalDurMs > 0) {
+        const elapsedMs = Math.max(0, nowMs - eventStartMs);
+        const cycleMs = elapsedMs % eventTotalDurMs;
+        const cycleElapsedSec = cycleMs / 1000;
+        let acc = 0;
+        for (let i = 0; i < eventSlots.length; i++) {
+          const slotDur = Number(eventSlots[i].duration) || 0;
+          if (acc + slotDur > cycleElapsedSec || i === eventSlots.length - 1) {
+            eventMatchedIdx = i;
+            eventOffset = Math.max(0, cycleElapsedSec - acc);
+            eventRemaining = Math.max(0, slotDur - eventOffset);
+            break;
+          }
+          acc += slotDur;
+        }
+      } else {
+        for (let i = 0; i < eventSlots.length; i++) {
+          const slot = eventSlots[i];
+          const sStartMs = new Date(slot.startTime).getTime();
+          const sEndMs = new Date(slot.endTime).getTime();
+          if (nowMs >= sStartMs && nowMs < sEndMs) {
+            eventMatchedIdx = i;
+            eventOffset = Math.max(0, (nowMs - sStartMs) / 1000);
+            eventRemaining = Math.max(0, (sEndMs - nowMs) / 1000);
+            break;
+          }
+        }
+      }
+
+      if (eventMatchedIdx >= 0) {
+        const s = eventSlots[eventMatchedIdx];
+        eventCurrentSlot = {
+          id: s.trackId ? `ev_${activeEvent.id}_${s.slotOrder}_${s.trackId}` : `ev_${activeEvent.id}_${s.slotOrder}`,
+          title: s.title,
+          type: s.type,
+          audioUrl: s.audioUrl,
+          duration: s.duration,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          trackId: s.trackId
+        };
+
+        const nextSlots = [];
+        for (let i = eventMatchedIdx + 1; i < Math.min(eventSlots.length, eventMatchedIdx + 6); i++) {
+          const ns = eventSlots[i];
+          nextSlots.push({
+            id: ns.trackId ? `ev_${activeEvent.id}_${ns.slotOrder}_${ns.trackId}` : `ev_${activeEvent.id}_${ns.slotOrder}`,
+            title: ns.title,
+            type: ns.type,
+            audioUrl: ns.audioUrl,
+            duration: ns.duration,
+            startTime: ns.startTime,
+            endTime: ns.endTime,
+            trackId: ns.trackId
+          });
+        }
+
+        return {
+          station,
+          serverTime: nowIso,
+          broadcastStatus: 'live',
+          isLive: true,
+          isVirtualLoop: Boolean(activeEvent.is_loop),
+          isEternal: false,
+          isScheduledEvent: true,
+          scheduledEvent: {
+            id: activeEvent.id,
+            title: activeEvent.title,
+            description: activeEvent.description,
+            startTime: activeEvent.start_time,
+            endTime: activeEvent.end_time,
+            coverUrl: activeEvent.cover_url
+          },
+          nextScheduledEvent: nextEvent ? {
+            id: nextEvent.id,
+            title: nextEvent.title,
+            startTime: nextEvent.start_time,
+            endTime: nextEvent.end_time
+          } : null,
+          fallback: null,
+          currentSlot: eventCurrentSlot,
+          offset: Math.round(eventOffset * 10) / 10,
+          remaining: Math.round(eventRemaining * 10) / 10,
+          nextSlots,
+          prevSlots: []
+        };
+      }
+    }
+  }
+
   const status = station.broadcast_status || 'live';
   const isStationEternal = Boolean(station.is_eternal === 1 || station.is_eternal === true);
   if (status === 'offline') {
@@ -661,6 +1103,14 @@ async function getStationLiveState(stationId, options = {}) {
       isLive: false,
       isVirtualLoop: false,
       isEternal: isStationEternal,
+      isScheduledEvent: false,
+      scheduledEvent: null,
+      nextScheduledEvent: nextEvent ? {
+        id: nextEvent.id,
+        title: nextEvent.title,
+        startTime: nextEvent.start_time,
+        endTime: nextEvent.end_time
+      } : null,
       fallback: 'silence',
       currentSlot: null,
       offset: 0,
@@ -685,6 +1135,14 @@ async function getStationLiveState(stationId, options = {}) {
         isLive: false,
         isVirtualLoop: false,
         isEternal: isStationEternal,
+        isScheduledEvent: false,
+        scheduledEvent: null,
+        nextScheduledEvent: nextEvent ? {
+          id: nextEvent.id,
+          title: nextEvent.title,
+          startTime: nextEvent.start_time,
+          endTime: nextEvent.end_time
+        } : null,
         fallback: 'silence',
         currentSlot: null,
         offset: 0,
@@ -936,6 +1394,14 @@ async function getStationLiveState(stationId, options = {}) {
     isLive: Boolean(currentSlot),
     isVirtualLoop,
     isEternal: isStationEternal,
+    isScheduledEvent: false,
+    scheduledEvent: null,
+    nextScheduledEvent: nextEvent ? {
+      id: nextEvent.id,
+      title: nextEvent.title,
+      startTime: nextEvent.start_time,
+      endTime: nextEvent.end_time
+    } : null,
     fallback: !currentSlot ? station.fallback_mode : null,
     cycleStartTime: currentCycleStartMs ? new Date(currentCycleStartMs).toISOString() : null,
     cycleEndTime: currentCycleEndMs ? new Date(currentCycleEndMs).toISOString() : null,
@@ -1244,5 +1710,10 @@ module.exports = {
   stopStationBroadcast,
   getStationLiveState,
   getEffectiveNow,
-  cleanupOldTimelineSlots
+  cleanupOldTimelineSlots,
+  createScheduledBroadcast,
+  getScheduledBroadcasts,
+  getScheduledBroadcastById,
+  updateScheduledBroadcast,
+  deleteScheduledBroadcast
 };

@@ -1066,6 +1066,25 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
       radioDb.run("ALTER TABLE radio_timeline_slots ADD COLUMN slot_order INTEGER NOT NULL DEFAULT 0", () => {});
       radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_slots_order ON radio_timeline_slots(station_id, slot_order)', () => {});
 
+      radioDb.run(`CREATE TABLE IF NOT EXISTS radio_scheduled_broadcasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        station_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME NOT NULL,
+        duration REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'planned',
+        is_loop INTEGER NOT NULL DEFAULT 0,
+        fallback_action TEXT NOT NULL DEFAULT 'return_to_regular',
+        slots_data TEXT NOT NULL,
+        cover_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_sched_station_range ON radio_scheduled_broadcasts(station_id, start_time, end_time)');
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_sched_status ON radio_scheduled_broadcasts(status)');
+
       radioDb.run(`CREATE TABLE IF NOT EXISTS radio_favorites (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,

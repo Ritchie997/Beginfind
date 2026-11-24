@@ -273,6 +273,17 @@ async function collectUsedUploadNames() {
     const radioSlots = await dbAll(radioDb, 'SELECT audio_url FROM radio_timeline_slots', []).catch(() => []);
     radioSlots.forEach((s) => add(s.audio_url));
 
+    const scheduledBroadcasts = await dbAll(radioDb, 'SELECT slots_data, cover_url FROM radio_scheduled_broadcasts', []).catch(() => []);
+    scheduledBroadcasts.forEach((b) => {
+      add(b.cover_url);
+      try {
+        const slots = JSON.parse(b.slots_data || '[]');
+        if (Array.isArray(slots)) {
+          slots.forEach(s => add(s.audio_url || s.audioUrl));
+        }
+      } catch (_) {}
+    });
+
     const radioPlaylists = await dbAll(radioDb, 'SELECT cover_url FROM radio_playlists WHERE cover_url IS NOT NULL', []).catch(() => []);
     radioPlaylists.forEach((p) => add(p.cover_url));
   } catch (e) {

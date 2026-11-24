@@ -77,8 +77,16 @@
     isLoop: false,
     isTimeshift: false,
     timeshiftDeltaSec: 0,
+    serverTimeSkewMs: 0,
+    isScheduledEvent: false,
+    scheduledEvent: null,
+    nextScheduledEvent: null,
     savedAt: 0
   };
+
+  function getEffectiveNowMs() {
+    return Date.now() + (state.serverTimeSkewMs || 0);
+  }
 
   const listeners = new Set();
 
@@ -577,7 +585,10 @@
       if (finishedSlotId) {
         url += `?finished_slot_id=${encodeURIComponent(finishedSlotId)}`;
       }
+      const t0 = Date.now();
       const res = await fetch(url);
+      const t1 = Date.now();
+      const rtt = t1 - t0;
       if (!res.ok) {
         cancelLiveSync();
         if (res.status === 404) {
@@ -595,6 +606,15 @@
         return;
       }
       const live = await res.json();
+      if (live.serverTime) {
+        const serverMs = new Date(live.serverTime).getTime();
+        if (!isNaN(serverMs)) {
+          state.serverTimeSkewMs = Math.round((serverMs + (rtt / 2)) - t1);
+        }
+      }
+      state.isScheduledEvent = Boolean(live.isScheduledEvent);
+      state.scheduledEvent = live.scheduledEvent || null;
+      state.nextScheduledEvent = live.nextScheduledEvent || null;
 
       // Если за время запроса пользователь переключил режим или станцию
       if (state.mode !== 'radio' || (state.station && String(state.station.id) !== String(station.id))) {
@@ -1040,7 +1060,7 @@
           let liveOffset = dur;
           if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
             const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
-            const nowMs = Date.now();
+            const nowMs = getEffectiveNowMs();
             liveOffset = Math.max(0, Math.min(dur, (nowMs - startMs) / 1000));
           } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
             liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
@@ -1266,7 +1286,7 @@
           let liveOffset = dur;
           if (state.currentSlot && (state.currentSlot.startTime || state.currentSlot.start_time)) {
             const startMs = new Date(state.currentSlot.startTime || state.currentSlot.start_time).getTime();
-            const nowMs = Date.now();
+            const nowMs = getEffectiveNowMs();
             liveOffset = Math.max(0, Math.min(dur, (nowMs - startMs) / 1000));
           } else if (state.currentSlot && state.currentSlot.offset !== undefined) {
             liveOffset = Math.max(0, Math.min(dur, Number(state.currentSlot.offset) || 0));
@@ -1313,6 +1333,40 @@
       if (trackDur) trackDur.textContent = formatTime(dur);
       if (trackFill && dur > 0) {
         trackFill.style.width = `${Math.min(100, Math.max(0, (cur / dur) * 100))}%`;
+      }
+    }
+
+    // Проверка наступления или окончания запланированного эфира (Option 1: Radio Standard Cutover)
+    if (state.mode === 'radio' && state.station && isAudioLeader && !state.isTimeshift) {
+      const serverNow = getEffectiveNowMs();
+
+      // 1. Приближение следующего запланированного эфира
+      if (state.nextScheduledEvent && state.nextScheduledEvent.startTime) {
+        const schedStartMs = new Date(state.nextScheduledEvent.startTime).getTime();
+        const diffMs = schedStartMs - serverNow;
+
+        // Плавный fade-out за 2.5 секунды до точного старта передачи
+        if (diffMs > 0 && diffMs <= 2500 && state.isPlaying && !audio.paused) {
+          const baseVol = Number.isFinite(state.volume) ? state.volume : 0.9;
+          const factor = Math.max(0.05, diffMs / 2500);
+          audio.volume = Math.max(0, Math.min(1, baseVol * factor));
+        }
+
+        // Секунда в секунду: бесшовное переключение на запланированный эфир
+        if (diffMs <= 0 && !state.isScheduledEvent) {
+          if (Number.isFinite(state.volume)) audio.volume = state.volume;
+          syncRadioStationLive(state.station, true);
+          return;
+        }
+      }
+
+      // 2. Окончание текущего запланированного эфира
+      if (state.isScheduledEvent && state.scheduledEvent && (state.scheduledEvent.end_time || state.scheduledEvent.endTime)) {
+        const schedEndMs = new Date(state.scheduledEvent.end_time || state.scheduledEvent.endTime).getTime();
+        if (serverNow >= schedEndMs) {
+          syncRadioStationLive(state.station, true);
+          return;
+        }
       }
     }
   }
@@ -1584,7 +1638,10 @@
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    syncBar: updateBarUI
+    syncBar: updateBarUI,
+    getEffectiveNowMs,
+    getServerTimeSkewMs: () => (state.serverTimeSkewMs || 0),
+    setServerTimeSkewMs: (skew) => { state.serverTimeSkewMs = skew; }
   };
 
   // Автозапуск при инициализации страницы

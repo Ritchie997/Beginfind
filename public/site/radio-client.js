@@ -108,11 +108,25 @@
     globalUnsub: null,
     serverTimeDelta: 0,
     serverClockInterval: null,
-    pendingInsertIndex: -1
+    pendingInsertIndex: -1,
+    editorSubmode: 'timeline',
+    calendarYear: new Date().getFullYear(),
+    calendarMonth: new Date().getMonth(),
+    selectedCalendarDateStr: new Date().toISOString().slice(0, 10),
+    scheduledEvents: [],
+    serverTimeSkewMs: 0
   };
 
   function getEffectiveNowMs() {
     return Date.now();
+  }
+
+  function getEffectiveServerNowMs() {
+    const gAudio = getGlobalAudio();
+    if (gAudio && typeof gAudio.getEffectiveNowMs === 'function') {
+      return gAudio.getEffectiveNowMs();
+    }
+    return Date.now() + (state.serverTimeSkewMs || 0);
   }
 
   let dom = {};
@@ -335,7 +349,50 @@
       // Кнопки открытия модалок
       btnOpenUploadTrack: document.getElementById('btnOpenUploadTrack'),
       btnOpenCreateStation: document.getElementById('btnOpenCreateStation'),
-      btnUploadTrackFromFeed: document.getElementById('btnUploadTrackFromFeed')
+      btnUploadTrackFromFeed: document.getElementById('btnUploadTrackFromFeed'),
+
+      // Подрежимы редактора (Лента vs Календарь)
+      radioEditorSubnav: document.getElementById('radioEditorSubnav'),
+      btnSubnavTimeline: document.getElementById('btnSubnavTimeline'),
+      btnSubnavCalendar: document.getElementById('btnSubnavCalendar'),
+      editorScheduleCountBadge: document.getElementById('editorScheduleCountBadge'),
+      radioEditorTimelineMode: document.getElementById('radioEditorTimelineMode'),
+      radioEditorCalendarMode: document.getElementById('radioEditorCalendarMode'),
+
+      // Элементы календаря
+      btnCalPrevMonth: document.getElementById('btnCalPrevMonth'),
+      btnCalToday: document.getElementById('btnCalToday'),
+      btnCalNextMonth: document.getElementById('btnCalNextMonth'),
+      calMonthYearTitle: document.getElementById('calMonthYearTitle'),
+      calUserTzDisplay: document.getElementById('calUserTzDisplay'),
+      calServerSkewBadge: document.getElementById('calServerSkewBadge'),
+      btnOpenCreateScheduleModal: document.getElementById('btnOpenCreateScheduleModal'),
+      radioCalendarDaysGrid: document.getElementById('radioCalendarDaysGrid'),
+      calSelectedDayTitle: document.getElementById('calSelectedDayTitle'),
+      calSelectedDaySubtitle: document.getElementById('calSelectedDaySubtitle'),
+      btnAddEventForSelectedDay: document.getElementById('btnAddEventForSelectedDay'),
+      calDayEventsList: document.getElementById('calDayEventsList'),
+
+      // Модальное окно расписания
+      modalScheduleBroadcast: document.getElementById('modalScheduleBroadcast'),
+      formScheduleBroadcast: document.getElementById('formScheduleBroadcast'),
+      schedEventId: document.getElementById('schedEventId'),
+      schedModalHeaderTitle: document.getElementById('schedModalHeaderTitle'),
+      schedEventTitle: document.getElementById('schedEventTitle'),
+      schedEventDesc: document.getElementById('schedEventDesc'),
+      schedEventStartTime: document.getElementById('schedEventStartTime'),
+      schedUserTzLabel: document.getElementById('schedUserTzLabel'),
+      schedEventDurationDisplay: document.getElementById('schedEventDurationDisplay'),
+      schedEventEndTimeDisplay: document.getElementById('schedEventEndTimeDisplay'),
+      schedSourceTimeline: document.getElementById('schedSourceTimeline'),
+      schedSourceTemplate: document.getElementById('schedSourceTemplate'),
+      schedSourceEmpty: document.getElementById('schedSourceEmpty'),
+      schedSourceTimelineCount: document.getElementById('schedSourceTimelineCount'),
+      schedTemplateSelectWrap: document.getElementById('schedTemplateSelectWrap'),
+      schedTemplateSelect: document.getElementById('schedTemplateSelect'),
+      schedEventIsLoop: document.getElementById('schedEventIsLoop'),
+      schedEventFallback: document.getElementById('schedEventFallback'),
+      btnSubmitScheduleBroadcast: document.getElementById('btnSubmitScheduleBroadcast')
     };
   }
 
@@ -2387,6 +2444,7 @@
 
       markEditorDirty(false);
       renderEditor();
+      loadStationSchedule(stationId);
     } catch (e) {
       console.error('[radio] Error loading timeline:', e);
     }
@@ -4251,6 +4309,563 @@
     showModal('modalRadioTemplates');
   }
 
+  // ===== КАЛЕНДАРЬ РАСПИСАНИЯ И ЗАПЛАНИРОВАННЫХ ЭФИРОВ =====
+
+  function switchEditorSubmode(mode) {
+    state.editorSubmode = mode === 'calendar' ? 'calendar' : 'timeline';
+    if (dom.btnSubnavTimeline && dom.btnSubnavCalendar) {
+      dom.btnSubnavTimeline.classList.toggle('is-active', state.editorSubmode === 'timeline');
+      dom.btnSubnavCalendar.classList.toggle('is-active', state.editorSubmode === 'calendar');
+    }
+    if (dom.radioEditorTimelineMode) {
+      dom.radioEditorTimelineMode.style.display = state.editorSubmode === 'timeline' ? 'block' : 'none';
+    }
+    if (dom.radioEditorCalendarMode) {
+      dom.radioEditorCalendarMode.style.display = state.editorSubmode === 'calendar' ? 'block' : 'none';
+    }
+    if (state.editorSubmode === 'calendar') {
+      updateCalendarTzBadge();
+      if (state.selectedStationForEdit) {
+        loadStationSchedule(state.selectedStationForEdit.id);
+      } else {
+        renderCalendar();
+        renderSelectedDayEvents();
+      }
+    }
+  }
+
+  function updateCalendarTzBadge() {
+    const tz = getUserTimezoneInfo();
+    if (dom.calUserTzDisplay) {
+      dom.calUserTzDisplay.textContent = tz.label || tz.utcOffsetStr;
+    }
+    if (dom.calServerSkewBadge) {
+      const skewMs = state.serverTimeSkewMs || 0;
+      const skewSec = Math.round(skewMs / 1000);
+      if (Math.abs(skewSec) < 2) {
+        dom.calServerSkewBadge.textContent = 'синхронно';
+        dom.calServerSkewBadge.style.color = '#34d399';
+        dom.calServerSkewBadge.style.background = 'rgba(16,185,129,0.15)';
+      } else {
+        const sign = skewSec > 0 ? '+' : '';
+        dom.calServerSkewBadge.textContent = `сервер ${sign}${skewSec}с`;
+        dom.calServerSkewBadge.style.color = '#fbbf24';
+        dom.calServerSkewBadge.style.background = 'rgba(245,158,11,0.15)';
+      }
+    }
+  }
+
+  async function loadStationSchedule(stationId) {
+    if (!stationId) return;
+    try {
+      const res = await api(`/api/radio/stations/${stationId}/schedule`);
+      state.scheduledEvents = Array.isArray(res.events) ? res.events : [];
+      if (dom.editorScheduleCountBadge) {
+        const activeCount = state.scheduledEvents.filter(e => e.status !== 'cancelled').length;
+        dom.editorScheduleCountBadge.textContent = activeCount;
+        dom.editorScheduleCountBadge.style.display = activeCount > 0 ? 'inline-block' : 'none';
+      }
+      renderCalendar();
+      renderSelectedDayEvents();
+    } catch (e) {
+      console.warn('Ошибка загрузки расписания станции:', e);
+    }
+  }
+
+  const MONTH_NAMES_RU = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+  ];
+
+  function renderCalendar() {
+    if (!dom.radioCalendarDaysGrid) return;
+    const year = state.calendarYear;
+    const month = state.calendarMonth;
+
+    if (dom.calMonthYearTitle) {
+      dom.calMonthYearTitle.textContent = `${MONTH_NAMES_RU[month]} ${year}`;
+    }
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    let startDayOfWeek = firstDayOfMonth.getDay() - 1;
+    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const today = new Date();
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+    let html = '';
+
+    // Дни предыдущего месяца
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const dayNum = daysInPrevMonth - i;
+      const prevDate = new Date(year, month - 1, dayNum);
+      const dateStr = `${prevDate.getFullYear()}-${pad(prevDate.getMonth() + 1)}-${pad(dayNum)}`;
+      html += renderCalendarCell(dateStr, dayNum, true, dateStr === todayStr, dateStr === state.selectedCalendarDateStr);
+    }
+
+    // Дни текущего месяца
+    for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+      const dateStr = `${year}-${pad(month + 1)}-${pad(dayNum)}`;
+      html += renderCalendarCell(dateStr, dayNum, false, dateStr === todayStr, dateStr === state.selectedCalendarDateStr);
+    }
+
+    // Дни следующего месяца
+    const totalRendered = startDayOfWeek + daysInMonth;
+    const totalCells = totalRendered > 35 ? 42 : 35;
+    const nextDaysCount = totalCells - totalRendered;
+    for (let dayNum = 1; dayNum <= nextDaysCount; dayNum++) {
+      const nextDate = new Date(year, month + 1, dayNum);
+      const dateStr = `${nextDate.getFullYear()}-${pad(nextDate.getMonth() + 1)}-${pad(dayNum)}`;
+      html += renderCalendarCell(dateStr, dayNum, true, dateStr === todayStr, dateStr === state.selectedCalendarDateStr);
+    }
+
+    dom.radioCalendarDaysGrid.innerHTML = html;
+
+    dom.radioCalendarDaysGrid.querySelectorAll('.radio-cal-day').forEach((cell) => {
+      cell.addEventListener('click', () => {
+        const clickedDate = cell.getAttribute('data-date');
+        if (clickedDate) {
+          state.selectedCalendarDateStr = clickedDate;
+          renderCalendar();
+          renderSelectedDayEvents();
+        }
+      });
+    });
+  }
+
+  function getEventsForLocalDate(dateStr) {
+    const targetYMD = dateStr;
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    return (state.scheduledEvents || []).filter((e) => {
+      if (e.status === 'cancelled') return false;
+      const start = new Date(e.start_time);
+      if (isNaN(start.getTime())) return false;
+      const startYMD = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+
+      const end = new Date(e.end_time);
+      if (!isNaN(end.getTime())) {
+        const endYMD = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+        return targetYMD >= startYMD && targetYMD <= endYMD;
+      }
+      return targetYMD === startYMD;
+    });
+  }
+
+  function renderCalendarCell(dateStr, dayNum, isOtherMonth, isToday, isSelected) {
+    const events = getEventsForLocalDate(dateStr);
+    const classes = ['radio-cal-day'];
+    if (isOtherMonth) classes.push('is-other-month');
+    if (isToday) classes.push('is-today');
+    if (isSelected) classes.push('is-selected');
+
+    let eventsHtml = '';
+    const now = getEffectiveServerNowMs();
+
+    events.slice(0, 2).forEach((e) => {
+      const startMs = new Date(e.start_time).getTime();
+      const endMs = new Date(e.end_time).getTime();
+      const isLive = now >= startMs && now < endMs;
+      const isPast = now >= endMs;
+      const chipClass = isLive ? 'is-live' : isPast ? 'is-past' : '';
+      const d = new Date(e.start_time);
+      const pad = (n) => (n < 10 ? '0' : '') + n;
+      const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      eventsHtml += `
+        <div class="radio-cal-mini-chip ${chipClass}" title="${escapeHtml(e.title)} (${timeStr})">
+          ${isLive ? '🔴 ' : ''}<strong>${timeStr}</strong> ${escapeHtml(e.title)}
+        </div>
+      `;
+    });
+
+    if (events.length > 2) {
+      eventsHtml += `<div class="radio-cal-more-chip">+ ещё ${events.length - 2}</div>`;
+    }
+
+    return `
+      <div class="${classes.join(' ')}" data-date="${dateStr}">
+        <div class="radio-cal-day-num">${dayNum}</div>
+        <div class="radio-cal-day-events-wrap">${eventsHtml}</div>
+      </div>
+    `;
+  }
+
+  function renderSelectedDayEvents() {
+    if (!dom.calDayEventsList) return;
+    const dateStr = state.selectedCalendarDateStr;
+    const parts = dateStr.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+
+    const formatter = new Intl.DateTimeFormat('ru-RU', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      weekday: 'long'
+    });
+    if (dom.calSelectedDayTitle) {
+      dom.calSelectedDayTitle.textContent = formatter.format(d);
+    }
+
+    const events = getEventsForLocalDate(dateStr);
+    if (dom.calSelectedDaySubtitle) {
+      dom.calSelectedDaySubtitle.textContent = events.length > 0 
+        ? `Запланировано передач: ${events.length}` 
+        : 'Запланированные передачи';
+    }
+
+    if (events.length === 0) {
+      dom.calDayEventsList.innerHTML = `
+        <p class="radio-cal-empty-msg">
+          <i class="fas fa-calendar-xmark" style="font-size:1.8rem; display:block; margin-bottom:8px; opacity:0.4;"></i>
+          На этот день эфиров не запланировано.<br>
+          Станция будет играть обычную сетку или вечный эфир.
+        </p>
+      `;
+      return;
+    }
+
+    const now = getEffectiveServerNowMs();
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+
+    dom.calDayEventsList.innerHTML = events.map((e) => {
+      const start = new Date(e.start_time);
+      const end = new Date(e.end_time);
+      const startMs = start.getTime();
+      const endMs = end.getTime();
+      const isLive = now >= startMs && now < endMs;
+      const isPast = now >= endMs;
+      const isFuture = now < startMs;
+
+      const startTimeStr = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+      const endTimeStr = !isNaN(endMs) ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '--:--';
+      const durationStr = formatDuration(e.duration || 0);
+
+      let statusBadge = '';
+      if (isLive) {
+        statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.2); color:#f87171; border:1px solid rgba(239,68,68,0.5);"><i class="fas fa-tower-broadcast fa-fade"></i> В ЭФИРЕ</span>';
+      } else if (isFuture) {
+        statusBadge = '<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4);"><i class="far fa-clock"></i> Запланирован</span>';
+      } else {
+        statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; border:1px solid rgba(148,163,184,0.3);">Завершён</span>';
+      }
+
+      let slotsCount = 0;
+      try {
+        const slots = typeof e.slots_data === 'string' ? JSON.parse(e.slots_data) : e.slots_data;
+        slotsCount = Array.isArray(slots) ? slots.length : 0;
+      } catch (_) {}
+
+      return `
+        <div class="radio-sched-card ${isLive ? 'is-live' : ''}" data-event-id="${e.id}">
+          <div class="radio-sched-card-top">
+            <span class="radio-sched-card-time"><i class="far fa-clock"></i> ${startTimeStr} – ${endTimeStr}</span>
+            ${statusBadge}
+          </div>
+          <div class="radio-sched-card-title">${escapeHtml(e.title)}</div>
+          ${e.description ? `<div class="radio-sched-card-desc">${escapeHtml(e.description)}</div>` : ''}
+          <div class="radio-sched-card-meta">
+            <span class="radio-sched-card-meta-item"><i class="fas fa-hourglass-half"></i> ${durationStr}</span>
+            <span class="radio-sched-card-meta-item"><i class="fas fa-music"></i> ${slotsCount} треков</span>
+            ${e.is_loop ? '<span class="radio-sched-card-meta-item" style="color:#c084fc;"><i class="fas fa-repeat"></i> Зациклен</span>' : ''}
+          </div>
+          <div class="radio-sched-card-actions">
+            <button type="button" class="btn btn-secondary btn-xs btn-load-event-timeline" data-event-id="${e.id}" title="Открыть сетку этой передачи в видеомонтажном редакторе (ленте на 24ч)">
+              <i class="fas fa-sliders"></i> В ленту
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-xs btn-edit-event" data-event-id="${e.id}" title="Изменить время и параметры">
+              <i class="fas fa-pen"></i>
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-xs btn-delete-event" data-event-id="${e.id}" title="Удалить из расписания">
+              <i class="fas fa-trash-can"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    dom.calDayEventsList.querySelectorAll('.btn-load-event-timeline').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const eventId = btn.getAttribute('data-event-id');
+        const ev = state.scheduledEvents.find(x => String(x.id) === String(eventId));
+        if (ev) loadEventToTimeline(ev);
+      });
+    });
+
+    dom.calDayEventsList.querySelectorAll('.btn-edit-event').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const eventId = btn.getAttribute('data-event-id');
+        const ev = state.scheduledEvents.find(x => String(x.id) === String(eventId));
+        if (ev) openEditScheduleModal(ev);
+      });
+    });
+
+    dom.calDayEventsList.querySelectorAll('.btn-delete-event').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const eventId = btn.getAttribute('data-event-id');
+        deleteScheduleEvent(eventId);
+      });
+    });
+  }
+
+  function loadEventToTimeline(ev) {
+    if (!ev) return;
+    try {
+      const slots = typeof ev.slots_data === 'string' ? JSON.parse(ev.slots_data) : ev.slots_data;
+      if (!Array.isArray(slots) || slots.length === 0) {
+        showToast('В этой передаче пока нет треков. Добавьте треки в ленту и сохраните передачу.', 'info');
+      } else {
+        state.editorSlots = slots.map(s => ({
+          track_id: s.track_id || null,
+          title: s.title || 'Аудиозапись',
+          audio_url: s.audio_url || '',
+          duration: Number(s.duration) || 0,
+          type: s.type || 'track'
+        }));
+        state.editorBlocks = convertSlotsToBlocks(slots);
+        syncCompiledSlots();
+      }
+      setEditorStartTime(new Date(ev.start_time));
+      switchEditorSubmode('timeline');
+      markEditorDirty(true);
+      renderTimelineRibbon();
+      renderEditorBlocks();
+      showToast(`Сетка передачи «${ev.title}» загружена в ленту редактора!`, 'success');
+    } catch (e) {
+      showToast('Ошибка загрузки сетки передачи: ' + e.message, 'error');
+    }
+  }
+
+  async function deleteScheduleEvent(eventId) {
+    const ev = state.scheduledEvents.find(x => String(x.id) === String(eventId));
+    const title = ev ? ev.title : 'эту передачу';
+    const ok = await showConfirm(`Удалить «${title}» из календаря расписания?`, {
+      title: 'Удаление запланированного эфира',
+      confirmLabel: 'Удалить',
+      danger: true
+    });
+    if (!ok) return;
+
+    try {
+      const stationId = state.selectedStationForEdit.id;
+      await api(`/api/radio/stations/${stationId}/schedule/${eventId}`, {
+        method: 'DELETE'
+      });
+      showToast('Передача удалена из расписания', 'info');
+      await loadStationSchedule(stationId);
+    } catch (err) {
+      showToast('Ошибка удаления: ' + err.message, 'error');
+    }
+  }
+
+  function openCreateScheduleModal(defaultDateStr = null) {
+    if (!dom.modalScheduleBroadcast) return;
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    const targetDateStr = defaultDateStr || state.selectedCalendarDateStr;
+    const now = new Date(getEffectiveServerNowMs());
+    let defaultHour = now.getHours() + 1;
+
+    if (defaultHour >= 24) {
+      defaultHour = 0;
+    }
+    const defaultTimeVal = `${targetDateStr}T${pad(defaultHour)}:00`;
+
+    if (dom.schedEventId) dom.schedEventId.value = '';
+    if (dom.schedModalHeaderTitle) dom.schedModalHeaderTitle.innerHTML = '<i class="fas fa-calendar-plus"></i> Запланировать эфир';
+    if (dom.schedEventTitle) dom.schedEventTitle.value = '';
+    if (dom.schedEventDesc) dom.schedEventDesc.value = '';
+    if (dom.schedEventStartTime) dom.schedEventStartTime.value = defaultTimeVal;
+    if (dom.schedEventIsLoop) dom.schedEventIsLoop.checked = false;
+    if (dom.schedEventFallback) dom.schedEventFallback.value = 'return_to_normal';
+    if (dom.schedSourceTimeline) dom.schedSourceTimeline.checked = true;
+
+    populateScheduleTemplatesDropdown();
+    updateScheduleModalDurations();
+    showModal('modalScheduleBroadcast');
+  }
+
+  function openEditScheduleModal(ev) {
+    if (!dom.modalScheduleBroadcast || !ev) return;
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    const start = new Date(ev.start_time);
+    const startVal = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}T${pad(start.getHours())}:${pad(start.getMinutes())}`;
+
+    if (dom.schedEventId) dom.schedEventId.value = ev.id;
+    if (dom.schedModalHeaderTitle) dom.schedModalHeaderTitle.innerHTML = '<i class="fas fa-pen"></i> Редактировать передачу';
+    if (dom.schedEventTitle) dom.schedEventTitle.value = ev.title || '';
+    if (dom.schedEventDesc) dom.schedEventDesc.value = ev.description || '';
+    if (dom.schedEventStartTime) dom.schedEventStartTime.value = startVal;
+    if (dom.schedEventIsLoop) dom.schedEventIsLoop.checked = Boolean(ev.is_loop);
+    if (dom.schedEventFallback) dom.schedEventFallback.value = ev.fallback_action || 'return_to_normal';
+
+    populateScheduleTemplatesDropdown();
+    updateScheduleModalDurations(ev.duration);
+    showModal('modalScheduleBroadcast');
+  }
+
+  function populateScheduleTemplatesDropdown() {
+    if (!dom.schedTemplateSelect) return;
+    const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
+    if (templates.length === 0) {
+      dom.schedTemplateSelect.innerHTML = '<option value="">(У вас пока нет сохранённых шаблонов)</option>';
+      if (dom.schedSourceTemplate) dom.schedSourceTemplate.disabled = true;
+    } else {
+      if (dom.schedSourceTemplate) dom.schedSourceTemplate.disabled = false;
+      dom.schedTemplateSelect.innerHTML = templates.map(t => `
+        <option value="${t.id}">${escapeHtml(t.name)} (${(t.blocks || []).length} блоков, ${formatDuration(t.totalDurationSec || 0)})</option>
+      `).join('');
+    }
+  }
+
+  function updateScheduleModalDurations(explicitDuration = null) {
+    const tz = getUserTimezoneInfo();
+    if (dom.schedUserTzLabel) dom.schedUserTzLabel.textContent = tz.label || tz.utcOffsetStr;
+
+    let durationSec = 0;
+    if (explicitDuration !== null && explicitDuration !== undefined) {
+      durationSec = Number(explicitDuration) || 0;
+    } else {
+      let sourceMode = 'timeline';
+      if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+      else if (dom.schedSourceEmpty && dom.schedSourceEmpty.checked) sourceMode = 'empty';
+
+      if (sourceMode === 'timeline') {
+        durationSec = state.editorCachedDurationSec || (state.editorSlots || []).reduce((s, x) => s + (Number(x.duration) || 0), 0);
+      } else if (sourceMode === 'template') {
+        const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
+        const tplId = dom.schedTemplateSelect ? dom.schedTemplateSelect.value : null;
+        const tpl = templates.find(t => String(t.id) === String(tplId)) || templates[0];
+        durationSec = tpl ? (tpl.totalDurationSec || 0) : 0;
+      } else {
+        durationSec = 0;
+      }
+    }
+
+    if (dom.schedSourceTimelineCount) {
+      dom.schedSourceTimelineCount.textContent = (state.editorSlots || []).length;
+    }
+    if (dom.schedEventDurationDisplay) {
+      dom.schedEventDurationDisplay.textContent = formatDuration(durationSec);
+    }
+    if (dom.schedEventEndTimeDisplay && dom.schedEventStartTime && dom.schedEventStartTime.value) {
+      const startMs = new Date(dom.schedEventStartTime.value).getTime();
+      if (!isNaN(startMs)) {
+        const endMs = startMs + durationSec * 1000;
+        dom.schedEventEndTimeDisplay.textContent = formatClockTime(endMs);
+      } else {
+        dom.schedEventEndTimeDisplay.textContent = '--:--';
+      }
+    }
+  }
+
+  async function handleScheduleBroadcastSubmit(e) {
+    e.preventDefault();
+    if (!state.selectedStationForEdit) {
+      showToast('Пожалуйста, выберите радиостанцию', 'warning');
+      return;
+    }
+    const stationId = state.selectedStationForEdit.id;
+    const eventId = dom.schedEventId ? dom.schedEventId.value : null;
+
+    const title = dom.schedEventTitle ? dom.schedEventTitle.value.trim() : '';
+    if (!title) {
+      showToast('Укажите название передачи', 'warning');
+      return;
+    }
+
+    const startTimeLocal = dom.schedEventStartTime ? dom.schedEventStartTime.value : '';
+    if (!startTimeLocal) {
+      showToast('Укажите время старта передачи', 'warning');
+      return;
+    }
+
+    const startDate = new Date(startTimeLocal);
+    if (isNaN(startDate.getTime())) {
+      showToast('Некорректная дата старта передачи', 'warning');
+      return;
+    }
+    const startTimeIso = startDate.toISOString();
+
+    let slots = [];
+    let sourceMode = 'timeline';
+    if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+    else if (dom.schedSourceEmpty && dom.schedSourceEmpty.checked) sourceMode = 'empty';
+
+    if (eventId) {
+      const existing = state.scheduledEvents.find(x => String(x.id) === String(eventId));
+      if (existing) {
+        slots = typeof existing.slots_data === 'string' ? JSON.parse(existing.slots_data) : existing.slots_data;
+      }
+    } else {
+      if (sourceMode === 'timeline') {
+        syncCompiledSlots();
+        slots = state.editorSlots || [];
+      } else if (sourceMode === 'template') {
+        const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
+        const tplId = dom.schedTemplateSelect ? dom.schedTemplateSelect.value : null;
+        const tpl = templates.find(t => String(t.id) === String(tplId)) || templates[0];
+        if (tpl && Array.isArray(tpl.blocks)) {
+          const compiled = compileBlocksToSlots(tpl.blocks, startTimeIso);
+          slots = compiled.slots || [];
+        }
+      } else {
+        slots = [];
+      }
+    }
+
+    const isLoop = Boolean(dom.schedEventIsLoop && dom.schedEventIsLoop.checked);
+    const fallbackAction = dom.schedEventFallback ? dom.schedEventFallback.value : 'return_to_normal';
+    const description = dom.schedEventDesc ? dom.schedEventDesc.value.trim() : '';
+
+    const payload = {
+      title,
+      description,
+      start_time: startTimeIso,
+      is_loop: isLoop,
+      fallback_action: fallbackAction,
+      slots_data: slots
+    };
+
+    const submitBtn = dom.btnSubmitScheduleBroadcast;
+    try {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+      }
+
+      if (eventId) {
+        await api(`/api/radio/stations/${stationId}/schedule/${eventId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        showToast('Запланированная передача обновлена', 'success');
+      } else {
+        await api(`/api/radio/stations/${stationId}/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        showToast('Эфир успешно запланирован в календарь!', 'success');
+      }
+
+      hideModal('modalScheduleBroadcast');
+      await loadStationSchedule(stationId);
+    } catch (err) {
+      showToast('Ошибка сохранения: ' + err.message, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-check"></i> Сохранить в расписание';
+      }
+    }
+  }
+
   function updateBlockTimeBadges() {
     const listEl = dom.editorBlocksList || dom.editorSlotsList;
     if (!listEl) return;
@@ -5797,6 +6412,62 @@
       await publishBroadcast(state.editorStartTime || new Date(), { notify: true, autoTune: true });
     });
 
+    // Переключатель подрежимов: Лента на 24ч vs Календарь расписания
+    dom.btnSubnavTimeline?.addEventListener('click', () => switchEditorSubmode('timeline'));
+    dom.btnSubnavCalendar?.addEventListener('click', () => switchEditorSubmode('calendar'));
+
+    // Навигация по календарю расписания
+    dom.btnCalPrevMonth?.addEventListener('click', () => {
+      state.calendarMonth--;
+      if (state.calendarMonth < 0) {
+        state.calendarMonth = 11;
+        state.calendarYear--;
+      }
+      renderCalendar();
+    });
+
+    dom.btnCalNextMonth?.addEventListener('click', () => {
+      state.calendarMonth++;
+      if (state.calendarMonth > 11) {
+        state.calendarMonth = 0;
+        state.calendarYear++;
+      }
+      renderCalendar();
+    });
+
+    dom.btnCalToday?.addEventListener('click', () => {
+      const now = new Date();
+      state.calendarYear = now.getFullYear();
+      state.calendarMonth = now.getMonth();
+      const pad = (n) => (n < 10 ? '0' : '') + n;
+      state.selectedCalendarDateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      renderCalendar();
+      renderSelectedDayEvents();
+    });
+
+    dom.btnOpenCreateScheduleModal?.addEventListener('click', () => {
+      openCreateScheduleModal();
+    });
+
+    dom.btnAddEventForSelectedDay?.addEventListener('click', () => {
+      openCreateScheduleModal(state.selectedCalendarDateStr);
+    });
+
+    // Реакции формы модального окна расписания
+    dom.schedEventStartTime?.addEventListener('input', () => updateScheduleModalDurations());
+    dom.schedEventStartTime?.addEventListener('change', () => updateScheduleModalDurations());
+    document.querySelectorAll('input[name="schedSourceMode"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        if (dom.schedTemplateSelectWrap) {
+          dom.schedTemplateSelectWrap.style.display = (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) ? 'block' : 'none';
+        }
+        updateScheduleModalDurations();
+      });
+    });
+    dom.schedTemplateSelect?.addEventListener('change', () => updateScheduleModalDurations());
+
+    dom.formScheduleBroadcast?.addEventListener('submit', handleScheduleBroadcastSubmit);
+
     // Масштабирование видео-таймлайна
     dom.btnTimelineZoomIn?.addEventListener('click', () => setTimelineZoom(state.timelineZoom * 1.25));
     dom.btnTimelineZoomOut?.addEventListener('click', () => setTimelineZoom(state.timelineZoom / 1.25));
@@ -7066,6 +7737,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clientTimeIso: new Date().toISOString() })
         });
+        await syncClockWithServer();
         showToast(`Время эфира синхронизировано с часами устройства: ${formatClockTime(new Date(), { withSeconds: true })} (${tz.label || tz.utcOffsetStr})`, 'success');
       } catch (err) {
         showToast('Ошибка синхронизации времени: ' + err.message, 'error');
@@ -7078,7 +7750,21 @@
 
     async function syncClockWithServer() {
       try {
-        await api('/api/system-settings/public');
+        const t0 = Date.now();
+        const res = await api('/api/system-settings/public');
+        const t1 = Date.now();
+        const rtt = t1 - t0;
+        if (res && res.serverTime) {
+          const srvMs = new Date(res.serverTime).getTime();
+          if (!isNaN(srvMs)) {
+            state.serverTimeSkewMs = Math.round((srvMs + (rtt / 2)) - t1);
+            const gAudio = getGlobalAudio();
+            if (gAudio && typeof gAudio.setServerTimeSkewMs === 'function') {
+              gAudio.setServerTimeSkewMs(state.serverTimeSkewMs);
+            }
+          }
+        }
+        updateCalendarTzBadge();
       } catch (_) {}
     }
     syncClockWithServer();
@@ -7095,6 +7781,7 @@
       if (dom.radioServerClock) {
         dom.radioServerClock.innerHTML = `<i class="fas fa-clock"></i> Эфир: ${formatClockTime(nowMs, { withSeconds: true })}`;
       }
+      updateCalendarTzBadge();
       updateTimelinePlayhead();
     }, 1000);
 
