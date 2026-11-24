@@ -866,7 +866,7 @@
           button.title = 'Показать статьи с тегом «' + clean + '»';
           var color = window.TagColors ? window.TagColors.get(clean) : null;
           if (color) {
-            button.style.color = color;
+            button.style.color = 'var(--text-normal, #dbdee1)';
             button.style.backgroundColor = color + '22';
             button.style.borderColor = color + '55';
             button.classList.add('has-tag-color');
@@ -4449,7 +4449,7 @@
             button.textContent = '#' + clean;
             var color = window.TagColors ? window.TagColors.get(clean) : null;
             if (color) {
-              button.style.color = color;
+              button.style.color = 'var(--text-normal, #dbdee1)';
               button.style.backgroundColor = color + '22';
               button.style.borderColor = color + '55';
               button.classList.add('has-tag-color');
@@ -5803,7 +5803,7 @@
         item.textContent = '#' + clean;
         var color = window.TagColors ? window.TagColors.get(clean) : null;
         if (color) {
-          item.style.color = color;
+          item.style.color = 'var(--text-normal, #dbdee1)';
           item.style.backgroundColor = color + '22';
           item.style.borderColor = color + '55';
           item.classList.add('has-tag-color');

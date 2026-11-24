@@ -1083,7 +1083,7 @@ function reactionsBarInnerHtml(reactions) {
             : `<p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>`}
           ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) => {
             const color = window.TagColors ? window.TagColors.get(t) : null;
-            const styleAttr = color ? ` style="color:${color};background-color:${color}22;border-color:${color}55;"` : '';
+            const styleAttr = color ? ` style="color:var(--text-normal, #dbdee1);background-color:${color}22;border-color:${color}55;"` : '';
             return `<span class="antropedia-tag-pill${color ? ' has-tag-color' : ''}" data-action="filter-tag" data-value="${escapeHtml(t)}"${styleAttr}>#${escapeHtml(t)}</span>`;
           }).join('')}</div>` : ''}
           <div class="antropedia-card-meta">
@@ -1519,7 +1519,7 @@ function reactionsBarInnerHtml(reactions) {
         article.tags.forEach((tag) => {
           const clean = String(tag).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
           const color = window.TagColors ? window.TagColors.get(clean) : null;
-          const style = color ? ` style="color:${color};background-color:${color}22;border-color:${color}55;"` : '';
+          const style = color ? ` style="color:var(--text-normal, #dbdee1);background-color:${color}22;border-color:${color}55;"` : '';
           badges.push(`<span class="hashtag antropedia-view-tag${color ? ' has-tag-color' : ''}" data-tag="${escapeHtml(clean)}"${style}>#${escapeHtml(clean)}</span>`);
         });
       }

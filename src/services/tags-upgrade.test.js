@@ -236,6 +236,23 @@ test('tag colors: TagColors module exists and correctly normalizes, registers an
   assert.ok(mockEl.style.backgroundColor.includes('#e91e63'));
   assert.ok(mockEl.style.borderColor.includes('#e91e63'));
   assert.ok(mockEl.classList.contains('has-tag-color'));
+
+  // Test paint metadata pill (preserves standard text color for readability)
+  const mockPill = {
+    dataset: { tag: 'дракон' },
+    style: {},
+    classList: {
+      classes: new Set(['wiki-tag']),
+      contains(cls) { return this.classes.has(cls); },
+      add(cls) { this.classes.add(cls); }
+    },
+    getAttribute() { return null; }
+  };
+  TagColors.paint(mockPill);
+  assert.strictEqual(mockPill.style.color, 'var(--text-normal, #dbdee1)');
+  assert.ok(mockPill.style.backgroundColor.includes('#e91e63'));
+  assert.ok(mockPill.style.borderColor.includes('#e91e63'));
+  assert.ok(mockPill.classList.contains('has-tag-color'));
 });
 
 test('tag colors: blocks-renderer.js and alltell-client.js format hashtags with tag colors', () => {

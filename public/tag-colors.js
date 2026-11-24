@@ -87,8 +87,16 @@
           removeBtn.style.background = `${color}33`;
         }
       } else {
-        const textColor = (isActive && !options.keepTextColor) ? '#ffffff' : color;
-        el.style.color = textColor;
+        const isMetadataPill = el.classList.contains('wiki-tag') ||
+          el.classList.contains('antropedia-tag-pill') ||
+          el.classList.contains('antropedia-view-tag') ||
+          el.classList.contains('antropedia-tag-chip');
+
+        if (isMetadataPill || options.keepTextColor) {
+          el.style.color = (isActive || options.textColor === '#ffffff') ? '#ffffff' : 'var(--text-normal, #dbdee1)';
+        } else {
+          el.style.color = isActive ? '#ffffff' : color;
+        }
         el.style.backgroundColor = `${color}${alphaBg}`;
         el.style.borderColor = `${color}${alphaBorder}`;
       }

@@ -4618,10 +4618,18 @@ body.articles-page .content-body {
   filter: brightness(1.2);
 }
 
+.wiki-tag.has-tag-color,
+.antropedia-tag-pill.has-tag-color,
+.antropedia-view-tag.has-tag-color {
+  color: var(--text-normal, #dbdee1);
+}
+
 .wiki-tag.has-tag-color:hover,
 .antropedia-tag-pill.has-tag-color:hover,
+.antropedia-view-tag.has-tag-color:hover,
 .antropedia-tag-chip.has-tag-color:hover {
-  filter: brightness(1.2);
+  color: #ffffff !important;
+  filter: brightness(1.25);
 }
 
 /* === Единый стиль выпадающего списка тегов в метаданных (как в редакторе статей) === */

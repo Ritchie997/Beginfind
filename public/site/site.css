@@ -14930,17 +14930,19 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
 
 .wiki-tag.has-tag-color,
 .antropedia-tag-chip.has-tag-color {
-    transition: filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+    color: var(--text-normal, #dbdee1);
+    transition: filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .wiki-tag.has-tag-color:hover,
 .antropedia-tag-chip.has-tag-color:hover {
+    color: #ffffff !important;
     filter: brightness(1.2);
 }
 
 .public-wiki-card-tags .wiki-tag.has-tag-color:hover,
 .antropedia-detail-view .public-article-tags .wiki-tag.has-tag-color:hover {
-    color: inherit !important;
+    color: #ffffff !important;
     background-color: inherit !important;
     border-color: inherit !important;
     filter: brightness(1.25) !important;
