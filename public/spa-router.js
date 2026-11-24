@@ -4469,6 +4469,20 @@ class SPARouter {
       this.deleteSelectedTags();
     });
 
+    // Отмена выбора по клавише Escape
+    if (this._tagsKeyHandler) {
+      document.removeEventListener('keydown', this._tagsKeyHandler);
+      this._tagsKeyHandler = null;
+    }
+    this._tagsKeyHandler = (e) => {
+      if (e.key === 'Escape' && this.tagsSelected && this.tagsSelected.size > 0) {
+        const colorModal = document.getElementById('tag-color-modal');
+        if (colorModal && !colorModal.hidden) return;
+        this.clearSelectedTags();
+      }
+    };
+    document.addEventListener('keydown', this._tagsKeyHandler);
+
     // Модалка "Цвет тега" — тот же паттерн close/cancel/overlay-click, что и
     // у модалок вкладки "Сервера" (см. setupServerFormEvents).
     document.getElementById('tag-color-modal-save-btn')?.addEventListener('click', () => this.saveTagColorModal());
@@ -4567,16 +4581,12 @@ class SPARouter {
       return;
     }
 
-    // Цвет тега — один на тег во всей системе (граф связей красит узлы им же).
-    // Плитка = чекбокс выбора + кнопка "показать статьи с тегом" + круглый переключатель цвета
+    // Плитка тега = кликабельная карточка (открытие статей или выбор) + круглый переключатель цвета
+    // Выделение не висит постоянно: на ПК — через Ctrl+клик (Cmd+клик), на телефонах — через долгое нажатие.
     gridEl.innerHTML = filtered.map((t) => {
       const isSelected = this.tagsSelected && this.tagsSelected.has(t.tag);
       return `
         <div class="tag-card${isSelected ? ' is-selected' : ''}" data-tag="${this.escapeHtml(t.tag)}">
-          <label class="tag-card-select" title="Выбрать тег «${this.escapeHtml(t.tag)}»">
-            <input type="checkbox" class="tag-card-checkbox" data-tag-select="${this.escapeHtml(t.tag)}"${isSelected ? ' checked' : ''} aria-label="Выбрать тег «${this.escapeHtml(t.tag)}»">
-            <span class="tag-card-checkbox-custom"><i class="fas fa-check"></i></span>
-          </label>
           <button type="button" class="tag-card-main" data-open-tag title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
             <span class="tag-card-icon" style="background:${t.color}26;color:${t.color}"><i class="fas fa-hashtag"></i></span>
             <span class="tag-card-body">
@@ -4587,20 +4597,87 @@ class SPARouter {
           <button type="button" class="tag-card-color" data-open-tag-color="${this.escapeHtml(t.tag)}" title="Изменить цвет тега «${this.escapeHtml(t.tag)}»" aria-label="Изменить цвет тега «${this.escapeHtml(t.tag)}»">
             <span class="tag-card-swatch" style="background:${t.color}"></span>
           </button>
+          <span class="tag-card-check" aria-hidden="true"><i class="fas fa-check"></i></span>
         </div>
       `;
     }).join('');
 
-    gridEl.querySelectorAll('[data-tag-select]').forEach((cb) => {
-      cb.addEventListener('change', (e) => {
-        this.toggleTagSelection(e.target.dataset.tagSelect, e.target.checked);
+    gridEl.querySelectorAll('.tag-card').forEach((card) => {
+      const tag = card.dataset.tag;
+      let longPressTimer = null;
+      let longPressTriggered = false;
+      let touchStartX = 0;
+      let touchStartY = 0;
+
+      // Долгое нажатие (сенсорные устройства / телефоны) для включения выделения
+      card.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        longPressTriggered = false;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        clearTimeout(longPressTimer);
+        longPressTimer = setTimeout(() => {
+          longPressTriggered = true;
+          if (navigator.vibrate) {
+            try { navigator.vibrate(40); } catch (_) {}
+          }
+          this.toggleTagSelection(tag);
+        }, 450);
+      }, { passive: true });
+
+      card.addEventListener('touchmove', (e) => {
+        if (!longPressTimer || !e.touches[0]) return;
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.hypot(dx, dy) > 10) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }, { passive: true });
+
+      card.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        if (longPressTriggered) {
+          e.preventDefault();
+          setTimeout(() => { longPressTriggered = false; }, 120);
+        }
       });
-    });
-    gridEl.querySelectorAll('[data-open-tag]').forEach((btn) => {
-      btn.addEventListener('click', () => this.openTagInAntropedia(btn.closest('.tag-card').dataset.tag));
-    });
-    gridEl.querySelectorAll('[data-open-tag-color]').forEach((btn) => {
-      btn.addEventListener('click', () => this.showTagColorModal(btn.dataset.openTagColor));
+
+      card.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        longPressTriggered = false;
+      });
+
+      // Клик по основной области:
+      // - Ctrl+клик / Cmd+клик или уже активный режим выбора -> переключение выделения
+      // - Обычный клик без режима выбора -> открытие статей с тегом в Antropedia
+      const mainBtn = card.querySelector('[data-open-tag]');
+      if (mainBtn) {
+        mainBtn.addEventListener('click', (e) => {
+          if (longPressTriggered) {
+            longPressTriggered = false;
+            return;
+          }
+          const isSelectionActive = this.tagsSelected && this.tagsSelected.size > 0;
+          if (e.ctrlKey || e.metaKey || isSelectionActive) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleTagSelection(tag);
+            return;
+          }
+          this.openTagInAntropedia(tag);
+        });
+      }
+
+      const colorBtn = card.querySelector('[data-open-tag-color]');
+      if (colorBtn) {
+        colorBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showTagColorModal(tag);
+        });
+      }
     });
 
     this.updateTagsBulkBar();
@@ -4608,7 +4685,8 @@ class SPARouter {
 
   toggleTagSelection(tag, isSelected) {
     if (!this.tagsSelected) this.tagsSelected = new Set();
-    if (isSelected) {
+    const shouldSelect = typeof isSelected === 'boolean' ? isSelected : !this.tagsSelected.has(tag);
+    if (shouldSelect) {
       this.tagsSelected.add(tag);
     } else {
       this.tagsSelected.delete(tag);
@@ -4616,9 +4694,7 @@ class SPARouter {
     const safeTag = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(tag) : tag.replace(/"/g, '\\"');
     const card = document.getElementById('tagsContainer')?.querySelector(`.tag-card[data-tag="${safeTag}"]`);
     if (card) {
-      card.classList.toggle('is-selected', isSelected);
-      const cb = card.querySelector('.tag-card-checkbox');
-      if (cb) cb.checked = isSelected;
+      card.classList.toggle('is-selected', shouldSelect);
     }
     this.updateTagsBulkBar();
   }
@@ -4640,10 +4716,14 @@ class SPARouter {
     const countText = document.getElementById('tagsBulkSelectedCount');
     const deselectBtn = document.getElementById('tagsDeselectAllBtn');
     const selectAllBtn = document.getElementById('tagsSelectAllBtn');
+    const hintEl = document.getElementById('tagsSelectionHint');
     const count = this.tagsSelected ? this.tagsSelected.size : 0;
     const visible = this.currentFilteredTags || [];
     const allSelected = visible.length > 0 && visible.every((t) => this.tagsSelected && this.tagsSelected.has(t.tag));
 
+    if (hintEl) {
+      hintEl.hidden = count > 0;
+    }
     if (countText) {
       const plural = (n, one, few, many) => {
         const m10 = n % 10;

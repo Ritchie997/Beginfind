@@ -6,8 +6,17 @@ const radioStore = require('./radio-store');
 
 const rootDir = path.resolve(__dirname, '../../');
 
+async function getUnusedFrequency() {
+  for (let i = 0; i < 50; i++) {
+    const freq = Math.round((200 + Math.random() * 800) * 10) / 10;
+    const existing = await radioStore.getStationByFrequency(freq);
+    if (!existing) return freq;
+  }
+  return 999.9;
+}
+
 test('radio-calendar: CRUD and overlap validation for scheduled broadcasts', async () => {
-  const uniqueFreq = Math.round((70 + Math.random() * 20) * 10) / 10;
+  const uniqueFreq = await getUnusedFrequency();
   const station = await radioStore.createStation({
     frequency: uniqueFreq,
     name: 'Schedule Test Station',
@@ -103,7 +112,7 @@ test('radio-calendar: CRUD and overlap validation for scheduled broadcasts', asy
 });
 
 test('radio-calendar: Priority arbitration in getStationLiveState()', async () => {
-  const uniqueFreq = Math.round((70 + Math.random() * 20) * 10) / 10;
+  const uniqueFreq = await getUnusedFrequency();
   const station = await radioStore.createStation({
     frequency: uniqueFreq,
     name: 'Arbitration Station',

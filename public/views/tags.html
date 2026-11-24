@@ -26,12 +26,9 @@
         <span class="tags-count" id="tagsCount"></span>
       </div>
       <div class="tags-status-actions" id="tagsSelectionActions">
-        <button type="button" class="btn btn-secondary tags-action-sm-btn" id="tagsSelectAllBtn" title="Выбрать все видимые теги">
-          <i class="far fa-check-square"></i> Выбрать все
-        </button>
-        <button type="button" class="btn btn-secondary tags-action-sm-btn" id="tagsDeselectAllBtn" title="Снять выбор" hidden>
-          <i class="far fa-square"></i> Снять выбор
-        </button>
+        <span class="tags-selection-hint" id="tagsSelectionHint">
+          <i class="fas fa-info-circle"></i> Ctrl+клик или долгое нажатие для выбора
+        </span>
       </div>
     </div>
 
@@ -42,14 +39,20 @@
         <span id="tagsBulkSelectedCount">Выбрано: 0</span>
       </div>
       <div class="tags-bulk-actions">
+        <button type="button" class="btn btn-secondary tags-bulk-btn" id="tagsSelectAllBtn" title="Выбрать все видимые теги">
+          <i class="far fa-check-square"></i> Выбрать все
+        </button>
+        <button type="button" class="btn btn-secondary tags-bulk-btn" id="tagsDeselectAllBtn" title="Снять выбор" hidden>
+          <i class="far fa-square"></i> Снять выбор
+        </button>
         <button type="button" class="btn btn-secondary tags-bulk-btn" id="tagsBulkColorBtn">
           <i class="fas fa-palette"></i> Изменить цвет
         </button>
         <button type="button" class="btn btn-danger tags-bulk-btn" id="tagsBulkDeleteBtn">
           <i class="fas fa-trash-alt"></i> Удалить
         </button>
-        <button type="button" class="btn btn-secondary tags-bulk-btn tags-bulk-cancel-btn" id="tagsBulkCancelBtn" title="Снять выбор">
-          <i class="fas fa-times"></i>
+        <button type="button" class="btn btn-secondary tags-bulk-btn tags-bulk-cancel-btn" id="tagsBulkCancelBtn" title="Снять выбор и выйти">
+          Отмена
         </button>
       </div>
     </div>
@@ -154,22 +157,17 @@
   gap: 8px;
 }
 
-.tags-action-sm-btn {
-  padding: 5px 11px;
+.tags-selection-hint {
   font-size: 12px;
-  border-radius: 6px;
-  height: 30px;
-  display: inline-flex;
+  color: var(--text-muted);
+  display: flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
-  background: var(--background-tertiary);
-  border: 1px solid var(--background-accent);
-  color: var(--text-normal);
+  user-select: none;
 }
-.tags-action-sm-btn:hover {
-  border-color: var(--blurple);
-  color: var(--text-normal);
+.tags-selection-hint i {
+  color: var(--blurple);
+  font-size: 11px;
 }
 
 .tags-heading {
@@ -319,61 +317,45 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   border-radius: 8px;
   padding: 4px 8px 4px 6px;
   transition: border-color 0.15s, background-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 @media (hover: hover) {
   .tag-card:hover { border-color: var(--blurple); transform: translateY(-1px); }
 }
 .tag-card.is-selected {
   border-color: var(--blurple) !important;
-  background: rgba(88, 101, 242, 0.1);
+  background: rgba(88, 101, 242, 0.12) !important;
   box-shadow: 0 0 0 1px var(--blurple);
 }
 
-.tag-card-select {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 4px 2px;
-  user-select: none;
-}
-.tag-card-checkbox {
+.tag-card-check {
+  display: none;
   position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.tag-card-checkbox-custom {
+  top: -5px;
+  right: -5px;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  border: 1.5px solid var(--text-muted);
-  background: var(--background-tertiary);
-  display: flex;
+  border-radius: 50%;
+  background: var(--blurple);
+  color: #fff;
+  font-size: 10px;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  color: transparent;
-  transition: all 0.15s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--background-secondary);
+  z-index: 2;
 }
-.tag-card:hover .tag-card-checkbox-custom {
-  border-color: var(--text-normal);
-}
-.tag-card-checkbox:checked + .tag-card-checkbox-custom {
-  background: var(--blurple);
-  border-color: var(--blurple);
-  color: #fff;
-}
-.tag-card-checkbox:focus-visible + .tag-card-checkbox-custom {
-  box-shadow: 0 0 0 2px var(--blurple);
+.tag-card.is-selected .tag-card-check {
+  display: flex;
 }
 
 .tag-card-main {

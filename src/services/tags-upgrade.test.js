@@ -91,7 +91,7 @@ test('tags upgrade: deleteTags in articles-store handles empty or non-matching t
   assert.ok(Array.isArray(res.affectedSlugs));
 });
 
-test('tags upgrade: tags.html contains sorting dropdown, selection controls and bulk action bar', () => {
+test('tags upgrade: tags.html contains sorting dropdown, selection hint and bulk action bar', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../../public/views/tags.html'), 'utf8');
 
   // Sort dropdown & options
@@ -101,7 +101,8 @@ test('tags upgrade: tags.html contains sorting dropdown, selection controls and 
   assert.ok(html.includes('value="name_asc"'), 'Must have name_asc sort option');
   assert.ok(html.includes('value="name_desc"'), 'Must have name_desc sort option');
 
-  // Selection buttons
+  // Selection hint and buttons
+  assert.ok(html.includes('id="tagsSelectionHint"'), 'Must have tagsSelectionHint');
   assert.ok(html.includes('id="tagsSelectAllBtn"'), 'Must have tagsSelectAllBtn');
   assert.ok(html.includes('id="tagsDeselectAllBtn"'), 'Must have tagsDeselectAllBtn');
 
@@ -117,7 +118,7 @@ test('tags upgrade: tags.html contains sorting dropdown, selection controls and 
   assert.ok(html.includes('id="tag-color-modal-desc"'), 'Modal must have tag-color-modal-desc');
 });
 
-test('tags upgrade: spa-router.js implements sorting, selection, bulk color and bulk deletion', () => {
+test('tags upgrade: spa-router.js implements sorting, gesture selection (Ctrl+click & long press), bulk color and deletion', () => {
   const js = fs.readFileSync(path.resolve(__dirname, '../../public/spa-router.js'), 'utf8');
 
   // Check state & handlers
@@ -130,9 +131,11 @@ test('tags upgrade: spa-router.js implements sorting, selection, bulk color and 
   assert.ok(js.includes('showBulkTagColorModal('), 'Must implement showBulkTagColorModal');
   assert.ok(js.includes('updateTagsBulkBar('), 'Must implement updateTagsBulkBar');
 
-  // Check card checkbox in renderTagsGrid
-  assert.ok(js.includes('tag-card-checkbox'), 'Cards must render checkbox');
-  assert.ok(js.includes('data-tag-select='), 'Checkboxes must have data-tag-select');
+  // Verify non-persistent selection: Ctrl/Cmd click on desktop and long press on touch
+  assert.ok(js.includes('e.ctrlKey || e.metaKey'), 'Must handle Ctrl/Cmd click for selection');
+  assert.ok(js.includes('longPressTimer'), 'Must handle long press timer for mobile devices');
+  assert.ok(js.includes('tag-card-check'), 'Cards render clean check badge instead of permanent checkboxes');
+  assert.ok(!js.includes('tag-card-checkbox'), 'Cards must NOT contain permanent checkbox elements');
 });
 
 test('tags upgrade: app.js ApiClient supports deleteTags and bulk setTagColor with DELETE body support', () => {
