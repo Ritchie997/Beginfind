@@ -384,12 +384,23 @@
       schedUserTzLabel: document.getElementById('schedUserTzLabel'),
       schedEventDurationDisplay: document.getElementById('schedEventDurationDisplay'),
       schedEventEndTimeDisplay: document.getElementById('schedEventEndTimeDisplay'),
+      schedSourceSection: document.getElementById('schedSourceSection'),
       schedSourceTimeline: document.getElementById('schedSourceTimeline'),
+      schedSourceStationGrid: document.getElementById('schedSourceStationGrid'),
+      schedStationGridSelectWrap: document.getElementById('schedStationGridSelectWrap'),
+      schedStationGridSelect: document.getElementById('schedStationGridSelect'),
       schedSourceTemplate: document.getElementById('schedSourceTemplate'),
-      schedSourceEmpty: document.getElementById('schedSourceEmpty'),
-      schedSourceTimelineCount: document.getElementById('schedSourceTimelineCount'),
       schedTemplateSelectWrap: document.getElementById('schedTemplateSelectWrap'),
       schedTemplateSelect: document.getElementById('schedTemplateSelect'),
+      btnSaveTemplateFromModal: document.getElementById('btnSaveTemplateFromModal'),
+      schedTemplateEmptyNotice: document.getElementById('schedTemplateEmptyNotice'),
+      schedSourcePlaylist: document.getElementById('schedSourcePlaylist'),
+      schedPlaylistSelectWrap: document.getElementById('schedPlaylistSelectWrap'),
+      schedPlaylistSelect: document.getElementById('schedPlaylistSelect'),
+      schedSourceEmpty: document.getElementById('schedSourceEmpty'),
+      schedEmptyDurationWrap: document.getElementById('schedEmptyDurationWrap'),
+      schedEmptyDurationSelect: document.getElementById('schedEmptyDurationSelect'),
+      schedSourceTimelineCount: document.getElementById('schedSourceTimelineCount'),
       schedEventIsLoop: document.getElementById('schedEventIsLoop'),
       schedEventFallback: document.getElementById('schedEventFallback'),
       btnSubmitScheduleBroadcast: document.getElementById('btnSubmitScheduleBroadcast')
@@ -4663,6 +4674,9 @@
     }
   }
 
+  let cachedSelectedStationSlots = null;
+  let cachedSelectedPlaylistSlots = null;
+
   function openCreateScheduleModal(defaultDateStr = null) {
     if (!dom.modalScheduleBroadcast) return;
     const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -4682,9 +4696,20 @@
     if (dom.schedEventStartTime) dom.schedEventStartTime.value = defaultTimeVal;
     if (dom.schedEventIsLoop) dom.schedEventIsLoop.checked = false;
     if (dom.schedEventFallback) dom.schedEventFallback.value = 'return_to_normal';
+    if (dom.schedSourceSection) dom.schedSourceSection.style.display = 'block';
     if (dom.schedSourceTimeline) dom.schedSourceTimeline.checked = true;
 
+    if (dom.schedStationGridSelectWrap) dom.schedStationGridSelectWrap.style.display = 'none';
+    if (dom.schedTemplateSelectWrap) dom.schedTemplateSelectWrap.style.display = 'none';
+    if (dom.schedPlaylistSelectWrap) dom.schedPlaylistSelectWrap.style.display = 'none';
+    if (dom.schedEmptyDurationWrap) dom.schedEmptyDurationWrap.style.display = 'none';
+
+    cachedSelectedStationSlots = null;
+    cachedSelectedPlaylistSlots = null;
+
     populateScheduleTemplatesDropdown();
+    populateScheduleStationsDropdown();
+    populateSchedulePlaylistsDropdown();
     updateScheduleModalDurations();
     showModal('modalScheduleBroadcast');
   }
@@ -4702,8 +4727,19 @@
     if (dom.schedEventStartTime) dom.schedEventStartTime.value = startVal;
     if (dom.schedEventIsLoop) dom.schedEventIsLoop.checked = Boolean(ev.is_loop);
     if (dom.schedEventFallback) dom.schedEventFallback.value = ev.fallback_action || 'return_to_normal';
+    if (dom.schedSourceSection) dom.schedSourceSection.style.display = 'none';
+
+    if (dom.schedStationGridSelectWrap) dom.schedStationGridSelectWrap.style.display = 'none';
+    if (dom.schedTemplateSelectWrap) dom.schedTemplateSelectWrap.style.display = 'none';
+    if (dom.schedPlaylistSelectWrap) dom.schedPlaylistSelectWrap.style.display = 'none';
+    if (dom.schedEmptyDurationWrap) dom.schedEmptyDurationWrap.style.display = 'none';
+
+    cachedSelectedStationSlots = null;
+    cachedSelectedPlaylistSlots = null;
 
     populateScheduleTemplatesDropdown();
+    populateScheduleStationsDropdown();
+    populateSchedulePlaylistsDropdown();
     updateScheduleModalDurations(ev.duration);
     showModal('modalScheduleBroadcast');
   }
@@ -4712,17 +4748,49 @@
     if (!dom.schedTemplateSelect) return;
     const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
     if (templates.length === 0) {
-      dom.schedTemplateSelect.innerHTML = '<option value="">(У вас пока нет сохранённых шаблонов)</option>';
-      if (dom.schedSourceTemplate) dom.schedSourceTemplate.disabled = true;
+      dom.schedTemplateSelect.innerHTML = '<option value="">(Шаблонов пока нет)</option>';
+      if (dom.schedTemplateEmptyNotice) dom.schedTemplateEmptyNotice.style.display = 'block';
     } else {
-      if (dom.schedSourceTemplate) dom.schedSourceTemplate.disabled = false;
+      if (dom.schedTemplateEmptyNotice) dom.schedTemplateEmptyNotice.style.display = 'none';
       dom.schedTemplateSelect.innerHTML = templates.map(t => `
-        <option value="${t.id}">${escapeHtml(t.name)} (${(t.blocks || []).length} блоков, ${formatDuration(t.totalDurationSec || 0)})</option>
+        <option value="${t.id}">${escapeHtml(t.name)} (${(t.blocks || []).length} блоков, ${formatDuration(t.totalDurationSec || t.totalDuration || 0)})</option>
+      `).join('');
+    }
+    if (dom.schedSourceTemplate) dom.schedSourceTemplate.disabled = false;
+  }
+
+  function populateScheduleStationsDropdown() {
+    if (!dom.schedStationGridSelect) return;
+    const stations = state.myStations || [];
+    if (stations.length === 0) {
+      dom.schedStationGridSelect.innerHTML = '<option value="">(У вас пока нет радиостанций)</option>';
+    } else {
+      dom.schedStationGridSelect.innerHTML = stations.map(s => `
+        <option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.frequency)} FM)</option>
       `).join('');
     }
   }
 
-  function updateScheduleModalDurations(explicitDuration = null) {
+  async function populateSchedulePlaylistsDropdown() {
+    if (!dom.schedPlaylistSelect) return;
+    try {
+      let playlists = state.userPlaylists;
+      if (!playlists || playlists.length === 0) {
+        const res = await api('/api/radio/playlists/mine').catch(() => ({ playlists: [] }));
+        playlists = res.playlists || [];
+        state.userPlaylists = playlists;
+      }
+      if (playlists.length === 0) {
+        dom.schedPlaylistSelect.innerHTML = '<option value="">(У вас пока нет плейлистов в медиатеке)</option>';
+      } else {
+        dom.schedPlaylistSelect.innerHTML = playlists.map(p => `
+          <option value="${p.id}">${escapeHtml(p.name)} (${p.tracks_count || (p.tracks && p.tracks.length) || 0} треков)</option>
+        `).join('');
+      }
+    } catch (_) {}
+  }
+
+  async function updateScheduleModalDurations(explicitDuration = null) {
     const tz = getUserTimezoneInfo();
     if (dom.schedUserTzLabel) dom.schedUserTzLabel.textContent = tz.label || tz.utcOffsetStr;
 
@@ -4731,18 +4799,49 @@
       durationSec = Number(explicitDuration) || 0;
     } else {
       let sourceMode = 'timeline';
-      if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+      if (dom.schedSourceStationGrid && dom.schedSourceStationGrid.checked) sourceMode = 'station_grid';
+      else if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+      else if (dom.schedSourcePlaylist && dom.schedSourcePlaylist.checked) sourceMode = 'playlist';
       else if (dom.schedSourceEmpty && dom.schedSourceEmpty.checked) sourceMode = 'empty';
 
       if (sourceMode === 'timeline') {
         durationSec = state.editorCachedDurationSec || (state.editorSlots || []).reduce((s, x) => s + (Number(x.duration) || 0), 0);
+      } else if (sourceMode === 'station_grid') {
+        const stId = dom.schedStationGridSelect ? dom.schedStationGridSelect.value : null;
+        if (stId) {
+          try {
+            const rawSlots = await api(`/api/radio/stations/${stId}/timeline`);
+            cachedSelectedStationSlots = rawSlots || [];
+            durationSec = cachedSelectedStationSlots.reduce((s, x) => s + (Number(x.duration) || 0), 0);
+          } catch (_) {
+            durationSec = 0;
+          }
+        }
       } else if (sourceMode === 'template') {
         const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
         const tplId = dom.schedTemplateSelect ? dom.schedTemplateSelect.value : null;
         const tpl = templates.find(t => String(t.id) === String(tplId)) || templates[0];
-        durationSec = tpl ? (tpl.totalDurationSec || 0) : 0;
-      } else {
-        durationSec = 0;
+        durationSec = tpl ? (tpl.totalDurationSec || tpl.totalDuration || 0) : 0;
+      } else if (sourceMode === 'playlist') {
+        const plId = dom.schedPlaylistSelect ? dom.schedPlaylistSelect.value : null;
+        if (plId) {
+          try {
+            const plData = await api(`/api/radio/playlists/${plId}`);
+            cachedSelectedPlaylistSlots = (plData.tracks || []).map(t => ({
+              track_id: t.id,
+              title: t.title,
+              audio_url: t.audio_url,
+              duration: Number(t.duration) || 0,
+              type: t.type || 'track'
+            }));
+            durationSec = cachedSelectedPlaylistSlots.reduce((s, x) => s + (Number(x.duration) || 0), 0);
+          } catch (_) {
+            durationSec = 0;
+          }
+        }
+      } else if (sourceMode === 'empty') {
+        const selVal = dom.schedEmptyDurationSelect ? dom.schedEmptyDurationSelect.value : 3600;
+        durationSec = Number(selVal) || 3600;
       }
     }
 
@@ -4792,29 +4891,70 @@
     const startTimeIso = startDate.toISOString();
 
     let slots = [];
+    let plannedDuration = 3600;
     let sourceMode = 'timeline';
-    if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+    if (dom.schedSourceStationGrid && dom.schedSourceStationGrid.checked) sourceMode = 'station_grid';
+    else if (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) sourceMode = 'template';
+    else if (dom.schedSourcePlaylist && dom.schedSourcePlaylist.checked) sourceMode = 'playlist';
     else if (dom.schedSourceEmpty && dom.schedSourceEmpty.checked) sourceMode = 'empty';
 
     if (eventId) {
       const existing = state.scheduledEvents.find(x => String(x.id) === String(eventId));
       if (existing) {
         slots = typeof existing.slots_data === 'string' ? JSON.parse(existing.slots_data) : existing.slots_data;
+        plannedDuration = existing.duration || 3600;
       }
     } else {
       if (sourceMode === 'timeline') {
         syncCompiledSlots();
         slots = state.editorSlots || [];
+        plannedDuration = state.editorCachedDurationSec || 3600;
+      } else if (sourceMode === 'station_grid') {
+        const stId = dom.schedStationGridSelect ? dom.schedStationGridSelect.value : null;
+        if (cachedSelectedStationSlots && cachedSelectedStationSlots.length > 0) {
+          slots = cachedSelectedStationSlots;
+        } else if (stId) {
+          const raw = await api(`/api/radio/stations/${stId}/timeline`);
+          slots = (raw || []).map(s => ({
+            track_id: s.track_id || null,
+            title: s.title || 'Трек',
+            audio_url: s.audio_url || '',
+            duration: Number(s.duration) || 0,
+            type: s.type || 'track'
+          }));
+        }
+        plannedDuration = slots.reduce((s, x) => s + (Number(x.duration) || 0), 0) || 3600;
       } else if (sourceMode === 'template') {
         const templates = typeof getSavedTemplates === 'function' ? getSavedTemplates() : [];
         const tplId = dom.schedTemplateSelect ? dom.schedTemplateSelect.value : null;
         const tpl = templates.find(t => String(t.id) === String(tplId)) || templates[0];
-        if (tpl && Array.isArray(tpl.blocks)) {
+        if (tpl && Array.isArray(tpl.blocks) && tpl.blocks.length > 0) {
           const compiled = compileBlocksToSlots(tpl.blocks, startTimeIso);
           slots = compiled.slots || [];
+          plannedDuration = compiled.totalDurationSec || tpl.totalDurationSec || tpl.totalDuration || 3600;
+        } else {
+          slots = [];
+          plannedDuration = 3600;
         }
-      } else {
+      } else if (sourceMode === 'playlist') {
+        const plId = dom.schedPlaylistSelect ? dom.schedPlaylistSelect.value : null;
+        if (cachedSelectedPlaylistSlots && cachedSelectedPlaylistSlots.length > 0) {
+          slots = cachedSelectedPlaylistSlots;
+        } else if (plId) {
+          const plData = await api(`/api/radio/playlists/${plId}`);
+          slots = (plData.tracks || []).map(t => ({
+            track_id: t.id,
+            title: t.title,
+            audio_url: t.audio_url,
+            duration: Number(t.duration) || 0,
+            type: t.type || 'track'
+          }));
+        }
+        plannedDuration = slots.reduce((s, x) => s + (Number(x.duration) || 0), 0) || 3600;
+      } else if (sourceMode === 'empty') {
         slots = [];
+        const selVal = dom.schedEmptyDurationSelect ? dom.schedEmptyDurationSelect.value : 3600;
+        plannedDuration = Number(selVal) || 3600;
       }
     }
 
@@ -4826,6 +4966,7 @@
       title,
       description,
       start_time: startTimeIso,
+      duration: plannedDuration,
       is_loop: isLoop,
       fallback_action: fallbackAction,
       slots_data: slots
@@ -6458,13 +6599,52 @@
     dom.schedEventStartTime?.addEventListener('change', () => updateScheduleModalDurations());
     document.querySelectorAll('input[name="schedSourceMode"]').forEach((radio) => {
       radio.addEventListener('change', () => {
+        if (dom.schedStationGridSelectWrap) {
+          dom.schedStationGridSelectWrap.style.display = (dom.schedSourceStationGrid && dom.schedSourceStationGrid.checked) ? 'block' : 'none';
+        }
         if (dom.schedTemplateSelectWrap) {
           dom.schedTemplateSelectWrap.style.display = (dom.schedSourceTemplate && dom.schedSourceTemplate.checked) ? 'block' : 'none';
+        }
+        if (dom.schedPlaylistSelectWrap) {
+          dom.schedPlaylistSelectWrap.style.display = (dom.schedSourcePlaylist && dom.schedSourcePlaylist.checked) ? 'block' : 'none';
+        }
+        if (dom.schedEmptyDurationWrap) {
+          dom.schedEmptyDurationWrap.style.display = (dom.schedSourceEmpty && dom.schedSourceEmpty.checked) ? 'block' : 'none';
         }
         updateScheduleModalDurations();
       });
     });
+    dom.schedStationGridSelect?.addEventListener('change', () => {
+      cachedSelectedStationSlots = null;
+      updateScheduleModalDurations();
+    });
     dom.schedTemplateSelect?.addEventListener('change', () => updateScheduleModalDurations());
+    dom.schedPlaylistSelect?.addEventListener('change', () => {
+      cachedSelectedPlaylistSlots = null;
+      updateScheduleModalDurations();
+    });
+    dom.schedEmptyDurationSelect?.addEventListener('change', () => updateScheduleModalDurations());
+
+    dom.btnSaveTemplateFromModal?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!state.editorBlocks || state.editorBlocks.length === 0) {
+        showToast('В ленте редактора пока нет блоков для сохранения в шаблон', 'warning');
+        return;
+      }
+      const tplName = window.prompt('Введите название нового шаблона:', `Шаблон эфира от ${new Date().toLocaleDateString('ru-RU')}`);
+      if (tplName && tplName.trim()) {
+        saveCurrentGridAsTemplate(tplName.trim());
+        populateScheduleTemplatesDropdown();
+        if (dom.schedSourceTemplate) dom.schedSourceTemplate.checked = true;
+        if (dom.schedStationGridSelectWrap) dom.schedStationGridSelectWrap.style.display = 'none';
+        if (dom.schedTemplateSelectWrap) dom.schedTemplateSelectWrap.style.display = 'block';
+        if (dom.schedPlaylistSelectWrap) dom.schedPlaylistSelectWrap.style.display = 'none';
+        if (dom.schedEmptyDurationWrap) dom.schedEmptyDurationWrap.style.display = 'none';
+        updateScheduleModalDurations();
+        showToast(`Шаблон «${tplName.trim()}» сохранён и выбран!`, 'success');
+      }
+    });
 
     dom.formScheduleBroadcast?.addEventListener('submit', handleScheduleBroadcastSubmit);
 

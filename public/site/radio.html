@@ -1164,24 +1164,69 @@
               </div>
             </div>
           </div>
-          <div class="radio-form-group">
-            <label style="font-weight:600;">Источник треков сетки</label>
-            <div class="radio-sched-source-options" style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
+          <div class="radio-form-group" id="schedSourceSection">
+            <label style="font-weight:600;">Источник сетки вещания</label>
+            <div class="radio-sched-source-options" style="display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+              <!-- 1. Текущая сетка из ленты редактора -->
               <label class="radio-sched-radio-label">
                 <input type="radio" name="schedSourceMode" value="timeline" id="schedSourceTimeline" checked>
-                <span>Использовать текущую сетку из ленты редактора (<span id="schedSourceTimelineCount">0</span> треков/блоков)</span>
+                <span>Использовать текущую открытую сетку из ленты (<span id="schedSourceTimelineCount">0</span> треков/блоков)</span>
               </label>
+
+              <!-- 2. Сетка вещания из сохранённых радиостанций -->
+              <label class="radio-sched-radio-label">
+                <input type="radio" name="schedSourceMode" value="station_grid" id="schedSourceStationGrid">
+                <span>Использовать сохранённую сетку вещания радиостанции</span>
+              </label>
+              <div id="schedStationGridSelectWrap" style="display:none; margin-left:24px;">
+                <select id="schedStationGridSelect" class="radio-form-select form-control" style="width:100%;"></select>
+                <div style="font-size:0.75rem; color:#94a3b8; margin-top:3px;">
+                  Загрузить сохранённую сетку треков и расписание любой из ваших станций
+                </div>
+              </div>
+
+              <!-- 3. Сохранённые шаблоны эфира -->
               <label class="radio-sched-radio-label">
                 <input type="radio" name="schedSourceMode" value="template" id="schedSourceTemplate">
-                <span>Использовать сохранённый шаблон эфира</span>
+                <span>Использовать сохранённый шаблон эфирной сетки</span>
               </label>
               <div id="schedTemplateSelectWrap" style="display:none; margin-left:24px;">
-                <select id="schedTemplateSelect" class="radio-form-select form-control" style="width:100%;"></select>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <select id="schedTemplateSelect" class="radio-form-select form-control" style="flex:1;"></select>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btnSaveTemplateFromModal" title="Сохранить текущую сетку ленты как новый шаблон" style="white-space:nowrap;">
+                    <i class="fas fa-plus"></i> В шаблоны
+                  </button>
+                </div>
+                <div id="schedTemplateEmptyNotice" style="display:none; font-size:0.78rem; color:#fbbf24; margin-top:4px;">
+                  Шаблоны ещё не сохранены. Нажмите «В шаблоны», чтобы сохранить текущую сетку как шаблон.
+                </div>
               </div>
+
+              <!-- 4. Плейлист из медиатеки -->
+              <label class="radio-sched-radio-label">
+                <input type="radio" name="schedSourceMode" value="playlist" id="schedSourcePlaylist">
+                <span>Использовать плейлист из медиатеки</span>
+              </label>
+              <div id="schedPlaylistSelectWrap" style="display:none; margin-left:24px;">
+                <select id="schedPlaylistSelect" class="radio-form-select form-control" style="width:100%;"></select>
+              </div>
+
+              <!-- 5. Пустая передача -->
               <label class="radio-sched-radio-label">
                 <input type="radio" name="schedSourceMode" value="empty" id="schedSourceEmpty">
                 <span>Создать пустую передачу (наполнить в редакторе позже)</span>
               </label>
+              <div id="schedEmptyDurationWrap" style="display:none; margin-left:24px;">
+                <label style="font-size:0.82rem; color:#94a3b8; display:block; margin-bottom:4px;">Хронометраж эфирного окна передачи:</label>
+                <select id="schedEmptyDurationSelect" class="radio-form-select form-control" style="max-width:240px;">
+                  <option value="1800">30 минут</option>
+                  <option value="3600" selected>1 час</option>
+                  <option value="5400">1.5 часа</option>
+                  <option value="7200">2 часа</option>
+                  <option value="10800">3 часа</option>
+                  <option value="14400">4 часа</option>
+                </select>
+              </div>
             </div>
           </div>
           <div class="radio-form-group" style="margin-top:12px;">

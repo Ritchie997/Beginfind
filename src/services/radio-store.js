@@ -435,49 +435,54 @@ async function createScheduledBroadcast(stationId, actingUserId, isRootOrAdmin, 
     throw new Error('Укажите название запланированной передачи');
   }
 
-  if (!Array.isArray(slots) || slots.length === 0) {
-    throw new Error('Сетка передачи должна содержать хотя бы один трек');
-  }
-
   const startMs = new Date(startTime).getTime();
   if (isNaN(startMs)) {
     throw new Error('Укажите корректную дату и время старта передачи');
   }
 
-  const preparedSlots = [];
-  let orderIndex = 0;
-  let cursor = startMs;
-
-  for (const s of slots) {
-    const durSec = Math.max(1, Number(s.duration) || 0);
-    const durMs = Math.round(durSec * 1000);
-    const sStart = new Date(cursor).toISOString();
-    const sEnd = new Date(cursor + durMs).toISOString();
-
-    let audioUrl = s.audio_url || s.audioUrl;
-    if (!audioUrl && (s.track_id || s.trackId)) {
-      const dbTrack = await get('SELECT audio_url FROM radio_tracks WHERE id = ?', [s.track_id || s.trackId]);
-      if (dbTrack && dbTrack.audio_url) audioUrl = dbTrack.audio_url;
-    }
-    if (!audioUrl) audioUrl = '';
-
-    preparedSlots.push({
-      slotOrder: orderIndex++,
-      trackId: s.track_id || s.trackId || null,
-      title: String(s.title || 'Без названия').trim(),
-      type: ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
-      audioUrl,
-      duration: durSec,
-      startTime: sStart,
-      endTime: sEnd
-    });
-
-    cursor += durMs;
-  }
-
-  const totalDurationSec = preparedSlots.reduce((sum, s) => sum + s.duration, 0);
   const startIso = new Date(startMs).toISOString();
-  const endIso = new Date(cursor).toISOString();
+  let totalDurationSec = 0;
+  let endIso = null;
+  const preparedSlots = [];
+
+  if (Array.isArray(slots) && slots.length > 0) {
+    let orderIndex = 0;
+    let cursor = startMs;
+
+    for (const s of slots) {
+      const durSec = Math.max(1, Number(s.duration) || 0);
+      const durMs = Math.round(durSec * 1000);
+      const sStart = new Date(cursor).toISOString();
+      const sEnd = new Date(cursor + durMs).toISOString();
+
+      let audioUrl = s.audio_url || s.audioUrl;
+      if (!audioUrl && (s.track_id || s.trackId)) {
+        const dbTrack = await get('SELECT audio_url FROM radio_tracks WHERE id = ?', [s.track_id || s.trackId]);
+        if (dbTrack && dbTrack.audio_url) audioUrl = dbTrack.audio_url;
+      }
+      if (!audioUrl) audioUrl = '';
+
+      preparedSlots.push({
+        slotOrder: orderIndex++,
+        trackId: s.track_id || s.trackId || null,
+        title: String(s.title || 'Без названия').trim(),
+        type: ['track', 'podcast', 'speech'].includes(s.type) ? s.type : 'track',
+        audioUrl,
+        duration: durSec,
+        startTime: sStart,
+        endTime: sEnd
+      });
+
+      cursor += durMs;
+    }
+
+    totalDurationSec = preparedSlots.reduce((sum, s) => sum + s.duration, 0);
+    endIso = new Date(cursor).toISOString();
+  } else {
+    // Разрешено создание пустой передачи (наполняется в редакторе позже)
+    totalDurationSec = Math.max(60, Number(data.duration) || 3600);
+    endIso = new Date(startMs + totalDurationSec * 1000).toISOString();
+  }
 
   // Проверка наложения по времени с другими передачами этой же станции
   const overlap = await get(

@@ -83,6 +83,21 @@ test('radio-calendar: CRUD and overlap validation for scheduled broadcasts', asy
   const afterDelete = await radioStore.getScheduledBroadcastById(event2.id);
   assert.equal(afterDelete, null, 'Удаленный эфир не должен находиться');
 
+  // 7. Создание пустой передачи без слотов с кастомным хронометражем (пункт «Создать пустую передачу»)
+  const emptyStart = new Date(endTime1.getTime() + 7200 * 1000);
+  const emptyEvent = await radioStore.createScheduledBroadcast(station.id, 888, true, {
+    title: 'Пустая запланированная передача',
+    description: 'Наполнение сетки будет позже',
+    start_time: emptyStart.toISOString(),
+    duration: 5400, // 1.5 часа
+    slots_data: []
+  });
+  assert.ok(emptyEvent.id, 'Пустая передача должна успешно создаться');
+  assert.equal(emptyEvent.duration, 5400, 'Хронометраж должен быть 5400 секунд');
+  assert.equal(emptyEvent.status, 'planned');
+  const emptySlots = typeof emptyEvent.slots_data === 'string' ? JSON.parse(emptyEvent.slots_data) : emptyEvent.slots_data;
+  assert.deepEqual(emptySlots, [], 'Слоты пустой передачи должны быть пустым массивом');
+
   // Очистка станции
   await radioStore.deleteStation(station.id, 888, true);
 });
@@ -168,6 +183,16 @@ test('radio-calendar: HTML and CSS UI parity for calendar and scheduling', () =>
   assert.ok(radioHtml.includes('id="modalScheduleBroadcast"'), 'radio.html должен содержать модальное окно modalScheduleBroadcast');
   assert.ok(radioHtml.includes('id="formScheduleBroadcast"'), 'radio.html должен содержать форму formScheduleBroadcast');
   assert.ok(radioHtml.includes('id="schedEventStartTime"'), 'radio.html должен содержать ввод времени старта передачи');
+  assert.ok(radioHtml.includes('id="schedSourceTimeline"'), 'radio.html должен содержать выбор источника текущей ленты');
+  assert.ok(radioHtml.includes('id="schedSourceStationGrid"'), 'radio.html должен содержать выбор источника сетки станции');
+  assert.ok(radioHtml.includes('id="schedStationGridSelect"'), 'radio.html должен содержать выпадающий список станций');
+  assert.ok(radioHtml.includes('id="schedSourceTemplate"'), 'radio.html должен содержать выбор источника шаблона сетки');
+  assert.ok(radioHtml.includes('id="schedTemplateSelect"'), 'radio.html должен содержать выпадающий список шаблонов');
+  assert.ok(radioHtml.includes('id="btnSaveTemplateFromModal"'), 'radio.html должен содержать кнопку сохранения шаблона из модалки');
+  assert.ok(radioHtml.includes('id="schedSourcePlaylist"'), 'radio.html должен содержать выбор источника плейлиста медиатеки');
+  assert.ok(radioHtml.includes('id="schedPlaylistSelect"'), 'radio.html должен содержать выпадающий список плейлистов');
+  assert.ok(radioHtml.includes('id="schedSourceEmpty"'), 'radio.html должен содержать выбор пустой передачи');
+  assert.ok(radioHtml.includes('id="schedEmptyDurationSelect"'), 'radio.html должен содержать селектор длительности пустой передачи');
 
   // 3. CSS классы календаря в radio.css
   assert.ok(radioCss.includes('.radio-editor-subnav'), 'radio.css должен содержать стили для .radio-editor-subnav');
@@ -181,6 +206,10 @@ test('radio-calendar: HTML and CSS UI parity for calendar and scheduling', () =>
   assert.ok(radioJs.includes('function renderSelectedDayEvents('), 'radio-client.js должен содержать функцию рендеринга событий дня');
   assert.ok(radioJs.includes('function loadEventToTimeline('), 'radio-client.js должен позволять загрузить эфир в ленту редактора');
   assert.ok(radioJs.includes('function syncClockWithServer('), 'radio-client.js должен выполнять NTP-калибровку часов с сервером');
+  assert.ok(radioJs.includes('function populateScheduleStationsDropdown('), 'radio-client.js должен заполнять список сеток станций');
+  assert.ok(radioJs.includes('function populateScheduleTemplatesDropdown('), 'radio-client.js должен заполнять список шаблонов');
+  assert.ok(radioJs.includes('function populateSchedulePlaylistsDropdown('), 'radio-client.js должен заполнять список плейлистов');
+  assert.ok(radioJs.includes('schedSourceTemplate.disabled = false'), 'radio-client.js должен держать радиокнопку шаблонов кликабельной');
 
   // 5. Глобальный плеер: бесшовный переход (Radio standard cutover)
   assert.ok(globalPlayerJs.includes('nextScheduledEvent'), 'radio-global-player.js должен отслеживать nextScheduledEvent');
