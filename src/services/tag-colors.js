@@ -129,4 +129,18 @@ async function setColor(key, name, color) {
   return normalized;
 }
 
-module.exports = { HEX_RE, randomTagColor, ensureColors, setColor };
+/**
+ * Удалить записи о цветах указанных тегов из базы.
+ * @param {string[]} keys — нормализованные ключи тегов (tagKey)
+ * @returns {Promise<number>} количество удалённых записей
+ */
+async function deleteColors(keys) {
+  if (!Array.isArray(keys) || !keys.length) return 0;
+  const validKeys = keys.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean);
+  if (!validKeys.length) return 0;
+  const placeholders = validKeys.map(() => '?').join(',');
+  const res = await run(`DELETE FROM tag_colors WHERE tag_key IN (${placeholders})`, validKeys);
+  return (res && res.changes) || 0;
+}
+
+module.exports = { HEX_RE, randomTagColor, ensureColors, setColor, deleteColors };

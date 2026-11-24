@@ -449,7 +449,8 @@ function documentLinkableText(doc) {
 
 // Wiki-ссылка: [подпись]((цель)) или [подпись]((цель#якорь)) — см. blocks-renderer.js.
 const WIKILINK_RE = /\[[^\]\n]*\]\(\(([^()#\n]+)(?:#[^()\n]*)?\)\)/g;
-const HASHTAG_RE = /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
+// Хэштег: стандартный #тег или скобочный #[тег с пробелами] (например #[Данные удалены])
+const HASHTAG_RE = /(^|\s)#(?:\[([^\]\n]+)\]|([a-zA-Zа-яА-ЯёЁ0-9_-]+))/g;
 
 function extractWikiLinksFromDocument(doc, slugify) {
   const text = documentLinkableText(doc);
@@ -469,7 +470,8 @@ function extractHashtagsFromDocument(doc) {
   let m;
   HASHTAG_RE.lastIndex = 0;
   while ((m = HASHTAG_RE.exec(text)) !== null) {
-    tags.add(m[2].toLowerCase());
+    const t = (m[2] || m[3] || '').trim();
+    if (t) tags.add(t.toLowerCase());
   }
   return Array.from(tags);
 }
@@ -578,8 +580,74 @@ function rewriteWikiLinksInDocument(doc, slugify, rewrite) {
   return { doc: newDoc, changed };
 }
 
+/**
+ * Удаляет хэштеги, для которых shouldRemove(tag) вернул true:
+ * если тег был в тексте статьи, он помечается как #[Данные удалены],
+ * чтобы его можно было найти в поиске и витрине тегов.
+ * @param {object} doc — блочный документ статьи
+ * @param {(tag: string) => boolean} shouldRemove
+ * @returns {{doc: object, changed: boolean}}
+ */
+function removeHashtagsFromDocument(doc, shouldRemove) {
+  if (!doc || !Array.isArray(doc.blocks)) return { doc: doc || createEmptyDocument(), changed: false };
+  let changed = false;
+
+  const rewriteText = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    HASHTAG_RE.lastIndex = 0;
+    return text.replace(HASHTAG_RE, (match, prefix, bracketTag, plainTag) => {
+      const tag = (bracketTag || plainTag || '').trim();
+      if (shouldRemove(tag)) {
+        changed = true;
+        const lower = tag.toLowerCase().replace(/^\[+|\]+$/g, '');
+        if (lower === 'данные удалены') {
+          return `${prefix}[Данные удалены]`;
+        }
+        return `${prefix}#[Данные удалены]`;
+      }
+      return match;
+    });
+  };
+
+  const rewriteBlock = (block) => {
+    if (!block || typeof block !== 'object') return block;
+    const d = block.data || {};
+    switch (block.type) {
+      case 'paragraph':
+      case 'heading':
+      case 'quote':
+        return { ...block, data: { ...d, markdown: rewriteText(d.markdown) } };
+      case 'callout':
+        return { ...block, data: { ...d, title: rewriteText(d.title), markdown: rewriteText(d.markdown) } };
+      case 'list':
+        return { ...block, data: { ...d, items: (d.items || []).map((it) => ({ ...it, markdown: rewriteText(it.markdown) })) } };
+      case 'table':
+        return { ...block, data: { ...d, rows: (d.rows || []).map((row) => row.map(rewriteText)) } };
+      case 'infobox':
+        return {
+          ...block,
+          data: {
+            ...d,
+            title: rewriteText(d.title),
+            rows: (d.rows || []).map((r) => ({ ...r, label: rewriteText(r.label), value: rewriteText(r.value) }))
+          }
+        };
+      case 'columns':
+        return { ...block, data: { columns: (d.columns || []).map((c) => ({ ...c, blocks: (c.blocks || []).map(rewriteBlock) })) } };
+      case 'spoiler-section':
+        return { ...block, data: { ...d, title: rewriteText(d.title), blocks: (d.blocks || []).map(rewriteBlock) } };
+      default:
+        return block;
+    }
+  };
+
+  const newDoc = { version: doc.version || 1, blocks: (doc.blocks || []).map(rewriteBlock) };
+  return { doc: newDoc, changed };
+}
+
 module.exports = {
   BLOCK_TYPES,
+  HASHTAG_RE,
   createEmptyDocument,
   normalizeDocument,
   normalizeBlock,
@@ -595,5 +663,6 @@ module.exports = {
   sanitizeAudioPath,
   AUDIO_EXT_RE,
   mapImages,
-  rewriteWikiLinksInDocument
+  rewriteWikiLinksInDocument,
+  removeHashtagsFromDocument
 };

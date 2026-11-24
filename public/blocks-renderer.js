@@ -159,7 +159,7 @@
   // попадают — у них одна круглая скобка, а не две. Пустая подпись
   // []((статья)) допустима (см. WIKILINK_MARK_AUTO), пустая цель ((())) — нет.
   const WIKILINK_PARSE_RE_G = () => /\[([^\]\n]*)\]\(\(([^()#\n]+)(?:#([^()\n]*))?\)\)/g;
-  const HASHTAG_RE_G = () => /(^|\s)#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g;
+  const HASHTAG_RE_G = () => /(^|\s)#(?:\[([^\]\n]+)\]|([a-zA-Zа-яА-ЯёЁ0-9_-]+))/g;
   const WIKILINK_MARK_START = String.fromCharCode(0xE000);
   const WIKILINK_MARK_SEP = String.fromCharCode(0xE001);
   const WIKILINK_MARK_END = String.fromCharCode(0xE002);
@@ -374,8 +374,9 @@
         frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index) + m[1]));
         const span = document.createElement('span');
         span.className = 'hashtag';
-        span.dataset.tag = m[2].toLowerCase();
-        span.textContent = '#' + m[2];
+        const tagValue = (m[2] || m[3] || '').trim();
+        span.dataset.tag = tagValue.toLowerCase();
+        span.textContent = m[2] ? `#[${m[2]}]` : `#${m[3]}`;
         frag.appendChild(span);
         lastIndex = m.index + m[0].length;
       }

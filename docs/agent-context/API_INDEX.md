@@ -46,6 +46,8 @@
 - `GET /articles-index`
 - `GET /tags`
 - `PUT /tags/color`
+- `DELETE /tags`
+- `POST /tags/delete`
 - `GET /articles-graph`
 - `GET /dashboard-summary`
 - `GET /dashboard/stats`

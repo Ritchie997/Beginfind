@@ -1488,30 +1488,80 @@ router.get('/tags', auth.authenticateToken, auth.checkApproved, async (req, res)
   }
 });
 
-// PUT /api/tags/color { tag, color } — сменить цвет тега на собственный
-// (#rrggbb). Цвет один на тег во всей системе: граф и вкладка "Теги" сразу
-// показывают новый цвет всем. Менять можно только существующие (доступные
-// пользователю) теги — чтобы таблица цветов не обрастала произвольными
-// названиями.
+// PUT /api/tags/color { tag, color } или { tags: [...], color } — сменить цвет одного
+// или нескольких тегов на собственный (#rrggbb). Цвет один на тег во всей системе:
+// граф и вкладка "Теги" сразу показывают новый цвет всем.
 router.put('/tags/color', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, async (req, res) => {
   try {
-    const { tag, color } = req.body || {};
-    const key = store.tagKey(tag);
-    if (!key) return res.status(400).json({ error: 'Не указан тег' });
+    const { tag, tags, color } = req.body || {};
     if (!tagColors.HEX_RE.test(String(color || ''))) {
       return res.status(400).json({ error: 'Цвет должен быть в формате #rrggbb' });
     }
 
-    const { articles: accessible, tagsOf } = await readerTagIndex(req.user);
-    const existing = store.collectTags(accessible, tagsOf).find((t) => t.key === key);
-    if (!existing) return res.status(404).json({ error: 'Такого тега нет' });
+    const targetTags = Array.isArray(tags) ? tags : (tag != null ? [tag] : []);
+    if (!targetTags.length) return res.status(400).json({ error: 'Не указан тег' });
 
-    const saved = await tagColors.setColor(key, existing.tag, color);
-    res.json({ tag: existing.tag, color: saved });
+    const { articles: accessible, tagsOf } = await readerTagIndex(req.user);
+    const existingTags = store.collectTags(accessible, tagsOf);
+    const existingByKey = new Map(existingTags.map((t) => [t.key, t]));
+
+    const updated = [];
+    for (const raw of targetTags) {
+      const key = store.tagKey(raw);
+      if (!key) continue;
+      const existing = existingByKey.get(key);
+      const name = existing ? existing.tag : String(raw).replace(/^#+/, '').trim();
+      const saved = await tagColors.setColor(key, name, color);
+      updated.push({ tag: name, color: saved });
+    }
+
+    if (!updated.length) {
+      return res.status(404).json({ error: 'Таких тегов не найдено' });
+    }
+
+    // Обратная совместимость для одиночного запроса { tag, color }
+    if (tag && !Array.isArray(tags)) {
+      return res.json({ tag: updated[0].tag, color: updated[0].color });
+    }
+
+    res.json({ success: true, tags: updated, color });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// DELETE /api/tags { tags: [...] } или POST /api/tags/delete { tags: [...] } —
+// удалить тег(и) из всех статей и удалить их записи цветов из базы данных.
+async function handleDeleteTags(req, res) {
+  try {
+    const rawTags = Array.isArray(req.body?.tags)
+      ? req.body.tags
+      : (req.body?.tag ? [req.body.tag] : []);
+    if (!rawTags.length) {
+      return res.status(400).json({ error: 'Не указаны теги для удаления' });
+    }
+
+    const keys = rawTags.map((t) => store.tagKey(t)).filter(Boolean);
+    if (!keys.length) {
+      return res.status(400).json({ error: 'Некорректные названия тегов' });
+    }
+
+    const result = store.deleteTags(keys);
+    await tagColors.deleteColors(keys);
+
+    res.json({
+      success: true,
+      affectedArticles: result.affectedArticles,
+      affectedSlugs: result.affectedSlugs,
+      deletedTags: result.removedTags
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+router.delete('/tags', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, handleDeleteTags);
+router.post('/tags/delete', auth.authenticateToken, auth.checkApproved, auth.checkNotMuted, handleDeleteTags);
 
 // Данные для графа связей: статьи (узлы) + wiki-ссылки между ними (рёбра).
 //

@@ -4431,10 +4431,42 @@ class SPARouter {
   // === Вкладка "Теги" — глобальный список тегов ===
 
   async initTagsPage() {
+    this.tagsSelected = new Set();
+    this.tagsSortOrder = document.getElementById('tagsSortSelect')?.value || 'count_desc';
+    this.currentFilteredTags = [];
+
     await this.loadTagsList();
+
     // Поиск по названию — фильтрация на клиенте: список уже целиком загружен.
     document.getElementById('tagsSearchInput')?.addEventListener('input', (e) => {
       this.renderTagsGrid(e.target.value);
+    });
+
+    // Сортировка (по количеству статей / по названию)
+    document.getElementById('tagsSortSelect')?.addEventListener('change', (e) => {
+      this.tagsSortOrder = e.target.value;
+      this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
+    });
+
+    // Массовые действия: Выбрать все / Снять выбор
+    document.getElementById('tagsSelectAllBtn')?.addEventListener('click', () => {
+      this.selectAllVisibleTags();
+    });
+    document.getElementById('tagsDeselectAllBtn')?.addEventListener('click', () => {
+      this.clearSelectedTags();
+    });
+    document.getElementById('tagsBulkCancelBtn')?.addEventListener('click', () => {
+      this.clearSelectedTags();
+    });
+
+    // Массовая смена цвета
+    document.getElementById('tagsBulkColorBtn')?.addEventListener('click', () => {
+      this.showBulkTagColorModal();
+    });
+
+    // Массовое удаление
+    document.getElementById('tagsBulkDeleteBtn')?.addEventListener('click', () => {
+      this.deleteSelectedTags();
     });
 
     // Модалка "Цвет тега" — тот же паттерн close/cancel/overlay-click, что и
@@ -4471,9 +4503,7 @@ class SPARouter {
           const key = String(item.tag).toLowerCase();
           if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0, color: item.color || '#5865f2' });
         });
-        // Алфавитный порядок — список приходит с сервера в произвольном
-        // порядке (см. collectTags в articles-store.js), сортируем на клиенте.
-        this.tagsCache = [...seen.values()].sort((a, b) => a.tag.localeCompare(b.tag, 'ru'));
+        this.tagsCache = [...seen.values()];
         this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
       } else {
         if (loadingEl) loadingEl.hidden = true;
@@ -4508,43 +4538,178 @@ class SPARouter {
       gridEl.hidden = true;
       gridEl.innerHTML = '';
       if (emptyEl) emptyEl.hidden = false;
+      this.currentFilteredTags = [];
+      this.updateTagsBulkBar();
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
 
     const q = String(filterText || '').trim().toLowerCase().replace(/^#/, '');
-    const filtered = q ? all.filter((t) => t.tag.toLowerCase().includes(q)) : all;
+    let filtered = q ? all.filter((t) => t.tag.toLowerCase().includes(q)) : all.slice();
+
+    const sortOrder = this.tagsSortOrder || 'count_desc';
+    if (sortOrder === 'count_desc') {
+      filtered.sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag, 'ru'));
+    } else if (sortOrder === 'count_asc') {
+      filtered.sort((a, b) => (a.count - b.count) || a.tag.localeCompare(b.tag, 'ru'));
+    } else if (sortOrder === 'name_asc') {
+      filtered.sort((a, b) => a.tag.localeCompare(b.tag, 'ru'));
+    } else if (sortOrder === 'name_desc') {
+      filtered.sort((a, b) => b.tag.localeCompare(a.tag, 'ru'));
+    }
+
+    this.currentFilteredTags = filtered;
 
     gridEl.hidden = false;
     if (filtered.length === 0) {
       gridEl.innerHTML = `<div class="tags-no-results">Ничего не найдено по запросу «${this.escapeHtml(filterText)}»</div>`;
+      this.updateTagsBulkBar();
       return;
     }
 
     // Цвет тега — один на тег во всей системе (граф связей красит узлы им же).
-    // Плитка = кнопка "показать статьи с тегом" + круглый переключатель цвета,
-    // открывающий модалку #tag-color-modal (см. showTagColorModal ниже).
-    gridEl.innerHTML = filtered.map((t) => `
-      <div class="tag-card" data-tag="${this.escapeHtml(t.tag)}">
-        <button type="button" class="tag-card-main" data-open-tag title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
-          <span class="tag-card-icon" style="background:${t.color}26;color:${t.color}"><i class="fas fa-hashtag"></i></span>
-          <span class="tag-card-body">
-            <span class="tag-card-name">${this.escapeHtml(t.tag)}</span>
-            <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
-          </span>
-        </button>
-        <button type="button" class="tag-card-color" data-open-tag-color="${this.escapeHtml(t.tag)}" title="Изменить цвет тега «${this.escapeHtml(t.tag)}»" aria-label="Изменить цвет тега «${this.escapeHtml(t.tag)}»">
-          <span class="tag-card-swatch" style="background:${t.color}"></span>
-        </button>
-      </div>
-    `).join('');
+    // Плитка = чекбокс выбора + кнопка "показать статьи с тегом" + круглый переключатель цвета
+    gridEl.innerHTML = filtered.map((t) => {
+      const isSelected = this.tagsSelected && this.tagsSelected.has(t.tag);
+      return `
+        <div class="tag-card${isSelected ? ' is-selected' : ''}" data-tag="${this.escapeHtml(t.tag)}">
+          <label class="tag-card-select" title="Выбрать тег «${this.escapeHtml(t.tag)}»">
+            <input type="checkbox" class="tag-card-checkbox" data-tag-select="${this.escapeHtml(t.tag)}"${isSelected ? ' checked' : ''} aria-label="Выбрать тег «${this.escapeHtml(t.tag)}»">
+            <span class="tag-card-checkbox-custom"><i class="fas fa-check"></i></span>
+          </label>
+          <button type="button" class="tag-card-main" data-open-tag title="Показать статьи с тегом «${this.escapeHtml(t.tag)}»">
+            <span class="tag-card-icon" style="background:${t.color}26;color:${t.color}"><i class="fas fa-hashtag"></i></span>
+            <span class="tag-card-body">
+              <span class="tag-card-name">${this.escapeHtml(t.tag)}</span>
+              <span class="tag-card-meta">${t.count} ${plural(t.count, 'статья', 'статьи', 'статей')}</span>
+            </span>
+          </button>
+          <button type="button" class="tag-card-color" data-open-tag-color="${this.escapeHtml(t.tag)}" title="Изменить цвет тега «${this.escapeHtml(t.tag)}»" aria-label="Изменить цвет тега «${this.escapeHtml(t.tag)}»">
+            <span class="tag-card-swatch" style="background:${t.color}"></span>
+          </button>
+        </div>
+      `;
+    }).join('');
 
+    gridEl.querySelectorAll('[data-tag-select]').forEach((cb) => {
+      cb.addEventListener('change', (e) => {
+        this.toggleTagSelection(e.target.dataset.tagSelect, e.target.checked);
+      });
+    });
     gridEl.querySelectorAll('[data-open-tag]').forEach((btn) => {
       btn.addEventListener('click', () => this.openTagInAntropedia(btn.closest('.tag-card').dataset.tag));
     });
     gridEl.querySelectorAll('[data-open-tag-color]').forEach((btn) => {
       btn.addEventListener('click', () => this.showTagColorModal(btn.dataset.openTagColor));
     });
+
+    this.updateTagsBulkBar();
+  }
+
+  toggleTagSelection(tag, isSelected) {
+    if (!this.tagsSelected) this.tagsSelected = new Set();
+    if (isSelected) {
+      this.tagsSelected.add(tag);
+    } else {
+      this.tagsSelected.delete(tag);
+    }
+    const safeTag = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(tag) : tag.replace(/"/g, '\\"');
+    const card = document.getElementById('tagsContainer')?.querySelector(`.tag-card[data-tag="${safeTag}"]`);
+    if (card) {
+      card.classList.toggle('is-selected', isSelected);
+      const cb = card.querySelector('.tag-card-checkbox');
+      if (cb) cb.checked = isSelected;
+    }
+    this.updateTagsBulkBar();
+  }
+
+  selectAllVisibleTags() {
+    if (!this.tagsSelected) this.tagsSelected = new Set();
+    const visible = this.currentFilteredTags || [];
+    visible.forEach((t) => this.tagsSelected.add(t.tag));
+    this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
+  }
+
+  clearSelectedTags() {
+    if (this.tagsSelected) this.tagsSelected.clear();
+    this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
+  }
+
+  updateTagsBulkBar() {
+    const bulkBar = document.getElementById('tagsBulkBar');
+    const countText = document.getElementById('tagsBulkSelectedCount');
+    const deselectBtn = document.getElementById('tagsDeselectAllBtn');
+    const selectAllBtn = document.getElementById('tagsSelectAllBtn');
+    const count = this.tagsSelected ? this.tagsSelected.size : 0;
+    const visible = this.currentFilteredTags || [];
+    const allSelected = visible.length > 0 && visible.every((t) => this.tagsSelected && this.tagsSelected.has(t.tag));
+
+    if (countText) {
+      const plural = (n, one, few, many) => {
+        const m10 = n % 10;
+        const m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return one;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+        return many;
+      };
+      countText.textContent = `Выбрано: ${count} ${plural(count, 'тег', 'тега', 'тегов')}`;
+    }
+    if (bulkBar) {
+      bulkBar.hidden = count === 0;
+    }
+    if (deselectBtn) {
+      deselectBtn.hidden = count === 0;
+    }
+    if (selectAllBtn) {
+      selectAllBtn.hidden = visible.length === 0 || allSelected;
+    }
+  }
+
+  async deleteSelectedTags() {
+    const tags = Array.from(this.tagsSelected || []);
+    if (!tags.length) return;
+
+    const plural = (n, one, few, many) => {
+      const m10 = n % 10;
+      const m100 = n % 100;
+      if (m10 === 1 && m100 !== 11) return one;
+      if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+      return many;
+    };
+
+    const countStr = `${tags.length} ${plural(tags.length, 'тег', 'тега', 'тегов')}`;
+    const msg = `Удалить выбранные ${countStr}? Они будут убраны из всех статей и из базы тегов.`;
+
+    let confirmed = false;
+    if (typeof window.showConfirm === 'function') {
+      confirmed = await window.showConfirm(msg, {
+        title: 'Удалить выбранные теги?',
+        confirmLabel: 'Удалить',
+        danger: true
+      });
+    } else {
+      confirmed = window.confirm(msg);
+    }
+    if (!confirmed) return;
+
+    try {
+      const result = await apiClient.deleteTags(tags);
+      if (!result.success) {
+        throw new Error(result.error || result.data?.error || 'не удалось удалить теги');
+      }
+
+      const deletedKeys = new Set((result.deletedTags || tags).map((t) => String(t).toLowerCase().replace(/^#+/, '')));
+      this.tagsCache = (this.tagsCache || []).filter((t) => !deletedKeys.has(String(t.tag).toLowerCase().replace(/^#+/, '')));
+      this.tagsSelected.clear();
+
+      this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
+      const affArticles = result.affectedArticles || 0;
+      const affMsg = affArticles > 0 ? ` (затронуто статей: ${affArticles})` : '';
+      showMessage(`Удалено тегов: ${tags.length}${affMsg}`, 'success');
+    } catch (error) {
+      console.error('Error deleting tags:', error);
+      showMessage(`Ошибка при удалении тегов: ${error.message}`, 'error');
+    }
   }
 
   paintTagCard(card, color) {
@@ -4561,13 +4726,8 @@ class SPARouter {
     window.antropediaManager?.filterByTag(tag);
   }
 
-  // === Модалка "Цвет тега" — тот же .modal-overlay/.modal-box, что у
-  // модалок вкладки "Сервера" (см. комментарий в tags.html). Два способа
-  // задать цвет, синхронизированные друг с другом: нативный <input
-  // type="color"> (основной) и HEX-поле (точное значение), плюс готовые
-  // пресеты — та же палитра, что у аватаров серверов (serverAvatarPalette).
+  // === Модалка "Цвет тега" ===
 
-  // "#RRGGBB"/"RRGGBB"/"RGB" -> "#rrggbb" в нижнем регистре, null если не хекс.
   normalizeHexColor(value) {
     const v = String(value || '').trim().replace(/^#/, '');
     if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v.toLowerCase()}`;
@@ -4579,10 +4739,44 @@ class SPARouter {
     const item = (this.tagsCache || []).find((t) => t.tag === tag);
     if (!item) return;
     this._tagColorModalTag = tag;
+    this._tagColorModalTags = null;
 
-    document.getElementById('tag-color-modal-name').textContent = `#${item.tag}`;
+    const titleEl = document.getElementById('tag-color-modal-title');
+    if (titleEl) titleEl.textContent = 'Цвет тега';
+    const nameEl = document.getElementById('tag-color-modal-name');
+    if (nameEl) nameEl.textContent = `#${item.tag}`;
+    const descEl = document.getElementById('tag-color-modal-desc');
+    if (descEl) descEl.hidden = true;
+
     this.renderTagColorModalPresets();
     this.setTagColorModalValue(item.color);
+
+    const modal = document.getElementById('tag-color-modal');
+    if (modal) modal.hidden = false;
+    document.getElementById('tag-color-modal-hex')?.focus();
+  }
+
+  showBulkTagColorModal() {
+    const tags = Array.from(this.tagsSelected || []);
+    if (!tags.length) return;
+    this._tagColorModalTag = null;
+    this._tagColorModalTags = tags;
+
+    const firstItem = (this.tagsCache || []).find((t) => t.tag === tags[0]);
+    const initColor = firstItem ? firstItem.color : '#5865f2';
+
+    const titleEl = document.getElementById('tag-color-modal-title');
+    if (titleEl) titleEl.textContent = 'Цвет выбранных тегов';
+    const nameEl = document.getElementById('tag-color-modal-name');
+    if (nameEl) nameEl.textContent = `Выбрано тегов: ${tags.length}`;
+    const descEl = document.getElementById('tag-color-modal-desc');
+    if (descEl) {
+      descEl.textContent = tags.slice(0, 6).map((t) => `#${t}`).join(', ') + (tags.length > 6 ? '…' : '');
+      descEl.hidden = false;
+    }
+
+    this.renderTagColorModalPresets();
+    this.setTagColorModalValue(initColor);
 
     const modal = document.getElementById('tag-color-modal');
     if (modal) modal.hidden = false;
@@ -4593,6 +4787,7 @@ class SPARouter {
     const modal = document.getElementById('tag-color-modal');
     if (modal) modal.hidden = true;
     this._tagColorModalTag = null;
+    this._tagColorModalTags = null;
   }
 
   renderTagColorModalPresets() {
@@ -4606,13 +4801,6 @@ class SPARouter {
     });
   }
 
-  // Общая точка входа для пикера/HEX-поля/пресетов — красит превью и
-  // подсвечивает совпавший пресет. fromHexField: true — вызов из СОБСТВЕННОГО
-  // input-обработчика HEX-поля: его же value руками не трогаем (иначе на
-  // полпути к 6-значному коду normalizeHexColor успевает принять честные 3
-  // символа за короткую HEX-запись "#rgb" и подменяет то, что человек ещё
-  // печатает, — цвет "портился" посреди набора, см. баг с "#ff8800" на
-  // выходе дававший "#ffff88").
   setTagColorModalValue(color, { fromHexField = false } = {}) {
     const normalized = this.normalizeHexColor(color);
     const hexInput = document.getElementById('tag-color-modal-hex');
@@ -4623,7 +4811,7 @@ class SPARouter {
       if (!fromHexField) hexInput.value = normalized || color || '';
       hexInput.classList.toggle('invalid', fromHexField && !normalized);
     }
-    if (!normalized) return; // невалидный HEX (например, ещё не дописан) — превью/пикер не трогаем
+    if (!normalized) return;
     if (pickerInput) pickerInput.value = normalized;
     if (icon) { icon.style.background = `${normalized}26`; icon.style.color = normalized; }
     document.querySelectorAll('.tag-color-modal-preset').forEach((btn) => {
@@ -4632,8 +4820,6 @@ class SPARouter {
   }
 
   async saveTagColorModal() {
-    const tag = this._tagColorModalTag;
-    if (!tag) return;
     const hexInput = document.getElementById('tag-color-modal-hex');
     const color = this.normalizeHexColor(hexInput?.value);
     if (!color) {
@@ -4642,15 +4828,43 @@ class SPARouter {
       return;
     }
 
+    const isBulk = Array.isArray(this._tagColorModalTags) && this._tagColorModalTags.length > 0;
+    const targetTags = isBulk
+      ? this._tagColorModalTags
+      : (this._tagColorModalTag ? [this._tagColorModalTag] : []);
+    if (!targetTags.length) return;
+
     try {
-      const result = await apiClient.setTagColor(tag, color);
+      const result = isBulk
+        ? await apiClient.setTagColor(targetTags, color)
+        : await apiClient.setTagColor(targetTags[0], color);
+
       if (!result.success) throw new Error(result.data?.error || result.error || 'не удалось сохранить цвет');
-      const finalColor = result.data.color || color;
-      const item = (this.tagsCache || []).find((t) => t.tag === tag);
-      if (item) item.color = finalColor;
-      const card = document.getElementById('tagsContainer')?.querySelector(`.tag-card[data-tag="${CSS.escape(tag)}"]`);
-      this.paintTagCard(card, finalColor);
-      showMessage(`Цвет тега «${tag}» обновлён`, 'success');
+
+      const finalColor = result.color || (result.data && result.data.color) || color;
+      const keySet = new Set(targetTags.map((t) => String(t).toLowerCase().replace(/^#+/, '')));
+
+      (this.tagsCache || []).forEach((t) => {
+        if (keySet.has(String(t.tag).toLowerCase().replace(/^#+/, ''))) {
+          t.color = finalColor;
+        }
+      });
+
+      const grid = document.getElementById('tagsContainer');
+      if (grid) {
+        targetTags.forEach((tag) => {
+          const safeTag = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(tag) : tag.replace(/"/g, '\\"');
+          const card = grid.querySelector(`.tag-card[data-tag="${safeTag}"]`);
+          this.paintTagCard(card, finalColor);
+        });
+      }
+
+      if (isBulk) {
+        showMessage(`Цвет ${targetTags.length} тегов обновлён`, 'success');
+        this.clearSelectedTags();
+      } else {
+        showMessage(`Цвет тега «${targetTags[0]}» обновлён`, 'success');
+      }
       this.hideTagColorModal();
     } catch (error) {
       showMessage(`Ошибка смены цвета: ${error.message}`, 'error');

@@ -1,8 +1,8 @@
 <!-- Вкладка "Теги": глобальный список всех тегов, существующих в системе, без
      дублей (регистр и ведущий "#" не различаются). Заменила прежнюю вкладку
-     "Категории" — сущности "Категория" в проекте больше нет. Список только для
-     чтения: теги создаются и правятся в самих статьях (поле "Теги" в
-     редакторе или #тег прямо в тексте), см. GET /api/tags. -->
+     "Категории" — сущности "Категория" в проекте больше нет. Список позволяет
+     сортировать теги по количеству статей или имени, выделять теги для массовой
+     смены цвета или удаления, а также искать статьи с нужным тегом. -->
 <div class="tags-page">
 
   <div class="tags-toolbar">
@@ -12,9 +12,46 @@
         <i class="fas fa-search"></i>
         <input type="text" id="tagsSearchInput" class="tags-search-input" placeholder="Поиск">
       </div>
+      <div class="tags-sort-wrap">
+        <select id="tagsSortSelect" class="form-select tags-sort-select" aria-label="Сортировка тегов">
+          <option value="count_desc">Больше всего статей</option>
+          <option value="count_asc">Меньше всего статей</option>
+          <option value="name_asc">По названию (А-Я)</option>
+          <option value="name_desc">По названию (Я-А)</option>
+        </select>
+      </div>
     </div>
     <div class="tags-toolbar-row tags-toolbar-row-status">
-      <span class="tags-count" id="tagsCount"></span>
+      <div class="tags-status-left">
+        <span class="tags-count" id="tagsCount"></span>
+      </div>
+      <div class="tags-status-actions" id="tagsSelectionActions">
+        <button type="button" class="btn btn-secondary tags-action-sm-btn" id="tagsSelectAllBtn" title="Выбрать все видимые теги">
+          <i class="far fa-check-square"></i> Выбрать все
+        </button>
+        <button type="button" class="btn btn-secondary tags-action-sm-btn" id="tagsDeselectAllBtn" title="Снять выбор" hidden>
+          <i class="far fa-square"></i> Снять выбор
+        </button>
+      </div>
+    </div>
+
+    <!-- Панель массовых действий при выделении тегов -->
+    <div class="tags-bulk-bar" id="tagsBulkBar" hidden>
+      <div class="tags-bulk-info">
+        <i class="fas fa-check-circle"></i>
+        <span id="tagsBulkSelectedCount">Выбрано: 0</span>
+      </div>
+      <div class="tags-bulk-actions">
+        <button type="button" class="btn btn-secondary tags-bulk-btn" id="tagsBulkColorBtn">
+          <i class="fas fa-palette"></i> Изменить цвет
+        </button>
+        <button type="button" class="btn btn-danger tags-bulk-btn" id="tagsBulkDeleteBtn">
+          <i class="fas fa-trash-alt"></i> Удалить
+        </button>
+        <button type="button" class="btn btn-secondary tags-bulk-btn tags-bulk-cancel-btn" id="tagsBulkCancelBtn" title="Снять выбор">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -43,13 +80,16 @@
   <div id="tag-color-modal" class="modal-overlay" hidden>
     <div class="modal-box">
       <div class="modal-header">
-        <h3>Цвет тега</h3>
+        <h3 id="tag-color-modal-title">Цвет тега</h3>
         <button type="button" class="modal-close" id="tag-color-modal-close-btn" title="Закрыть">&times;</button>
       </div>
       <div class="modal-body">
         <div class="tag-color-modal-preview">
           <span class="tag-card-icon tag-color-modal-icon" id="tag-color-modal-icon"><i class="fas fa-hashtag"></i></span>
-          <span class="tag-color-modal-name" id="tag-color-modal-name"></span>
+          <div class="tag-color-modal-name-wrap">
+            <span class="tag-color-modal-name" id="tag-color-modal-name"></span>
+            <span class="tag-color-modal-desc" id="tag-color-modal-desc" hidden></span>
+          </div>
         </div>
         <div class="tag-color-modal-picker-row">
           <input type="color" id="tag-color-modal-picker" class="tag-color-modal-picker" aria-label="Выбор цвета">
@@ -102,6 +142,36 @@
   border-top: 1px solid var(--background-accent);
 }
 
+.tags-status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tags-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tags-action-sm-btn {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: 6px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  background: var(--background-tertiary);
+  border: 1px solid var(--background-accent);
+  color: var(--text-normal);
+}
+.tags-action-sm-btn:hover {
+  border-color: var(--blurple);
+  color: var(--text-normal);
+}
+
 .tags-heading {
   margin: 0;
   font-size: 20px;
@@ -143,7 +213,71 @@
   box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
 }
 
+.tags-sort-wrap {
+  flex: 0 0 auto;
+}
+.tags-sort-select {
+  min-width: 190px;
+  padding: 9px 12px;
+  border: 1px solid var(--background-accent);
+  border-radius: 6px;
+  background: var(--background-tertiary);
+  color: var(--text-normal);
+  font-size: 14px;
+  cursor: pointer;
+}
+.tags-sort-select:focus {
+  outline: none;
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+}
+
 .tags-count { font-size: 13px; color: var(--header-secondary); }
+
+/* Панель массовых действий */
+.tags-bulk-bar {
+  background: var(--background-tertiary);
+  border: 1px solid var(--blurple);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  animation: tags-fade-in 0.2s ease;
+}
+@keyframes tags-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tags-bulk-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.tags-bulk-info i { color: var(--blurple); }
+.tags-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tags-bulk-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.tags-bulk-cancel-btn {
+  padding: 6px 10px;
+}
 
 .tags-loading {
   display: grid;
@@ -182,18 +316,66 @@
 }
 
 .tag-card {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--background-secondary);
   border: 1px solid var(--background-accent);
   border-radius: 8px;
-  padding: 4px 8px 4px 4px;
-  transition: border-color 0.15s, transform 0.15s;
+  padding: 4px 8px 4px 6px;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 @media (hover: hover) {
   .tag-card:hover { border-color: var(--blurple); transform: translateY(-1px); }
 }
+.tag-card.is-selected {
+  border-color: var(--blurple) !important;
+  background: rgba(88, 101, 242, 0.1);
+  box-shadow: 0 0 0 1px var(--blurple);
+}
+
+.tag-card-select {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px 2px;
+  user-select: none;
+}
+.tag-card-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tag-card-checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-muted);
+  background: var(--background-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  transition: all 0.15s ease;
+}
+.tag-card:hover .tag-card-checkbox-custom {
+  border-color: var(--text-normal);
+}
+.tag-card-checkbox:checked + .tag-card-checkbox-custom {
+  background: var(--blurple);
+  border-color: var(--blurple);
+  color: #fff;
+}
+.tag-card-checkbox:focus-visible + .tag-card-checkbox-custom {
+  box-shadow: 0 0 0 2px var(--blurple);
+}
+
 .tag-card-main {
   display: flex;
   align-items: center;
@@ -203,7 +385,7 @@
   text-align: left;
   background: none;
   border: none;
-  padding: 6px 6px;
+  padding: 6px 4px;
   color: var(--text-normal);
   font: inherit;
   cursor: pointer;
@@ -269,10 +451,21 @@
   border-radius: 12px;
   font-size: 17px;
 }
+.tag-color-modal-name-wrap { min-width: 0; flex: 1; }
 .tag-color-modal-name {
   font-weight: 600;
   font-size: 15px;
   color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.tag-color-modal-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -326,6 +519,12 @@
   .tags-toolbar { padding: 12px; gap: 10px; }
   .tags-heading { font-size: 18px; }
   .tags-search-wrap { flex: 1 1 100%; }
-  .tags-toolbar-row-status { padding-top: 8px; }
+  .tags-sort-wrap { flex: 1 1 100%; width: 100%; }
+  .tags-sort-select { width: 100%; min-width: 0; }
+  .tags-toolbar-row-status { padding-top: 8px; flex-direction: column; align-items: stretch; gap: 8px; }
+  .tags-status-left { justify-content: space-between; }
+  .tags-status-actions { justify-content: flex-end; }
+  .tags-bulk-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tags-bulk-actions { justify-content: flex-end; }
 }
 </style>

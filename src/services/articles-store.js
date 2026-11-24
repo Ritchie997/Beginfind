@@ -422,6 +422,124 @@ function rewriteMapBlockDays(mapIds, convertDay) {
 }
 
 /**
+ * Удаляет указанные теги из всех статей:
+ * - Если тег связан с описанием / тегами статьи (article.tags, layer.tags, excerpt),
+ *   он просто исчезает оттуда (удаляется без следа).
+ * - Если тег был в тексте статьи (блоках контента), он помечается как #[Данные удалены],
+ *   чтобы его можно было найти.
+ * @param {string[]} rawTags — названия или ключи тегов
+ * @returns {{affectedArticles: number, affectedSlugs: string[], removedTags: string[]}}
+ */
+function deleteTags(rawTags) {
+  const keys = new Set((rawTags || []).map(tagKey).filter(Boolean));
+  if (!keys.size) return { affectedArticles: 0, affectedSlugs: [], removedTags: [] };
+
+  const shouldRemove = (raw) => keys.has(tagKey(raw));
+  const updatedArticles = [];
+
+  const cleanExcerpt = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    blocks.HASHTAG_RE.lastIndex = 0;
+    return text.replace(blocks.HASHTAG_RE, (match, prefix, bracketTag, plainTag) => {
+      const tag = bracketTag || plainTag;
+      if (shouldRemove(tag)) {
+        return '';
+      }
+      return match;
+    }).replace(/\s{2,}/g, ' ').trim();
+  };
+
+  for (const article of listArticles()) {
+    const patch = {};
+    let articleChanged = false;
+
+    // 1. Верхнеуровневые теги статьи — просто исчезают оттуда
+    if (Array.isArray(article.tags) && article.tags.length > 0) {
+      const filtered = article.tags.filter((t) => !shouldRemove(t));
+      if (filtered.length !== article.tags.length) {
+        patch.tags = filtered;
+        articleChanged = true;
+      }
+    }
+
+    // Верхнеуровневый excerpt (описание) — просто исчезает оттуда
+    if (article.excerpt) {
+      const cleaned = cleanExcerpt(article.excerpt);
+      if (cleaned !== article.excerpt) {
+        patch.excerpt = cleaned;
+        articleChanged = true;
+      }
+    }
+
+    // 2. Слои (для многослойных статей)
+    if (Array.isArray(article.layers) && article.layers.length > 0) {
+      let layersChanged = false;
+      const newLayers = article.layers.map((l) => {
+        let layerModified = false;
+        let newTags = l.tags;
+        let newExcerpt = l.excerpt;
+
+        // Теги слоя — просто исчезают оттуда
+        if (Array.isArray(l.tags) && l.tags.length > 0) {
+          const filtered = l.tags.filter((t) => !shouldRemove(t));
+          if (filtered.length !== l.tags.length) {
+            newTags = filtered;
+            layerModified = true;
+          }
+        }
+
+        // Описание слоя — просто исчезает оттуда
+        if (l.excerpt) {
+          const cleaned = cleanExcerpt(l.excerpt);
+          if (cleaned !== l.excerpt) {
+            newExcerpt = cleaned;
+            layerModified = true;
+          }
+        }
+
+        // В тексте слоя — помечается как #[Данные удалены]
+        const { doc, changed } = blocks.removeHashtagsFromDocument(l.content, shouldRemove);
+        if (changed) layerModified = true;
+
+        if (layerModified) {
+          layersChanged = true;
+          return { ...l, tags: newTags, excerpt: newExcerpt, content: doc };
+        }
+        return l;
+      });
+      if (layersChanged) {
+        patch.layers = newLayers;
+        articleChanged = true;
+      }
+    } else {
+      // 3. Контент однослойной статьи — в тексте помечается как #[Данные удалены]
+      if (article.content) {
+        const { doc, changed } = blocks.removeHashtagsFromDocument(article.content, shouldRemove);
+        if (changed) {
+          patch.content = doc;
+          articleChanged = true;
+        }
+      }
+    }
+
+    if (articleChanged) {
+      writeArticleFile(article.slug, { ...article, ...patch });
+      updatedArticles.push(article.slug);
+    }
+  }
+
+  if (updatedArticles.length > 0) {
+    invalidateCache();
+  }
+
+  return {
+    affectedArticles: updatedArticles.length,
+    affectedSlugs: updatedArticles,
+    removedTags: Array.from(keys)
+  };
+}
+
+/**
  * Текст цели для ((ссылки)) на статью: сам заголовок, если он однозначно
  * превращается обратно в тот же slug (читаемо в редакторе), иначе slug.
  * Заголовок с ()# ссылкой не записать — ими ссылка разбирается.
@@ -512,10 +630,11 @@ function renameArticle(oldSlug, newTitle) {
 
 /**
  * Ключ тега для сравнения и хранения цвета: без ведущего "#", без учёта
- * регистра ("Дракон", "дракон" и "#ДРАКОН" — один и тот же тег).
+ * регистра и внешних скобок ("Дракон", "дракон", "#ДРАКОН", "#[Данные удалены]"
+ * и "[Данные удалены]" дают один и тот же канонический ключ).
  */
 function tagKey(raw) {
-  return String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim().toLowerCase();
+  return String(raw == null ? '' : raw).trim().replace(/^#+/, '').replace(/^\[+|\]+$/g, '').trim().toLowerCase();
 }
 
 /**
@@ -537,9 +656,12 @@ function collectTags(articles, tagsOf) {
   const byKey = new Map(); // ключ (нижний регистр) -> { tag, fromField, slugs:Set }
 
   const add = (raw, slug, fromField) => {
-    const name = String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim();
+    let name = String(raw == null ? '' : raw).trim().replace(/^#+/, '').trim();
     if (!name) return;
     const key = tagKey(name);
+    if (key === 'данные удалены') {
+      name = '[Данные удалены]';
+    }
     let entry = byKey.get(key);
     if (!entry) {
       entry = { tag: name, fromField, slugs: new Set() };
@@ -699,13 +821,13 @@ function filterArticles(opts = {}) {
   }
 
   if (tags.length) {
-    const set = new Set(tags.map((t) => t.toLowerCase()));
+    const set = new Set(tags.map((t) => tagKey(t)));
     list = list.filter((a) => {
-      const ownTags = (a.tags || []).map((t) => String(t).toLowerCase());
+      const ownTags = (a.tags || []).map((t) => tagKey(t));
       if (ownTags.some((t) => set.has(t))) return true;
       // #теги прямо в тексте статьи (Obsidian-стиль) — те же, что подсвечиваются
       // в редакторе/превью (см. extractHashtags), тоже должны находиться фильтром.
-      return extractHashtags(a).some((t) => set.has(t));
+      return extractHashtags(a).some((t) => set.has(tagKey(t)));
     });
   }
 
@@ -846,6 +968,7 @@ module.exports = {
   searchArticles,
   filterArticles,
   collectTags,
+  deleteTags,
   tagKey,
   stripLegacyCategoryFields,
   extractWikiLinks,

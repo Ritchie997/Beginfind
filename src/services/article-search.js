@@ -256,9 +256,9 @@ function parseSearchQueryInternal(rawQuery) {
   authorTermsWithIndex.sort((a, b) => a.offset - b.offset);
   const authorTerms = authorTermsWithIndex.map((a) => a.name);
 
-  // 4. Извлекаем хэштеги: #тег
-  working = working.replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (match, tag) => {
-    const key = tag.trim().toLowerCase();
+  // 4. Извлекаем хэштеги: #тег или скобочный #[тег]
+  working = working.replace(/(?:^|\s)#(?:\[([^\]\n]+)\]|([\p{L}\p{N}_-]+))/gu, (match, bracketTag, plainTag) => {
+    const key = (bracketTag || plainTag || '').trim().toLowerCase();
     if (key) hashKeys.push(key);
     return ' ';
   });

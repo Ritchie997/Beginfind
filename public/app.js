@@ -160,7 +160,7 @@ class ApiClient {
       },
     };
 
-    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
       options.body = JSON.stringify(data);
     }
 
@@ -594,8 +594,18 @@ class ApiClient {
 
   // Сменить цвет тега на собственный (#rrggbb) — один цвет на тег во всей
   // системе (граф связей, вкладка "Теги"), см. PUT /api/tags/color.
-  async setTagColor(tag, color) {
-    return this.makeAuthenticatedRequest('/api/tags/color', 'PUT', { tag, color });
+  // Поддерживает как одиночный тег (строка), так и массив тегов для массовой смены.
+  async setTagColor(tagOrTags, color) {
+    if (Array.isArray(tagOrTags)) {
+      return this.makeAuthenticatedRequest('/api/tags/color', 'PUT', { tags: tagOrTags, color });
+    }
+    return this.makeAuthenticatedRequest('/api/tags/color', 'PUT', { tag: tagOrTags, color });
+  }
+
+  // Удалить один или несколько тегов из всех статей (см. DELETE /api/tags)
+  async deleteTags(tagOrTags) {
+    const tags = Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags];
+    return this.makeAuthenticatedRequest('/api/tags', 'DELETE', { tags });
   }
 
   // Methods for roles
