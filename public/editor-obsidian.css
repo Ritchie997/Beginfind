@@ -558,9 +558,26 @@
   text-decoration-color: var(--yellow);
 }
 .preview-pane .hashtag {
-  color: var(--blurple);
-  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
   font-weight: 500;
+  font-size: 0.9em;
+  line-height: 1.45;
+  border: 1px solid rgba(88, 101, 242, 0.28);
+  background: rgba(88, 101, 242, 0.12);
+  color: var(--blurple, #5865f2);
+  cursor: pointer;
+  vertical-align: baseline;
+  transition: filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.preview-pane .hashtag:hover {
+  filter: brightness(1.2);
+}
+.preview-pane .hashtag.has-tag-color:hover {
+  filter: brightness(1.25);
 }
 
 /* === Блочная модель статьи (см. src/services/blocks.js,

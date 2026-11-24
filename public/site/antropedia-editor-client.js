@@ -213,7 +213,8 @@
         if (window.apiClient) {
           window.apiClient.makeAuthenticatedRequest('/api/tags').then((res) => {
             if (res && res.success && Array.isArray(res.data) && this.tagsField) {
-              this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}` })));
+              if (window.TagColors) window.TagColors.registerAll(res.data);
+              this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}`, color: t.color })));
             }
           }).catch(() => {});
         }

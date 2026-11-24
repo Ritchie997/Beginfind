@@ -326,6 +326,7 @@
         btn.className = 'antropedia-tag-chip' + (activeTags.includes(tagName) ? ' active' : '');
         btn.textContent = '#' + tagName;
         btn.title = 'Фильтр по тегу «' + tagName + '»';
+        if (window.TagColors) window.TagColors.paint(btn, tagName);
         btn.addEventListener('click', function () {
           if (!state.tagField) return;
           var cur = state.tagField.getValues();
@@ -862,6 +863,7 @@
           button.className = 'wiki-tag';
           button.textContent = '#' + tag;
           button.title = 'Показать статьи с тегом «' + tag + '»';
+          if (window.TagColors) window.TagColors.paint(button, tag);
           button.addEventListener('click', function () {
             if (state.tagField) {
               state.tagField.addValue(tag);
@@ -1170,6 +1172,7 @@
         if (!response.ok) return;
         var result = await response.json();
         var tags = Array.isArray(result.data) ? result.data : Array.isArray(result) ? result : [];
+        if (window.TagColors) window.TagColors.registerAll(tags);
         if (state.tagField) {
           state.tagField.setOptions(tags.map(function (item) { return { value: item.tag, label: item.tag }; }));
         }
@@ -4425,7 +4428,8 @@
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'wiki-tag';
-            button.textContent = tag;
+            button.textContent = tag.startsWith('#') ? tag : '#' + tag;
+            if (window.TagColors) window.TagColors.paint(button, tag);
             button.addEventListener('click', function () {
               window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tag));
             });
@@ -5770,6 +5774,7 @@
         var item = document.createElement('span');
         item.className = 'wiki-tag';
         item.textContent = '#' + tag;
+        if (window.TagColors) window.TagColors.paint(item, tag);
         tags.appendChild(item);
       });
       body.appendChild(tags);

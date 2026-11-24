@@ -260,9 +260,18 @@ function createPublicArticlesRouter(
 
   // Теги для фильтра каталога — только видимые гостю. Зарегистрирован до
   // /public/articles/:slug по смыслу: путь другой, конфликта нет.
-  router.get('/public/tags', (req, res) => {
+  router.get('/public/tags', async (req, res) => {
     try {
-      res.json({ data: publicArticles.listPublicTags(articleStore.listArticles()) });
+      const tags = publicArticles.listPublicTags(articleStore.listArticles());
+      const colorMap = await colorsStore.ensureColors(
+        tags.map((t) => ({ key: articleStore.tagKey(t.tag), name: t.tag }))
+      );
+      const withColors = tags.map((t) => ({
+        tag: t.tag,
+        count: t.count,
+        color: (colorMap.get(articleStore.tagKey(t.tag)) || {}).color || null
+      }));
+      res.json({ data: withColors });
     } catch (err) {
       console.error('[public-articles] Failed to list public tags:', err);
       res.status(500).json({ error: 'Не удалось загрузить теги' });

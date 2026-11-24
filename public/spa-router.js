@@ -916,7 +916,8 @@ class SPARouter {
     if (this.tagsField && window.apiClient) {
       window.apiClient.getTags().then((res) => {
         if (res && res.success && Array.isArray(res.data) && this.tagsField) {
-          this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}` })));
+          window.TagColors?.registerAll(res.data);
+          this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}`, color: t.color })));
         }
       }).catch(() => {});
     }
@@ -4525,6 +4526,7 @@ class SPARouter {
           if (!seen.has(key)) seen.set(key, { tag: item.tag, count: item.count || 0, color: item.color || '#5865f2' });
         });
         this.tagsCache = [...seen.values()];
+        window.TagColors?.registerAll(this.tagsCache);
         this.renderTagsGrid(document.getElementById('tagsSearchInput')?.value || '');
       } else {
         if (loadingEl) loadingEl.hidden = true;
@@ -4936,6 +4938,7 @@ class SPARouter {
           t.color = finalColor;
         }
       });
+      targetTags.forEach((tag) => window.TagColors?.set(tag, finalColor));
 
       const grid = document.getElementById('tagsContainer');
       if (grid) {

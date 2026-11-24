@@ -4567,3 +4567,47 @@ body.articles-page .content-body {
 .radio-modal-backdrop[hidden] {
   display: none !important;
 }
+
+/* === Хэштеги статей и публикаций (#тег, #[тег с пробелами]) === */
+.hashtag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 0.9em;
+  line-height: 1.45;
+  border: 1px solid rgba(88, 101, 242, 0.28);
+  background: rgba(88, 101, 242, 0.12);
+  color: var(--blurple, #5865f2);
+  text-decoration: none;
+  cursor: pointer;
+  vertical-align: baseline;
+  transition: filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  user-select: text;
+}
+
+.hashtag:hover {
+  filter: brightness(1.2);
+  text-decoration: none;
+}
+
+.hashtag.has-tag-color:hover {
+  filter: brightness(1.25);
+}
+
+.alltell-post-hashtag {
+  text-decoration: none;
+}
+
+.alltell-post-hashtag:hover {
+  text-decoration: none;
+  filter: brightness(1.2);
+}
+
+.wiki-tag.has-tag-color:hover,
+.antropedia-tag-pill.has-tag-color:hover,
+.antropedia-tag-chip.has-tag-color:hover {
+  filter: brightness(1.2);
+}

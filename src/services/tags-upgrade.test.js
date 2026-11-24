@@ -192,3 +192,78 @@ test('tags autocomplete: CSS styling exists for tag suggest in editor-blocks.css
   const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
   assert.ok(siteCss.includes('.alltell-tag-suggest'), 'Must style alltell-tag-suggest in site.css');
 });
+
+test('tag colors: TagColors module exists and correctly normalizes, registers and paints elements', () => {
+  const TagColors = require('../../public/tag-colors');
+  assert.ok(TagColors, 'TagColors must be exported');
+  assert.strictEqual(typeof TagColors.get, 'function');
+  assert.strictEqual(typeof TagColors.set, 'function');
+  assert.strictEqual(typeof TagColors.registerAll, 'function');
+  assert.strictEqual(typeof TagColors.paint, 'function');
+
+  // Test normalization
+  assert.strictEqual(TagColors.normalizeKey('#Дракон'), 'дракон');
+  assert.strictEqual(TagColors.normalizeKey('##[Космос]'), 'космос');
+  assert.strictEqual(TagColors.normalizeKey('  [Данные удалены]  '), 'данные удалены');
+
+  // Test register and get
+  TagColors.registerAll([
+    { tag: 'Дракон', color: '#ff5722' },
+    { tag: 'Космос', color: '#00b0f4' }
+  ]);
+  assert.strictEqual(TagColors.get('дракон'), '#ff5722');
+  assert.strictEqual(TagColors.get('#Дракон'), '#ff5722');
+  assert.strictEqual(TagColors.get('#[Космос]'), '#00b0f4');
+  assert.strictEqual(TagColors.get('nonexistent'), null);
+
+  // Test set
+  TagColors.set('дракон', '#e91e63');
+  assert.strictEqual(TagColors.get('дракон'), '#e91e63');
+
+  // Test paint mock element
+  const mockEl = {
+    dataset: { tag: 'дракон' },
+    style: {},
+    classList: {
+      classes: new Set(),
+      contains(cls) { return this.classes.has(cls); },
+      add(cls) { this.classes.add(cls); }
+    },
+    getAttribute() { return null; }
+  };
+  TagColors.paint(mockEl);
+  assert.strictEqual(mockEl.style.color, '#e91e63');
+  assert.ok(mockEl.style.backgroundColor.includes('#e91e63'));
+  assert.ok(mockEl.style.borderColor.includes('#e91e63'));
+  assert.ok(mockEl.classList.contains('has-tag-color'));
+});
+
+test('tag colors: blocks-renderer.js and alltell-client.js format hashtags with tag colors', () => {
+  const rendererJs = fs.readFileSync(path.resolve(__dirname, '../../public/blocks-renderer.js'), 'utf8');
+  assert.ok(rendererJs.includes('TagColors.paint(span, tagValue)'), 'blocks-renderer must call TagColors.paint on hashtag spans');
+  assert.ok(rendererJs.includes('TagColors.paintAll(container)'), 'blocks-renderer must repaint container tags on attach');
+
+  const alltellJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/alltell-client.js'), 'utf8');
+  assert.ok(alltellJs.includes('alltell-post-hashtag'), 'alltell-client must render alltell-post-hashtag');
+  assert.ok(alltellJs.includes('TagColors.get(raw)'), 'alltell-client must query TagColors in formatPostBody');
+  assert.ok(alltellJs.includes('TagColors.registerAll('), 'alltell-client must register tags into TagColors');
+});
+
+test('tag colors: public-articles route /public/tags returns color for public tags', () => {
+  const routeJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/public-articles.routes.js'), 'utf8');
+  assert.ok(routeJs.includes('colorsStore.ensureColors'), '/public/tags route must ensure colors for public tags');
+  assert.ok(routeJs.includes('color: (colorMap.get'), '/public/tags route must include color in response data');
+});
+
+test('tag colors: global-styles.css, editor-obsidian.css and site.css include hashtag badge styles', () => {
+  const globalCss = fs.readFileSync(path.resolve(__dirname, '../../public/global-styles.css'), 'utf8');
+  assert.ok(globalCss.includes('.hashtag'), 'global-styles.css must include .hashtag');
+  assert.ok(globalCss.includes('.hashtag.has-tag-color'), 'global-styles.css must style .hashtag.has-tag-color');
+  assert.ok(globalCss.includes('.alltell-post-hashtag'), 'global-styles.css must style .alltell-post-hashtag');
+
+  const obsidianCss = fs.readFileSync(path.resolve(__dirname, '../../public/editor-obsidian.css'), 'utf8');
+  assert.ok(obsidianCss.includes('.preview-pane .hashtag'), 'editor-obsidian.css must style .preview-pane .hashtag');
+
+  const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
+  assert.ok(siteCss.includes('.hashtag'), 'site.css must include .hashtag');
+});

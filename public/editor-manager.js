@@ -598,6 +598,7 @@
           : null;
         if (result && result.success && Array.isArray(result.data)) {
           this.tagsIndex = result.data;
+          if (window.TagColors) window.TagColors.registerAll(this.tagsIndex);
           return this.tagsIndex;
         }
       } catch (_) {}
@@ -608,6 +609,7 @@
         const json = await resp.json();
         const list = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : []);
         this.tagsIndex = list;
+        if (window.TagColors) window.TagColors.registerAll(this.tagsIndex);
         return this.tagsIndex;
       } catch (_) {
         this.tagsIndex = [];

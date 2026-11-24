@@ -178,6 +178,9 @@
       this.values.forEach((v) => {
         const chip = document.createElement('span');
         chip.className = 'chip-field-chip';
+        if (window.TagColors) {
+          window.TagColors.paint(chip, v);
+        }
 
         const label = document.createElement('span');
         label.className = 'chip-field-chip-label';

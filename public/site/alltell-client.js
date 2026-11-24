@@ -1084,6 +1084,7 @@
         var res = await window.apiClient.getTags();
         if (res && res.success && Array.isArray(res.data)) {
           cachedFeedTags = res.data;
+          if (window.TagColors) window.TagColors.registerAll(cachedFeedTags);
           return cachedFeedTags;
         }
       }
@@ -1096,6 +1097,7 @@
       var json = await resp.json();
       var list = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : []);
       cachedFeedTags = list;
+      if (window.TagColors) window.TagColors.registerAll(cachedFeedTags);
       return cachedFeedTags;
     } catch (_) {
       cachedFeedTags = [];
@@ -1693,6 +1695,16 @@
     });
     text = text.replace(/\[([^\]]+)\]\(\(([a-zA-Z0-9_\-\.]+)\)\)/g, function (_, title, slug) {
       return '<a href="/antropedia/' + encodeURIComponent(slug.trim()) + '" class="alltell-post-wikilink"><i class="fas fa-book-bookmark"></i> ' + title.trim() + '</a>';
+    });
+
+    // Хэштеги: #[тег с пробелами] или #тег
+    text = text.replace(/(^|[\s\u00a0(])#(?:\[([^\]\n]+)\]|([a-zA-Zа-яА-ЯёЁ0-9_-]+))/g, function (_, prefix, bracketTag, wordTag) {
+      var raw = (bracketTag || wordTag || '').trim();
+      var label = bracketTag ? '#[' + bracketTag + ']' : '#' + wordTag;
+      var clean = raw.replace(/^#+/, '').replace(/^\[+|\]+$/g, '').trim().toLowerCase();
+      var color = (window.TagColors && typeof window.TagColors.get === 'function') ? window.TagColors.get(raw) : null;
+      var styleAttr = color ? ' style="color:' + color + ';background-color:' + color + '20;border-color:' + color + '4d;"' : '';
+      return prefix + '<a href="/antropedia?tag=' + encodeURIComponent(clean) + '" class="hashtag alltell-post-hashtag' + (color ? ' has-tag-color' : '') + '" data-tag="' + clean + '"' + styleAttr + '>' + label + '</a>';
     });
 
     // Обычные markdown-ссылки: [название](url)

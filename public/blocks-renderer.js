@@ -377,6 +377,9 @@
         const tagValue = (m[2] || m[3] || '').trim();
         span.dataset.tag = tagValue.toLowerCase();
         span.textContent = m[2] ? `#[${m[2]}]` : `#${m[3]}`;
+        if (window.TagColors && typeof window.TagColors.paint === 'function') {
+          window.TagColors.paint(span, tagValue);
+        }
         frag.appendChild(span);
         lastIndex = m.index + m[0].length;
       }
@@ -714,6 +717,9 @@
     }
     if (window.AllTellAudio && typeof window.AllTellAudio.initAll === 'function') {
       window.AllTellAudio.initAll(container);
+    }
+    if (window.TagColors && typeof window.TagColors.paintAll === 'function') {
+      window.TagColors.paintAll(container);
     }
     if (container.__blocksInteractionsAttached) return;
     container.__blocksInteractionsAttached = true;

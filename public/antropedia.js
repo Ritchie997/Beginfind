@@ -634,6 +634,7 @@ function reactionsBarInnerHtml(reactions) {
       try {
         const tagsResult = await window.apiClient.getTags();
         const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
+        if (window.TagColors) window.TagColors.registerAll(tags);
         this.tagField?.setOptions(tags.map((t) => ({ value: t.tag, label: t.tag })));
         this.renderQuickTags(tags);
       } catch (e) {
@@ -645,6 +646,7 @@ function reactionsBarInnerHtml(reactions) {
       try {
         const tagsResult = await window.apiClient.getTags();
         const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
+        if (window.TagColors) window.TagColors.registerAll(tags);
         this.renderQuickTags(tags);
         return tags;
       } catch (e) {
@@ -674,6 +676,7 @@ function reactionsBarInnerHtml(reactions) {
         btn.setAttribute('data-tag', tagName);
         btn.textContent = '#' + tagName;
         btn.title = `Фильтр по тегу «${tagName}»` + (tagItem.count != null ? ` (${tagItem.count})` : '');
+        if (window.TagColors) window.TagColors.paint(btn, tagName);
 
         btn.addEventListener('click', () => {
           if (!this.tagField) return;
@@ -1072,9 +1075,11 @@ function reactionsBarInnerHtml(reactions) {
           ${article.search_snippet
             ? `<div class="antropedia-card-snippet"><span class="antropedia-snippet-label"><i class="fas fa-search"></i> Найдено:</span> …${escapeHtml(article.search_snippet).replace(/&lt;mark&gt;/g, '<mark class="antropedia-search-highlight">').replace(/&lt;\/mark&gt;/g, '</mark>')}…</div>`
             : `<p class="antropedia-card-excerpt">${escapeHtml(makeExcerpt(article, this.articlesIndexBySlug))}</p>`}
-          ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) =>
-            `<span class="antropedia-tag-pill" data-action="filter-tag" data-value="${escapeHtml(t)}">#${escapeHtml(t)}</span>`
-          ).join('')}</div>` : ''}
+          ${tags.length ? `<div class="antropedia-card-tags">${tags.map((t) => {
+            const color = window.TagColors ? window.TagColors.get(t) : null;
+            const styleAttr = color ? ` style="color:${color};background-color:${color}22;border-color:${color}55;"` : '';
+            return `<span class="antropedia-tag-pill${color ? ' has-tag-color' : ''}" data-action="filter-tag" data-value="${escapeHtml(t)}"${styleAttr}>#${escapeHtml(t)}</span>`;
+          }).join('')}</div>` : ''}
           <div class="antropedia-card-meta">
             <span${article.author && article.author.id ? ` data-action="open-profile" data-value="${article.author.id}" style="cursor:pointer" title="Открыть профиль"` : ''}>${window.avatarHtml({ name: authorName, avatar: article.author && article.author.avatar }, 18)} ${escapeHtml(authorName)}</span>
             <span><i class="fas fa-calendar"></i> ${formatDate(article.created_at)}</span>
