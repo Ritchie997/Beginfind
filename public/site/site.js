@@ -861,12 +861,21 @@
           var button = document.createElement('button');
           button.type = 'button';
           button.className = 'wiki-tag';
-          button.textContent = '#' + tag;
-          button.title = 'Показать статьи с тегом «' + tag + '»';
-          if (window.TagColors) window.TagColors.paint(button, tag);
+          var clean = String(tag).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+          button.textContent = '#' + clean;
+          button.title = 'Показать статьи с тегом «' + clean + '»';
+          var color = window.TagColors ? window.TagColors.get(clean) : null;
+          if (color) {
+            button.style.color = color;
+            button.style.backgroundColor = color + '22';
+            button.style.borderColor = color + '55';
+            button.classList.add('has-tag-color');
+          } else if (window.TagColors) {
+            window.TagColors.paint(button, clean);
+          }
           button.addEventListener('click', function () {
             if (state.tagField) {
-              state.tagField.addValue(tag);
+              state.tagField.addValue(clean);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           });
@@ -1174,7 +1183,15 @@
         var tags = Array.isArray(result.data) ? result.data : Array.isArray(result) ? result : [];
         if (window.TagColors) window.TagColors.registerAll(tags);
         if (state.tagField) {
-          state.tagField.setOptions(tags.map(function (item) { return { value: item.tag, label: item.tag }; }));
+          state.tagField.setOptions(tags.map(function (item) {
+            return {
+              value: item.tag,
+              label: item.tag.startsWith('#') ? item.tag : '#' + item.tag,
+              color: item.color,
+              count: item.count,
+              isTag: true
+            };
+          }));
         }
         if (quickTagsEl && tags.length) {
           renderQuickTags(tags);
@@ -4428,10 +4445,19 @@
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'wiki-tag';
-            button.textContent = tag.startsWith('#') ? tag : '#' + tag;
-            if (window.TagColors) window.TagColors.paint(button, tag);
+            var clean = String(tag).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+            button.textContent = '#' + clean;
+            var color = window.TagColors ? window.TagColors.get(clean) : null;
+            if (color) {
+              button.style.color = color;
+              button.style.backgroundColor = color + '22';
+              button.style.borderColor = color + '55';
+              button.classList.add('has-tag-color');
+            } else if (window.TagColors) {
+              window.TagColors.paint(button, clean);
+            }
             button.addEventListener('click', function () {
-              window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(tag));
+              window.PublicSite.navigateTo('/antropedia?tag=' + encodeURIComponent(clean));
             });
             tagsContainer.appendChild(button);
           });
@@ -5773,8 +5799,17 @@
       article.tags.slice(0, 4).forEach(function (tag) {
         var item = document.createElement('span');
         item.className = 'wiki-tag';
-        item.textContent = '#' + tag;
-        if (window.TagColors) window.TagColors.paint(item, tag);
+        var clean = String(tag).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+        item.textContent = '#' + clean;
+        var color = window.TagColors ? window.TagColors.get(clean) : null;
+        if (color) {
+          item.style.color = color;
+          item.style.backgroundColor = color + '22';
+          item.style.borderColor = color + '55';
+          item.classList.add('has-tag-color');
+        } else if (window.TagColors) {
+          window.TagColors.paint(item, clean);
+        }
         tags.appendChild(item);
       });
       body.appendChild(tags);

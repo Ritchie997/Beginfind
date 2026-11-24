@@ -6350,7 +6350,12 @@
             ${matches.map(function (article) {
               var isSelected = selectedSlugs.has(article.slug);
               var tagsText = Array.isArray(article.tags) && article.tags.length
-                ? article.tags.slice(0, 2).map(function (t) { return '#' + escapeHtml(t); }).join(' ')
+                ? article.tags.slice(0, 3).map(function (t) {
+                    var clean = String(t).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+                    var color = window.TagColors ? window.TagColors.get(clean) : null;
+                    var style = color ? ' style="color:' + color + ';background-color:' + color + '22;border-color:' + color + '55;"' : '';
+                    return '<span class="hashtag' + (color ? ' has-tag-color' : '') + '"' + style + '>#' + escapeHtml(clean) + '</span>';
+                  }).join(' ')
                 : '';
               return `
                 <button type="button"

@@ -917,7 +917,13 @@ class SPARouter {
       window.apiClient.getTags().then((res) => {
         if (res && res.success && Array.isArray(res.data) && this.tagsField) {
           window.TagColors?.registerAll(res.data);
-          this.tagsField.setOptions(res.data.map((t) => ({ value: t.tag, label: `#${t.tag}`, color: t.color })));
+          this.tagsField.setOptions(res.data.map((t) => ({
+            value: t.tag,
+            label: t.tag.startsWith('#') ? t.tag : `#${t.tag}`,
+            color: t.color,
+            count: t.count,
+            isTag: true
+          })));
         }
       }).catch(() => {});
     }

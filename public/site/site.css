@@ -14891,3 +14891,11 @@ mark.antropedia-search-hit.antropedia-search-hit-current,
 .antropedia-tag-chip.has-tag-color:hover {
     filter: brightness(1.2);
 }
+
+.public-wiki-card-tags .wiki-tag.has-tag-color:hover,
+.antropedia-detail-view .public-article-tags .wiki-tag.has-tag-color:hover {
+    color: inherit !important;
+    background-color: inherit !important;
+    border-color: inherit !important;
+    filter: brightness(1.25) !important;
+}

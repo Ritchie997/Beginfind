@@ -635,7 +635,13 @@ function reactionsBarInnerHtml(reactions) {
         const tagsResult = await window.apiClient.getTags();
         const tags = (tagsResult.success && Array.isArray(tagsResult.data)) ? tagsResult.data : [];
         if (window.TagColors) window.TagColors.registerAll(tags);
-        this.tagField?.setOptions(tags.map((t) => ({ value: t.tag, label: t.tag })));
+        this.tagField?.setOptions(tags.map((t) => ({
+          value: t.tag,
+          label: t.tag.startsWith('#') ? t.tag : `#${t.tag}`,
+          color: t.color,
+          count: t.count,
+          isTag: true
+        })));
         this.renderQuickTags(tags);
       } catch (e) {
         // Фильтр по тегам просто останется без подсказок — не критично
@@ -1509,6 +1515,14 @@ function reactionsBarInnerHtml(reactions) {
 
       const badges = [];
       if (article.locked) badges.push('<span class="antropedia-badge" style="background:var(--yellow-hover)"><i class="fas fa-lock"></i> Закрытая</span>');
+      if (Array.isArray(article.tags) && article.tags.length) {
+        article.tags.forEach((tag) => {
+          const clean = String(tag).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+          const color = window.TagColors ? window.TagColors.get(clean) : null;
+          const style = color ? ` style="color:${color};background-color:${color}22;border-color:${color}55;"` : '';
+          badges.push(`<span class="hashtag antropedia-view-tag${color ? ' has-tag-color' : ''}" data-tag="${escapeHtml(clean)}"${style}>#${escapeHtml(clean)}</span>`);
+        });
+      }
       const badgesEl = document.getElementById('antropediaViewBadges');
       if (badgesEl) badgesEl.innerHTML = badges.join('');
 

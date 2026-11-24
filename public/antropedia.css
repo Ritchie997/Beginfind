@@ -605,6 +605,13 @@ mark.antropedia-search-highlight {
   color: var(--text-normal);
 }
 
+.antropedia-tag-pill.has-tag-color:hover {
+  filter: brightness(1.25) !important;
+  color: inherit !important;
+  background-color: inherit !important;
+  border-color: inherit !important;
+}
+
 .antropedia-card-meta {
   margin-top: auto;
   display: flex;

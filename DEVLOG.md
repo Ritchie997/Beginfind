@@ -17,13 +17,17 @@
 - **Лента публикаций AllTell (`public/site/alltell-client.js`):**
   - Функция `formatPostBody` теперь распознаёт и форматирует хэштеги `#слово` и `#[тег с пробелами]` в кликабельные элементы `<a class="hashtag alltell-post-hashtag">` со стилизацией в индивидуальный цвет тега и переходом к каталогу Antropedia.
   - Метод `loadFeedTags` регистрирует полученные теги в `window.TagColors`.
-- **Витрина Antropedia и карточки (`public/site/site.js`, `public/antropedia.js`, `public/chip-field.js`):**
-  - Кнопки тегов карточек статей `.wiki-tag`, популярные теги-фильтры `.antropedia-tag-chip`, бейджи `.antropedia-tag-pill` и чипы в поле ввода тегов `.chip-field-chip` окрашиваются в закреплённый цвет тега.
-  - В роуте `GET /public/tags` (`src/routes/public-articles.routes.js`) теперь также возвращаются закреплённые цвета каждого публичного тега (`colorsStore.ensureColors`), благодаря чему гости и неавторизованные пользователи видят цвета тегов синхронно с админ-панелью.
-- **Стилизация (`public/global-styles.css`, `public/editor-obsidian.css`, `public/site/site.css`):**
-  - Добавлены общие правила для бейджей `.hashtag` и `.alltell-post-hashtag` (плавное осветление при наведении, скругление, отступы, аккуратное выравнивание по базовой линии текста).
+- **Витрина Antropedia, карточки и поле ввода тегов (`public/site/site.js`, `public/antropedia.js`, `public/chip-field.js`):**
+  - **Единый стиль меню выбора тегов (`public/chip-field.js`, `public/global-styles.css`):** выпадающий список выбора тегов в метаданных статьи (`articleTagsField` в админке и основе) унифицирован с подсказками ввода в статье — отображаются цветная иконка `#`, название тега и счётчик статей (`.eb-suggest-tag-item`), с поддержкой навигации стрелками `ArrowDown`/`ArrowUp` и подтверждения по `Enter`.
+  - **Цветные блоки тегов в метаданных (`public/chip-field.js`):** чипы добавленных тегов статьи (`.chip-field-chip`) окрашиваются в индивидуальный цвет тега (тонированный фон, акцентная рамка и цветная кнопка удаления).
+  - **Цветные блоки тегов в прочтении статьи:** плашки тегов в шапке открытой статьи (в основе `.public-article-tags .wiki-tag` и в админке `antropediaViewBadges`) отображаются как цветные бейджи со своими цветами.
+  - **Цветные блоки тегов на главной странице в ленте Antropedia:** теги на карточках статей (`.wiki-tag`, `.antropedia-tag-pill`) и кнопки быстрого фильтра популярных тегов (`.antropedia-tag-chip`) окрашиваются в цвета из админ-панели с защитой цвета при наведении.
+  - **Публикации AllTell:** теги к статьям в окне выбора прикреплений и хэштеги в ленте постов AllTell стилизуются в цвет тега.
+  - В роуте `GET /public/tags` (`src/routes/public-articles.routes.js`) возвращаются закреплённые цвета каждого публичного тега (`colorsStore.ensureColors`), обеспечивая синхронность отображения для гостей.
+- **Стилизация (`public/global-styles.css`, `public/editor-obsidian.css`, `public/site/site.css`, `public/antropedia.css`):**
+  - Добавлены общие правила для бейджей `.hashtag`, `.alltell-post-hashtag`, чипов `.chip-field-chip.has-tag-color` и выпадающего списка `.eb-suggest-tag-item`.
 - **Тестирование:**
-  - В `src/services/tags-upgrade.test.js` добавлены тесты функциональности `TagColors`, проверки раскраски хэштегов в `blocks-renderer.js`, поддержки цветов в `alltell-client.js`, отдачи цветов в `GET /public/tags` и стилей в CSS. Все 150 тестов успешно пройдены.
+  - В `src/services/tags-upgrade.test.js` добавлены тесты функциональности `TagColors`, проверки раскраски хэштегов в `blocks-renderer.js` и `alltell-client.js`, унификации выпадающего списка `chip-field.js`, цветных чипов метаданных и стилей. Все 152 теста успешно пройдены.
 
 ## 2026-11-24 — автодополнение хэштегов (#тег) при вводе в тексте статьи и в ленте публикаций
 

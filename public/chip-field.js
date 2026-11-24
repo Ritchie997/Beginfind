@@ -56,17 +56,38 @@
       this.inputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          if (this.freeText) {
-            const active = this.dropdownEl?.querySelector('.chip-field-dropdown-item:hover, .chip-field-dropdown-item.is-active');
-            if (active) {
-              active.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            } else {
-              this._commitTyped();
-            }
+          const active = this.dropdownEl?.querySelector('.chip-field-dropdown-item.is-active, .chip-field-dropdown-item:hover');
+          if (active && active.dataset.value != null) {
+            this.addValue(active.dataset.value);
+          } else if (this.freeText) {
+            this._commitTyped();
           } else {
             const first = this.dropdownEl?.querySelector('.chip-field-dropdown-item');
-            if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            if (first && first.dataset.value != null) this.addValue(first.dataset.value);
           }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (!this._open) {
+            this._renderDropdown(true);
+            return;
+          }
+          const items = Array.from(this.dropdownEl?.querySelectorAll('.chip-field-dropdown-item') || []);
+          if (!items.length) return;
+          let idx = items.findIndex((it) => it.classList.contains('is-active') || it.classList.contains('eb-suggest-active'));
+          if (idx !== -1) items[idx].classList.remove('is-active', 'eb-suggest-active');
+          idx = (idx + 1) % items.length;
+          items[idx].classList.add('is-active', 'eb-suggest-active');
+          items[idx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (!this._open) return;
+          const items = Array.from(this.dropdownEl?.querySelectorAll('.chip-field-dropdown-item') || []);
+          if (!items.length) return;
+          let idx = items.findIndex((it) => it.classList.contains('is-active') || it.classList.contains('eb-suggest-active'));
+          if (idx !== -1) items[idx].classList.remove('is-active', 'eb-suggest-active');
+          idx = idx <= 0 ? items.length - 1 : idx - 1;
+          items[idx].classList.add('is-active', 'eb-suggest-active');
+          items[idx].scrollIntoView({ block: 'nearest' });
         } else if (e.key === 'Backspace' && !this.inputEl.value && this.values.length) {
           this.removeValue(this.values[this.values.length - 1]);
         } else if (e.key === 'Escape') {
@@ -152,7 +173,8 @@
     }
 
     _commitTyped(silent) {
-      const text = this.inputEl.value.trim();
+      const raw = (this.inputEl.value || '').trim();
+      const text = raw.replace(/^#+/, '').replace(/^\[+|\]+$/g, '').trim();
       this.inputEl.value = '';
       if (!text) { if (!silent) this._closeDropdown(); return; }
       if (!this.values.includes(text)) {
@@ -178,13 +200,14 @@
       this.values.forEach((v) => {
         const chip = document.createElement('span');
         chip.className = 'chip-field-chip';
-        if (window.TagColors) {
-          window.TagColors.paint(chip, v);
-        }
+        const cleanVal = String(v).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+        const color = (window.TagColors && window.TagColors.get(cleanVal)) || null;
 
         const label = document.createElement('span');
         label.className = 'chip-field-chip-label';
-        label.textContent = this._labelFor(v);
+        const isTag = Boolean(this.freeText || color || (window.TagColors && window.TagColors.has(cleanVal)));
+        const rawLabel = this._labelFor(v);
+        label.textContent = isTag && !rawLabel.startsWith('#') ? '#' + rawLabel : rawLabel;
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -192,6 +215,17 @@
         remove.innerHTML = '&times;';
         remove.title = 'Убрать';
         remove.addEventListener('click', (e) => { e.stopPropagation(); this.removeValue(v); });
+
+        if (color) {
+          chip.style.backgroundColor = `${color}28`;
+          chip.style.borderColor = `${color}66`;
+          chip.style.color = color;
+          chip.classList.add('has-tag-color');
+          remove.style.color = color;
+          remove.style.backgroundColor = `${color}33`;
+        } else if (window.TagColors) {
+          window.TagColors.paint(chip, cleanVal);
+        }
 
         chip.append(label, remove);
         this.chipsEl.appendChild(chip);
@@ -208,13 +242,24 @@
       if (!forceOpen && !this._open) return;
       this._open = true;
 
-      const query = (this.inputEl?.value || '').trim().toLowerCase();
-      const list = this.options.filter((o) =>
-        !this.values.includes(String(o.value)) &&
-        (!query || o.label.toLowerCase().includes(query))
-      );
+      const rawQuery = (this.inputEl?.value || '').trim().toLowerCase();
+      const query = rawQuery.replace(/^#+/, '');
+      const list = this.options.filter((o) => {
+        if (this.values.includes(String(o.value))) return false;
+        if (!query) return true;
+        const optLabel = String(o.label || o.value).toLowerCase();
+        const optClean = optLabel.replace(/^#+/, '');
+        return optLabel.includes(rawQuery) || optClean.includes(query);
+      });
 
       if (!list.length && !forceOpen && !query) { this._closeDropdown(); return; }
+
+      const isTagField = Boolean(this.freeText || (this.options && this.options.some((o) => o.isTag || o.color)));
+      if (isTagField) {
+        this.dropdownEl.classList.add('eb-tag-suggest');
+      } else {
+        this.dropdownEl.classList.remove('eb-tag-suggest');
+      }
 
       this.dropdownEl.innerHTML = '';
       if (!list.length) {
@@ -223,11 +268,46 @@
         empty.textContent = this.emptyText;
         this.dropdownEl.appendChild(empty);
       } else {
-        list.forEach((o) => {
+        const plural = (n, one, few, many) => {
+          const m10 = n % 10;
+          const m100 = n % 100;
+          if (m10 === 1 && m100 !== 11) return one;
+          if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+          return many;
+        };
+
+        list.forEach((o, i) => {
           const item = document.createElement('div');
-          item.className = 'chip-field-dropdown-item';
-          item.textContent = o.label;
-          item.addEventListener('mousedown', (e) => { e.preventDefault(); this.addValue(o.value); });
+          item.dataset.value = o.value;
+          const cleanName = String(o.label || o.value).replace(/^#+/, '').replace(/^\[+|\]+$/g, '');
+          const isTag = Boolean(o.isTag || this.freeText || o.color || (window.TagColors && window.TagColors.has(cleanName)));
+
+          if (isTag) {
+            item.className = 'chip-field-dropdown-item eb-suggest-tag-item' + (i === 0 ? ' is-active eb-suggest-active' : '');
+            const color = o.color || (window.TagColors && window.TagColors.get(cleanName)) || '#5865f2';
+            const count = o.count != null ? Number(o.count) : null;
+            const countStr = count != null && count > 0 ? `${count} ${plural(count, 'статья', 'статьи', 'статей')}` : '';
+
+            item.innerHTML = `
+              <span class="eb-suggest-tag-icon" style="background:${color}26;color:${color}"><i class="fas fa-hashtag"></i></span>
+              <span class="eb-suggest-tag-name">#${escapeHtml(cleanName)}</span>
+              ${countStr ? `<span class="eb-suggest-tag-meta">${countStr}</span>` : ''}
+            `;
+          } else {
+            item.className = 'chip-field-dropdown-item' + (i === 0 ? ' is-active' : '');
+            item.textContent = o.label;
+          }
+
+          item.addEventListener('mouseenter', () => {
+            this.dropdownEl?.querySelectorAll('.chip-field-dropdown-item.is-active, .chip-field-dropdown-item.eb-suggest-active')
+              .forEach((el) => el.classList.remove('is-active', 'eb-suggest-active'));
+            item.classList.add('is-active', 'eb-suggest-active');
+          });
+
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            this.addValue(o.value);
+          });
           this.dropdownEl.appendChild(item);
         });
       }

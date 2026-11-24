@@ -267,3 +267,39 @@ test('tag colors: global-styles.css, editor-obsidian.css and site.css include ha
   const siteCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.css'), 'utf8');
   assert.ok(siteCss.includes('.hashtag'), 'site.css must include .hashtag');
 });
+
+test('unified tag dropdown & metadata chips: chip-field.js mirrors editor suggest and paints colored chips', () => {
+  const chipFieldJs = fs.readFileSync(path.resolve(__dirname, '../../public/chip-field.js'), 'utf8');
+
+  // Unified dropdown item markup
+  assert.ok(chipFieldJs.includes('eb-suggest-tag-item'), 'chip-field dropdown must use eb-suggest-tag-item class');
+  assert.ok(chipFieldJs.includes('eb-suggest-tag-icon'), 'chip-field dropdown must render eb-suggest-tag-icon');
+  assert.ok(chipFieldJs.includes('eb-suggest-tag-name'), 'chip-field dropdown must render eb-suggest-tag-name');
+  assert.ok(chipFieldJs.includes('eb-suggest-tag-meta'), 'chip-field dropdown must render eb-suggest-tag-meta');
+  assert.ok(chipFieldJs.includes('eb-tag-suggest'), 'chip-field dropdown must add eb-tag-suggest class for tags');
+
+  // Keyboard navigation
+  assert.ok(chipFieldJs.includes("e.key === 'ArrowDown'"), 'chip-field must support ArrowDown navigation');
+  assert.ok(chipFieldJs.includes("e.key === 'ArrowUp'"), 'chip-field must support ArrowUp navigation');
+  assert.ok(chipFieldJs.includes('eb-suggest-active') || chipFieldJs.includes('is-active'), 'chip-field must track active suggest item');
+
+  // Chip coloring
+  assert.ok(chipFieldJs.includes('has-tag-color'), 'chip-field must set has-tag-color on colored chips');
+  assert.ok(chipFieldJs.includes('TagColors.get'), 'chip-field must check TagColors for chip colors');
+
+  const globalCss = fs.readFileSync(path.resolve(__dirname, '../../public/global-styles.css'), 'utf8');
+  assert.ok(globalCss.includes('.chip-field-chip.has-tag-color'), 'global-styles.css must style .chip-field-chip.has-tag-color');
+  assert.ok(globalCss.includes('.eb-suggest-tag-icon'), 'global-styles.css must include .eb-suggest-tag-icon');
+});
+
+test('reading view and antropedia feed: tags take colors in detail view, cards and quick tags', () => {
+  const siteJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/site.js'), 'utf8');
+  assert.ok(siteJs.includes('public-article-tags'), 'site.js must manage public-article-tags in reading view');
+  assert.ok(siteJs.includes('TagColors.get(clean'), 'site.js must query TagColors in detail view & cards');
+  assert.ok(siteJs.includes('has-tag-color'), 'site.js must add has-tag-color to colored tag buttons/chips');
+
+  const antropediaJs = fs.readFileSync(path.resolve(__dirname, '../../public/antropedia.js'), 'utf8');
+  assert.ok(antropediaJs.includes('antropedia-view-tag'), 'antropedia.js must render antropedia-view-tag in reading view');
+  assert.ok(antropediaJs.includes('antropedia-card-tags'), 'antropedia.js must render antropedia-card-tags on catalog cards');
+  assert.ok(antropediaJs.includes('TagColors'), 'antropedia.js must integrate with TagColors');
+});
