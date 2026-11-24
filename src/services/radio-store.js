@@ -252,20 +252,28 @@ async function listStations() {
           isLive: false
         };
       }
-      const currentSlot = await get(
+      let currentSlot = await get(
         `SELECT * FROM radio_timeline_slots 
          WHERE station_id = ? AND start_time <= ? AND end_time > ? 
          ORDER BY slot_order ASC, start_time ASC LIMIT 1`,
         [st.id, now, now]
       );
+      if (!currentSlot && (st.fallback_mode === 'loop' || st.is_eternal)) {
+        try {
+          const liveState = await getStationLiveState(st.id);
+          if (liveState && liveState.currentSlot) {
+            currentSlot = liveState.currentSlot;
+          }
+        } catch (_) {}
+      }
       return {
         ...st,
         currentTrack: currentSlot ? {
           title: currentSlot.title,
           type: currentSlot.type,
           duration: currentSlot.duration,
-          startTime: currentSlot.start_time,
-          endTime: currentSlot.end_time
+          startTime: currentSlot.start_time || currentSlot.startTime,
+          endTime: currentSlot.end_time || currentSlot.endTime
         } : null,
         isLive: Boolean(currentSlot)
       };
@@ -283,7 +291,7 @@ async function getStationByFrequency(frequency) {
   return get('SELECT * FROM radio_stations WHERE frequency = ?', [frequency]);
 }
 
-async function createStation({ frequency, name, description = '', ownerId, ownerName, avatarUrl = null, fallbackMode = 'loop', hostName, host_name }) {
+async function createStation({ frequency, name, description = '', ownerId, ownerName, avatarUrl = null, fallbackMode = 'loop', hostName, host_name, isEternal, is_eternal }) {
   const numFreq = Number(frequency);
   if (isNaN(numFreq) || numFreq <= 0) {
     throw new Error('Некорректная частота. Укажите положительное число (например, 101.5 или 42)');
@@ -300,18 +308,22 @@ async function createStation({ frequency, name, description = '', ownerId, owner
   }
 
   const chosenOwner = String(hostName || host_name || '').trim() || ownerName || 'Ведущий';
-  const cleanFallback = ['loop', 'noise', 'silence'].includes(fallbackMode) ? fallbackMode : 'loop';
+  const cleanEternal = (isEternal === 1 || isEternal === true || is_eternal === 1 || is_eternal === true) ? 1 : 0;
+  let cleanFallback = ['loop', 'noise', 'silence'].includes(fallbackMode) ? fallbackMode : 'loop';
+  if (cleanEternal === 1 && !fallbackMode) {
+    cleanFallback = 'loop';
+  }
 
   const result = await run(
-    `INSERT INTO radio_stations (frequency, name, description, owner_id, owner_name, avatar_url, fallback_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [numFreq, cleanName, String(description || '').trim(), ownerId, chosenOwner, avatarUrl || null, cleanFallback]
+    `INSERT INTO radio_stations (frequency, name, description, owner_id, owner_name, avatar_url, fallback_mode, is_eternal)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [numFreq, cleanName, String(description || '').trim(), ownerId, chosenOwner, avatarUrl || null, cleanFallback, cleanEternal]
   );
 
   return getStationById(result.lastID);
 }
 
-async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive, ownerName, owner_name, host, host_name }) {
+async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive, ownerName, owner_name, host, host_name, isEternal, is_eternal }) {
   const station = await getStationById(id);
   if (!station) throw new Error('Станция не найдена');
 
@@ -350,6 +362,16 @@ async function updateStation(id, actingUserId, isRootOrAdmin, { name, descriptio
   if (isActive !== undefined) {
     updates.push('is_active = ?');
     params.push(isActive ? 1 : 0);
+  }
+  const eternalVal = isEternal !== undefined ? isEternal : is_eternal;
+  if (eternalVal !== undefined) {
+    const cleanEternal = (eternalVal === 1 || eternalVal === true || eternalVal === '1' || eternalVal === 'true') ? 1 : 0;
+    updates.push('is_eternal = ?');
+    params.push(cleanEternal);
+    if (cleanEternal === 1 && fallbackMode === undefined) {
+      updates.push('fallback_mode = ?');
+      params.push('loop');
+    }
   }
 
   updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -630,6 +652,7 @@ async function getStationLiveState(stationId, options = {}) {
   const nowMs = now.getTime();
 
   const status = station.broadcast_status || 'live';
+  const isStationEternal = Boolean(station.is_eternal === 1 || station.is_eternal === true);
   if (status === 'offline') {
     return {
       station,
@@ -637,6 +660,7 @@ async function getStationLiveState(stationId, options = {}) {
       broadcastStatus: 'offline',
       isLive: false,
       isVirtualLoop: false,
+      isEternal: isStationEternal,
       fallback: 'silence',
       currentSlot: null,
       offset: 0,
@@ -660,6 +684,7 @@ async function getStationLiveState(stationId, options = {}) {
         scheduledStartTime: station.broadcast_started_at,
         isLive: false,
         isVirtualLoop: false,
+        isEternal: isStationEternal,
         fallback: 'silence',
         currentSlot: null,
         offset: 0,
@@ -713,7 +738,7 @@ async function getStationLiveState(stationId, options = {}) {
     const totalDurationMs = Math.round(totalDurationSec * 1000);
     const scheduleStartMs = new Date(activeLoopSlots[0].start_time).getTime();
 
-    if (station.fallback_mode === 'loop' && totalDurationSec > 0) {
+    if ((station.fallback_mode === 'loop' || isStationEternal) && totalDurationSec > 0) {
       if (nowMs < scheduleStartMs) {
         if (scheduleStartMs - nowMs <= 4000) {
           // Защита от микро-рассинхрона (если старт через пару секунд)
@@ -909,9 +934,8 @@ async function getStationLiveState(stationId, options = {}) {
     serverTime: nowIso,
     broadcastStatus: station.broadcast_status || 'live',
     isLive: Boolean(currentSlot),
-    broadcastStatus: station.broadcast_status || 'live',
-    isLive: Boolean(currentSlot),
     isVirtualLoop,
+    isEternal: isStationEternal,
     fallback: !currentSlot ? station.fallback_mode : null,
     cycleStartTime: currentCycleStartMs ? new Date(currentCycleStartMs).toISOString() : null,
     cycleEndTime: currentCycleEndMs ? new Date(currentCycleEndMs).toISOString() : null,
@@ -1177,7 +1201,8 @@ async function removeTrackFromPlaylist(playlistId, trackId, userId, isAdmin) {
 async function cleanupOldTimelineSlots() {
   const result = await run(
     `DELETE FROM radio_timeline_slots 
-     WHERE datetime(end_time) < datetime('now', '-32 hours')`
+     WHERE datetime(end_time) < datetime('now', '-32 hours')
+       AND station_id NOT IN (SELECT id FROM radio_stations WHERE is_eternal = 1)`
   );
   if (result.changes > 0) {
     console.log(`[Radio Cleanup] Удалено ${result.changes} слотов старше 32 часов`);

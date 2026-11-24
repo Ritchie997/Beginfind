@@ -328,8 +328,8 @@
         <div class="radio-editor-header">
           <div>
             <h2 style="margin:0 0 6px 0;">Сетка вещания вашей радиостанции</h2>
-            <p style="margin:0; color:#94a3b8; font-size:0.9rem;">
-              Составьте расписание треков, подкастов и слов на 24 часа. Сетка будет доступна в эфире на протяжении 32 часов.
+            <p style="margin:0; color:#94a3b8; font-size:0.9rem;" id="editorHeaderDescription">
+              Составьте расписание треков, подкастов и слов на 24 часа. Сетка будет доступна в эфире на протяжении 32 часов (или бессрочно при включении вечного эфира).
             </p>
           </div>
           <div class="radio-editor-capacity">
@@ -350,6 +350,7 @@
             <select id="editorStationSelect" class="radio-form-select" style="min-width:200px;"></select>
             <button type="button" class="btn btn-secondary btn-sm" id="btnEditStationSettings" title="Действия со станцией и настройки"><i class="fas fa-ellipsis-vertical"></i> Опции станции</button>
             <span id="editorLiveStatusBadge" class="badge radio-live-status-badge" style="font-size:0.8rem; padding:6px 12px; border-radius:8px; font-weight:700;">⚪ ЭФИР ОСТАНОВЛЕН</span>
+            <span id="editorEternalBadge" class="badge radio-eternal-badge" style="display:none; font-size:0.8rem; padding:6px 12px; border-radius:8px; font-weight:700;" title="Вечный зацикленный эфир включен: расписание не будет удаляться через 32 часа"><i class="fas fa-infinity"></i> ВЕЧНЫЙ ЭФИР</span>
           </div>
 
           <div class="radio-time-sync-widget" id="radioTimeSyncWidget" title="Системное время вашего устройства и часовой пояс">
@@ -425,6 +426,9 @@
               <button type="button" class="radio-preset-chip" id="btnPresetNextHour">В начале часа</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btnToggleBroadcastLoop" title="Зацикливать вещание радиостанции по кругу (бесконечный эфир)">
                 <i class="fas fa-repeat"></i> <span id="broadcastLoopBtnText">Зациклить эфир</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnToggleEternalBroadcast" title="Вечный зацикленный эфир (не удалять эфир через 32 часа, бесконечное вещание по кругу)">
+                <i class="fas fa-infinity"></i> <span id="eternalBroadcastBtnText">Вечный зацикленный эфир</span>
               </button>
             </div>
           </div>
@@ -666,6 +670,19 @@
               <option value="noise">📻 Звук радиопомех / белый шум</option>
               <option value="silence">🔇 Тишина / Офлайн</option>
             </select>
+          </div>
+          <div class="radio-form-group">
+            <label class="form-check-label" style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; background:rgba(255,255,255,0.04); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); margin-top:10px;">
+              <input type="checkbox" id="createStationIsEternal" class="form-check-input" style="margin-top:3px;">
+              <div>
+                <div style="font-weight:600; color:#e2e8f0; display:flex; align-items:center; gap:6px;">
+                  <i class="fas fa-infinity" style="color:#c084fc;"></i> Вечный зацикленный эфир
+                </div>
+                <div style="font-size:0.82rem; color:#94a3b8; margin-top:2px;">
+                  Не удалять эфир через 32 часа, вещать бесконечно по кругу
+                </div>
+              </div>
+            </label>
           </div>
         </div>
         <div class="modal-footer">
@@ -972,6 +989,19 @@
               <option value="noise">📻 Звук радиопомех / белый шум</option>
               <option value="silence">🔇 Тишина / Офлайн</option>
             </select>
+          </div>
+          <div class="radio-form-group">
+            <label class="form-check-label" style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; background:rgba(255,255,255,0.04); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+              <input type="checkbox" id="editStationIsEternal" class="form-check-input" style="margin-top:3px;">
+              <div>
+                <div style="font-weight:600; color:#e2e8f0; display:flex; align-items:center; gap:6px;">
+                  <i class="fas fa-infinity" style="color:#c084fc;"></i> Вечный зацикленный эфир
+                </div>
+                <div style="font-size:0.82rem; color:#94a3b8; margin-top:2px;">
+                  Не удалять сетку вещания через 32 часа. Эфир будет бесконечно зациклен и доступен слушателям всегда.
+                </div>
+              </div>
+            </label>
           </div>
           <div class="radio-form-group">
             <label>Аватар / Обложка радиостанции</label>

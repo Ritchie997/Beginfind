@@ -1037,6 +1037,7 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
         is_active INTEGER NOT NULL DEFAULT 1,
         broadcast_status TEXT NOT NULL DEFAULT 'live',
         broadcast_started_at DATETIME,
+        is_eternal INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -1044,6 +1045,8 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
       radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_stations_owner ON radio_stations(owner_id)');
       radioDb.run("ALTER TABLE radio_stations ADD COLUMN broadcast_status TEXT NOT NULL DEFAULT 'live'", () => {});
       radioDb.run("ALTER TABLE radio_stations ADD COLUMN broadcast_started_at DATETIME", () => {});
+      radioDb.run("ALTER TABLE radio_stations ADD COLUMN is_eternal INTEGER NOT NULL DEFAULT 0", () => {});
+      radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_stations_eternal ON radio_stations(is_eternal)', () => {});
 
       radioDb.run(`CREATE TABLE IF NOT EXISTS radio_timeline_slots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

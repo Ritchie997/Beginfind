@@ -334,7 +334,7 @@ router.get('/radio/stations', async (req, res) => {
 // POST /api/radio/stations — регистрация новой радиостанции / занятие частоты
 router.post('/radio/stations', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { frequency, name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, ownerName, owner_name, host, host_name } = req.body;
+    const { frequency, name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, ownerName, owner_name, host, host_name, isEternal, is_eternal } = req.body;
     const customHost = String(ownerName || owner_name || host || host_name || '').trim();
 
     const station = await radioStore.createStation({
@@ -344,7 +344,8 @@ router.post('/radio/stations', auth.authenticateToken, auth.checkApproved, async
       ownerId: req.user.id,
       ownerName: customHost || getDisplayName(req.user),
       avatarUrl: avatarUrl || avatar_url || null,
-      fallbackMode: fallbackMode || fallback_mode || 'loop'
+      fallbackMode: fallbackMode || fallback_mode || 'loop',
+      isEternal: isEternal !== undefined ? isEternal : is_eternal
     });
 
     res.status(201).json(station);
@@ -371,14 +372,15 @@ router.get('/radio/stations/:id', async (req, res) => {
 // PUT /api/radio/stations/:id — обновление настроек станции владельцем
 router.put('/radio/stations/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
-    const { name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, isActive, ownerName, owner_name, host, host_name } = req.body;
+    const { name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, isActive, ownerName, owner_name, host, host_name, isEternal, is_eternal } = req.body;
     const updated = await radioStore.updateStation(req.params.id, req.user.id, isRootOrAdmin(req.user), {
       name,
       description,
       avatarUrl: avatarUrl || avatar_url,
       fallbackMode: fallbackMode || fallback_mode,
       isActive,
-      ownerName: ownerName !== undefined ? ownerName : (owner_name !== undefined ? owner_name : (host !== undefined ? host : host_name))
+      ownerName: ownerName !== undefined ? ownerName : (owner_name !== undefined ? owner_name : (host !== undefined ? host : host_name)),
+      isEternal: isEternal !== undefined ? isEternal : is_eternal
     });
     res.json(updated);
   } catch (error) {
@@ -433,7 +435,12 @@ router.post('/radio/stations/:id/start-broadcast', auth.authenticateToken, auth.
       return res.status(403).json({ error: 'Только владелец станции может запускать эфир' });
     }
 
-    const { forceNow, startTime, slots } = req.body;
+    const { forceNow, startTime, slots, isEternal, is_eternal } = req.body;
+    if (isEternal !== undefined || is_eternal !== undefined) {
+      await radioStore.updateStation(req.params.id, req.user.id, isRootOrAdmin(req.user), {
+        isEternal: isEternal !== undefined ? isEternal : is_eternal
+      });
+    }
     const state = await radioStore.startStationBroadcast(req.params.id, {
       forceNow: forceNow !== undefined ? Boolean(forceNow) : (!startTime || startTime === 'now'),
       startTime,
@@ -488,7 +495,7 @@ router.get('/radio/stations/:id/timeline', optionalUser, async (req, res) => {
       return s;
     });
 
-    if (station && (station.broadcast_status === 'live' || station.isLive) && station.fallback_mode === 'loop' && safeSlots.length > 0) {
+    if (station && (station.broadcast_status === 'live' || station.isLive) && (station.fallback_mode === 'loop' || station.is_eternal) && safeSlots.length > 0) {
       const liveState = await radioStore.getStationLiveState(station.id);
       if (liveState && liveState.cycleStartTime) {
         let cursorMs = new Date(liveState.cycleStartTime).getTime();
@@ -521,7 +528,12 @@ router.put('/radio/stations/:id/timeline', auth.authenticateToken, auth.checkApp
       return res.status(403).json({ error: 'Только владелец станции может редактировать ленту времени' });
     }
 
-    const { slots, startTime, forceNow, hotUpdate } = req.body;
+    const { slots, startTime, forceNow, hotUpdate, isEternal, is_eternal } = req.body;
+    if (isEternal !== undefined || is_eternal !== undefined) {
+      await radioStore.updateStation(req.params.id, req.user.id, isRootOrAdmin(req.user), {
+        isEternal: isEternal !== undefined ? isEternal : is_eternal
+      });
+    }
     if (!Array.isArray(slots)) {
       return res.status(400).json({ error: 'slots должен быть массивом элементов эфира' });
     }

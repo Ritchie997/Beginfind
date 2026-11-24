@@ -3045,3 +3045,27 @@
   display: flex;
   gap: 6px;
 }
+
+/* Вечный зацикленный эфир (Infinity / Eternal Broadcast) */
+.radio-eternal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(168, 85, 247, 0.18) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
+  transition: all 0.25s ease;
+}
+
+#btnToggleEternalBroadcast {
+  transition: all 0.2s ease;
+}
+
+#btnToggleEternalBroadcast.is-active,
+#btnToggleEternalBroadcast.btn-primary {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.35) 0%, rgba(99, 102, 241, 0.35) 100%) !important;
+  border-color: rgba(168, 85, 247, 0.7) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}

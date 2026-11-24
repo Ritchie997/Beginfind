@@ -570,6 +570,160 @@ test('radio-global-player: strict prohibition of seeking into future and next bu
   assert.ok(radioHtml.includes('Хронометраж:'), 'radio.html must label timeline total duration as Хронометраж instead of confusing Эфир');
 });
 
+test('radio-store: eternal loop creation, toggle and preservation against 32-hour cleanup', async () => {
+  const { radioDb } = require('../db/connections');
+
+  const freqNormal = 99.41;
+  const freqEternal = 99.42;
+
+  const ex1 = await radioStore.getStationByFrequency(freqNormal);
+  if (ex1) await radioStore.deleteStation(ex1.id, ex1.owner_id, true);
+  const ex2 = await radioStore.getStationByFrequency(freqEternal);
+  if (ex2) await radioStore.deleteStation(ex2.id, ex2.owner_id, true);
+
+  // 1. Создаем обычную станцию и станцию с вечным зацикленным эфиром
+  const normalStation = await radioStore.createStation({
+    frequency: freqNormal,
+    name: 'Normal Station',
+    ownerId: 901,
+    ownerName: 'Tester',
+    fallbackMode: 'loop',
+    isEternal: 0
+  });
+
+  const eternalStation = await radioStore.createStation({
+    frequency: freqEternal,
+    name: 'Eternal Station',
+    ownerId: 901,
+    ownerName: 'Tester',
+    fallbackMode: 'loop',
+    isEternal: 1
+  });
+
+  assert.equal(normalStation.is_eternal, 0, 'Normal station is_eternal must be 0');
+  assert.equal(eternalStation.is_eternal, 1, 'Eternal station is_eternal must be 1');
+
+  // 2. Вставляем слоты старше 35 часов (имитируем прошедший эфир)
+  const oldStart = new Date(Date.now() - 40 * 60 * 60 * 1000).toISOString();
+  const oldEnd = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+
+  await new Promise((resolve, reject) => {
+    radioDb.run(
+      `INSERT INTO radio_timeline_slots (station_id, slot_order, title, type, audio_url, duration, start_time, end_time)
+       VALUES (?, 0, 'Old Normal Track', 'track', '/uploads/old_norm.mp3', 3600, ?, ?)`,
+      [normalStation.id, oldStart, oldEnd],
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+
+  await new Promise((resolve, reject) => {
+    radioDb.run(
+      `INSERT INTO radio_timeline_slots (station_id, slot_order, title, type, audio_url, duration, start_time, end_time)
+       VALUES (?, 0, 'Old Eternal Track', 'track', '/uploads/old_etern.mp3', 3600, ?, ?)`,
+      [eternalStation.id, oldStart, oldEnd],
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+
+  // 3. Запускаем cleanupOldTimelineSlots
+  const deletedCount = await radioStore.cleanupOldTimelineSlots();
+  assert.ok(deletedCount >= 1, 'Cleanup must delete at least 1 slot from non-eternal station');
+
+  // 4. Проверяем, что слот обычной станции удален, а вечной — сохранен
+  const normalSlots = await radioStore.getTimelineSlots(normalStation.id);
+  const eternalSlots = await radioStore.getTimelineSlots(eternalStation.id);
+
+  assert.equal(normalSlots.length, 0, 'Слоты обычной станции старше 32 часов должны быть удалены');
+  assert.equal(eternalSlots.length, 1, 'Слоты вечной радиостанции НЕ должны удаляться через 32 часа');
+  assert.equal(eternalSlots[0].title, 'Old Eternal Track');
+
+  // 5. Выключаем вечный эфир у eternalStation и проверяем, что теперь очистка сработает
+  await radioStore.updateStation(eternalStation.id, 901, true, { isEternal: 0 });
+  const updatedEternalSt = await radioStore.getStationById(eternalStation.id);
+  assert.equal(updatedEternalSt.is_eternal, 0, 'is_eternal должен стать 0 после обновления');
+
+  const secondCleanup = await radioStore.cleanupOldTimelineSlots();
+  assert.ok(secondCleanup >= 1, 'После отключения вечного режима устаревшие слоты должны очищаться');
+
+  const eternalSlotsAfter = await radioStore.getTimelineSlots(eternalStation.id);
+  assert.equal(eternalSlotsAfter.length, 0, 'После отключения вечного режима слот должен быть удален');
+
+  await radioStore.deleteStation(normalStation.id, 901, true);
+  await radioStore.deleteStation(eternalStation.id, 901, true);
+});
+
+test('radio-store: live state and timeline projection for eternal looped broadcast', async () => {
+  const freq = 99.43;
+  const existing = await radioStore.getStationByFrequency(freq);
+  if (existing) await radioStore.deleteStation(existing.id, existing.owner_id, true);
+
+  const station = await radioStore.createStation({
+    frequency: freq,
+    name: 'Endless Echo FM',
+    ownerId: 902,
+    ownerName: 'EchoHost',
+    isEternal: 1
+  });
+
+  assert.equal(station.is_eternal, 1);
+  assert.equal(station.fallback_mode, 'loop');
+
+  // Эфир запущен 48 часов назад (3 трека по 100 секунд, общий цикл 300 секунд)
+  const now = radioStore.getEffectiveNow().getTime();
+  const startTime = new Date(now - 48 * 3600 * 1000).toISOString();
+
+  await radioStore.setTimelineSlots(station.id, [
+    { title: 'Eternal Ambient 1', duration: 100, audio_url: '/uploads/e1.mp3', type: 'track' },
+    { title: 'Eternal Ambient 2', duration: 100, audio_url: '/uploads/e2.mp3', type: 'track' },
+    { title: 'Eternal Ambient 3', duration: 100, audio_url: '/uploads/e3.mp3', type: 'track' }
+  ], startTime, { status: 'live' });
+
+  // Проверяем состояние эфира: станция вещает бесконечно
+  const liveState = await radioStore.getStationLiveState(station.id);
+  assert.ok(liveState.isLive, 'Вечный эфир должен оставаться активным');
+  assert.equal(liveState.isEternal, true, 'isEternal флаг должен быть true');
+  assert.ok(liveState.isVirtualLoop, 'Эфир должен виртуально зацикливаться');
+  assert.ok(liveState.currentSlot, 'Должен быть активный играющий слот');
+
+  const curStart = new Date(liveState.currentSlot.startTime).getTime();
+  const curEnd = new Date(liveState.currentSlot.endTime).getTime();
+  assert.ok(curStart <= now + 1000, 'Метка старта должна быть спроецирована на текущий цикл');
+  assert.ok(curEnd > now, 'Метка окончания должна быть в будущем текущего цикла');
+
+  // Проверяем, что listStations() показывает станцию как живую (live)
+  const allSt = await radioStore.listStations();
+  const found = allSt.find(s => s.id === station.id);
+  assert.ok(found, 'Станция должна присутствовать в списке');
+  assert.ok(found.isLive, 'Станция с вечным эфиром должна определяться как Live в списке станций');
+  assert.ok(found.currentTrack, 'У вечной станции должен быть определен currentTrack');
+
+  await radioStore.deleteStation(station.id, 902, true);
+});
+
+test('radio-editor-ui: eternal broadcast button, badge, and modal elements exist', () => {
+  const radioHtml = fs.readFileSync(path.join(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClient = fs.readFileSync(path.join(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const radioCss = fs.readFileSync(path.join(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  // 1. Проверяем кнопку и бейдж в radio.html
+  assert.ok(radioHtml.includes('btnToggleEternalBroadcast'), 'radio.html must contain btnToggleEternalBroadcast');
+  assert.ok(radioHtml.includes('eternalBroadcastBtnText'), 'radio.html must contain eternalBroadcastBtnText');
+  assert.ok(radioHtml.includes('editorEternalBadge'), 'radio.html must contain editorEternalBadge');
+  assert.ok(radioHtml.includes('editStationIsEternal'), 'modalEditStation must have editStationIsEternal checkbox');
+  assert.ok(radioHtml.includes('createStationIsEternal'), 'modalCreateStation must have createStationIsEternal checkbox');
+
+  // 2. Проверяем клиентскую логику в radio-client.js
+  assert.ok(radioClient.includes('quickUpdateEternalMode'), 'radio-client must implement quickUpdateEternalMode');
+  assert.ok(radioClient.includes('btnToggleEternalBroadcast'), 'radio-client must bind click on btnToggleEternalBroadcast');
+  assert.ok(radioClient.includes('editorEternalBadge'), 'radio-client must update editorEternalBadge visibility');
+  assert.ok(radioClient.includes('editStationIsEternal'), 'radio-client must sync editStationIsEternal checkbox');
+  assert.ok(radioClient.includes('createStationIsEternal'), 'radio-client must handle createStationIsEternal checkbox');
+
+  // 3. Проверяем стили в radio.css
+  assert.ok(radioCss.includes('.radio-eternal-badge'), 'radio.css must style .radio-eternal-badge');
+  assert.ok(radioCss.includes('#btnToggleEternalBroadcast'), 'radio.css must style #btnToggleEternalBroadcast');
+});
+
 
 
 

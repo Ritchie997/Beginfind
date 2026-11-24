@@ -218,9 +218,12 @@
       btnPresetPlus15: document.getElementById('btnPresetPlus15'),
       btnPresetNextHour: document.getElementById('btnPresetNextHour'),
       editorLiveStatusBadge: document.getElementById('editorLiveStatusBadge'),
+      editorEternalBadge: document.getElementById('editorEternalBadge'),
       btnSetStartTimeNow: document.getElementById('btnSetStartTimeNow'),
       btnToggleBroadcastLoop: document.getElementById('btnToggleBroadcastLoop'),
       broadcastLoopBtnText: document.getElementById('broadcastLoopBtnText'),
+      btnToggleEternalBroadcast: document.getElementById('btnToggleEternalBroadcast'),
+      eternalBroadcastBtnText: document.getElementById('eternalBroadcastBtnText'),
       btnClearTimelineBtn: document.getElementById('btnClearTimelineBtn'),
       btnReleaseStationBtn: document.getElementById('btnReleaseStationBtn'),
       editorSlotsList: document.getElementById('editorSlotsList'),
@@ -316,6 +319,8 @@
       editStationHost: document.getElementById('editStationHost'),
       editStationDescription: document.getElementById('editStationDescription'),
       editStationFallback: document.getElementById('editStationFallback'),
+      editStationIsEternal: document.getElementById('editStationIsEternal'),
+      createStationIsEternal: document.getElementById('createStationIsEternal'),
       editStationAvatar: document.getElementById('editStationAvatar'),
       editStationAvatarFile: document.getElementById('editStationAvatarFile'),
       editStationAvatarPreviewBox: document.getElementById('editStationAvatarPreviewBox'),
@@ -754,6 +759,26 @@
       dom.btnToggleBroadcastLoop.title = isLoopMode 
         ? 'Зацикливание эфира включено (сетка воспроизводится по кругу). Нажмите, чтобы выключить.' 
         : 'Зацикливать вещание радиостанции по кругу (бесконечный эфир)';
+    }
+
+    if (dom.btnToggleEternalBroadcast) {
+      const edStation = state.selectedStationForEdit || state.currentStation;
+      const isEternal = Boolean(edStation && (edStation.is_eternal === 1 || edStation.is_eternal === true || edStation.isEternal));
+      dom.btnToggleEternalBroadcast.classList.toggle('btn-primary', isEternal);
+      dom.btnToggleEternalBroadcast.classList.toggle('is-active', isEternal);
+      dom.btnToggleEternalBroadcast.classList.toggle('btn-secondary', !isEternal);
+      if (dom.eternalBroadcastBtnText) {
+        dom.eternalBroadcastBtnText.textContent = isEternal ? 'Вечный эфир (ВКЛ)' : 'Вечный зацикленный эфир';
+      }
+      dom.btnToggleEternalBroadcast.title = isEternal
+        ? 'Вечный зацикленный эфир включён: сетка не удаляется через 32 часа и вещает бесконечно по кругу. Нажмите, чтобы выключить.'
+        : 'Включить вечный зацикленный эфир: расписание не будет удаляться через 32 часа и продолжит бесконечно играть по кругу.';
+    }
+
+    if (dom.editorEternalBadge) {
+      const edStation = state.selectedStationForEdit || state.currentStation;
+      const isEternal = Boolean(edStation && (edStation.is_eternal === 1 || edStation.is_eternal === true || edStation.isEternal));
+      dom.editorEternalBadge.style.display = isEternal ? 'inline-flex' : 'none';
     }
   }
 
@@ -2025,6 +2050,11 @@
       dom.btnMasterApplyDraft.style.display = (state.isEditorDirty && status === 'live' && isLive) ? 'inline-flex' : 'none';
     }
 
+    if (dom.editorEternalBadge) {
+      const isEternal = Boolean(st && (st.is_eternal === 1 || st.is_eternal === true || st.isEternal));
+      dom.editorEternalBadge.style.display = isEternal ? 'inline-flex' : 'none';
+    }
+
     if (!badge) return;
     badge.style.display = 'inline-flex';
     badge.className = 'badge radio-live-status-badge';
@@ -2327,6 +2357,9 @@
         if (live && live.station && state.selectedStationForEdit) {
           state.selectedStationForEdit.broadcast_status = live.broadcastStatus || live.station.broadcast_status || (live.isLive ? 'live' : 'offline');
           state.selectedStationForEdit.isLive = Boolean(live.isLive);
+          if (live.station.is_eternal !== undefined) {
+            state.selectedStationForEdit.is_eternal = live.station.is_eternal;
+          }
         }
       } catch (_) {}
 
@@ -3745,23 +3778,65 @@
   // Быстрое переключение поведения при окончании сетки
   async function quickUpdateFallbackMode(st, newMode) {
     try {
+      const payload = { fallbackMode: newMode };
+      if (newMode !== 'loop' && (st.is_eternal === 1 || st.is_eternal === true)) {
+        payload.isEternal = 0;
+      }
       await api(`/api/radio/stations/${st.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fallbackMode: newMode })
+        body: JSON.stringify(payload)
       });
       st.fallback_mode = newMode;
+      if (newMode !== 'loop') st.is_eternal = 0;
       if (state.currentStation && String(state.currentStation.id) === String(st.id)) {
         state.currentStation.fallback_mode = newMode;
+        if (newMode !== 'loop') state.currentStation.is_eternal = 0;
       }
       if (state.selectedStationForEdit && String(state.selectedStationForEdit.id) === String(st.id)) {
         state.selectedStationForEdit.fallback_mode = newMode;
+        if (newMode !== 'loop') state.selectedStationForEdit.is_eternal = 0;
       }
       const label = newMode === 'loop' ? 'Зацикливание' : newMode === 'noise' ? 'Радиопомехи' : 'Тишина';
       showToast(`Режим эфира изменён: ${label}`, 'success');
       loadStations();
     } catch (err) {
       showToast('Ошибка смены режима: ' + err.message, 'error');
+    }
+  }
+
+  // Быстрое переключение вечного зацикленного эфира
+  async function quickUpdateEternalMode(st, isEternal) {
+    try {
+      const payload = {
+        isEternal: isEternal ? 1 : 0
+      };
+      if (isEternal) {
+        payload.fallbackMode = 'loop';
+      }
+      await api(`/api/radio/stations/${st.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      st.is_eternal = isEternal ? 1 : 0;
+      if (isEternal) st.fallback_mode = 'loop';
+      if (state.currentStation && String(state.currentStation.id) === String(st.id)) {
+        state.currentStation.is_eternal = st.is_eternal;
+        if (isEternal) state.currentStation.fallback_mode = 'loop';
+      }
+      if (state.selectedStationForEdit && String(state.selectedStationForEdit.id) === String(st.id)) {
+        state.selectedStationForEdit.is_eternal = st.is_eternal;
+        if (isEternal) state.selectedStationForEdit.fallback_mode = 'loop';
+      }
+      const msg = isEternal 
+        ? 'Включён вечный зацикленный эфир: сетка не удаляется через 32 часа!' 
+        : 'Вечный эфир выключен: сетка будет храниться стандартные 32 часа.';
+      showToast(msg, 'success');
+      loadStations();
+      updateDeckUI();
+    } catch (err) {
+      showToast('Ошибка смены режима вечного эфира: ' + err.message, 'error');
     }
   }
 
@@ -3772,6 +3847,7 @@
     if (dom.editStationName) dom.editStationName.value = st.name || '';
     if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
     if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
+    if (dom.editStationIsEternal) dom.editStationIsEternal.checked = Boolean(st.is_eternal === 1 || st.is_eternal === true || st.isEternal);
     if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
     if (dom.editStationHost) dom.editStationHost.value = st.owner_name || '';
     if (dom.editStationAvatarFile) dom.editStationAvatarFile.value = '';
@@ -3818,6 +3894,16 @@
         onClick: () => {
           const nextMode = fallbackMode === 'loop' ? 'noise' : (fallbackMode === 'noise' ? 'silence' : 'loop');
           quickUpdateFallbackMode(st, nextMode);
+        }
+      });
+
+      const isEternal = Boolean(st.is_eternal === 1 || st.is_eternal === true || st.isEternal);
+      items.push({
+        icon: 'fa-infinity',
+        label: 'Вечный зацикленный эфир',
+        badge: isEternal ? 'ВКЛ (без удаления)' : 'ВЫКЛ (до 32ч)',
+        onClick: () => {
+          quickUpdateEternalMode(st, !isEternal);
         }
       });
 
@@ -5170,6 +5256,9 @@
     if (dom.stationHostInput && !dom.stationHostInput.value) {
       dom.stationHostInput.value = user.displayName || user.username || '';
     }
+    if (dom.createStationIsEternal) {
+      dom.createStationIsEternal.checked = false;
+    }
     showModal('modalCreateStation');
   }
 
@@ -5626,6 +5715,22 @@
       const newMode = currentMode === 'loop' ? 'noise' : 'loop';
       await quickUpdateFallbackMode(targetStation, newMode);
       updateDeckUI();
+    });
+
+    dom.btnToggleEternalBroadcast?.addEventListener('click', async () => {
+      const targetStation = state.selectedStationForEdit || state.currentStation;
+      if (!targetStation) {
+        showToast('Радиостанция не выбрана', 'info');
+        return;
+      }
+      const curUser = getCurrentUser();
+      const isOwner = Boolean(curUser && (String(targetStation.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
+      if (!isOwner) {
+        showToast('Только владелец станции может изменять режим эфира', 'warning');
+        return;
+      }
+      const isEternal = Boolean(targetStation.is_eternal === 1 || targetStation.is_eternal === true || targetStation.isEternal);
+      await quickUpdateEternalMode(targetStation, !isEternal);
     });
 
     dom.btnClearTimelineBtn?.addEventListener('click', async () => {
@@ -6791,6 +6896,7 @@
           avatarUrl = upRes.url;
         }
 
+        const isEternal = Boolean(dom.createStationIsEternal?.checked);
         const newStation = await api('/api/radio/stations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -6798,9 +6904,10 @@
             frequency: freq,
             name,
             description: desc,
-            fallbackMode: fallback,
+            fallbackMode: isEternal ? 'loop' : fallback,
             avatarUrl,
-            ownerName: host
+            ownerName: host,
+            isEternal: isEternal ? 1 : 0
           })
         });
 
@@ -6912,10 +7019,18 @@
           avatarUrl = upRes.url;
         }
 
+        const isEternal = Boolean(dom.editStationIsEternal?.checked);
         const updated = await api(`/api/radio/stations/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description, fallbackMode, avatarUrl, ownerName: host })
+          body: JSON.stringify({
+            name,
+            description,
+            fallbackMode: isEternal ? 'loop' : fallbackMode,
+            avatarUrl,
+            ownerName: host,
+            isEternal: isEternal ? 1 : 0
+          })
         });
 
         if (state.currentStation && String(state.currentStation.id) === String(id)) {
