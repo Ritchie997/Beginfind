@@ -161,7 +161,9 @@ test('radio visual system shares public-site styling and isolates mobile overrid
   assert.ok(mobileCss.includes('body[data-page="radio"] .modal-overlay'), 'Mobile layout must adapt radio dialogs');
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-timeline-track-scroll'), 'Mobile layout must keep timeline scrolling inside its viewport');
   assert.ok(html.includes('<details class="radio-editor-disclosure radio-editor-schedule-disclosure">'), 'Editor scheduling controls must be collapsible');
-  assert.ok(html.includes('<details class="radio-editor-disclosure radio-studio-add-disclosure">'), 'Studio add actions must be grouped in a collapsible section');
+  assert.ok(!html.includes('radio-studio-add-disclosure') && !html.includes('Добавить в сетку'), 'The duplicate add-to-grid section must be removed');
+  assert.ok(html.includes('id="btnToggleMediaDrawer"') && html.includes('id="btnOpenSmartGapFill"'), 'The media library and gap-fill tools must remain available');
+  assert.ok(!html.includes('id="btnPickFromMyTracks"'), 'The redundant track-library picker button must no longer appear');
   assert.ok(html.includes('aria-label="Масштаб редактора эфира"'), 'Timeline zoom controls must remain available beside the overview');
 
   for (const id of [
@@ -175,11 +177,6 @@ test('radio visual system shares public-site styling and isolates mobile overrid
     'btnTimelineZoomReset',
     'btnTimelineZoomIn',
     'btnTimelineExtendScale',
-    'btnPickFromMyTracks',
-    'btnOpenPickPlaylistForTimeline',
-    'btnUploadPlaylist',
-    'btnUploadNewSlot',
-    'btnOpenInsertWordsModal',
     'btnToggleMediaDrawer',
     'btnOpenSmartGapFill',
     'btnSaveTimeline'
@@ -211,6 +208,21 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-eb-blocklist'), 'The arrangement lane must have mobile-specific sizing');
 });
 
+test('radio timeline insertions retain the clicked position and live playhead follows playlist track time', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  assert.ok(client.includes('openInsertWordsModalAtBlockIndex(targetIndex);'), 'The plus-menu speech action must preserve its exact block insertion index');
+  assert.ok(client.includes('addBlockToEditor({') && client.includes('}, targetIndex);'), 'Speech blocks selected from the plus menu must insert at the chosen block boundary');
+  assert.ok(!client.includes('openInsertWordsModalForIndex(targetIndex - 1)'), 'Quick insertion must not infer the selected boundary from rounded wall-clock time');
+  assert.ok(!client.includes("label: 'Трек из медиатеки'"), 'The plus menu must not expose the restricted duplicate track picker');
+  assert.ok(client.includes("label: 'Плейлист'"), 'The plus menu playlist action must use the concise label');
+  assert.ok(client.includes('function findEditorBlockForSlot(slot)'), 'Live slot matching must resolve playlist subtracks to their parent block');
+  assert.ok(client.includes('activeBlockOffset += Math.min(Math.max(0, audioSec), activeTrackDuration || audioSec);'), 'The live playhead must include preceding tracks within a playlist');
+  assert.ok(client.includes('const playheadPct = (activeElapsed / timelineScale) * 100;'), 'The playhead must use the same normalized time scale as overview clips');
+});
+
 test('radio editor blocks keep a fixed workspace and expand playlists inside their cards', () => {
   const fs = require('fs');
   const path = require('path');
@@ -224,6 +236,7 @@ test('radio editor blocks keep a fixed workspace and expand playlists inside the
   assert.ok(client.includes('const pauseMs = 3000;'), 'The marquee must pause for three seconds when it returns to the start');
   assert.ok(desktopCss.includes('height: 240px;\n  min-height: 240px;'), 'Editor cards must have a fixed height');
   assert.ok(desktopCss.includes('max-height: 100px;') && desktopCss.includes('overflow-y: auto;'), 'Expanded playlist tracks must scroll inside a bounded list');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-insert-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;'), 'The plus icon must be centered inside its circular insertion button');
   assert.match(mobileCss, /\.radio-eb-block\s*\{[^}]*height: 240px;[^}]*min-height: 240px;/s, 'Mobile editor cards must preserve the same fixed height');
 });
 
@@ -236,9 +249,12 @@ test('speech blocks provide working microphone and file attachment actions', () 
   assert.ok(client.includes('class="btn btn-primary btn-sm btn-add-speech-recording"'), 'Unrecorded speech blocks must show an actionable recording button');
   assert.ok(client.includes('openSpeechAudioModalForBlock(Number(btn.dataset.index))'), 'The block action must open its recording/attachment form for the selected block');
   assert.ok(client.includes("document.getElementById('speechFileInput')?.addEventListener('change'"), 'The speech modal must capture a selected audio file');
+  assert.ok(client.includes('setSpeechAudioPreview(file, true);'), 'A selected local file must be previewable before saving');
+  assert.ok(client.includes('setSpeechAudioPreview(blob, true);'), 'A microphone recording must be previewable before saving');
+  assert.ok(client.includes('class="btn btn-secondary btn-sm btn-preview-block radio-eb-speech-preview"'), 'Recorded speech blocks must expose a labeled preview action');
   assert.ok(client.includes('block.audio_url = finalAudioUrl;'), 'Saving a recording must attach its URL to the original block');
   assert.ok(client.includes("api('/api/upload-audio', { method: 'POST', body: formData })"), 'Recorded microphone audio must upload through the audio endpoint');
-  assert.ok(html.includes('id="btnModalRecordSpeech"') && html.includes('id="speechFileInput"'), 'The speech modal must expose both microphone and local file inputs');
+  assert.ok(html.includes('id="btnModalRecordSpeech"') && html.includes('id="speechFileInput"') && html.includes('id="speechAudioPreview"'), 'The speech modal must expose recording, file selection and playback controls');
 });
 
 test('radio overview is read-only and its navigation stays synchronized with the block editor', () => {

@@ -478,32 +478,6 @@
 
         <!-- Панель добавления слотов и инструментов студии -->
         <div class="radio-studio-add-toolbar">
-          <details class="radio-editor-disclosure radio-studio-add-disclosure">
-            <summary>
-              <i class="fas fa-plus"></i>
-              <span>Добавить в сетку</span>
-              <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
-            </summary>
-            <div class="radio-editor-disclosure-body">
-              <div class="radio-studio-add-actions">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnPickFromMyTracks">
-                  <i class="fas fa-music"></i> + Трек из медиатеки
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnOpenPickPlaylistForTimeline">
-                  <i class="fas fa-list-check"></i> + Плейлист в эфир
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnUploadPlaylist">
-                  <i class="fas fa-folder-arrow-up"></i> Загрузить плейлист
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnUploadNewSlot">
-                  <i class="fas fa-file-arrow-up"></i> 1 аудиофайл
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnOpenInsertWordsModal">
-                  <i class="fas fa-clock"></i> Слова по времени (Якорь)
-                </button>
-              </div>
-            </div>
-          </details>
           <details class="radio-editor-disclosure radio-studio-tools-disclosure">
             <summary>
               <i class="fas fa-wand-magic-sparkles"></i>
@@ -880,6 +854,8 @@
             <div id="speechBoxFile" style="display:none;">
               <input type="file" id="speechFileInput" class="radio-form-input form-input" accept="audio/*">
             </div>
+
+            <audio id="speechAudioPreview" controls preload="metadata" hidden aria-label="Предпрослушивание записи" style="width:100%; margin-top:10px;"></audio>
 
             <div id="speechBoxLib" style="display:none; max-height:220px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px;">
               <p class="alltell-state">Загружаем аудиозаписи...</p>

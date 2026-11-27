@@ -2077,6 +2077,61 @@
     return 'rb_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  function findEditorBlockForSlot(slot) {
+    if (!slot) return { blockIndex: -1, subTrackIndex: -1 };
+
+    const blockId = slot.blockId || slot.block_id;
+    if (blockId) {
+      const blockIndex = state.editorBlocks.findIndex((block) => String(block.id) === String(blockId));
+      if (blockIndex >= 0) {
+        const block = state.editorBlocks[blockIndex];
+        if (block.type !== 'playlist') return { blockIndex, subTrackIndex: -1 };
+        const trackId = slot.trackId || slot.track_id;
+        const audioUrl = slot.audioUrl || slot.audio_url;
+        const subTrackIndex = block.items?.findIndex((item) => (
+          (trackId && String(item.track_id || item.id) === String(trackId)) ||
+          (audioUrl && item.audio_url && (item.audio_url === audioUrl || audioUrl.endsWith(item.audio_url)))
+        )) ?? -1;
+        return { blockIndex, subTrackIndex };
+      }
+    }
+
+    const trackId = slot.trackId || slot.track_id;
+    const audioUrl = slot.audioUrl || slot.audio_url;
+    const title = slot.title;
+    const matchesId = (item) => trackId && String(item.track_id || item.id) === String(trackId);
+    const matchesUrl = (item) => audioUrl && (
+      item.audio_url === audioUrl ||
+      (item.audio_url && audioUrl.endsWith(item.audio_url))
+    );
+    const findMatch = (predicate) => {
+      for (let blockIndex = 0; blockIndex < state.editorBlocks.length; blockIndex++) {
+        const block = state.editorBlocks[blockIndex];
+        if (block.type === 'playlist' && Array.isArray(block.items)) {
+          const subTrackIndex = block.items.findIndex(predicate);
+          if (subTrackIndex >= 0) return { blockIndex, subTrackIndex };
+        } else if (predicate(block)) {
+          return { blockIndex, subTrackIndex: -1 };
+        }
+      }
+      return null;
+    };
+
+    if (trackId) {
+      const match = findMatch(matchesId);
+      if (match) return match;
+    }
+    if (audioUrl) {
+      const match = findMatch(matchesUrl);
+      if (match) return match;
+    }
+    if (title) {
+      const match = findMatch((item) => item.title === title);
+      if (match) return match;
+    }
+    return { blockIndex: -1, subTrackIndex: -1 };
+  }
+
   // Компиляция блочной модели в плоскую последовательность слотов для бэкенда
   function compileBlocksToSlots(blocks, startTimeIso) {
     let cursor = new Date(startTimeIso || Date.now()).getTime();
@@ -2772,8 +2827,14 @@
         </div>
       `;
       document.getElementById('btnEmptyAddPlaylist')?.addEventListener('click', openPickPlaylistForTimeline);
-      document.getElementById('btnEmptyAddTrack')?.addEventListener('click', () => dom.btnPickFromMyTracks?.click());
-      document.getElementById('btnEmptyAddWords')?.addEventListener('click', () => openInsertWordsModalForIndex(-1));
+      document.getElementById('btnEmptyAddTrack')?.addEventListener('click', () => {
+        state.mediaDrawerTab = 'tracks';
+        dom.radioMediaDrawer?.querySelectorAll('.radio-media-tab').forEach((tab) => {
+          tab.classList.toggle('is-active', tab.dataset.drawerTab === 'tracks');
+        });
+        toggleMediaDrawer(true);
+      });
+      document.getElementById('btnEmptyAddWords')?.addEventListener('click', () => openInsertWordsModalAtBlockIndex(0));
       updateCapacityUI();
       restoreTimelineScrollPosition();
       return;
@@ -2876,11 +2937,15 @@
             <div class="radio-eb-title-line radio-eb-speech-title">
               <i class="fas fa-microphone"></i> ${renderBlockTitle(block.title)}
             </div>
-            ${!block.audio_url ? `
+            ${block.audio_url ? `
+              <button type="button" class="btn btn-secondary btn-sm btn-preview-block radio-eb-speech-preview" data-index="${index}" title="Прослушать запись в общем плеере">
+                <i class="fas fa-play"></i> Прослушать запись
+              </button>
+            ` : `
               <button type="button" class="btn btn-primary btn-sm btn-add-speech-recording" data-index="${index}">
                 <i class="fas fa-microphone"></i> Добавить запись
               </button>
-            ` : ''}
+            `}
           </div>
         `;
       } else if (block.type === 'time_anchor') {
@@ -2922,7 +2987,7 @@
               <span class="radio-eb-duration-badge">${formatDuration(durSec)}</span>
             </div>
             <div class="radio-eb-actions">
-              ${(block.audio_url || (isPlaylist && items.some(t => t.audio_url))) ? `
+              ${((block.audio_url && block.type !== 'speech' && block.type !== 'jingle') || (isPlaylist && items.some(t => t.audio_url))) ? `
                 <button type="button" class="radio-eb-btn btn-preview-block" data-index="${index}" title="Воспроизвести в общем плеере">
                   <i class="fas fa-play"></i>
                 </button>
@@ -3367,50 +3432,9 @@
       // 1. Приоритет прямого эфира: если прямо сейчас звучит радиостанция,
       // сопоставляем активный слот плеера с блоками сетки!
       if (isRadioLive && activeSlot) {
-        if (state.editorSlots && state.editorSlots.length > 0 && activeSlot.id) {
-          const sIdx = state.editorSlots.findIndex(s => String(s.id) === String(activeSlot.id));
-          if (sIdx >= 0) {
-            const slotObj = state.editorSlots[sIdx];
-            if (slotObj && slotObj.blockId) {
-              const bIdx = state.editorBlocks.findIndex(b => b.id === slotObj.blockId);
-              if (bIdx >= 0) onAirBlockIndex = bIdx;
-            } else if (sIdx < state.editorBlocks.length) {
-              onAirBlockIndex = sIdx;
-            }
-          }
-        }
-
-        const slotTrackId = activeSlot.trackId || activeSlot.track_id;
-        const slotTitle = activeSlot.title;
-        const slotAudioUrl = activeSlot.audioUrl || activeSlot.audio_url;
-        const slotOrder = activeSlot.slot_order !== undefined ? Number(activeSlot.slot_order) : -1;
-
-        if (onAirBlockIndex < 0) {
-          for (let i = 0; i < state.editorBlocks.length; i++) {
-            const b = state.editorBlocks[i];
-            if (b.type === 'playlist' && b.items && b.items.length > 0) {
-              const subIdx = b.items.findIndex(it =>
-                (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
-                (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
-                (slotTitle && it.title === slotTitle)
-              );
-              if (subIdx >= 0) {
-                onAirBlockIndex = i;
-                onAirSubTrackIndex = subIdx;
-                break;
-              }
-            } else {
-              const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
-              const matchTrack = slotTrackId && b.track_id == slotTrackId;
-              const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
-              const matchTitle = slotTitle && b.title === slotTitle;
-              if (matchOrder || matchTrack || matchUrl || matchTitle) {
-                onAirBlockIndex = i;
-                break;
-              }
-            }
-          }
-        }
+        const match = findEditorBlockForSlot(activeSlot);
+        onAirBlockIndex = match.blockIndex;
+        onAirSubTrackIndex = match.subTrackIndex;
       }
 
       // 2. Если по активному слоту не сопоставили (пауза или режим наблюдателя),
@@ -3490,12 +3514,13 @@
         card.classList.toggle('is-timeshift-block', Boolean(isThisHearing && isRadioLive && isTimeshift));
 
         // Кнопка предпрослушивания блока
-        const previewBtn = card.querySelector('.btn-preview-block');
-        if (previewBtn) {
+        card.querySelectorAll('.btn-preview-block').forEach((previewBtn) => {
           previewBtn.classList.toggle('is-playing', Boolean(isThisHearing));
-          previewBtn.innerHTML = `<i class="fas ${isThisHearing ? 'fa-pause' : 'fa-play'}"></i>`;
+          previewBtn.innerHTML = previewBtn.classList.contains('radio-eb-speech-preview')
+            ? `<i class="fas ${isThisHearing ? 'fa-pause' : 'fa-play'}"></i> ${isThisHearing ? 'Пауза' : 'Прослушать запись'}`
+            : `<i class="fas ${isThisHearing ? 'fa-pause' : 'fa-play'}"></i>`;
           previewBtn.title = isThisHearing ? 'Пауза' : 'Воспроизвести в общем плеере';
-        }
+        });
 
         // Кнопка плейлиста в аккордеоне
         const plPlayBtn = card.querySelector('.btn-play-playlist-block');
@@ -4301,16 +4326,8 @@
       title: `Вставка в позицию #${targetIndex + 1}`,
       items: [
         {
-          icon: 'fa-music',
-          label: 'Трек из медиатеки',
-          onClick: () => {
-            state.pendingInsertIndex = targetIndex;
-            dom.btnPickFromMyTracks?.click();
-          }
-        },
-        {
           icon: 'fa-list-check',
-          label: 'Плейлист целиком в эфир',
+          label: 'Плейлист',
           onClick: () => {
             openPickPlaylistForTimeline(targetIndex);
           }
@@ -4319,7 +4336,7 @@
           icon: 'fa-microphone',
           label: 'Слова ведущего / Подводка',
           onClick: () => {
-            openInsertWordsModalForIndex(targetIndex - 1);
+            openInsertWordsModalAtBlockIndex(targetIndex);
           }
         },
         {
@@ -5249,96 +5266,30 @@
       const isThisStation = Boolean(st && gState.station && String(gState.station.id) === String(st.id));
 
       if (isRadioLive && !isTimeshift && (isThisStation || !st) && gState.currentSlot && state.editorBlocks && state.editorBlocks.length > 0) {
-        let curBlockIdx = -1;
-        let curSubTrackIdx = -1;
-
-        // 1. Приоритетный поиск по точному ID слота в скомпилированной сетке слотов
-        if (state.editorSlots && state.editorSlots.length > 0 && gState.currentSlot && gState.currentSlot.id) {
-          const sIdx = state.editorSlots.findIndex(s => String(s.id) === String(gState.currentSlot.id));
-          if (sIdx >= 0) {
-            const slotObj = state.editorSlots[sIdx];
-            if (slotObj && slotObj.blockId) {
-              const bIdx = state.editorBlocks.findIndex(b => b.id === slotObj.blockId);
-              if (bIdx >= 0) curBlockIdx = bIdx;
-            } else if (sIdx < state.editorBlocks.length) {
-              curBlockIdx = sIdx;
-            }
-          }
-        }
-
-        if (curBlockIdx < 0) {
-          const slotTrackId = gState.currentSlot.trackId || gState.currentSlot.track_id;
-          const slotTitle = gState.currentSlot.title;
-          const slotAudioUrl = gState.currentSlot.audioUrl || gState.currentSlot.audio_url;
-          const slotOrder = gState.currentSlot.slot_order !== undefined ? Number(gState.currentSlot.slot_order) : -1;
-
-          for (let i = 0; i < state.editorBlocks.length; i++) {
-            const b = state.editorBlocks[i];
-            if (b.type === 'playlist' && b.items && b.items.length > 0) {
-              const subIdx = b.items.findIndex(it =>
-                (slotAudioUrl && (it.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && it.audio_url && slotAudioUrl.endsWith(it.audio_url)))) ||
-                (slotTrackId && (it.track_id || it.id) == slotTrackId) ||
-                (slotTitle && it.title === slotTitle)
-              );
-              if (subIdx >= 0) {
-                curBlockIdx = i;
-                curSubTrackIdx = subIdx;
-                break;
-              }
-            } else {
-              const matchOrder = slotOrder >= 0 && (b.slot_order === slotOrder || (state.editorSlots && state.editorSlots[slotOrder] && state.editorSlots[slotOrder].blockId === b.id));
-              const matchTrack = slotTrackId && b.track_id == slotTrackId;
-              const matchUrl = slotAudioUrl && (b.audio_url === slotAudioUrl || (typeof slotAudioUrl === 'string' && b.audio_url && slotAudioUrl.endsWith(b.audio_url)));
-              const matchTitle = slotTitle && b.title === slotTitle;
-              if (matchOrder || matchTrack || matchUrl || matchTitle) {
-                curBlockIdx = i;
-                break;
-              }
-            }
-          }
-        }
-
+        const { blockIndex: curBlockIdx, subTrackIndex: curSubTrackIdx } = findEditorBlockForSlot(gState.currentSlot);
         if (curBlockIdx >= 0) {
-          let accumulatedSec = 0;
-          for (let i = 0; i < curBlockIdx; i++) {
-            accumulatedSec += Number(state.editorBlocks[i].duration) || 0;
-          }
-          if (curSubTrackIdx > 0 && state.editorBlocks[curBlockIdx].items) {
-            for (let s = 0; s < curSubTrackIdx; s++) {
-              accumulatedSec += Number(state.editorBlocks[curBlockIdx].items[s].duration) || 0;
+          let activeBlockOffset = 0;
+          const currentBlock = state.editorBlocks[curBlockIdx];
+          if (currentBlock.type === 'playlist' && curSubTrackIdx >= 0) {
+            for (let subIdx = 0; subIdx < curSubTrackIdx; subIdx++) {
+              activeBlockOffset += Number(currentBlock.items[subIdx].duration) || 0;
             }
           }
           const audioSec = (gAudio && gAudio.audio && Number.isFinite(gAudio.audio.currentTime))
             ? gAudio.audio.currentTime
             : (gState.currentTime || 0);
-          activeElapsed = accumulatedSec + audioSec;
-
-          // Позиционируем плейхед напрямую по физическому положению клипа на ленте в DOM!
-          // Это гарантирует стопроцентное попадание линии на играющий клип, исключая любые визуальные зазоры и отставания.
-          const activeClip = dom.radioTimelineTrack.querySelector(`.radio-timeline-clip[data-index="${curBlockIdx}"]`);
-          if (activeClip) {
-            const clipLeft = activeClip.offsetLeft;
-            const clipWidth = activeClip.offsetWidth;
-            const blockDur = Number(state.editorBlocks[curBlockIdx].duration) || 1;
-            const clipRatio = Math.max(0, Math.min(1, audioSec / blockDur));
-            const targetPx = clipLeft + (clipRatio * clipWidth);
-            const trackWidth = dom.radioTimelineTrack.clientWidth || 1;
-            const playheadPct = (targetPx / trackWidth) * 100;
-
-            dom.radioTimelinePlayhead.style.display = 'block';
-            dom.radioTimelinePlayhead.style.left = `${playheadPct.toFixed(2)}%`;
-
-            const badge = dom.radioTimelinePlayhead.querySelector('.radio-timeline-playhead-badge');
-            if (badge) {
-              const tz = getUserTimezoneInfo();
-              const liveTimeStr = formatClockTime(nowMs);
-              badge.textContent = isLooping ? `🔴 ЭФИР 🔄 ${liveTimeStr}` : `🔴 ЭФИР ${liveTimeStr}`;
-              badge.title = `Текущее время вещания: ${liveTimeStr} (${tz.utcOffsetStr})`;
-              badge.classList.remove('is-timeshift-playhead');
-            }
-            updateEditorPlaybackUI();
-            return;
+          const activeBlockDuration = Number(currentBlock.duration) || 0;
+          if (currentBlock.type === 'playlist' && curSubTrackIdx >= 0) {
+            const activeTrackDuration = Number(currentBlock.items[curSubTrackIdx]?.duration) || 0;
+            activeBlockOffset += Math.min(Math.max(0, audioSec), activeTrackDuration || audioSec);
           }
+          activeElapsed = state.editorBlocks
+            .slice(0, curBlockIdx)
+            .reduce((sum, block) => sum + (Number(block.duration) || 0), 0)
+            + activeBlockOffset
+            + (currentBlock.type === 'playlist' && curSubTrackIdx >= 0
+              ? 0
+              : Math.min(Math.max(0, audioSec), activeBlockDuration || audioSec));
         }
       }
 
@@ -5937,6 +5888,7 @@
 
   let insertWordsContext = {
     targetSlotIndex: -1,
+    targetBlockIndex: null,
     audioUrl: null,
     duration: 5,
     micRecordedBlob: null,
@@ -6048,12 +6000,39 @@
     renderEditor();
   }
 
+  let speechPreviewObjectUrl = null;
+  function setSpeechAudioPreview(source, createObjectUrl = false) {
+    const audio = document.getElementById('speechAudioPreview');
+    if (!audio) return;
+
+    audio.pause();
+    if (speechPreviewObjectUrl) {
+      URL.revokeObjectURL(speechPreviewObjectUrl);
+      speechPreviewObjectUrl = null;
+    }
+
+    if (!source) {
+      audio.removeAttribute('src');
+      audio.hidden = true;
+      audio.load();
+      return;
+    }
+
+    const src = createObjectUrl ? URL.createObjectURL(source) : source;
+    if (createObjectUrl) speechPreviewObjectUrl = src;
+    audio.src = src;
+    audio.hidden = false;
+    audio.load();
+  }
+
   function resetSpeechAudioSelection(block = null) {
     insertWordsContext.audioUrl = null;
     insertWordsContext.duration = 5;
     insertWordsContext.micRecordedBlob = null;
     insertWordsContext.file = null;
     insertWordsContext.editBlockId = block ? String(block.id) : null;
+    insertWordsContext.targetBlockIndex = null;
+    setSpeechAudioPreview(null);
 
     const fileInput = document.getElementById('speechFileInput');
     if (fileInput) fileInput.value = '';
@@ -6088,6 +6067,30 @@
       return;
     }
     resetSpeechAudioSelection(block);
+    showModal('modalInsertWordsByTime');
+  }
+
+  function openInsertWordsModalAtBlockIndex(blockIndex) {
+    resetSpeechAudioSelection();
+    insertWordsContext.targetBlockIndex = Math.max(0, Math.min(blockIndex, state.editorBlocks.length));
+
+    const targetTimeGroup = document.getElementById('speechTargetTimeInput')?.closest('.radio-form-group');
+    if (targetTimeGroup) targetTimeGroup.hidden = true;
+    const timeInput = document.getElementById('speechTargetTimeInput');
+    if (timeInput) timeInput.required = false;
+
+    const modalTitle = document.querySelector('#modalInsertWordsByTime .modal-header h3');
+    if (modalTitle) modalTitle.textContent = 'Вставить слова в выбранную позицию';
+    const planBox = document.getElementById('speechPlanCalculatedBox');
+    const planText = document.getElementById('speechPlanText');
+    if (planBox && planText) {
+      const target = state.editorBlocks[insertWordsContext.targetBlockIndex];
+      planText.textContent = target
+        ? `Слова ведущего будут добавлены перед блоком «${target.title}».`
+        : 'Слова ведущего будут добавлены в конец сетки.';
+      planBox.style.display = 'block';
+    }
+
     showModal('modalInsertWordsByTime');
   }
 
@@ -6192,6 +6195,7 @@
   function hideModal(modal) {
     if (typeof modal === 'string') modal = document.getElementById(modal);
     if (!modal) return;
+    if (modal.id === 'modalInsertWordsByTime') setSpeechAudioPreview(null);
     modal.hidden = true;
     modal.style.display = 'none';
   }
@@ -7303,6 +7307,7 @@
       insertWordsContext.audioUrl = null;
       insertWordsContext.micRecordedBlob = null;
       insertWordsContext.file = file;
+      setSpeechAudioPreview(file, true);
       const status = document.getElementById('speechMicStatus');
       if (status) status.innerHTML = `<i class="fas fa-file-audio"></i> Выбран файл: ${escapeHtml(file.name)}`;
     });
@@ -7329,6 +7334,7 @@
               insertWordsContext.duration = parseFloat(btn.dataset.dur) || 10;
               insertWordsContext.micRecordedBlob = null;
               insertWordsContext.file = null;
+              setSpeechAudioPreview(insertWordsContext.audioUrl);
               const fileInput = document.getElementById('speechFileInput');
               if (fileInput) fileInput.value = '';
               document.getElementById('speechSlotTitleInput').value = btn.dataset.title;
@@ -7371,6 +7377,7 @@
         insertWordsContext.audioUrl = null;
         insertWordsContext.file = null;
         insertWordsContext.micRecordedBlob = null;
+        setSpeechAudioPreview(null);
         const fileInput = document.getElementById('speechFileInput');
         if (fileInput) fileInput.value = '';
         modalChunks = [];
@@ -7384,6 +7391,7 @@
           const blobType = modalMediaRecorder.mimeType || modalChunks[0]?.type || 'audio/webm';
           const blob = new Blob(modalChunks, { type: blobType });
           insertWordsContext.micRecordedBlob = blob;
+          setSpeechAudioPreview(blob, true);
           const dur = Math.round((Date.now() - modalRecStart) / 1000) || 5;
           insertWordsContext.duration = dur;
           stream.getTracks().forEach((track) => track.stop());
@@ -7466,6 +7474,17 @@
           renderEditor();
           hideModal('modalInsertWordsByTime');
           showToast('Запись добавлена в блок и сохранена в сетку эфира', 'success');
+        } else if (insertWordsContext.targetBlockIndex !== null) {
+          const targetIndex = Math.min(insertWordsContext.targetBlockIndex, state.editorBlocks.length);
+          addBlockToEditor({
+            id: genBlockId(),
+            type: 'speech',
+            title,
+            audio_url: finalAudioUrl,
+            duration: Math.max(1, Number(finalDuration) || 1)
+          }, targetIndex);
+          hideModal('modalInsertWordsByTime');
+          showToast('Слова ведущего вставлены в выбранную позицию и сохранены в сетку эфира', 'success');
         } else {
           const calc = calculateSpeechInsertionSlot(targetTime);
           insertSpeechAtSlotIndex({

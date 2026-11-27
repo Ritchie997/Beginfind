@@ -4506,6 +4506,15 @@ body[data-page="radio"] .radio-eb-gap-content > .btn {
   white-space: normal;
 }
 
+body[data-page="radio"] .radio-eb-speech-content > .radio-eb-speech-preview {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: #d7dce5;
+}
+
 body[data-page="radio"] .radio-playlist-accordion {
   display: flex;
   flex-direction: column;
@@ -4603,6 +4612,9 @@ body[data-page="radio"] .radio-eb-insert-line.is-active::before {
 }
 
 body[data-page="radio"] .radio-eb-insert-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -4611,10 +4623,14 @@ body[data-page="radio"] .radio-eb-insert-btn {
   background: #30343b;
   box-shadow: none;
   font-size: 0;
+  line-height: 1;
 }
 
 body[data-page="radio"] .radio-eb-insert-btn i {
+  display: block;
+  margin: 0;
   font-size: 0.65rem;
+  line-height: 1;
 }
 
 body[data-page="radio"] .radio-eb-insert-btn:hover {
