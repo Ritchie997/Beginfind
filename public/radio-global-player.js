@@ -161,10 +161,6 @@
       return;
     }
     const data = getSerializableState();
-    // При выгрузке страницы лидером сохраняем статус активного воспроизведения
-    if (isPageUnloading && isAudioLeader) {
-      data.isPlaying = true;
-    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (_) {}

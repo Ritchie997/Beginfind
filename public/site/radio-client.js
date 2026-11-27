@@ -1050,12 +1050,6 @@
           state.currentStation = gState.station;
           updateDeckUI();
           highlightActiveStation(gState.station.id);
-        } else if (gState.mode !== 'track') {
-          // Находим станцию, в которой прямо сейчас идет живой эфир, либо первую в каталоге, и начинаем вещание со смещением!
-          const targetStation = stations.find((s) => s.isLive) || stations[0];
-          tuneStation(targetStation, true);
-        } else {
-          tuneStation(stations[0], false);
         }
       }
     } catch (e) {

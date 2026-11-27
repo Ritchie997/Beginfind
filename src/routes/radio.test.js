@@ -138,9 +138,10 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(playerJs.includes('isAudioLeader'), 'Must track audio leader across tabs');
   assert.ok(playerJs.includes('QUERY_LEADER'), 'Must query leader to prevent duplicate audio');
   assert.ok(playerJs.includes('LEADER_ACK'), 'Must acknowledge leader to follower tabs');
-  assert.ok(playerJs.includes('isPageUnloading'), 'Must track page unloading state');
+  assert.ok(playerJs.includes('isPageUnloading'), 'Must preserve unload handling for the audio pause event');
   assert.ok(playerJs.includes('beforeunload'), 'Must handle beforeunload');
   assert.ok(playerJs.includes('pagehide'), 'Must handle pagehide');
+  assert.ok(!playerJs.includes('data.isPlaying = true'), 'Unloading must not force paused playback to resume');
 
   // 3. Audio reload prevention (isSameSrc)
   assert.ok(playerJs.includes('isSameSrc'), 'Must check isSameSrc to avoid resetting media element');
@@ -155,6 +156,8 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(!radioClientJs.includes('tuneStation(state.currentStation, gState.isPlaying)'), 'Poll timer must not unconditionally call tuneStation');
   assert.ok(radioClientJs.includes('autoPlay'), 'tuneStation must support and respect autoPlay parameter');
   assert.ok(radioClientJs.includes('syncBar'), 'switchTab must synchronize player bar visibility');
+  assert.ok(!radioClientJs.includes('tuneStation(targetStation, true)'), 'Loading the station list must not autoplay a station');
+  assert.ok(!radioClientJs.includes('tuneStation(stations[0], false)'), 'Loading the station list must not select a station implicitly');
 });
 
 test('SPA navigation & audio continuity: router resilience, script deduplication, and player singleton', () => {
