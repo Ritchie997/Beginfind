@@ -64,6 +64,7 @@
   let visualizerContext = null;
   let visualizerAnalyser = null;
   let visualizerFrequencyData = null;
+  let visualizerSource = null;
 
   const state = {
     mode: null, // 'radio' | 'track'
@@ -96,16 +97,34 @@
       if (!visualizerAnalyser) {
         const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
         const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
-        if (!AudioContextConstructor || !captureStream) return false;
+        if (!AudioContextConstructor) return false;
 
         visualizerContext = new AudioContextConstructor();
         visualizerAnalyser = visualizerContext.createAnalyser();
-        visualizerAnalyser.fftSize = 256;
-        visualizerAnalyser.smoothingTimeConstant = 0.78;
+        visualizerAnalyser.fftSize = 2048;
+        visualizerAnalyser.minDecibels = -85;
+        visualizerAnalyser.maxDecibels = -25;
+        visualizerAnalyser.smoothingTimeConstant = 0.55;
         visualizerFrequencyData = new Uint8Array(visualizerAnalyser.frequencyBinCount);
 
-        const stream = captureStream.call(audio);
-        visualizerContext.createMediaStreamSource(stream).connect(visualizerAnalyser);
+        if (captureStream) {
+          const stream = captureStream.call(audio);
+          visualizerSource = visualizerContext.createMediaStreamSource(stream);
+          visualizerSource.connect(visualizerAnalyser);
+        } else {
+          const sourceUrl = new URL(audio.currentSrc || audio.src, window.location.href);
+          if (sourceUrl.origin !== window.location.origin) {
+            visualizerContext.close().catch(() => {});
+            visualizerContext = null;
+            visualizerAnalyser = null;
+            visualizerFrequencyData = null;
+            return false;
+          }
+
+          visualizerSource = visualizerContext.createMediaElementSource(audio);
+          visualizerSource.connect(visualizerAnalyser);
+          visualizerAnalyser.connect(visualizerContext.destination);
+        }
       }
 
       if (visualizerContext.state === 'suspended') {
@@ -119,6 +138,7 @@
       visualizerContext = null;
       visualizerAnalyser = null;
       visualizerFrequencyData = null;
+      visualizerSource = null;
       return false;
     }
   }
@@ -132,6 +152,10 @@
     if (!visualizerAnalyser || !visualizerFrequencyData) return null;
     visualizerAnalyser.getByteFrequencyData(visualizerFrequencyData);
     return visualizerFrequencyData;
+  }
+
+  function getVisualizerSampleRate() {
+    return visualizerContext ? visualizerContext.sampleRate : null;
   }
 
   const listeners = new Set();
@@ -1678,6 +1702,7 @@
     toggleMute,
     stop,
     getVisualizerFrequencyData,
+    getVisualizerSampleRate,
     subscribe: (fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);

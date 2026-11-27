@@ -142,6 +142,7 @@
         cancelAnimationFrame(state.visualizerFrameId);
         state.visualizerFrameId = null;
       }
+      dom.deckVisualizer.classList.remove('is-fallback');
       state.visualizerBars.forEach((bar) => { bar.style.height = '6px'; });
       return;
     }
@@ -157,16 +158,28 @@
       }
 
       const frequencyData = globalAudio.getVisualizerFrequencyData?.();
-      if (!frequencyData) return;
+      if (!frequencyData) {
+        dom.deckVisualizer.classList.add('is-fallback');
+        return;
+      }
+      dom.deckVisualizer.classList.remove('is-fallback');
 
       const bandCount = state.visualizerBars.length;
+      const sampleRate = globalAudio.getVisualizerSampleRate?.() || 44100;
+      const nyquist = sampleRate / 2;
+      const minFrequency = 55;
+      const maxFrequency = Math.min(14000, nyquist);
+      const binCount = frequencyData.length;
+      const binFrequency = sampleRate / (binCount * 2);
       state.visualizerBars.forEach((bar, index) => {
-        const start = Math.floor((index / bandCount) * frequencyData.length);
-        const end = Math.max(start + 1, Math.floor(((index + 1) / bandCount) * frequencyData.length));
-        let total = 0;
-        for (let bin = start; bin < end; bin++) total += frequencyData[bin];
-        const average = total / (end - start);
-        bar.style.height = `${6 + (average / 255) * 32}px`;
+        const startHz = minFrequency * Math.pow(maxFrequency / minFrequency, index / bandCount);
+        const endHz = minFrequency * Math.pow(maxFrequency / minFrequency, (index + 1) / bandCount);
+        const startBin = Math.max(1, Math.floor(startHz / binFrequency));
+        const endBin = Math.min(binCount, Math.max(startBin + 1, Math.ceil(endHz / binFrequency)));
+        let peak = 0;
+        for (let bin = startBin; bin < endBin; bin++) peak = Math.max(peak, frequencyData[bin]);
+        const level = Math.pow(peak / 255, 0.8);
+        bar.style.height = `${6 + level * 32}px`;
       });
 
       state.visualizerFrameId = requestAnimationFrame(renderFrame);

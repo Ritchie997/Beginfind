@@ -171,8 +171,14 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(playerJs.includes('createMediaStreamSource'), 'Must analyze the playing audio stream with Web Audio');
   assert.ok(playerJs.includes('createAnalyser'), 'Must use a real audio analyser');
   assert.ok(playerJs.includes('getByteFrequencyData'), 'Must expose frequency data to the radio UI');
-  assert.ok(!radioCss.includes('@keyframes sound-wave'), 'Visualizer bars must not use a synthetic CSS animation');
+  assert.ok(playerJs.includes('getVisualizerSampleRate'), 'Visualizer must map FFT bins using the actual audio context sample rate');
+  assert.ok(playerJs.includes('fftSize = 2048'), 'Visualizer must resolve enough frequency bins for band separation');
+  assert.ok(playerJs.includes('createMediaElementSource(audio)'), 'Visualizer needs a same-origin fallback when stream capture is unavailable');
+  assert.ok(radioCss.includes('.radio-visualizer.is-playing.is-fallback'), 'Synthetic animation must only run when audio analysis is unavailable');
+  assert.ok(radioClientJs.includes("classList.add('is-fallback')"), 'Visualizer must automatically enable the fallback animation when analysis is unavailable');
+  assert.ok(radioClientJs.includes("classList.remove('is-fallback')"), 'Visualizer must return to real analysis when it becomes available');
   assert.ok(radioClientJs.includes('requestAnimationFrame(renderFrame)'), 'Visualizer must render analyzed audio levels');
+  assert.ok(radioClientJs.includes('Math.pow(maxFrequency / minFrequency'), 'Visualizer must use logarithmic frequency bands');
 
   // 5. Radio client: non-destructive poll timer and autoPlay respect
   assert.ok(!radioClientJs.includes('tuneStation(state.currentStation, gState.isPlaying)'), 'Poll timer must not unconditionally call tuneStation');
