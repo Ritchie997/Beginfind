@@ -2950,6 +2950,7 @@
         block.duration = block.items.reduce((s, it) => s + Math.max(1, Number(it.duration) || 0), 0);
       }
       const durSec = Number(block.duration) || 0;
+      const clipWidth = Math.min(540, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)));
       const startMs = cursor;
       const endMs = cursor + durSec * 1000;
       cursor = endMs;
@@ -3068,7 +3069,7 @@
       }
 
       html += `
-        <div class="radio-eb-block ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" draggable="true">
+        <div class="radio-eb-block eb-block-${block.type} ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" style="--radio-clip-width:${clipWidth}px" draggable="true">
           ${isPlaylist ? '<div class="radio-eb-bracket radio-eb-bracket-left" title="Начало плейлиста ["></div>' : ''}
           <div class="radio-eb-drag-handle" title="Потяните для изменения порядка в эфире">
             <i class="fas fa-grip-vertical"></i>

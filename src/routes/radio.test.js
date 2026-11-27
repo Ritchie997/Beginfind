@@ -166,6 +166,21 @@ test('radio visual system shares public-site styling and isolates mobile overrid
   }
 });
 
+test('radio schedule blocks render as a compact horizontal arrangement lane', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
+
+  assert.ok(client.includes('const clipWidth = Math.min(540, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)))'), 'Clip width must respond to its duration');
+  assert.ok(client.includes('style="--radio-clip-width:${clipWidth}px"'), 'Rendered clips must expose their visual duration width');
+  assert.ok(client.includes('eb-block-${block.type}'), 'Rendered clips must expose their block type for restrained color coding');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist {\n  display: flex;\n  flex-direction: row;'), 'Schedule clips must flow horizontally in one scrollable lane');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-block.is-on-air-block'), 'On-air clips must use a distinct non-glowing highlight');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .radio-eb-blocklist'), 'The arrangement lane must have mobile-specific sizing');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');

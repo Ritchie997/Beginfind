@@ -4243,3 +4243,290 @@ body[data-page="radio"] .radio-editor-danger-actions .btn-outline-danger:hover {
   background: rgba(239, 68, 68, 0.16);
   color: #fca5a5;
 }
+
+body[data-page="radio"] .radio-eb-blocklist {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 5px;
+  min-height: 190px;
+  margin: 0 0 24px;
+  padding: 28px 12px 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0.72), rgba(20, 22, 27, 0.92));
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+body[data-page="radio"] .radio-eb-block {
+  --radio-clip-accent: #7893bd;
+  flex: 0 0 var(--radio-clip-width, 230px);
+  min-width: 0;
+  min-height: 128px;
+  align-self: flex-start;
+  box-sizing: border-box;
+  padding: 11px 10px 10px 33px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 3px solid var(--radio-clip-accent);
+  border-radius: 6px;
+  background: linear-gradient(145deg, rgba(74, 91, 119, 0.22), rgba(35, 40, 49, 0.9));
+  box-shadow: none;
+  scroll-snap-align: start;
+  transition: background 0.15s ease, border-color 0.15s ease, filter 0.15s ease;
+}
+
+body[data-page="radio"] .radio-eb-block.eb-block-playlist {
+  --radio-clip-accent: #a884c7;
+  border: 1px solid rgba(168, 132, 199, 0.2);
+  border-left: 3px solid var(--radio-clip-accent);
+  background: linear-gradient(145deg, rgba(103, 70, 127, 0.2), rgba(35, 34, 43, 0.92));
+  box-shadow: none;
+}
+
+body[data-page="radio"] .radio-eb-block.eb-block-gap {
+  --radio-clip-accent: #d3a758;
+  border: 1px dashed rgba(211, 167, 88, 0.38);
+  border-left: 3px solid var(--radio-clip-accent);
+  background: rgba(211, 167, 88, 0.07);
+}
+
+body[data-page="radio"] .radio-eb-block.eb-block-speech,
+body[data-page="radio"] .radio-eb-block.eb-block-jingle {
+  --radio-clip-accent: #c8a05b;
+  background: linear-gradient(145deg, rgba(122, 91, 42, 0.2), rgba(35, 36, 39, 0.92));
+}
+
+body[data-page="radio"] .radio-eb-block.eb-block-time_anchor {
+  --radio-clip-accent: #bf7482;
+  background: linear-gradient(145deg, rgba(115, 58, 72, 0.2), rgba(35, 34, 39, 0.92));
+}
+
+body[data-page="radio"] .radio-eb-block:hover,
+body[data-page="radio"] .radio-eb-block:focus-within {
+  border-color: color-mix(in srgb, var(--radio-clip-accent) 58%, transparent);
+  border-left-color: var(--radio-clip-accent);
+  background-color: rgba(255, 255, 255, 0.035);
+  box-shadow: none;
+  filter: brightness(1.08);
+}
+
+body[data-page="radio"] .radio-eb-block.is-drag-over {
+  border: 1px dashed var(--radio-accent);
+  border-left: 3px solid var(--radio-accent);
+  background: rgba(255, 71, 87, 0.12);
+}
+
+body[data-page="radio"] .radio-eb-drag-handle {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 25px;
+  justify-content: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+body[data-page="radio"] .radio-eb-drag-handle:hover {
+  color: var(--radio-clip-accent);
+}
+
+body[data-page="radio"] .radio-eb-bracket {
+  display: none;
+}
+
+body[data-page="radio"] .radio-eb-order-num {
+  color: rgba(220, 221, 222, 0.48);
+  font-size: 0.66rem;
+}
+
+body[data-page="radio"] .radio-eb-header {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 8px;
+}
+
+body[data-page="radio"] .radio-eb-meta-left {
+  gap: 5px;
+}
+
+body[data-page="radio"] .eb-type-badge {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--radio-clip-accent) 34%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--radio-clip-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--radio-clip-accent) 75%, white);
+  font-size: 0.62rem;
+}
+
+body[data-page="radio"] .radio-eb-time-range,
+body[data-page="radio"] .radio-eb-duration-badge {
+  font-size: 0.7rem;
+  color: var(--header-secondary, #b9bbbe);
+}
+
+body[data-page="radio"] .radio-eb-duration-badge {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+body[data-page="radio"] .radio-eb-actions {
+  justify-content: flex-start;
+  gap: 2px;
+  margin: 0;
+}
+
+body[data-page="radio"] .radio-eb-btn {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgba(220, 221, 222, 0.62);
+  font-size: 0.72rem;
+}
+
+body[data-page="radio"] .radio-eb-btn:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+body[data-page="radio"] .radio-eb-btn.danger:hover {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ff858b;
+}
+
+body[data-page="radio"] .radio-eb-body {
+  min-width: 0;
+  color: var(--text-normal, #dcddde);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+body[data-page="radio"] .radio-eb-body > div {
+  min-width: 0;
+}
+
+body[data-page="radio"] .radio-playlist-accordion-header {
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0;
+  font-size: 0.78rem;
+}
+
+body[data-page="radio"] .radio-playlist-accordion-header > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+body[data-page="radio"] .radio-playlist-accordion-header > div:first-child strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="radio"] .radio-playlist-accordion-header > div:last-child {
+  flex: 0 0 auto;
+  gap: 3px !important;
+}
+
+body[data-page="radio"] .radio-playlist-accordion-header .btn {
+  padding: 4px 6px;
+  font-size: 0.68rem;
+}
+
+body[data-page="radio"] .radio-playlist-tracks-nested {
+  max-height: 82px;
+  margin-top: 7px;
+  padding-left: 7px;
+  gap: 3px;
+  overflow-y: auto;
+  border-left-color: color-mix(in srgb, var(--radio-clip-accent) 45%, transparent);
+}
+
+body[data-page="radio"] .radio-playlist-nested-track {
+  gap: 5px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.13);
+  font-size: 0.72rem;
+}
+
+body[data-page="radio"] .radio-eb-insert-line {
+  flex: 0 0 12px;
+  align-self: stretch;
+  height: auto;
+  min-height: 128px;
+  margin: 0 -3px;
+  opacity: 0.45;
+}
+
+body[data-page="radio"] .radio-eb-insert-line::before {
+  left: 50%;
+  right: auto;
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+body[data-page="radio"] .radio-eb-insert-line:hover,
+body[data-page="radio"] .radio-eb-insert-line.is-active {
+  opacity: 1;
+}
+
+body[data-page="radio"] .radio-eb-insert-line:hover::before,
+body[data-page="radio"] .radio-eb-insert-line.is-active::before {
+  background: rgba(255, 71, 87, 0.8);
+}
+
+body[data-page="radio"] .radio-eb-insert-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: #30343b;
+  box-shadow: none;
+  font-size: 0;
+}
+
+body[data-page="radio"] .radio-eb-insert-btn i {
+  font-size: 0.65rem;
+}
+
+body[data-page="radio"] .radio-eb-insert-btn:hover {
+  transform: none;
+  border-color: var(--radio-accent);
+  background: var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-eb-block.is-on-air-block {
+  border-color: rgba(255, 71, 87, 0.6) !important;
+  border-left-color: var(--radio-accent) !important;
+  background: linear-gradient(145deg, rgba(255, 71, 87, 0.18), rgba(35, 34, 39, 0.94)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 71, 87, 0.12) !important;
+}
+
+body[data-page="radio"] .radio-eb-block.is-playing-block:not(.is-on-air-block) {
+  border-color: rgba(255, 71, 87, 0.48) !important;
+  border-left-color: var(--radio-accent) !important;
+  background: rgba(255, 71, 87, 0.1) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 71, 87, 0.08) !important;
+}
+
+body[data-page="radio"] .radio-eb-block.is-timeshift-block {
+  border-color: rgba(211, 167, 88, 0.55) !important;
+  border-left-color: #d3a758 !important;
+  background: rgba(211, 167, 88, 0.1) !important;
+  box-shadow: inset 0 0 0 1px rgba(211, 167, 88, 0.08) !important;
+}
