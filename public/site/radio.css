@@ -4686,6 +4686,30 @@ body[data-page="radio"] .radio-timeline-workspace .radio-timeline-clip .clip-dur
   display: none;
 }
 
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-clip.is-title-visible .clip-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 5px;
+  overflow: hidden;
+  font-size: 0.67rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-clip.is-title-visible .clip-title > i {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+}
+
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-clip.is-title-visible .clip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body[data-page="radio"] .radio-timeline-viewport {
   position: absolute;
   z-index: 6;

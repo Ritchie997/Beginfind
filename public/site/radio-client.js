@@ -2667,6 +2667,9 @@
       } else {
         dom.radioTimelineTrack.innerHTML = state.editorBlocks.map((block, idx) => {
           const pct = Math.max(0.15, (block.duration / timelineScale) * 100);
+          const renderedWidth = (dom.radioTimelineTrack.clientWidth * pct) / 100;
+          const labelMinWidth = window.innerWidth <= 768 ? 70 : 86;
+          const showTitle = renderedWidth >= labelMinWidth;
           const typeClass = `clip-${block.type}`;
           const isPlaylist = block.type === 'playlist';
           const icon = isPlaylist ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
@@ -2675,9 +2678,9 @@
           const subInfo = isPlaylist ? ` (${(block.items || []).length} тр)` : '';
 
           return `
-            <div class="radio-timeline-clip ${typeClass}" data-block-id="${block.id}" data-index="${idx}" draggable="false" style="width: ${pct.toFixed(3)}%;" title="${titleText}${subInfo} — ${durText}">
+            <div class="radio-timeline-clip ${typeClass}${showTitle ? ' is-title-visible' : ''}" data-block-id="${block.id}" data-index="${idx}" draggable="false" style="width: ${pct.toFixed(3)}%;" title="${titleText}${subInfo} — ${durText}">
               ${isPlaylist ? '<div class="radio-clip-bracket bracket-left" title="Начало плейлиста ["></div>' : ''}
-              <div class="clip-title"><i class="fas ${icon}"></i> ${titleText}${subInfo}</div>
+              <div class="clip-title"><i class="fas ${icon}"></i><span class="clip-name">${titleText}</span></div>
               <div class="clip-dur">${durText}</div>
               ${isPlaylist ? '<div class="radio-clip-bracket bracket-right" title="] Конец плейлиста"></div>' : ''}
             </div>

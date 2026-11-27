@@ -176,6 +176,8 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(client.includes('const clipWidth = Math.min(maxClipWidth, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)))'), 'Clip width must respond to its duration');
   assert.ok(client.includes('data-base-width="${clipWidth}"'), 'Editor clips must expose their base duration width for zooming');
   assert.ok(client.includes('style="width: ${pct.toFixed(3)}%;"'), 'Overview clips must expose their proportional duration width');
+  assert.ok(client.includes("const showTitle = renderedWidth >= labelMinWidth;"), 'Overview clip names must only appear when the clip has room for a readable label');
+  assert.ok(client.includes('class="clip-title"><i class="fas ${icon}"></i><span class="clip-name">${titleText}</span></div>'), 'Overview clip names must be truncated independently from their icons');
   assert.ok(client.includes('eb-block-${block.type}'), 'Rendered clips must expose their block type for restrained color coding');
   assert.ok(client.includes('class="radio-eb-empty-state"'), 'The empty schedule message must use the full-lane empty state');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist {\n  display: flex;\n  flex-direction: row;'), 'Schedule clips must flow horizontally in one scrollable lane');
@@ -201,6 +203,8 @@ test('radio overview is read-only and its navigation stays synchronized with the
   assert.ok(client.includes("['dragstart', 'dragenter', 'dragover', 'drop']"), 'The overview must reject all drag-and-drop interactions');
   assert.ok(!client.includes("dom.radioTimelineTrack?.addEventListener('drop'"), 'The overview must not retain a drop handler that can mutate the schedule');
   assert.ok(css.includes('.radio-timeline-clip.is-selected'), 'Selected overview clips must have a visual state');
+  assert.ok(css.includes('.radio-timeline-clip.is-title-visible .clip-title'), 'Overview labels must be shown on clips with enough room');
+  assert.ok(css.includes('.radio-timeline-clip.is-title-visible .clip-name'), 'Long overview labels must truncate without overflowing their clip');
   assert.ok(css.includes('.radio-eb-block.is-timeline-selected'), 'Overview selection must be reflected in the editor');
 });
 
