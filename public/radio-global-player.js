@@ -65,6 +65,31 @@
   let visualizerAnalyser = null;
   let visualizerFrequencyData = null;
   let visualizerSource = null;
+  let visualizerSourceUrl = null;
+
+  function connectCapturedAudioStream(force = false) {
+    const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
+    if (!captureStream || !visualizerContext || !visualizerAnalyser) return false;
+
+    const sourceUrl = audio.currentSrc || audio.src || '';
+    if (!force && visualizerSource && visualizerSourceUrl === sourceUrl) return true;
+
+    const stream = captureStream.call(audio);
+    const hasLiveAudioTrack = stream.getAudioTracks().some((track) => track.readyState === 'live');
+    if (!hasLiveAudioTrack) {
+      if (visualizerSource) visualizerSource.disconnect();
+      visualizerSource = null;
+      visualizerSourceUrl = null;
+      return false;
+    }
+
+    const nextSource = visualizerContext.createMediaStreamSource(stream);
+    nextSource.connect(visualizerAnalyser);
+    if (visualizerSource) visualizerSource.disconnect();
+    visualizerSource = nextSource;
+    visualizerSourceUrl = sourceUrl;
+    return true;
+  }
 
   const state = {
     mode: null, // 'radio' | 'track'
@@ -96,7 +121,6 @@
     try {
       if (!visualizerAnalyser) {
         const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-        const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
         if (!AudioContextConstructor) return false;
 
         visualizerContext = new AudioContextConstructor();
@@ -107,11 +131,8 @@
         visualizerAnalyser.smoothingTimeConstant = 0.55;
         visualizerFrequencyData = new Uint8Array(visualizerAnalyser.frequencyBinCount);
 
-        if (captureStream) {
-          const stream = captureStream.call(audio);
-          visualizerSource = visualizerContext.createMediaStreamSource(stream);
-          visualizerSource.connect(visualizerAnalyser);
-        } else {
+        const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
+        if (!captureStream) {
           const sourceUrl = new URL(audio.currentSrc || audio.src, window.location.href);
           if (sourceUrl.origin !== window.location.origin) {
             visualizerContext.close().catch(() => {});
@@ -127,6 +148,10 @@
         }
       }
 
+      if (audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream) {
+        connectCapturedAudioStream();
+      }
+
       if (visualizerContext.state === 'suspended') {
         visualizerContext.resume().catch((error) => {
           console.warn('[GlobalRadio] Audio visualizer could not resume:', error);
@@ -139,6 +164,7 @@
       visualizerAnalyser = null;
       visualizerFrequencyData = null;
       visualizerSource = null;
+      visualizerSourceUrl = null;
       return false;
     }
   }
@@ -149,7 +175,7 @@
   }
 
   function getVisualizerFrequencyData() {
-    if (!visualizerAnalyser || !visualizerFrequencyData) return null;
+    if (!visualizerAnalyser || !visualizerFrequencyData || !visualizerSource) return null;
     visualizerAnalyser.getByteFrequencyData(visualizerFrequencyData);
     return visualizerFrequencyData;
   }
@@ -165,6 +191,12 @@
       try { fn(state); } catch (e) { console.error(e); }
     });
   }
+
+  audio.addEventListener('loadedmetadata', () => {
+    if (!visualizerContext || !visualizerAnalyser) return;
+    connectCapturedAudioStream(true);
+    notifyListeners();
+  });
 
   function notify() {
     notifyListeners();
