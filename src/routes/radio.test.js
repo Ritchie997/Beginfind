@@ -177,7 +177,10 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(client.includes('data-base-width="${clipWidth}"'), 'Editor clips must expose their base duration width for zooming');
   assert.ok(client.includes('style="width: ${pct.toFixed(3)}%;"'), 'Overview clips must expose their proportional duration width');
   assert.ok(client.includes('eb-block-${block.type}'), 'Rendered clips must expose their block type for restrained color coding');
+  assert.ok(client.includes('class="radio-eb-empty-state"'), 'The empty schedule message must use the full-lane empty state');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist {\n  display: flex;\n  flex-direction: row;'), 'Schedule clips must flow horizontally in one scrollable lane');
+  assert.ok(desktopCss.includes('flex: 1 0 100%;'), 'The empty state must span the full editor lane');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist:has(.radio-eb-empty-state)'), 'The empty lane must not retain extra blank space around the full-width state');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-block.is-on-air-block'), 'On-air clips must use a distinct non-glowing highlight');
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-eb-blocklist'), 'The arrangement lane must have mobile-specific sizing');
 });

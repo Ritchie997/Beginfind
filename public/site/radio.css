@@ -4773,6 +4773,28 @@ body[data-page="radio"] .radio-eb-blocklist {
   background: transparent;
 }
 
+body[data-page="radio"] .radio-eb-blocklist:has(.radio-eb-empty-state) {
+  align-items: stretch;
+  padding: 16px 12px;
+}
+
+body[data-page="radio"] .radio-eb-empty-state {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 200px;
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+  color: #94a3b8;
+  text-align: center;
+}
+
 body[data-page="radio"] .radio-eb-block {
   padding-left: 30px;
 }

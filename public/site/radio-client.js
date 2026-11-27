@@ -2719,7 +2719,7 @@
 
     if (state.editorBlocks.length === 0) {
       listEl.innerHTML = `
-        <div style="text-align:center; padding:40px 20px; color:#94a3b8; background:rgba(0,0,0,0.2); border:1px dashed rgba(255,255,255,0.1); border-radius:14px;">
+        <div class="radio-eb-empty-state">
           <i class="fas fa-layer-group" style="font-size:2.2rem; color:var(--brand-accent,#6366f1); margin-bottom:12px; display:block;"></i>
           <h3 style="color:#fff; margin:0 0 8px 0;">Сетка вещания пока пуста</h3>
           <p style="margin:0 0 16px 0; font-size:0.9rem;">Добавьте готовый плейлист, соберите треки из медиатеки или запишите голос ведущего с микрофона.</p>

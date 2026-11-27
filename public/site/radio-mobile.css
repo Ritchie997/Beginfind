@@ -1133,6 +1133,15 @@
     padding: 22px 9px 14px;
   }
 
+  body[data-page="radio"] .radio-eb-blocklist:has(.radio-eb-empty-state) {
+    padding: 10px 9px;
+  }
+
+  body[data-page="radio"] .radio-eb-empty-state {
+    min-height: 190px;
+    padding: 20px 12px;
+  }
+
   body[data-page="radio"] .radio-timeline-overview-hint {
     align-items: flex-start;
     padding: 8px 10px 0;
