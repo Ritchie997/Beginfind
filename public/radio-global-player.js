@@ -61,6 +61,9 @@
   let isAudioLeader = false;
   let isPageUnloading = false;
   let remoteLeaderTabId = null;
+  let visualizerContext = null;
+  let visualizerAnalyser = null;
+  let visualizerFrequencyData = null;
 
   const state = {
     mode: null, // 'radio' | 'track'
@@ -86,6 +89,49 @@
 
   function getEffectiveNowMs() {
     return Date.now() + (state.serverTimeSkewMs || 0);
+  }
+
+  function prepareAudioVisualizer() {
+    try {
+      if (!visualizerAnalyser) {
+        const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+        const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
+        if (!AudioContextConstructor || !captureStream) return false;
+
+        visualizerContext = new AudioContextConstructor();
+        visualizerAnalyser = visualizerContext.createAnalyser();
+        visualizerAnalyser.fftSize = 256;
+        visualizerAnalyser.smoothingTimeConstant = 0.78;
+        visualizerFrequencyData = new Uint8Array(visualizerAnalyser.frequencyBinCount);
+
+        const stream = captureStream.call(audio);
+        visualizerContext.createMediaStreamSource(stream).connect(visualizerAnalyser);
+      }
+
+      if (visualizerContext.state === 'suspended') {
+        visualizerContext.resume().catch((error) => {
+          console.warn('[GlobalRadio] Audio visualizer could not resume:', error);
+        });
+      }
+      return true;
+    } catch (error) {
+      console.warn('[GlobalRadio] Audio visualizer is unavailable:', error);
+      visualizerContext = null;
+      visualizerAnalyser = null;
+      visualizerFrequencyData = null;
+      return false;
+    }
+  }
+
+  function playAudio() {
+    prepareAudioVisualizer();
+    return audio.play();
+  }
+
+  function getVisualizerFrequencyData() {
+    if (!visualizerAnalyser || !visualizerFrequencyData) return null;
+    visualizerAnalyser.getByteFrequencyData(visualizerFrequencyData);
+    return visualizerFrequencyData;
   }
 
   const listeners = new Set();
@@ -386,7 +432,7 @@
     if (state.isLoop) {
       // Зацикливание включенного трека/слота: повторяем текущую дорожку с начала
       audio.currentTime = 0;
-      audio.play().then(() => {
+      playAudio().then(() => {
         state.isPlaying = true;
         updateMediaSession();
         updateBarUI();
@@ -441,7 +487,7 @@
             audio.currentTime = 0;
           }
           state.isPlaying = true;
-          audio.play().then(() => {
+          playAudio().then(() => {
             state.isPlaying = true;
             updateMediaSession();
             updateBarUI();
@@ -714,7 +760,7 @@
         if (autoPlay) {
           isAudioLeader = true;
           remoteLeaderTabId = null;
-          audio.play().then(() => {
+          playAudio().then(() => {
             state.isPlaying = true;
             updateMediaSession();
             updateBarUI();
@@ -732,7 +778,7 @@
               if (state.mode === 'radio' && state.station) {
                 syncRadioStationLive(state.station, true);
               } else {
-                audio.play().then(() => {
+                playAudio().then(() => {
                   state.isPlaying = true;
                   updateMediaSession();
                   updateBarUI();
@@ -824,7 +870,7 @@
         }
       }
 
-      audio.play().then(() => {
+      playAudio().then(() => {
         state.isPlaying = true;
         updateMediaSession();
         updateBarUI();
@@ -876,7 +922,7 @@
     }
     audio.loop = Boolean(state.isLoop);
 
-    audio.play().then(() => {
+    playAudio().then(() => {
       state.isPlaying = true;
       updateMediaSession();
       updateBarUI();
@@ -1000,6 +1046,7 @@
   function resume() {
     isAudioLeader = true;
     remoteLeaderTabId = null;
+    prepareAudioVisualizer();
 
     if (state.mode === 'radio') {
       // Если слушатель не в таймшифте, разжатие паузы возвращает в текущий живой эфир на актуальное время
@@ -1015,7 +1062,7 @@
           audio.src = state.currentSlot.audioUrl;
         }
         audio.loop = Boolean(state.isLoop);
-        audio.play().then(() => {
+        playAudio().then(() => {
           state.isPlaying = true;
           updateMediaSession();
           updateBarUI();
@@ -1034,7 +1081,7 @@
           audio.currentTime = state.currentTime || 0;
         }
         audio.loop = Boolean(state.isLoop);
-        audio.play().then(() => {
+        playAudio().then(() => {
           state.isPlaying = true;
           updateMediaSession();
           updateBarUI();
@@ -1555,7 +1602,7 @@
         } else if (state.track && state.track.audio_url) {
           audio.src = state.track.audio_url;
           audio.currentTime = saved.currentTime || 0;
-          audio.play().then(() => {
+          playAudio().then(() => {
             state.isPlaying = true;
             updateMediaSession();
             updateBarUI();
@@ -1568,7 +1615,7 @@
             const unlock = () => {
               document.removeEventListener('pointerdown', unlock);
               document.removeEventListener('keydown', unlock);
-              audio.play().then(() => {
+              playAudio().then(() => {
                 state.isPlaying = true;
                 updateMediaSession();
                 updateBarUI();
@@ -1630,6 +1677,7 @@
     setVolume,
     toggleMute,
     stop,
+    getVisualizerFrequencyData,
     subscribe: (fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);

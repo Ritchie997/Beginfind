@@ -105,6 +105,8 @@
     recordedChunks: [],
     recordStartTime: 0,
     recordTimerInterval: null,
+    visualizerFrameId: null,
+    visualizerBars: [],
     globalUnsub: null,
     serverTimeDelta: 0,
     serverClockInterval: null,
@@ -127,6 +129,50 @@
       return gAudio.getEffectiveNowMs();
     }
     return Date.now() + (state.serverTimeSkewMs || 0);
+  }
+
+  function updateDeckVisualizer(gState) {
+    if (!dom.deckVisualizer) return;
+    if (!state.visualizerBars.length) {
+      state.visualizerBars = Array.from(dom.deckVisualizer.querySelectorAll('.radio-visualizer-bar'));
+    }
+
+    if (!gState || !gState.isPlaying) {
+      if (state.visualizerFrameId !== null) {
+        cancelAnimationFrame(state.visualizerFrameId);
+        state.visualizerFrameId = null;
+      }
+      state.visualizerBars.forEach((bar) => { bar.style.height = '6px'; });
+      return;
+    }
+    if (state.visualizerFrameId !== null) return;
+
+    const renderFrame = () => {
+      state.visualizerFrameId = null;
+      const globalAudio = getGlobalAudio();
+      const currentState = globalAudio ? globalAudio.getState() : null;
+      if (!currentState || !currentState.isPlaying) {
+        state.visualizerBars.forEach((bar) => { bar.style.height = '6px'; });
+        return;
+      }
+
+      const frequencyData = globalAudio.getVisualizerFrequencyData?.();
+      if (!frequencyData) return;
+
+      const bandCount = state.visualizerBars.length;
+      state.visualizerBars.forEach((bar, index) => {
+        const start = Math.floor((index / bandCount) * frequencyData.length);
+        const end = Math.max(start + 1, Math.floor(((index + 1) / bandCount) * frequencyData.length));
+        let total = 0;
+        for (let bin = start; bin < end; bin++) total += frequencyData[bin];
+        const average = total / (end - start);
+        bar.style.height = `${6 + (average / 255) * 32}px`;
+      });
+
+      state.visualizerFrameId = requestAnimationFrame(renderFrame);
+    };
+
+    state.visualizerFrameId = requestAnimationFrame(renderFrame);
   }
 
   let dom = {};
@@ -598,6 +644,7 @@
       if (dom.deckVisualizer) {
         dom.deckVisualizer.classList.toggle('is-playing', Boolean(gState.isPlaying));
       }
+      updateDeckVisualizer(gState);
 
       if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = formatDuration(cur);
       if (dom.deckTimeRemaining) {
@@ -654,6 +701,7 @@
       if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = '00:00';
       if (dom.deckTimeRemaining) dom.deckTimeRemaining.textContent = '--:--';
       if (dom.deckLiveSyncBtn) dom.deckLiveSyncBtn.style.display = 'none';
+      updateDeckVisualizer(gState);
       return;
     }
 
@@ -715,6 +763,7 @@
         dom.deckVisualizer.classList.remove('is-playing');
       }
     }
+    updateDeckVisualizer({ ...gState, isPlaying });
 
     const cur = (globalAudio && globalAudio.audio) ? (globalAudio.audio.currentTime || 0) : (gState.currentTime || 0);
     const dur = (globalAudio && globalAudio.audio && globalAudio.audio.duration) ? globalAudio.audio.duration : (slot ? (slot.duration || 0) : (gState.duration || 0));
@@ -6125,6 +6174,7 @@
         // Обновление состояния воспроизведения в редакторе радиоэфира
         updateEditorPlaybackUI(gState);
       });
+      updateDeckUI();
     }
 
     // 1. Табы
@@ -7973,6 +8023,12 @@
     const cleanupFn = function cleanup() {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
+      if (state.visualizerFrameId !== null) {
+        cancelAnimationFrame(state.visualizerFrameId);
+        state.visualizerFrameId = null;
+      }
+      state.visualizerBars.forEach((bar) => { bar.style.height = '6px'; });
+      state.visualizerBars = [];
       clearInterval(state.serverClockInterval);
       state.serverClockInterval = null;
       if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {

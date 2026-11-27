@@ -97,7 +97,9 @@ test('radio live player and station cards use a clean compact interface', () => 
   assert.ok(!html.includes('id="btnDeckEditStation"'), 'Live player must not show its ellipsis menu');
   assert.ok(!radioClientJs.includes('btn-card-station-menu'), 'Station cards must not render their ellipsis menu');
   assert.ok(css.includes('.radio-controls-main .deck-btn-label'), 'Live player button labels must be hidden');
-  assert.ok(css.includes('width: 38px;'), 'Live player action buttons must remain compact icon buttons');
+  assert.ok(css.includes('border: none;'), 'Live player controls must not have outlined button frames');
+  assert.ok(css.includes('background: transparent;'), 'Live player controls must use the mini-player transparent style');
+  assert.ok(css.includes('width: 32px;'), 'Live player action buttons must remain compact icon buttons');
 });
 
 test('maintenance mode: radio page and API gating', async () => {
@@ -138,6 +140,7 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   const path = require('path');
   const playerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
   const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const radioCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
 
   // 1. Background playback & MediaSession
   assert.ok(playerJs.includes('mediaSession'), 'Must integrate navigator.mediaSession');
@@ -164,6 +167,12 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(playerJs.includes('deckTimeCurrent'), 'Must update deckTimeCurrent');
   assert.ok(playerJs.includes('deckTimeRemaining'), 'Must update deckTimeRemaining');
   assert.ok(playerJs.includes('trackPageProgressFill'), 'Must update trackPageProgressFill');
+  assert.ok(playerJs.includes('audio.captureStream'), 'Visualizer must inspect the existing audio stream without reloading it');
+  assert.ok(playerJs.includes('createMediaStreamSource'), 'Must analyze the playing audio stream with Web Audio');
+  assert.ok(playerJs.includes('createAnalyser'), 'Must use a real audio analyser');
+  assert.ok(playerJs.includes('getByteFrequencyData'), 'Must expose frequency data to the radio UI');
+  assert.ok(!radioCss.includes('@keyframes sound-wave'), 'Visualizer bars must not use a synthetic CSS animation');
+  assert.ok(radioClientJs.includes('requestAnimationFrame(renderFrame)'), 'Visualizer must render analyzed audio levels');
 
   // 5. Radio client: non-destructive poll timer and autoPlay respect
   assert.ok(!radioClientJs.includes('tuneStation(state.currentStation, gState.isPlaying)'), 'Poll timer must not unconditionally call tuneStation');
