@@ -174,8 +174,9 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(playerJs.includes('getVisualizerSampleRate'), 'Visualizer must map FFT bins using the actual audio context sample rate');
   assert.ok(playerJs.includes('fftSize = 2048'), 'Visualizer must resolve enough frequency bins for band separation');
   assert.ok(playerJs.includes('createMediaElementSource(audio)'), 'Visualizer needs a same-origin fallback when stream capture is unavailable');
-  assert.ok(playerJs.includes('function connectCapturedAudioStream(force = false)'), 'Visualizer must reconnect to a newly loaded media stream');
-  assert.ok(playerJs.includes("audio.addEventListener('loadedmetadata'"), 'Visualizer must refresh its source when the media resource changes');
+  assert.ok(playerJs.includes('function connectCapturedAudioStream()'), 'Visualizer must reconnect to a playing media stream');
+  assert.ok(playerJs.includes("audio.addEventListener('loadedmetadata'"), 'Visualizer must discard stale sources when the media resource changes');
+  assert.ok(playerJs.includes("audio.addEventListener('playing'"), 'Visualizer must connect after playback starts and captured tracks become live');
   assert.ok(playerJs.includes('track.readyState === \'live\''), 'Visualizer must not keep reading an ended capture stream');
   assert.ok(playerJs.includes('!visualizerSource) return null'), 'Visualizer must use its fallback until a live source is connected');
   assert.ok(radioCss.includes('.radio-visualizer.is-playing.is-fallback'), 'Synthetic animation must only run when audio analysis is unavailable');

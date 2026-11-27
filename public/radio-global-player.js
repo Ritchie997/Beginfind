@@ -67,28 +67,33 @@
   let visualizerSource = null;
   let visualizerSourceUrl = null;
 
-  function connectCapturedAudioStream(force = false) {
+  function connectCapturedAudioStream() {
     const captureStream = audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream;
     if (!captureStream || !visualizerContext || !visualizerAnalyser) return false;
 
     const sourceUrl = audio.currentSrc || audio.src || '';
-    if (!force && visualizerSource && visualizerSourceUrl === sourceUrl) return true;
+    if (visualizerSource && visualizerSourceUrl === sourceUrl) return true;
 
-    const stream = captureStream.call(audio);
-    const hasLiveAudioTrack = stream.getAudioTracks().some((track) => track.readyState === 'live');
-    if (!hasLiveAudioTrack) {
-      if (visualizerSource) visualizerSource.disconnect();
-      visualizerSource = null;
-      visualizerSourceUrl = null;
+    try {
+      const stream = captureStream.call(audio);
+      const hasLiveAudioTrack = stream.getAudioTracks().some((track) => track.readyState === 'live');
+      if (!hasLiveAudioTrack) {
+        visualizerSource?.disconnect();
+        visualizerSource = null;
+        visualizerSourceUrl = null;
+        return false;
+      }
+
+      const nextSource = visualizerContext.createMediaStreamSource(stream);
+      nextSource.connect(visualizerAnalyser);
+      visualizerSource?.disconnect();
+      visualizerSource = nextSource;
+      visualizerSourceUrl = sourceUrl;
+      return true;
+    } catch (error) {
+      console.warn('[GlobalRadio] Audio stream capture is unavailable:', error);
       return false;
     }
-
-    const nextSource = visualizerContext.createMediaStreamSource(stream);
-    nextSource.connect(visualizerAnalyser);
-    if (visualizerSource) visualizerSource.disconnect();
-    visualizerSource = nextSource;
-    visualizerSourceUrl = sourceUrl;
-    return true;
   }
 
   const state = {
@@ -148,10 +153,6 @@
         }
       }
 
-      if (audio.captureStream || audio.mozCaptureStream || audio.webkitCaptureStream) {
-        connectCapturedAudioStream();
-      }
-
       if (visualizerContext.state === 'suspended') {
         visualizerContext.resume().catch((error) => {
           console.warn('[GlobalRadio] Audio visualizer could not resume:', error);
@@ -194,8 +195,18 @@
 
   audio.addEventListener('loadedmetadata', () => {
     if (!visualizerContext || !visualizerAnalyser) return;
-    connectCapturedAudioStream(true);
+    const sourceUrl = audio.currentSrc || audio.src || '';
+    if (visualizerSource && visualizerSourceUrl !== sourceUrl) {
+      visualizerSource.disconnect();
+      visualizerSource = null;
+      visualizerSourceUrl = null;
+    }
     notifyListeners();
+  });
+
+  audio.addEventListener('playing', () => {
+    if (!visualizerContext || !visualizerAnalyser) return;
+    if (connectCapturedAudioStream()) notifyListeners();
   });
 
   function notify() {
