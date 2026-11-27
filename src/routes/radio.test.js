@@ -102,6 +102,25 @@ test('radio live player and station cards use a clean compact interface', () => 
   assert.ok(css.includes('width: 32px;'), 'Live player action buttons must remain compact icon buttons');
 });
 
+test('radio visual system shares public-site styling and isolates mobile overrides', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
+
+  assert.match(html, /href="\/site\/radio-mobile\.css(?:\?v=\d+)?"/, 'Radio page must load its independent mobile stylesheet');
+  assert.ok(html.includes('media="(max-width: 768px)"'), 'Mobile overrides must not load on desktop');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .modal-box'), 'Radio modal styling must be scoped to the radio page');
+  assert.ok(desktopCss.includes('var(--background-secondary'), 'Desktop radio surfaces must use shared public-site tokens');
+  assert.ok(mobileCss.includes('@media (max-width: 768px)'), 'Mobile stylesheet must use the shared public-site breakpoint');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .radio-nav-tabs'), 'Mobile layout must adapt radio navigation');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .radio-feed-player-bar'), 'Mobile layout must adapt the mini player');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .alltell-global-audio-bar'), 'Mobile layout must adapt the cross-page mini player on radio');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .modal-overlay'), 'Mobile layout must adapt radio dialogs');
+  assert.ok(mobileCss.includes('body[data-page="radio"] .radio-timeline-track-scroll'), 'Mobile layout must keep timeline scrolling inside its viewport');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');
