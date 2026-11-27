@@ -113,12 +113,41 @@ test('radio visual system shares public-site styling and isolates mobile overrid
   assert.ok(html.includes('media="(max-width: 768px)"'), 'Mobile overrides must not load on desktop');
   assert.ok(desktopCss.includes('body[data-page="radio"] .modal-box'), 'Radio modal styling must be scoped to the radio page');
   assert.ok(desktopCss.includes('var(--background-secondary'), 'Desktop radio surfaces must use shared public-site tokens');
+  assert.ok(desktopCss.includes('--radio-accent: #ff4757;'), 'Radio accents must retain the red radio palette');
+  assert.ok(desktopCss.includes('body[data-page="radio"] .alltell-global-audio-bar'), 'Global player styling must remain scoped to radio');
+  assert.ok(desktopCss.includes('body[data-page="radio"] #btnMasterApplyDraft'), 'The duplicate draft-apply control must be hidden only on radio');
   assert.ok(mobileCss.includes('@media (max-width: 768px)'), 'Mobile stylesheet must use the shared public-site breakpoint');
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-nav-tabs'), 'Mobile layout must adapt radio navigation');
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-feed-player-bar'), 'Mobile layout must adapt the mini player');
   assert.ok(mobileCss.includes('body[data-page="radio"] .alltell-global-audio-bar'), 'Mobile layout must adapt the cross-page mini player on radio');
   assert.ok(mobileCss.includes('body[data-page="radio"] .modal-overlay'), 'Mobile layout must adapt radio dialogs');
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-timeline-track-scroll'), 'Mobile layout must keep timeline scrolling inside its viewport');
+  assert.ok(html.includes('<details class="radio-editor-disclosure radio-editor-schedule-disclosure">'), 'Editor scheduling controls must be collapsible');
+  assert.ok(html.includes('<details class="radio-editor-disclosure radio-studio-add-disclosure">'), 'Studio add actions must be grouped in a collapsible section');
+  assert.ok(html.includes('<details class="radio-editor-disclosure radio-timeline-view-disclosure">'), 'Timeline view controls must be collapsible');
+
+  for (const id of [
+    'btnClearTimelineBtn',
+    'btnReleaseStationBtn',
+    'btnScheduleBroadcast',
+    'btnPresetNow',
+    'btnToggleBroadcastLoop',
+    'btnToggleEternalBroadcast',
+    'btnTimelineZoomOut',
+    'btnTimelineZoomReset',
+    'btnTimelineZoomIn',
+    'btnTimelineExtendScale',
+    'btnPickFromMyTracks',
+    'btnOpenPickPlaylistForTimeline',
+    'btnUploadPlaylist',
+    'btnUploadNewSlot',
+    'btnOpenInsertWordsModal',
+    'btnToggleMediaDrawer',
+    'btnOpenSmartGapFill',
+    'btnSaveTimeline'
+  ]) {
+    assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, `Editor control ${id} must retain one stable DOM id`);
+  }
 });
 
 test('maintenance mode: radio page and API gating', async () => {

@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/site/radio.css">
-<link rel="stylesheet" href="/site/radio-mobile.css?v=2" media="(max-width: 768px)">
+<link rel="stylesheet" href="/site/radio-mobile.css?v=3" media="(max-width: 768px)">
 <link rel="stylesheet" href="/image-lightbox.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -353,18 +353,27 @@
 
           <div class="radio-time-sync-widget" id="radioTimeSyncWidget" title="Системное время вашего устройства и часовой пояс">
             <span id="radioServerClock"><i class="fas fa-clock"></i> Эфир: --:--:--</span>
-            <span id="radioUserTimezoneBadge" class="badge" style="background:rgba(99,102,241,0.2); color:#a5b4fc; font-size:0.75rem; padding:3px 8px; border-radius:6px; font-family:monospace;" title="Ваш часовой пояс">UTC</span>
+            <span id="radioUserTimezoneBadge" class="badge" style="background:rgba(255,71,87,0.16); color:#ff9aa3; font-size:0.75rem; padding:3px 8px; border-radius:6px; font-family:monospace;" title="Ваш часовой пояс">UTC</span>
             <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSyncClock" title="Проверить системное время и часовой пояс"><i class="fas fa-location-dot"></i></button>
           </div>
 
-          <div class="radio-editor-danger-actions">
-            <button type="button" class="btn btn-outline-danger btn-sm" id="btnClearTimelineBtn" title="Очистить всю сетку вещания (освободить эфир)">
-              <i class="fas fa-trash-can"></i> Очистить сетку
-            </button>
-            <button type="button" class="btn btn-outline-danger btn-sm" id="btnReleaseStationBtn" title="Удалить радиостанцию и освободить частоту">
-              <i class="fas fa-door-open"></i> Освободить частоту
-            </button>
-          </div>
+          <details class="radio-editor-disclosure radio-editor-danger-disclosure">
+            <summary>
+              <i class="fas fa-triangle-exclamation"></i>
+              <span>Опасные действия</span>
+              <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+            </summary>
+            <div class="radio-editor-disclosure-body">
+              <div class="radio-editor-danger-actions">
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btnClearTimelineBtn" title="Очистить всю сетку вещания (освободить эфир)">
+                  <i class="fas fa-trash-can"></i> Очистить сетку
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btnReleaseStationBtn" title="Удалить радиостанцию и освободить частоту">
+                  <i class="fas fa-door-open"></i> Освободить частоту
+                </button>
+              </div>
+            </div>
+          </details>
         </div>
 
         <!-- ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМОВ РЕДАКТОРА: ЛЕНТА НА 24Ч vs КАЛЕНДАРЬ РАСПИСАНИЯ -->
@@ -420,29 +429,37 @@
             </button>
           </div>
 
-          <!-- Правая колонка: Расписание старта и зацикливание (БЕЗ автозапуска при вводе!) -->
-          <div class="radio-deck-schedule-controls">
-            <div class="radio-schedule-time-row">
-              <label for="editorBroadcastStartTime"><i class="far fa-clock"></i> Старт вещания:</label>
-              <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
-              <button type="button" class="btn btn-primary btn-sm" id="btnScheduleBroadcast" title="Запланировать запуск эфира на указанное время">
-                <i class="fas fa-calendar-check"></i> Запланировать
-              </button>
+          <details class="radio-editor-disclosure radio-editor-schedule-disclosure">
+            <summary>
+              <i class="far fa-clock"></i>
+              <span>Расписание запуска и повторы</span>
+              <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+            </summary>
+            <div class="radio-editor-disclosure-body">
+              <div class="radio-deck-schedule-controls">
+                <div class="radio-schedule-time-row">
+                  <label for="editorBroadcastStartTime"><i class="far fa-clock"></i> Старт вещания:</label>
+                  <input type="datetime-local" id="editorBroadcastStartTime" class="radio-form-input radio-form-input-sm" title="Укажите точное время старта вещания в эфире">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnScheduleBroadcast" title="Запланировать запуск эфира на указанное время">
+                    <i class="fas fa-calendar-check"></i> Запланировать
+                  </button>
+                </div>
+                <div class="radio-schedule-presets-row">
+                  <span class="radio-schedule-presets-label">Быстрый выбор:</span>
+                  <button type="button" class="radio-preset-chip" id="btnPresetNow">Сейчас</button>
+                  <button type="button" class="radio-preset-chip" id="btnPresetPlus5">+5 мин</button>
+                  <button type="button" class="radio-preset-chip" id="btnPresetPlus15">+15 мин</button>
+                  <button type="button" class="radio-preset-chip" id="btnPresetNextHour">В начале часа</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btnToggleBroadcastLoop" title="Зацикливать вещание радиостанции по кругу (бесконечный эфир)">
+                    <i class="fas fa-repeat"></i> <span id="broadcastLoopBtnText">Зациклить эфир</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btnToggleEternalBroadcast" title="Вечный зацикленный эфир (не удалять эфир через 32 часа, бесконечное вещание по кругу)">
+                    <i class="fas fa-infinity"></i> <span id="eternalBroadcastBtnText">Вечный зацикленный эфир</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="radio-schedule-presets-row">
-              <span style="font-size:0.75rem; color:#94a3b8;">Быстрый выбор:</span>
-              <button type="button" class="radio-preset-chip" id="btnPresetNow">Сейчас</button>
-              <button type="button" class="radio-preset-chip" id="btnPresetPlus5">+5 мин</button>
-              <button type="button" class="radio-preset-chip" id="btnPresetPlus15">+15 мин</button>
-              <button type="button" class="radio-preset-chip" id="btnPresetNextHour">В начале часа</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btnToggleBroadcastLoop" title="Зацикливать вещание радиостанции по кругу (бесконечный эфир)">
-                <i class="fas fa-repeat"></i> <span id="broadcastLoopBtnText">Зациклить эфир</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btnToggleEternalBroadcast" title="Вечный зацикленный эфир (не удалять эфир через 32 часа, бесконечное вещание по кругу)">
-                <i class="fas fa-infinity"></i> <span id="eternalBroadcastBtnText">Вечный зацикленный эфир</span>
-              </button>
-            </div>
-          </div>
+          </details>
         </div>
 
         <!-- 1. ИНТЕРАКТИВНЫЙ ТАЙМЛАЙН-ВИДЕОРЕДАКТОР (TIMELINE RIBBON) -->
@@ -464,20 +481,29 @@
                 <i class="fas fa-tower-broadcast"></i> В эфир
               </button>
             </div>
-            <div class="radio-timeline-nle-zoom">
-              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomOut" title="Уменьшить масштаб (Ctrl + Scroll down)">
-                <i class="fas fa-magnifying-glass-minus"></i>
-              </button>
-              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomReset" title="Сбросить масштаб">
-                <i class="fas fa-arrows-left-right"></i>
-              </button>
-              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomIn" title="Увеличить масштаб (Ctrl + Scroll up)">
-                <i class="fas fa-magnifying-glass-plus"></i>
-              </button>
-              <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineExtendScale" title="Увеличить шкалу времени эфира (+15 мин)" style="width:auto; padding:0 8px; font-size:0.75rem; font-weight:700;">
-                <i class="fas fa-plus"></i> 15м
-              </button>
-            </div>
+            <details class="radio-editor-disclosure radio-timeline-view-disclosure">
+              <summary>
+                <i class="fas fa-magnifying-glass"></i>
+                <span>Вид</span>
+                <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+              </summary>
+              <div class="radio-editor-disclosure-body">
+                <div class="radio-timeline-nle-zoom">
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomOut" title="Уменьшить масштаб (Ctrl + Scroll down)">
+                    <i class="fas fa-magnifying-glass-minus"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomReset" title="Сбросить масштаб">
+                    <i class="fas fa-arrows-left-right"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomIn" title="Увеличить масштаб (Ctrl + Scroll up)">
+                    <i class="fas fa-magnifying-glass-plus"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineExtendScale" title="Увеличить шкалу времени эфира (+15 мин)" style="width:auto; padding:0 8px; font-size:0.75rem; font-weight:700;">
+                    <i class="fas fa-plus"></i> 15м
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
 
           <!-- Область прокрутки таймлайна с линейкой времени и дорожкой клипов -->
@@ -516,30 +542,50 @@
 
         <!-- Панель добавления слотов и инструментов студии -->
         <div class="radio-studio-add-toolbar">
-          <div class="radio-studio-add-actions">
-            <button type="button" class="btn btn-secondary btn-sm" id="btnPickFromMyTracks">
-              <i class="fas fa-music"></i> + Трек из медиатеки
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnOpenPickPlaylistForTimeline">
-              <i class="fas fa-list-check"></i> + Плейлист в эфир
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnUploadPlaylist">
-              <i class="fas fa-folder-arrow-up"></i> Загрузить плейлист
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnUploadNewSlot">
-              <i class="fas fa-file-arrow-up"></i> 1 аудиофайл
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" id="btnOpenInsertWordsModal">
-              <i class="fas fa-clock"></i> Слова по времени (Якорь)
-            </button>
-          </div>
-          <div class="radio-studio-side-actions">
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnToggleMediaDrawer" title="Открыть боковую панель медиатеки">
-              <i class="fas fa-folder-music"></i> Медиатека
-            </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnOpenSmartGapFill" title="Заполнить свободные интервалы музыкой из плейлистов">
-              <i class="fas fa-bolt"></i> Заполнить пустоту
-            </button>
+          <details class="radio-editor-disclosure radio-studio-add-disclosure">
+            <summary>
+              <i class="fas fa-plus"></i>
+              <span>Добавить в сетку</span>
+              <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+            </summary>
+            <div class="radio-editor-disclosure-body">
+              <div class="radio-studio-add-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnPickFromMyTracks">
+                  <i class="fas fa-music"></i> + Трек из медиатеки
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnOpenPickPlaylistForTimeline">
+                  <i class="fas fa-list-check"></i> + Плейлист в эфир
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnUploadPlaylist">
+                  <i class="fas fa-folder-arrow-up"></i> Загрузить плейлист
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnUploadNewSlot">
+                  <i class="fas fa-file-arrow-up"></i> 1 аудиофайл
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnOpenInsertWordsModal">
+                  <i class="fas fa-clock"></i> Слова по времени (Якорь)
+                </button>
+              </div>
+            </div>
+          </details>
+          <details class="radio-editor-disclosure radio-studio-tools-disclosure">
+            <summary>
+              <i class="fas fa-wand-magic-sparkles"></i>
+              <span>Инструменты</span>
+              <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+            </summary>
+            <div class="radio-editor-disclosure-body">
+              <div class="radio-studio-side-actions">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnToggleMediaDrawer" title="Открыть боковую панель медиатеки">
+                  <i class="fas fa-folder-music"></i> Медиатека
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnOpenSmartGapFill" title="Заполнить свободные интервалы музыкой из плейлистов">
+                  <i class="fas fa-bolt"></i> Заполнить пустоту
+                </button>
+              </div>
+            </div>
+          </details>
+          <div class="radio-studio-publish-action">
             <button type="button" class="btn btn-primary btn-sm" id="btnSaveTimeline">
               <i class="fas fa-tower-broadcast"></i> Опубликовать в эфир (24ч)
             </button>

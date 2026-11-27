@@ -438,6 +438,13 @@
     width: 100%;
   }
 
+  body[data-page="radio"] #btnSyncClock {
+    flex: 0 0 36px;
+    width: 36px;
+    min-height: 36px;
+    padding: 0;
+  }
+
   body[data-page="radio"] .radio-editor-subnav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -453,6 +460,50 @@
     gap: 5px;
     font-size: 12px;
     text-align: center;
+  }
+
+  body[data-page="radio"] .radio-editor-toolbar-top {
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  body[data-page="radio"] .radio-editor-station-select-wrap,
+  body[data-page="radio"] .radio-time-sync-widget {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  body[data-page="radio"] .radio-editor-station-select-wrap select {
+    flex: 1 1 100%;
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-editor-danger-disclosure {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  body[data-page="radio"] .radio-editor-disclosure > summary {
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  body[data-page="radio"] .radio-editor-disclosure-body {
+    padding: 0 10px 10px;
+  }
+
+  body[data-page="radio"] .radio-editor-danger-actions {
+    flex-wrap: wrap;
+    margin: 0;
+  }
+
+  body[data-page="radio"] .radio-editor-danger-actions .btn {
+    flex: 1 1 auto;
+    min-height: 40px;
+    white-space: normal;
   }
 
   body[data-page="radio"] .radio-draft-banner,
@@ -472,6 +523,64 @@
     gap: 6px;
   }
 
+  body[data-page="radio"] .radio-broadcast-master-deck {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="radio"] .radio-deck-primary-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-deck-primary-actions .radio-cta-broadcast-btn,
+  body[data-page="radio"] .radio-deck-primary-actions #btnSaveTimelineDraft {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  body[data-page="radio"] .radio-deck-primary-actions #btnSetStartTimeNow {
+    grid-column: 1 / -1;
+  }
+
+  body[data-page="radio"] .radio-deck-primary-actions > .btn {
+    min-height: 40px;
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  body[data-page="radio"] .radio-editor-schedule-disclosure {
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-deck-schedule-controls,
+  body[data-page="radio"] .radio-schedule-time-row,
+  body[data-page="radio"] .radio-schedule-presets-row {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-schedule-time-row label {
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-schedule-time-row .radio-form-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  body[data-page="radio"] .radio-schedule-presets-row .radio-preset-chip {
+    flex: 1 1 auto;
+    min-height: 36px;
+  }
+
+  body[data-page="radio"] .radio-schedule-presets-row > .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
   body[data-page="radio"] .radio-timeline-nle-header {
     align-items: flex-start;
     padding: 10px;
@@ -489,6 +598,20 @@
 
   body[data-page="radio"] .radio-timeline-nle-zoom {
     margin-left: auto;
+  }
+
+  body[data-page="radio"] .radio-timeline-view-disclosure {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  body[data-page="radio"] .radio-timeline-view-disclosure .radio-editor-disclosure-body {
+    padding-top: 0;
+  }
+
+  body[data-page="radio"] .radio-timeline-view-disclosure .radio-timeline-nle-zoom {
+    justify-content: flex-start;
+    margin-left: 0;
   }
 
   body[data-page="radio"] .radio-timeline-track-scroll {
@@ -544,6 +667,38 @@
 
   body[data-page="radio"] .radio-cal-sidebar {
     padding: 12px;
+  }
+
+  body[data-page="radio"] .radio-studio-add-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="radio"] .radio-studio-publish-action {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-studio-publish-action #btnSaveTimeline {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  body[data-page="radio"] .radio-studio-add-actions,
+  body[data-page="radio"] .radio-studio-side-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  body[data-page="radio"] .radio-studio-add-actions .btn,
+  body[data-page="radio"] .radio-studio-side-actions .btn {
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px;
+    white-space: normal;
+    font-size: 12px;
   }
 
   body[data-page="radio"] .radio-track-view-page {
@@ -942,6 +1097,7 @@
   }
 
   body[data-page="radio"] .radio-editor-danger-actions {
+    display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
 

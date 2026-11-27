@@ -1534,7 +1534,7 @@
   font-size: 0.95rem !important;
   padding: 10px 20px !important;
   border-radius: 10px !important;
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center !important;
   gap: 8px !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -3446,6 +3446,11 @@ body[data-page="radio"] {
   --radio-card-bg: var(--background-secondary, #2f3136);
   --radio-deck-bg: var(--background-secondary, #2f3136);
   --radio-border: rgba(255, 255, 255, 0.1);
+  --radio-accent: #ff4757;
+  --brand-accent: #ff4757;
+  --blurple: #ff4757;
+  --blurple-hover: #e63c4b;
+  --accent-purple: #ff8b95;
 }
 
 body[data-page="radio"] .site-main > .site-section {
@@ -3454,7 +3459,7 @@ body[data-page="radio"] .site-main > .site-section {
 
 body[data-page="radio"] .radio-hero-section {
   background:
-    radial-gradient(ellipse at 50% 0, rgba(88, 101, 242, 0.16), transparent 58%),
+    radial-gradient(ellipse at 50% 0, rgba(255, 71, 87, 0.16), transparent 58%),
     radial-gradient(ellipse at 82% 55%, rgba(255, 71, 87, 0.08), transparent 40%),
     var(--background-secondary, #2f3136);
 }
@@ -3493,8 +3498,8 @@ body[data-page="radio"] .radio-nav-tab:hover {
 
 body[data-page="radio"] .radio-nav-tab.is-active {
   color: #fff;
-  background: var(--blurple, #5865f2);
-  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.25);
+  background: var(--radio-accent);
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.25);
 }
 
 body[data-page="radio"] .radio-deck,
@@ -3516,7 +3521,7 @@ body[data-page="radio"] .radio-deck {
 }
 
 body[data-page="radio"] .radio-deck::before {
-  background: linear-gradient(90deg, var(--blurple, #5865f2), #8b5cf6, var(--radio-accent));
+  background: linear-gradient(90deg, var(--radio-accent), #ff8490, var(--radio-accent));
 }
 
 body[data-page="radio"] .radio-deck-body,
@@ -3577,14 +3582,14 @@ body[data-page="radio"] .radio-track-item:hover,
 body[data-page="radio"] .radio-playlist-card:hover,
 body[data-page="radio"] .radio-sched-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(88, 101, 242, 0.55);
+  border-color: rgba(255, 71, 87, 0.55);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
 }
 
 body[data-page="radio"] .radio-station-card.is-active-tune {
-  border-color: var(--blurple, #5865f2);
-  background: rgba(88, 101, 242, 0.1);
-  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.16);
+  border-color: var(--radio-accent);
+  background: rgba(255, 71, 87, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 71, 87, 0.16);
 }
 
 body[data-page="radio"] .radio-feed-toolbar {
@@ -3601,7 +3606,7 @@ body[data-page="radio"] .radio-feed-toolbar h3 {
 }
 
 body[data-page="radio"] .radio-feed-toolbar h3 i {
-  color: var(--blurple, #5865f2);
+  color: var(--radio-accent);
 }
 
 body[data-page="radio"] .radio-filter-btn {
@@ -3617,9 +3622,9 @@ body[data-page="radio"] .radio-filter-btn:hover {
 }
 
 body[data-page="radio"] .radio-filter-btn.is-active {
-  background: rgba(88, 101, 242, 0.18);
-  border-color: rgba(88, 101, 242, 0.5);
-  color: #c7d2fe;
+  background: rgba(255, 71, 87, 0.18);
+  border-color: rgba(255, 71, 87, 0.5);
+  color: #ffb4bb;
 }
 
 body[data-page="radio"] .radio-editor-toolbar-top,
@@ -3638,8 +3643,8 @@ body[data-page="radio"] .radio-editor-subnav {
 }
 
 body[data-page="radio"] .radio-editor-subnav-btn.is-active {
-  background: var(--blurple, #5865f2);
-  box-shadow: 0 2px 8px rgba(88, 101, 242, 0.25);
+  background: var(--radio-accent);
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.25);
 }
 
 body[data-page="radio"] .radio-timeline-nle-wrapper {
@@ -3725,27 +3730,27 @@ body[data-page="radio"] .radio-form-textarea {
 body[data-page="radio"] .radio-form-input:focus,
 body[data-page="radio"] .radio-form-select:focus,
 body[data-page="radio"] .radio-form-textarea:focus {
-  border-color: var(--blurple, #5865f2);
-  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
+  border-color: var(--radio-accent);
+  box-shadow: 0 0 0 2px rgba(255, 71, 87, 0.2);
 }
 
 body[data-page="radio"] .radio-btn-play,
 body[data-page="radio"] .standalone-play-btn,
 body[data-page="radio"] .feed-player-play-btn {
-  background: var(--blurple, #5865f2);
-  box-shadow: 0 3px 12px rgba(88, 101, 242, 0.3);
+  background: var(--radio-accent);
+  box-shadow: 0 3px 12px rgba(255, 71, 87, 0.3);
 }
 
 body[data-page="radio"] .radio-btn-play:hover,
 body[data-page="radio"] .standalone-play-btn:hover,
 body[data-page="radio"] .feed-player-play-btn:hover {
-  background: var(--blurple-hover, #4752c4);
+  background: var(--blurple-hover);
 }
 
 body[data-page="radio"] .radio-volume-slider,
 body[data-page="radio"] .standalone-vol-slider,
 body[data-page="radio"] .feed-player-volume {
-  accent-color: var(--blurple, #5865f2);
+  accent-color: var(--radio-accent);
 }
 
 body[data-page="radio"] .radio-controls-main .radio-action-btn.is-active,
@@ -3755,16 +3760,16 @@ body[data-page="radio"] .standalone-action-btn.is-active,
 body[data-page="radio"] .standalone-action-btn.is-muted,
 body[data-page="radio"] .feed-player-sub-btn.is-active,
 body[data-page="radio"] .feed-player-sub-btn.is-muted {
-  color: #c7d2fe !important;
-  border-color: rgba(88, 101, 242, 0.5) !important;
-  background: rgba(88, 101, 242, 0.18) !important;
+  color: #ffb4bb !important;
+  border-color: rgba(255, 71, 87, 0.5) !important;
+  background: rgba(255, 71, 87, 0.18) !important;
   box-shadow: none !important;
 }
 
 body[data-page="radio"] .radio-progress-fill,
 body[data-page="radio"] .standalone-progress-fill,
 body[data-page="radio"] .feed-player-progress-fill {
-  background: linear-gradient(90deg, var(--blurple, #5865f2), var(--accent-purple, #a78bfa));
+  background: linear-gradient(90deg, var(--radio-accent), var(--accent-purple));
 }
 
 body[data-page="radio"] .radio-feed-player-bar {
@@ -3797,36 +3802,36 @@ body[data-page="radio"] .alltell-global-time {
 body[data-page="radio"] .alltell-global-audio-btn.is-active,
 body[data-page="radio"] .alltell-global-tool-btn.is-muted,
 body[data-page="radio"] .alltell-global-tool-btn.is-active {
-  color: #c7d2fe;
-  background: rgba(88, 101, 242, 0.18);
+  color: #ffb4bb;
+  background: rgba(255, 71, 87, 0.18);
   box-shadow: none;
 }
 
 body[data-page="radio"] .alltell-global-play-btn {
-  background: var(--blurple, #5865f2);
-  box-shadow: 0 2px 10px rgba(88, 101, 242, 0.3);
+  background: var(--radio-accent);
+  box-shadow: 0 2px 10px rgba(255, 71, 87, 0.3);
 }
 
 body[data-page="radio"] .alltell-global-play-btn:hover {
-  background: var(--blurple-hover, #4752c4);
+  background: var(--blurple-hover);
 }
 
 body[data-page="radio"] .alltell-global-progress-fill {
-  background: linear-gradient(90deg, var(--blurple, #5865f2), var(--accent-purple, #a78bfa));
+  background: linear-gradient(90deg, var(--radio-accent), var(--accent-purple));
 }
 
 body[data-page="radio"] .alltell-global-vol-slider {
-  accent-color: var(--blurple, #5865f2);
+  accent-color: var(--radio-accent);
 }
 
 body[data-page="radio"] .alltell-global-link-btn {
-  background: rgba(88, 101, 242, 0.16);
-  border-color: rgba(88, 101, 242, 0.35);
-  color: #c7d2fe;
+  background: rgba(255, 71, 87, 0.16);
+  border-color: rgba(255, 71, 87, 0.35);
+  color: #ffb4bb;
 }
 
 body[data-page="radio"] .alltell-global-link-btn:hover {
-  background: var(--blurple, #5865f2);
+  background: var(--radio-accent);
   color: #fff;
 }
 
@@ -3835,7 +3840,247 @@ body[data-page="radio"] .radio-media-drawer {
   border-color: var(--background-accent, rgba(255, 255, 255, 0.1));
 }
 
+body[data-page="radio"] .radio-preset-chip:hover,
+body[data-page="radio"] .radio-timeline-zoom-btn:hover {
+  background: rgba(255, 71, 87, 0.18);
+  border-color: rgba(255, 71, 87, 0.45);
+  color: #fff;
+}
+
+body[data-page="radio"] .radio-cal-day.is-today {
+  border-color: rgba(255, 71, 87, 0.6);
+  background: rgba(255, 71, 87, 0.07);
+}
+
+body[data-page="radio"] .radio-cal-day.is-today .radio-cal-day-num,
+body[data-page="radio"] .radio-sched-card-time {
+  color: #ff7b86;
+}
+
+body[data-page="radio"] .radio-cal-day.is-selected {
+  border-color: var(--radio-accent) !important;
+  background: rgba(255, 71, 87, 0.12) !important;
+  box-shadow: 0 0 12px rgba(255, 71, 87, 0.25);
+}
+
+body[data-page="radio"] .radio-cal-mini-chip:not(.is-live):not(.is-past) {
+  background: rgba(255, 71, 87, 0.18);
+  color: #ffb4bb;
+  border-color: rgba(255, 71, 87, 0.4);
+}
+
+body[data-page="radio"] .radio-timeline-badge {
+  background: rgba(255, 71, 87, 0.18);
+  color: #ffb4bb;
+  border-color: rgba(255, 71, 87, 0.35);
+}
+
+body[data-page="radio"] .radio-timeline-clip.is-drag-over-left::before,
+body[data-page="radio"] .radio-timeline-clip.is-drag-over-right::after {
+  background: var(--radio-accent);
+  box-shadow: 0 0 12px var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-timeline-edge-handle:hover,
+body[data-page="radio"] .radio-timeline-edge-handle.is-resizing {
+  background: rgba(255, 71, 87, 0.5);
+}
+
+body[data-page="radio"] .radio-timeline-edge-handle:hover::after,
+body[data-page="radio"] .radio-timeline-edge-handle.is-resizing::after {
+  box-shadow: 0 0 8px var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-eb-block:hover,
+body[data-page="radio"] .radio-eb-block:focus-within {
+  border-color: rgba(255, 71, 87, 0.5);
+}
+
+body[data-page="radio"] .radio-eb-block.is-drag-over {
+  border-color: var(--radio-accent);
+  background: rgba(255, 71, 87, 0.1);
+}
+
+body[data-page="radio"] .radio-eb-drag-handle:hover,
+body[data-page="radio"] .radio-nested-insert-btn {
+  color: var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-nested-insert-btn:hover {
+  background: rgba(255, 71, 87, 0.2);
+  border-color: var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-eb-block.is-playing-block {
+  border-color: rgba(255, 71, 87, 0.8) !important;
+  box-shadow: 0 0 18px rgba(255, 71, 87, 0.3) !important;
+  background: rgba(76, 15, 23, 0.4) !important;
+}
+
+body[data-page="radio"] .radio-track-type-badge.type-track {
+  background: rgba(255, 71, 87, 0.2);
+  color: #ff9aa3;
+}
+
+body[data-page="radio"] .btn-primary {
+  border-color: var(--radio-accent);
+  background: var(--radio-accent);
+}
+
+body[data-page="radio"] .btn-primary:hover {
+  border-color: var(--blurple-hover);
+  background: var(--blurple-hover);
+}
+
+body[data-page="radio"] .radio-editor-disclosure {
+  min-width: 0;
+  border: 1px solid var(--background-accent, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--background-tertiary, #202225);
+  color: var(--text-normal, #dcddde);
+}
+
+body[data-page="radio"] .radio-editor-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border-radius: inherit;
+  color: var(--header-secondary, #b9bbbe);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+body[data-page="radio"] .radio-editor-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+body[data-page="radio"] .radio-editor-disclosure > summary:hover {
+  color: var(--header-primary, #fff);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body[data-page="radio"] .radio-editor-disclosure > summary > i:first-child {
+  color: var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-editor-disclosure-chevron {
+  margin-left: auto;
+  font-size: 0.75rem;
+  transition: transform 0.18s ease;
+}
+
+body[data-page="radio"] .radio-editor-disclosure[open] > summary {
+  color: var(--header-primary, #fff);
+}
+
+body[data-page="radio"] .radio-editor-disclosure[open] .radio-editor-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+body[data-page="radio"] .radio-editor-disclosure-body {
+  padding: 0 11px 11px;
+}
+
+body[data-page="radio"] .radio-editor-toolbar-top > .radio-editor-danger-disclosure {
+  margin-left: auto;
+}
+
+body[data-page="radio"] .radio-editor-danger-disclosure .radio-editor-danger-actions {
+  margin: 0;
+}
+
+body[data-page="radio"] .radio-broadcast-master-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+body[data-page="radio"] .radio-deck-primary-actions {
+  width: 100%;
+  gap: 8px;
+}
+
+body[data-page="radio"] .radio-editor-schedule-disclosure {
+  width: 100%;
+}
+
+body[data-page="radio"] .radio-editor-schedule-disclosure .radio-deck-schedule-controls {
+  gap: 12px;
+}
+
+body[data-page="radio"] .radio-editor-schedule-disclosure .radio-schedule-presets-label {
+  color: var(--header-secondary, #b9bbbe);
+  font-size: 0.78rem;
+}
+
+body[data-page="radio"] .radio-editor-schedule-disclosure .radio-schedule-presets-row {
+  gap: 7px;
+}
+
+body[data-page="radio"] #btnMasterApplyDraft {
+  display: none !important;
+}
+
+body[data-page="radio"] .radio-editor-danger-actions .btn {
+  min-height: 36px;
+}
+
+body[data-page="radio"] .radio-timeline-view-disclosure {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+body[data-page="radio"] .radio-timeline-view-disclosure .radio-editor-disclosure-body {
+  padding-top: 2px;
+}
+
+body[data-page="radio"] .radio-timeline-view-disclosure .radio-timeline-nle-zoom {
+  justify-content: flex-end;
+}
+
+body[data-page="radio"] .radio-studio-add-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+body[data-page="radio"] .radio-studio-add-toolbar .radio-editor-disclosure-body {
+  padding-top: 2px;
+}
+
+body[data-page="radio"] .radio-studio-add-actions,
+body[data-page="radio"] .radio-studio-side-actions {
+  align-items: stretch;
+}
+
+body[data-page="radio"] .radio-studio-publish-action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+body[data-page="radio"] #btnSaveTimeline {
+  min-height: 40px;
+  padding: 9px 16px;
+  border-color: var(--radio-accent);
+  background: var(--radio-accent);
+  box-shadow: 0 3px 12px rgba(255, 71, 87, 0.25);
+}
+
+body[data-page="radio"] #btnSaveTimeline:hover {
+  border-color: var(--blurple-hover);
+  background: var(--blurple-hover);
+}
+
 body[data-page="radio"] :is(button, a, input, select, textarea):focus-visible {
-  outline: 2px solid var(--blurple, #5865f2);
+  outline: 2px solid var(--radio-accent);
   outline-offset: 2px;
 }
