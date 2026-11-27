@@ -194,6 +194,7 @@
   }
 
   audio.addEventListener('loadedmetadata', () => {
+    updateMediaSessionPosition();
     if (!visualizerContext || !visualizerAnalyser) return;
     const sourceUrl = audio.currentSrc || audio.src || '';
     if (visualizerSource && visualizerSourceUrl !== sourceUrl) {
@@ -464,6 +465,7 @@
   audio.addEventListener('timeupdate', () => {
     state.currentTime = audio.currentTime || 0;
     state.duration = audio.duration || state.duration;
+    updateMediaSessionPosition();
     if (audio.duration && (!state.track || !state.track.duration || state.track.duration <= 0)) {
       handleDetectedDuration();
     }
@@ -472,6 +474,7 @@
 
   audio.addEventListener('seeked', () => {
     state.currentTime = audio.currentTime || 0;
+    updateMediaSessionPosition();
     updateProgressUI();
   });
 
@@ -605,6 +608,22 @@
 
       navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
     } catch (_) {}
+    updateMediaSessionPosition();
+  }
+
+  function updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
+
+    const duration = Number.isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration
+      : Number(state.track && state.track.duration) || Number(state.currentSlot && state.currentSlot.duration) || 0;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
+    const currentTime = Math.max(0, Math.min(duration, Number(audio.currentTime) || 0));
+    const playbackRate = Number.isFinite(audio.playbackRate) && audio.playbackRate > 0 ? audio.playbackRate : 1;
+    try {
+      navigator.mediaSession.setPositionState({ duration, playbackRate, position: currentTime });
+    } catch (_) {}
   }
 
   if ('mediaSession' in navigator) {
@@ -620,6 +639,14 @@
             seek(details.seekTime / dur);
           }
         }
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
+        if (dur > 0) seek(Math.max(0, (audio.currentTime - (details.seekOffset || 10)) / dur));
+      });
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const dur = audio.duration || (state.track ? state.track.duration : (state.currentSlot ? state.currentSlot.duration : 0));
+        if (dur > 0) seek(Math.min(1, (audio.currentTime + (details.seekOffset || 10)) / dur));
       });
     } catch (_) {}
   }
@@ -1365,11 +1392,26 @@
       toggleLoop();
     });
 
-    domBar.progressBar?.addEventListener('click', (e) => {
+    let seekingPointerId = null;
+    const seekFromPointer = (e) => {
       const rect = domBar.progressBar.getBoundingClientRect();
+      if (!rect.width) return;
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       seek(ratio);
+    };
+    domBar.progressBar?.addEventListener('pointerdown', (e) => {
+      seekingPointerId = e.pointerId;
+      domBar.progressBar.setPointerCapture(e.pointerId);
+      seekFromPointer(e);
     });
+    domBar.progressBar?.addEventListener('pointermove', (e) => {
+      if (e.pointerId === seekingPointerId) seekFromPointer(e);
+    });
+    const finishSeeking = (e) => {
+      if (e.pointerId === seekingPointerId) seekingPointerId = null;
+    };
+    domBar.progressBar?.addEventListener('pointerup', finishSeeking);
+    domBar.progressBar?.addEventListener('pointercancel', finishSeeking);
 
     domBar.muteBtn?.addEventListener('click', toggleMute);
     domBar.volSlider?.addEventListener('input', (e) => setVolume(parseFloat(e.target.value)));

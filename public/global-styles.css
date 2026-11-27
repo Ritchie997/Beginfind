@@ -4574,6 +4574,68 @@ body.articles-page .content-body {
   }
 }
 
+@media (max-width: 600px) {
+  .alltell-global-audio-bar {
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .alltell-global-audio-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "info actions"
+      "center center";
+    gap: 8px 10px;
+  }
+
+  .alltell-global-audio-info {
+    grid-area: info;
+    min-width: 0;
+    max-width: none;
+    gap: 8px;
+  }
+
+  .alltell-global-audio-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    font-size: 1rem;
+  }
+
+  .alltell-global-audio-actions {
+    grid-area: actions;
+    gap: 4px;
+  }
+
+  .alltell-global-audio-center {
+    grid-area: center;
+    width: 100%;
+    max-width: none;
+    gap: 4px;
+  }
+
+  .alltell-global-controls-row {
+    gap: 14px;
+  }
+
+  .alltell-global-progress-wrap {
+    gap: 6px;
+  }
+
+  .alltell-global-time {
+    width: 34px;
+    font-size: 0.68rem;
+  }
+
+  .alltell-global-progress-bar {
+    height: 6px;
+    padding: 8px 0;
+    box-sizing: content-box;
+    background-clip: content-box;
+    touch-action: pan-y;
+  }
+}
+
 /* Глобальная защита от отображения скрытых элементов и модалок */
 [hidden],
 .radio-modal-backdrop[hidden] {

@@ -6456,16 +6456,20 @@
       }
     });
 
-    dom.deckProgressBar?.addEventListener('click', (e) => {
+    let seekingDeckPointerId = null;
+    const seekDeckFromPointer = (e) => {
       const gAudio = getGlobalAudio();
       if (!gAudio) return;
       const rect = dom.deckProgressBar.getBoundingClientRect();
+      if (!rect.width) return;
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
 
       const curr = gAudio.getState();
-      if (curr.mode === 'radio' && state.currentStation && !state.isTimeshift && state.currentSlot) {
-        const curOffset = Math.max(0, (Date.now() - new Date(state.currentSlot.startTime).getTime()) / 1000);
-        const dur = (gAudio.audio && gAudio.audio.duration) ? gAudio.audio.duration : (state.currentSlot.duration || 0);
+      const currentSlot = curr.currentSlot || state.currentSlot;
+      const startTime = currentSlot && (currentSlot.startTime || currentSlot.start_time);
+      if (curr.mode === 'radio' && state.currentStation && !state.isTimeshift && currentSlot && startTime) {
+        const curOffset = Math.max(0, (Date.now() - new Date(startTime).getTime()) / 1000);
+        const dur = (gAudio.audio && gAudio.audio.duration) ? gAudio.audio.duration : (currentSlot.duration || 0);
         const maxLiveRatio = dur > 0 ? (curOffset / dur) : 1;
 
         if (ratio > maxLiveRatio + 0.03) {
@@ -6479,7 +6483,20 @@
 
       gAudio.seek(ratio);
       updateDeckUI();
+    };
+    dom.deckProgressBar?.addEventListener('pointerdown', (e) => {
+      seekingDeckPointerId = e.pointerId;
+      dom.deckProgressBar.setPointerCapture(e.pointerId);
+      seekDeckFromPointer(e);
     });
+    dom.deckProgressBar?.addEventListener('pointermove', (e) => {
+      if (e.pointerId === seekingDeckPointerId) seekDeckFromPointer(e);
+    });
+    const finishDeckSeeking = (e) => {
+      if (e.pointerId === seekingDeckPointerId) seekingDeckPointerId = null;
+    };
+    dom.deckProgressBar?.addEventListener('pointerup', finishDeckSeeking);
+    dom.deckProgressBar?.addEventListener('pointercancel', finishDeckSeeking);
 
     dom.deckVolumeSlider?.addEventListener('input', (e) => {
       const gAudio = getGlobalAudio();

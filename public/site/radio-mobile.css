@@ -175,6 +175,16 @@
     min-height: 8px;
   }
 
+  body[data-page="radio"] .radio-progress-bar,
+  body[data-page="radio"] .standalone-progress-bar,
+  body[data-page="radio"] .feed-player-progress-bar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    box-sizing: content-box;
+    background-clip: content-box;
+    touch-action: pan-y;
+  }
+
   body[data-page="radio"] .radio-time-row {
     margin-top: 5px;
     font-size: 11px;
@@ -1221,5 +1231,11 @@
 
   body[data-page="radio"] .feed-player-right #feedPlayerOpenTrackBtn {
     display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  body[data-page="radio"] .alltell-global-audio-bar {
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
   }
 }

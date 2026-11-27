@@ -368,6 +368,8 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   const playerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
   const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
   const radioCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const globalCss = fs.readFileSync(path.resolve(__dirname, '../../public/global-styles.css'), 'utf8').replace(/\r\n/g, '\n');
+  const radioMobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8').replace(/\r\n/g, '\n');
 
   // 1. Background playback & MediaSession
   assert.ok(playerJs.includes('mediaSession'), 'Must integrate navigator.mediaSession');
@@ -376,6 +378,13 @@ test('global audio player: background playback, MediaSession, cross-tab leader a
   assert.ok(playerJs.includes("'pause'"), 'Must handle mediaSession pause');
   assert.ok(playerJs.includes("'previoustrack'"), 'Must handle mediaSession previoustrack');
   assert.ok(playerJs.includes("'nexttrack'"), 'Must handle mediaSession nexttrack');
+  assert.ok(playerJs.includes('mediaSession.setPositionState({ duration, playbackRate, position: currentTime })'), 'Must publish playback position for lock-screen scrub controls');
+  assert.ok(playerJs.includes("'seekto'"), 'Must support seeking from lock-screen controls');
+  assert.ok(playerJs.includes("'seekbackward'") && playerJs.includes("'seekforward'"), 'Must support lock-screen skip controls');
+  assert.ok(playerJs.includes("addEventListener('pointerdown'") && playerJs.includes("addEventListener('pointermove'"), 'The global player seek bar must support touch dragging');
+  assert.ok(radioClientJs.includes("dom.deckProgressBar?.addEventListener('pointerdown'") && radioClientJs.includes("dom.deckProgressBar?.addEventListener('pointermove'"), 'The radio deck seek bar must support touch dragging');
+  assert.ok(globalCss.includes('@media (max-width: 600px)') && globalCss.includes('grid-template-areas:\n      "info actions"\n      "center center";'), 'The persistent player must keep its seek bar visible in a narrow mobile layout');
+  assert.ok(radioMobileCss.includes('body[data-page="radio"] .radio-progress-bar,\n  body[data-page="radio"] .standalone-progress-bar,\n  body[data-page="radio"] .feed-player-progress-bar'), 'Radio seek bars must keep a larger mobile touch target');
 
   // 2. Cross-tab leader coordination & unload protection
   assert.ok(playerJs.includes('isAudioLeader'), 'Must track audio leader across tabs');
