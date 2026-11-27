@@ -1129,7 +1129,7 @@
 
   body[data-page="radio"] .radio-eb-blocklist {
     gap: 5px;
-    min-height: 176px;
+    min-height: 290px;
     padding: 22px 9px 14px;
   }
 
@@ -1182,12 +1182,13 @@
 
   body[data-page="radio"] .radio-eb-block {
     flex-basis: min(var(--radio-clip-width, 230px), 360px, calc(100vw - 52px));
-    min-height: 132px;
+    height: 240px;
+    min-height: 240px;
     padding: 10px 8px 9px 31px;
   }
 
   body[data-page="radio"] .radio-eb-insert-line {
-    min-height: 132px;
+    min-height: 240px;
   }
 
   body[data-page="radio"] .radio-eb-actions {
@@ -1195,12 +1196,12 @@
   }
 
   body[data-page="radio"] .radio-eb-btn {
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 22px;
   }
 
   body[data-page="radio"] .radio-playlist-tracks-nested {
-    max-height: 72px;
+    max-height: 100px;
   }
 }
 

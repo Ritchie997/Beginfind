@@ -4272,7 +4272,8 @@ body[data-page="radio"] .radio-eb-blocklist {
   flex-direction: row;
   align-items: flex-start;
   gap: 5px;
-  min-height: 190px;
+  min-height: 290px;
+  box-sizing: border-box;
   margin: 0 0 24px;
   padding: 28px 12px 18px;
   overflow-x: auto;
@@ -4288,9 +4289,12 @@ body[data-page="radio"] .radio-eb-blocklist {
 
 body[data-page="radio"] .radio-eb-block {
   --radio-clip-accent: #7893bd;
+  display: flex;
+  flex-direction: column;
   flex: 0 0 var(--radio-clip-width, 230px);
   min-width: 0;
-  min-height: 128px;
+  height: 240px;
+  min-height: 240px;
   align-self: flex-start;
   box-sizing: border-box;
   padding: 11px 10px 10px 33px;
@@ -4371,10 +4375,11 @@ body[data-page="radio"] .radio-eb-order-num {
 body[data-page="radio"] .radio-eb-header {
   display: grid;
   gap: 7px;
-  margin: 0 0 8px;
+  margin: 0 0 9px;
 }
 
 body[data-page="radio"] .radio-eb-meta-left {
+  min-width: 0;
   gap: 5px;
 }
 
@@ -4406,8 +4411,9 @@ body[data-page="radio"] .radio-eb-actions {
 }
 
 body[data-page="radio"] .radio-eb-btn {
-  width: 26px;
-  height: 24px;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -4428,7 +4434,10 @@ body[data-page="radio"] .radio-eb-btn.danger:hover {
 }
 
 body[data-page="radio"] .radio-eb-body {
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
   color: var(--text-normal, #dcddde);
   font-size: 0.8rem;
   line-height: 1.35;
@@ -4438,37 +4447,118 @@ body[data-page="radio"] .radio-eb-body > div {
   min-width: 0;
 }
 
+body[data-page="radio"] .radio-eb-title-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #fff;
+  font-weight: 600;
+}
+
+body[data-page="radio"] .radio-eb-title-marquee {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  mask-image: linear-gradient(to right, #000 88%, transparent);
+}
+
+body[data-page="radio"] .radio-eb-title-text {
+  display: inline-block;
+  min-width: 100%;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+body[data-page="radio"] .radio-eb-speech-content,
+body[data-page="radio"] .radio-eb-anchor-content,
+body[data-page="radio"] .radio-eb-gap-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+body[data-page="radio"] .radio-eb-speech-title,
+body[data-page="radio"] .radio-eb-gap-title {
+  color: #fbbf24;
+}
+
+body[data-page="radio"] .radio-eb-anchor-title {
+  color: #fb7185;
+}
+
+body[data-page="radio"] .radio-eb-block-description {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+body[data-page="radio"] .radio-eb-speech-content > .btn,
+body[data-page="radio"] .radio-eb-gap-content > .btn {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 5px 7px;
+  font-size: 0.7rem;
+  white-space: normal;
+}
+
+body[data-page="radio"] .radio-playlist-accordion {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 body[data-page="radio"] .radio-playlist-accordion-header {
-  align-items: flex-start;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  flex: 0 0 auto;
   padding: 0;
   font-size: 0.78rem;
 }
 
-body[data-page="radio"] .radio-playlist-accordion-header > div:first-child {
+body[data-page="radio"] .radio-playlist-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  overflow: hidden;
 }
 
-body[data-page="radio"] .radio-playlist-accordion-header > div:first-child strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
+body[data-page="radio"] .radio-eb-playlist-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #fff;
+}
+
+body[data-page="radio"] .radio-eb-playlist-count {
+  flex: 0 0 auto;
+  color: #a5b4fc;
+  font-size: 0.7rem;
   white-space: nowrap;
 }
 
-body[data-page="radio"] .radio-playlist-accordion-header > div:last-child {
-  flex: 0 0 auto;
-  gap: 3px !important;
+body[data-page="radio"] .radio-playlist-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 body[data-page="radio"] .radio-playlist-accordion-header .btn {
-  padding: 4px 6px;
-  font-size: 0.68rem;
+  padding: 4px 7px;
+  font-size: 0.66rem;
 }
 
 body[data-page="radio"] .radio-playlist-tracks-nested {
-  max-height: 82px;
-  margin-top: 7px;
+  flex: 1 1 auto;
+  max-height: 100px;
+  min-height: 0;
+  margin-top: 8px;
   padding-left: 7px;
   gap: 3px;
   overflow-y: auto;
@@ -4488,7 +4578,7 @@ body[data-page="radio"] .radio-eb-insert-line {
   flex: 0 0 12px;
   align-self: stretch;
   height: auto;
-  min-height: 128px;
+  min-height: 240px;
   margin: 0 -3px;
   opacity: 0.45;
 }
@@ -4531,6 +4621,14 @@ body[data-page="radio"] .radio-eb-insert-btn:hover {
   transform: none;
   border-color: var(--radio-accent);
   background: var(--radio-accent);
+}
+
+body[data-page="radio"] .radio-eb-blocklist:has(.radio-eb-block) {
+  align-items: stretch;
+}
+
+body[data-page="radio"] .radio-eb-blocklist:has(.radio-eb-block) .radio-eb-block {
+  align-self: stretch;
 }
 
 body[data-page="radio"] .radio-eb-block.is-on-air-block {

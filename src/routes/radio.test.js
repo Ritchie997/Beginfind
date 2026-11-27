@@ -211,6 +211,36 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-eb-blocklist'), 'The arrangement lane must have mobile-specific sizing');
 });
 
+test('radio editor blocks keep a fixed workspace and expand playlists inside their cards', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
+
+  assert.ok(client.includes('const isCollapsed = block.isCollapsed !== false;'), 'Playlists must default to collapsed regardless of track count');
+  assert.ok(!client.includes('isCollapsed: false'), 'Newly created and split playlists must also start collapsed');
+  assert.ok(client.includes("title.addEventListener('click'"), 'A title click must start its marquee animation');
+  assert.ok(client.includes('const pauseMs = 3000;'), 'The marquee must pause for three seconds when it returns to the start');
+  assert.ok(desktopCss.includes('height: 240px;\n  min-height: 240px;'), 'Editor cards must have a fixed height');
+  assert.ok(desktopCss.includes('max-height: 100px;') && desktopCss.includes('overflow-y: auto;'), 'Expanded playlist tracks must scroll inside a bounded list');
+  assert.match(mobileCss, /\.radio-eb-block\s*\{[^}]*height: 240px;[^}]*min-height: 240px;/s, 'Mobile editor cards must preserve the same fixed height');
+});
+
+test('speech blocks provide working microphone and file attachment actions', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+
+  assert.ok(client.includes('class="btn btn-primary btn-sm btn-add-speech-recording"'), 'Unrecorded speech blocks must show an actionable recording button');
+  assert.ok(client.includes('openSpeechAudioModalForBlock(Number(btn.dataset.index))'), 'The block action must open its recording/attachment form for the selected block');
+  assert.ok(client.includes("document.getElementById('speechFileInput')?.addEventListener('change'"), 'The speech modal must capture a selected audio file');
+  assert.ok(client.includes('block.audio_url = finalAudioUrl;'), 'Saving a recording must attach its URL to the original block');
+  assert.ok(client.includes("api('/api/upload-audio', { method: 'POST', body: formData })"), 'Recorded microphone audio must upload through the audio endpoint');
+  assert.ok(html.includes('id="btnModalRecordSpeech"') && html.includes('id="speechFileInput"'), 'The speech modal must expose both microphone and local file inputs');
+});
+
 test('radio overview is read-only and its navigation stays synchronized with the block editor', () => {
   const fs = require('fs');
   const path = require('path');

@@ -2730,6 +2730,29 @@
     updateTimelinePlayhead();
   }
 
+  function animateEditorBlockTitle(card) {
+    const marquee = card?.querySelector('.radio-eb-title-marquee');
+    const title = marquee?.querySelector('.radio-eb-title-text');
+    if (!marquee || !title) return;
+
+    title.getAnimations().forEach((animation) => animation.cancel());
+    title.style.transform = 'translateX(0)';
+    const distance = title.scrollWidth - marquee.clientWidth;
+    if (distance <= 1) return;
+
+    const pauseMs = 3000;
+    const travelMs = Math.max(1200, distance / 28 * 1000);
+    const duration = pauseMs + travelMs;
+    const pauseOffset = pauseMs / duration;
+
+    title.animate([
+      { transform: `translateX(-${distance}px)`, offset: 0, easing: 'steps(1, end)' },
+      { transform: 'translateX(0)', offset: 0.001 },
+      { transform: 'translateX(0)', offset: pauseOffset },
+      { transform: `translateX(-${distance}px)`, offset: 1 }
+    ], { duration, iterations: Infinity });
+  }
+
   // 2. Отрисовка блочного конструктора эфира (в стиле Антропедии)
   function renderEditorBlocks() {
     const listEl = dom.editorBlocksList || dom.editorSlotsList;
@@ -2759,6 +2782,11 @@
     let cursor = new Date(state.editorStartTime || Date.now()).getTime();
     if (isNaN(cursor)) cursor = Date.now();
 
+    const renderBlockTitle = (title) => `
+      <span class="radio-eb-title-marquee">
+        <span class="radio-eb-title-text">${escapeHtml(title || '')}</span>
+      </span>
+    `;
     let html = '';
     state.editorBlocks.forEach((block, index) => {
       if (block.type === 'playlist' && Array.isArray(block.items)) {
@@ -2788,16 +2816,16 @@
 
       let bodyHtml = '';
       if (isPlaylist) {
-        const isCollapsed = Boolean(block.isCollapsed);
+        const isCollapsed = block.isCollapsed !== false;
         bodyHtml = `
           <div class="radio-playlist-accordion">
             <div class="radio-playlist-accordion-header btn-toggle-playlist" data-index="${index}">
-              <div style="display:flex; align-items:center; gap:8px;">
+              <div class="radio-playlist-heading">
                 <i class="fas ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="color:#a5b4fc; font-size:0.85rem;"></i>
-                <strong style="color:#fff;">${escapeHtml(block.title)}</strong>
-                <span style="font-size:0.8rem; color:#a5b4fc;">(${items.length} треков)</span>
+                <strong class="radio-eb-playlist-title">${renderBlockTitle(block.title)}</strong>
+                <span class="radio-eb-playlist-count">(${items.length} треков)</span>
               </div>
-              <div style="display:flex; gap:8px; align-items:center;">
+              <div class="radio-playlist-heading-actions">
                 ${items.some(t => t.audio_url) ? `
                   <button type="button" class="btn btn-outline-primary btn-sm btn-play-playlist-block" data-index="${index}" title="Слушать плейлист в общем плеере">
                     <i class="fas fa-play"></i> Слушать
@@ -2838,48 +2866,42 @@
         `;
       } else if (block.type === 'track') {
         bodyHtml = `
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <div style="font-weight:600; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-              ${escapeHtml(block.title)}
-            </div>
+          <div class="radio-eb-title-line">
+            ${renderBlockTitle(block.title)}
           </div>
         `;
       } else if (block.type === 'speech' || block.type === 'jingle') {
         bodyHtml = `
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <div style="font-weight:600; color:#fbbf24; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-              <i class="fas fa-microphone"></i> ${escapeHtml(block.title)}
+          <div class="radio-eb-speech-content">
+            <div class="radio-eb-title-line radio-eb-speech-title">
+              <i class="fas fa-microphone"></i> ${renderBlockTitle(block.title)}
             </div>
             ${!block.audio_url ? `
-              <span class="badge" style="background:#ff4757; color:#fff; font-size:0.72rem; padding:2px 6px; border-radius:4px;">Требуется запись</span>
+              <button type="button" class="btn btn-primary btn-sm btn-add-speech-recording" data-index="${index}">
+                <i class="fas fa-microphone"></i> Добавить запись
+              </button>
             ` : ''}
           </div>
         `;
       } else if (block.type === 'time_anchor') {
         bodyHtml = `
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <div>
-              <strong style="color:#fb7185;"><i class="fas fa-anchor"></i> ${escapeHtml(block.title)}</strong>
-              <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">
-                Фиксированный выход: ${block.anchor_time || '--:--'} • ${block.transition_mode === 'exact' ? 'Точная отсечка с возвратом трека' : 'Мягкий переход (доигрывание)'}
-              </div>
+          <div class="radio-eb-anchor-content">
+            <strong class="radio-eb-title-line radio-eb-anchor-title"><i class="fas fa-anchor"></i> ${renderBlockTitle(block.title)}</strong>
+            <div class="radio-eb-block-description">
+              Фиксированный выход: ${block.anchor_time || '--:--'} • ${block.transition_mode === 'exact' ? 'Точная отсечка с возвратом трека' : 'Мягкий переход (доигрывание)'}
             </div>
           </div>
         `;
       } else if (block.type === 'gap') {
         bodyHtml = `
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <div>
-              <strong style="color:#fbbf24;"><i class="fas fa-pause-circle"></i> ${escapeHtml(block.title || 'Пауза в эфире (пустота)')}</strong>
-              <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">
-                Свободный хронометраж: ${formatDuration(durSec)}. Можно заполнить подходящей музыкой из плейлистов или оставить как тишину.
-              </div>
+          <div class="radio-eb-gap-content">
+            <strong class="radio-eb-title-line radio-eb-gap-title"><i class="fas fa-pause-circle"></i> ${renderBlockTitle(block.title || 'Пауза в эфире (пустота)')}</strong>
+            <div class="radio-eb-block-description">
+              Свободный хронометраж: ${formatDuration(durSec)}. Можно заполнить подходящей музыкой из плейлистов или оставить как тишину.
             </div>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-warning btn-sm btn-fill-gap-playlist" data-index="${index}" title="Заполнить эту паузу музыкой из плейлистов">
-                <i class="fas fa-wand-magic-sparkles"></i> Заполнить плейлистом
-              </button>
-            </div>
+            <button type="button" class="btn btn-warning btn-sm btn-fill-gap-playlist" data-index="${index}" title="Заполнить эту паузу музыкой из плейлистов">
+              <i class="fas fa-wand-magic-sparkles"></i> Заполнить плейлистом
+            </button>
           </div>
         `;
       }
@@ -2996,6 +3018,13 @@
       });
     });
 
+    listEl.querySelectorAll('.btn-add-speech-recording').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSpeechAudioModalForBlock(Number(btn.dataset.index));
+      });
+    });
+
     // Заполнение свободной паузы в эфире (музыкальной пустоты)
     listEl.querySelectorAll('.btn-fill-gap-playlist').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -3031,6 +3060,18 @@
 
     // Контекстное меню блока по правому клику
     listEl.querySelectorAll('.radio-eb-block').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button, input, select, textarea, a, .radio-eb-drag-handle, .btn-toggle-playlist')) return;
+        animateEditorBlockTitle(card);
+      });
+
+      card.querySelectorAll('.radio-eb-title-marquee').forEach((title) => {
+        title.addEventListener('click', (e) => {
+          e.stopPropagation();
+          animateEditorBlockTitle(card);
+        });
+      });
+
       card.addEventListener('contextmenu', (e) => {
         if (e.target.closest('button, input, select, textarea, a')) return;
         e.preventDefault();
@@ -3598,7 +3639,7 @@
       title: `${block.title.replace(/\s*\(Часть \d+\)$/, '')} (Часть 1)`,
       items: part1Items,
       duration: dur1,
-      isCollapsed: false
+      isCollapsed: true
     };
 
     const replacements = [block1];
@@ -3620,7 +3661,7 @@
         title: `${block.title.replace(/\s*\(Часть \d+\)$/, '')} (Часть 2)`,
         items: part2Items,
         duration: dur2,
-        isCollapsed: false
+        isCollapsed: true
       };
       replacements.push(block2);
     }
@@ -4376,6 +4417,7 @@
     state.editorBlocks = JSON.parse(JSON.stringify(tpl.blocks));
     state.editorBlocks.forEach((b) => {
       b.id = genBlockId();
+      if (b.type === 'playlist') b.isCollapsed = true;
     });
     markEditorDirty(true);
     renderEditor();
@@ -5668,7 +5710,7 @@
         title: `Автозаполнение эфира (${selectedTracks.length} тр)`,
         duration: accumulatedDur,
         items: selectedTracks,
-        isCollapsed: false
+        isCollapsed: true
       };
 
       if (state.activeGapInfo.targetIndex >= 0 && state.editorBlocks[state.activeGapInfo.targetIndex] && state.editorBlocks[state.activeGapInfo.targetIndex].type === 'gap') {
@@ -5897,7 +5939,9 @@
     targetSlotIndex: -1,
     audioUrl: null,
     duration: 5,
-    micRecordedBlob: null
+    micRecordedBlob: null,
+    file: null,
+    editBlockId: null
   };
 
   function calculateSpeechInsertionSlot(targetTimeStr) {
@@ -6004,10 +6048,52 @@
     renderEditor();
   }
 
-  function openInsertWordsModalForIndex(slotIndex) {
-    insertWordsContext.targetSlotIndex = slotIndex + 1;
+  function resetSpeechAudioSelection(block = null) {
     insertWordsContext.audioUrl = null;
+    insertWordsContext.duration = 5;
+    insertWordsContext.micRecordedBlob = null;
+    insertWordsContext.file = null;
+    insertWordsContext.editBlockId = block ? String(block.id) : null;
 
+    const fileInput = document.getElementById('speechFileInput');
+    if (fileInput) fileInput.value = '';
+    const status = document.getElementById('speechMicStatus');
+    if (status) status.innerHTML = '<i class="fas fa-microphone"></i> Голос не записан';
+    const recordButton = document.getElementById('btnModalRecordSpeech');
+    if (recordButton) {
+      recordButton.classList.remove('is-recording');
+      recordButton.innerHTML = '<i class="fas fa-circle"></i> Записать';
+    }
+
+    const targetTimeGroup = document.getElementById('speechTargetTimeInput')?.closest('.radio-form-group');
+    if (targetTimeGroup) targetTimeGroup.hidden = Boolean(block);
+    const targetTimeInput = document.getElementById('speechTargetTimeInput');
+    if (targetTimeInput) targetTimeInput.required = !block;
+    const planBox = document.getElementById('speechPlanCalculatedBox');
+    if (planBox) planBox.style.display = block ? 'none' : '';
+    const modalTitle = document.querySelector('#modalInsertWordsByTime .modal-header h3');
+    if (modalTitle) modalTitle.textContent = block ? 'Добавить запись к блоку' : 'Вставить слова / джингл по времени';
+    const submitButton = document.getElementById('btnSubmitInsertSpeech');
+    if (submitButton) submitButton.textContent = block ? 'Сохранить запись в блок' : 'Вставить в сетку';
+    const slotTitle = document.getElementById('speechSlotTitleInput');
+    if (slotTitle) slotTitle.value = block?.title || 'Слова ведущего';
+
+    document.getElementById('btnSpeechTabMic')?.click();
+  }
+
+  function openSpeechAudioModalForBlock(blockIndex) {
+    const block = state.editorBlocks[blockIndex];
+    if (!block || (block.type !== 'speech' && block.type !== 'jingle')) {
+      showToast('Не удалось найти блок для записи', 'error');
+      return;
+    }
+    resetSpeechAudioSelection(block);
+    showModal('modalInsertWordsByTime');
+  }
+
+  function openInsertWordsModalForIndex(slotIndex) {
+    resetSpeechAudioSelection();
+    insertWordsContext.targetSlotIndex = slotIndex + 1;
     showModal('modalInsertWordsByTime');
 
     let cursor = new Date(state.editorStartTime || Date.now()).getTime();
@@ -7182,6 +7268,7 @@
 
     // 5. Модалка слов
     dom.btnOpenInsertWordsModal?.addEventListener('click', () => {
+      resetSpeechAudioSelection();
       showModal('modalInsertWordsByTime');
       const d = new Date();
       const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -7210,6 +7297,15 @@
 
     tabMic?.addEventListener('click', () => selectSpeechTab('mic'));
     tabFile?.addEventListener('click', () => selectSpeechTab('file'));
+    document.getElementById('speechFileInput')?.addEventListener('change', (event) => {
+      const file = event.target.files?.[0] || null;
+      if (!file) return;
+      insertWordsContext.audioUrl = null;
+      insertWordsContext.micRecordedBlob = null;
+      insertWordsContext.file = file;
+      const status = document.getElementById('speechMicStatus');
+      if (status) status.innerHTML = `<i class="fas fa-file-audio"></i> Выбран файл: ${escapeHtml(file.name)}`;
+    });
     tabLib?.addEventListener('click', async () => {
       selectSpeechTab('lib');
       if (boxLib) {
@@ -7231,6 +7327,10 @@
             btn.addEventListener('click', () => {
               insertWordsContext.audioUrl = btn.dataset.url;
               insertWordsContext.duration = parseFloat(btn.dataset.dur) || 10;
+              insertWordsContext.micRecordedBlob = null;
+              insertWordsContext.file = null;
+              const fileInput = document.getElementById('speechFileInput');
+              if (fileInput) fileInput.value = '';
               document.getElementById('speechSlotTitleInput').value = btn.dataset.title;
               showToast(`Выбрана запись: ${btn.dataset.title}`, 'info');
             });
@@ -7264,6 +7364,15 @@
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (typeof MediaRecorder === 'undefined') {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error('Запись звука не поддерживается этим браузером');
+        }
+        insertWordsContext.audioUrl = null;
+        insertWordsContext.file = null;
+        insertWordsContext.micRecordedBlob = null;
+        const fileInput = document.getElementById('speechFileInput');
+        if (fileInput) fileInput.value = '';
         modalChunks = [];
         modalMediaRecorder = new MediaRecorder(stream);
 
@@ -7272,11 +7381,17 @@
         };
 
         modalMediaRecorder.onstop = () => {
-          const blob = new Blob(modalChunks, { type: 'audio/webm' });
+          const blobType = modalMediaRecorder.mimeType || modalChunks[0]?.type || 'audio/webm';
+          const blob = new Blob(modalChunks, { type: blobType });
           insertWordsContext.micRecordedBlob = blob;
           const dur = Math.round((Date.now() - modalRecStart) / 1000) || 5;
           insertWordsContext.duration = dur;
+          stream.getTracks().forEach((track) => track.stop());
           if (status) status.innerHTML = `<i class="fas fa-circle-check" style="color:#2ed573;"></i> Голос записан (${formatDuration(dur)})`;
+          if (btn) {
+            btn.classList.remove('is-recording');
+            btn.innerHTML = '<i class="fas fa-circle"></i> Записать заново';
+          }
         };
 
         modalMediaRecorder.start();
@@ -7294,7 +7409,7 @@
           if (timer) timer.textContent = formatDuration(sec);
         }, 500);
       } catch (err) {
-        showToast('Ошибка доступа к микрофону: ' + err.message, 'error');
+        showToast('Не удалось начать запись. Проверьте разрешение на микрофон и подключение по HTTPS или localhost: ' + err.message, 'error');
       }
     });
 
@@ -7315,15 +7430,18 @@
 
         if (insertWordsContext.micRecordedBlob && !finalAudioUrl) {
           const formData = new FormData();
-          const file = new File([insertWordsContext.micRecordedBlob], `speech-${Date.now()}.webm`, { type: 'audio/webm' });
+          const file = new File(
+            [insertWordsContext.micRecordedBlob],
+            `speech-${Date.now()}.${insertWordsContext.micRecordedBlob.type.includes('ogg') ? 'ogg' : 'webm'}`,
+            { type: insertWordsContext.micRecordedBlob.type || 'audio/webm' }
+          );
+          const durPromise = getAudioDuration(file);
           formData.append('audio', file);
           const uploadRes = await api('/api/upload-audio', { method: 'POST', body: formData });
           finalAudioUrl = uploadRes.url;
-        }
-
-        const fileInput = document.getElementById('speechFileInput');
-        if (fileInput && fileInput.files[0] && !finalAudioUrl) {
-          const file = fileInput.files[0];
+          finalDuration = (await durPromise) || finalDuration;
+        } else if (insertWordsContext.file && !finalAudioUrl) {
+          const file = insertWordsContext.file;
           const durPromise = getAudioDuration(file);
           const formData = new FormData();
           formData.append('audio', file);
@@ -7337,16 +7455,29 @@
           return;
         }
 
-        const calc = calculateSpeechInsertionSlot(targetTime);
-        insertSpeechAtSlotIndex({
-          title,
-          type: 'speech',
-          audio_url: finalAudioUrl,
-          duration: finalDuration
-        }, calc.insertIndex);
+        if (insertWordsContext.editBlockId) {
+          const block = state.editorBlocks.find((item) => String(item.id) === insertWordsContext.editBlockId);
+          if (!block) throw new Error('Блок больше не найден в сетке');
+          block.title = title;
+          block.audio_url = finalAudioUrl;
+          block.duration = Math.max(1, Number(finalDuration) || 1);
+          syncCompiledSlots();
+          markEditorDirty(true);
+          renderEditor();
+          hideModal('modalInsertWordsByTime');
+          showToast('Запись добавлена в блок и сохранена в сетку эфира', 'success');
+        } else {
+          const calc = calculateSpeechInsertionSlot(targetTime);
+          insertSpeechAtSlotIndex({
+            title,
+            type: 'speech',
+            audio_url: finalAudioUrl,
+            duration: finalDuration
+          }, calc.insertIndex);
 
-        hideModal('modalInsertWordsByTime');
-        showToast(`Слова ведущего установлены в сетку после трека №${calc.priorSlotIndex || 1} и сохранены в эфир!`, 'success');
+          hideModal('modalInsertWordsByTime');
+          showToast(`Слова ведущего установлены в сетку после трека №${calc.priorSlotIndex || 1} и сохранены в эфир!`, 'success');
+        }
 
         // Автоматически сохраняем обновленную сетку в эфир, чтобы расписание диктора не слетало
         await publishBroadcast(state.editorStartTime, { notify: false, autoTune: false });
@@ -7355,7 +7486,7 @@
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.innerHTML = 'Вставить в сетку';
+          submitBtn.textContent = insertWordsContext.editBlockId ? 'Сохранить запись в блок' : 'Вставить в сетку';
         }
       }
     });
