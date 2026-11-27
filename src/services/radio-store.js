@@ -323,7 +323,7 @@ async function createStation({ frequency, name, description = '', ownerId, owner
   return getStationById(result.lastID);
 }
 
-async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive, ownerName, owner_name, host, host_name, isEternal, is_eternal }) {
+async function updateStation(id, actingUserId, isRootOrAdmin, { name, description, avatarUrl, fallbackMode, isActive, ownerName, owner_name, host, host_name, isEternal, is_eternal, franchiseId }) {
   const station = await getStationById(id);
   if (!station) throw new Error('Станция не найдена');
 
@@ -362,6 +362,14 @@ async function updateStation(id, actingUserId, isRootOrAdmin, { name, descriptio
   if (isActive !== undefined) {
     updates.push('is_active = ?');
     params.push(isActive ? 1 : 0);
+  }
+  if (franchiseId !== undefined) {
+    const cleanFranchiseId = franchiseId === null || franchiseId === '' ? null : Number(franchiseId);
+    if (cleanFranchiseId !== null && (!Number.isInteger(cleanFranchiseId) || cleanFranchiseId < 1)) {
+      throw new Error('Некорректный ID франшизы');
+    }
+    updates.push('franchise_id = ?');
+    params.push(cleanFranchiseId);
   }
   const eternalVal = isEternal !== undefined ? isEternal : is_eternal;
   if (eternalVal !== undefined) {

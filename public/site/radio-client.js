@@ -397,6 +397,7 @@
       editStationName: document.getElementById('editStationName'),
       editStationHost: document.getElementById('editStationHost'),
       editStationDescription: document.getElementById('editStationDescription'),
+      editStationFranchise: document.getElementById('editStationFranchise'),
       editStationFallback: document.getElementById('editStationFallback'),
       editStationIsEternal: document.getElementById('editStationIsEternal'),
       createStationIsEternal: document.getElementById('createStationIsEternal'),
@@ -1071,6 +1072,8 @@
       station.owner_name,
       station.avatar_url,
       station.description,
+      station.franchise_id,
+      station.franchise_name,
       station.broadcast_status,
       station.fallback_mode,
       liveState.label,
@@ -1102,7 +1105,12 @@
             <div class="radio-card-owner">Ведущий: ${escapeHtml(station.owner_name)}</div>
           </div>
         </div>
-        ${station.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(station.description)}</p>` : ''}
+            ${station.franchise_id && station.franchise_name ? `
+              <a class="radio-card-franchise-link" href="/alltell?franchise=${encodeURIComponent(station.franchise_id)}">
+                <i class="fas fa-layer-group" aria-hidden="true"></i> ${escapeHtml(station.franchise_name)}
+              </a>
+            ` : ''}
+            ${station.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(station.description)}</p>` : ''}
       </div>
       <div class="radio-card-playing">
         <div class="radio-card-live-status ${liveState.className}">
@@ -1152,7 +1160,8 @@
         const card = document.createElement('div');
         card.className = 'radio-station-card';
         card.dataset.id = String(station.id);
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (event) => {
+          if (event.target.closest('.radio-card-franchise-link')) return;
           const found = state.stations.find((item) => String(item.id) === String(card.dataset.id));
           if (found) tuneStation(found, true);
         });
@@ -3986,13 +3995,48 @@
   }
 
   // Открытие модального окна настроек станции
-  function openEditStationModal(st) {
+  async function openEditStationModal(st) {
     if (!st) return;
     if (dom.editStationId) dom.editStationId.value = st.id;
     if (dom.editStationName) dom.editStationName.value = st.name || '';
     if (dom.editStationDescription) dom.editStationDescription.value = st.description || '';
     if (dom.editStationFallback) dom.editStationFallback.value = st.fallback_mode || 'loop';
     if (dom.editStationIsEternal) dom.editStationIsEternal.checked = Boolean(st.is_eternal === 1 || st.is_eternal === true || st.isEternal);
+    if (dom.editStationFranchise) {
+      dom.editStationFranchise.disabled = true;
+      dom.editStationFranchise.innerHTML = '<option value="">Загружаем франшизы…</option>';
+      try {
+        const franchises = await api('/api/radio/manageable-franchises');
+        if (!Array.isArray(franchises)) throw new Error('Сервер вернул некорректный список франшиз');
+        dom.editStationFranchise.innerHTML = '<option value="">Без привязки</option>';
+        franchises.forEach((franchise) => {
+          const option = document.createElement('option');
+          option.value = String(franchise.id);
+          option.textContent = franchise.name;
+          dom.editStationFranchise.appendChild(option);
+        });
+        const linkedFranchiseId = st.franchise_id == null ? '' : String(st.franchise_id);
+        if (linkedFranchiseId && !franchises.some((franchise) => String(franchise.id) === linkedFranchiseId)) {
+          const option = document.createElement('option');
+          option.value = linkedFranchiseId;
+          option.textContent = st.franchise_name || `Связанная франшиза #${linkedFranchiseId} (нет доступа управления)`;
+          option.disabled = true;
+          dom.editStationFranchise.appendChild(option);
+        }
+        dom.editStationFranchise.value = linkedFranchiseId;
+        if (!franchises.length && !linkedFranchiseId) {
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'Нет доступных франшиз';
+          option.disabled = true;
+          dom.editStationFranchise.appendChild(option);
+        }
+        dom.editStationFranchise.disabled = false;
+      } catch (error) {
+        showToast(`Не удалось загрузить франшизы: ${error.message}`, 'error');
+        return;
+      }
+    }
     if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
     if (dom.editStationHost) dom.editStationHost.value = st.owner_name || '';
     if (dom.editStationAvatarFile) dom.editStationAvatarFile.value = '';
@@ -7831,7 +7875,8 @@
             fallbackMode: isEternal ? 'loop' : fallback,
             avatarUrl,
             ownerName: host,
-            isEternal: isEternal ? 1 : 0
+            isEternal: isEternal ? 1 : 0,
+            franchiseId: dom.editStationFranchise?.value || null
           })
         });
 

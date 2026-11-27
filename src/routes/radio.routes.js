@@ -3,6 +3,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/env');
+const { serversDb, serversSchemaReady } = require('../db/connections');
 const auth = require('../middleware/auth');
 const radioStore = require('../services/radio-store');
 
@@ -27,6 +28,50 @@ function getDisplayName(user) {
 
 function isRootOrAdmin(user) {
   return Boolean(user && (user.is_root || (user.admin_level && user.admin_level > 0)));
+}
+
+function dbAll(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (error, rows) => (error ? reject(error) : resolve(rows || [])));
+  });
+}
+
+function dbGet(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (error, row) => (error ? reject(error) : resolve(row || null)));
+  });
+}
+
+async function getManageableFranchises(user) {
+  await serversSchemaReady;
+  if (user.is_root) {
+    return dbAll(serversDb, 'SELECT id, name FROM servers ORDER BY name COLLATE NOCASE');
+  }
+  return dbAll(serversDb, `
+    SELECT s.id, s.name
+    FROM servers s
+    WHERE s.owner_id = ?
+       OR EXISTS (
+         SELECT 1
+         FROM user_server_role_assignments ura
+         JOIN server_roles sr ON sr.id = ura.role_id
+         WHERE ura.user_id = ? AND ura.server_id = s.id
+           AND sr.name = 'admin' AND sr.role_type = 'system'
+       )
+    ORDER BY s.name COLLATE NOCASE
+  `, [user.id, user.id]);
+}
+
+async function getPublicFranchises(franchiseIds) {
+  const ids = [...new Set(franchiseIds.filter((id) => Number.isInteger(Number(id)) && Number(id) > 0).map(Number))];
+  if (!ids.length) return new Map();
+  await serversSchemaReady;
+  const rows = await dbAll(
+    serversDb,
+    `SELECT id, name FROM servers WHERE is_published = 1 AND id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  );
+  return new Map(rows.map((franchise) => [String(franchise.id), franchise]));
 }
 
 // ===== 1. Медиатека: пользовательские треки и подкасты =====
@@ -320,11 +365,27 @@ router.delete('/radio/playlists/:id/tracks/:trackId', auth.authenticateToken, au
 
 // ===== 4. Радиостанции: занятие частот и управление =====
 
+router.get('/radio/manageable-franchises', auth.authenticateToken, auth.checkApproved, async (req, res) => {
+  try {
+    res.json(await getManageableFranchises(req.user));
+  } catch (error) {
+    console.error('[radio] Error listing manageable franchises:', error);
+    res.status(500).json({ error: 'Не удалось загрузить список франшиз: ' + error.message });
+  }
+});
+
 // GET /api/radio/stations — список всех активных радиостанций
 router.get('/radio/stations', async (req, res) => {
   try {
     const stations = await radioStore.listStations();
-    res.json(stations);
+    const franchises = await getPublicFranchises(stations.map((station) => station.franchise_id));
+    res.json(stations.map((station) => {
+      const franchise = franchises.get(String(station.franchise_id));
+      return {
+        ...station,
+        franchise_name: franchise ? franchise.name : null
+      };
+    }));
   } catch (error) {
     console.error('[radio] Error listing stations:', error);
     res.status(500).json({ error: 'Не удалось получить список радиостанций: ' + error.message });
@@ -373,6 +434,44 @@ router.get('/radio/stations/:id', async (req, res) => {
 router.put('/radio/stations/:id', auth.authenticateToken, auth.checkApproved, async (req, res) => {
   try {
     const { name, description, avatarUrl, avatar_url, fallbackMode, fallback_mode, isActive, ownerName, owner_name, host, host_name, isEternal, is_eternal } = req.body;
+    const hasFranchiseId = Object.prototype.hasOwnProperty.call(req.body, 'franchiseId');
+    let franchiseId;
+    if (hasFranchiseId) {
+      const rawFranchiseId = req.body.franchiseId;
+      franchiseId = rawFranchiseId === null || rawFranchiseId === '' ? null : Number(rawFranchiseId);
+      if (franchiseId !== null && (!Number.isInteger(franchiseId) || franchiseId < 1)) {
+        return res.status(400).json({ error: 'Укажите корректную франшизу' });
+      }
+
+      if (franchiseId !== null) {
+        const station = await radioStore.getStationById(req.params.id);
+        const isUnchangedFranchise = station && Number(station.franchise_id) === franchiseId;
+        if (!isUnchangedFranchise && !req.user.is_root) {
+          await serversSchemaReady;
+          const manageableFranchise = await dbGet(serversDb, `
+            SELECT s.id
+            FROM servers s
+            WHERE s.id = ? AND (
+              s.owner_id = ? OR EXISTS (
+                SELECT 1
+                FROM user_server_role_assignments ura
+                JOIN server_roles sr ON sr.id = ura.role_id
+                WHERE ura.user_id = ? AND ura.server_id = s.id
+                  AND sr.name = 'admin' AND sr.role_type = 'system'
+              )
+            )
+          `, [franchiseId, req.user.id, req.user.id]);
+          if (!manageableFranchise) {
+            return res.status(403).json({ error: 'Привязать станцию можно только к франшизе, которой вы управляете' });
+          }
+        } else if (!isUnchangedFranchise) {
+          await serversSchemaReady;
+          const franchise = await dbGet(serversDb, 'SELECT id FROM servers WHERE id = ?', [franchiseId]);
+          if (!franchise) return res.status(404).json({ error: 'Франшиза не найдена' });
+        }
+      }
+    }
+
     const updated = await radioStore.updateStation(req.params.id, req.user.id, isRootOrAdmin(req.user), {
       name,
       description,
@@ -380,7 +479,8 @@ router.put('/radio/stations/:id', auth.authenticateToken, auth.checkApproved, as
       fallbackMode: fallbackMode || fallback_mode,
       isActive,
       ownerName: ownerName !== undefined ? ownerName : (owner_name !== undefined ? owner_name : (host !== undefined ? host : host_name)),
-      isEternal: isEternal !== undefined ? isEternal : is_eternal
+      isEternal: isEternal !== undefined ? isEternal : is_eternal,
+      ...(hasFranchiseId ? { franchiseId } : {})
     });
     res.json(updated);
   } catch (error) {

@@ -1105,6 +1105,13 @@
             <textarea id="editStationDescription" class="radio-form-textarea form-control" rows="3" placeholder="Расскажите о формате вашей радиостанции..."></textarea>
           </div>
           <div class="radio-form-group">
+            <label for="editStationFranchise">Привязать частоту к франшизе (необязательно)</label>
+            <select id="editStationFranchise" class="radio-form-select form-select">
+              <option value="">Без привязки</option>
+            </select>
+            <small class="radio-station-franchise-help">Показывает связь станции с франшизой AllTell. В списке доступны только франшизы, которыми вы управляете.</small>
+          </div>
+          <div class="radio-form-group">
             <label>Поведение при пустом эфире (когда сетка закончилась)</label>
             <select id="editStationFallback" class="radio-form-select form-select">
               <option value="loop">🔄 Зацикливать составленную сетку вещания (по умолчанию)</option>

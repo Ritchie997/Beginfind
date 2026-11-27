@@ -3622,6 +3622,29 @@ body[data-page="radio"] .radio-card-track-title {
   gap: 7px;
 }
 
+body[data-page="radio"] .radio-card-franchise-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 2px 68px;
+  color: #d5c1e8;
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+body[data-page="radio"] .radio-card-franchise-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+body[data-page="radio"] .radio-station-franchise-help {
+  display: block;
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 body[data-page="radio"] .radio-card-live-status {
   font-size: 0.72rem;
   font-weight: 700;

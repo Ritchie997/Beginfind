@@ -66,6 +66,28 @@ test('GET /api/radio/stations returns stations list for unauthenticated guest', 
   assert.ok(Array.isArray(res.body), 'Response should be an array of stations');
 });
 
+test('manageable franchise list requires an approved signed-in user', async () => {
+  const app = createApp();
+  const res = await callApi(app, 'GET', '/api/radio/manageable-franchises');
+  assert.equal(res.status, 401);
+});
+
+test('station franchise binding is editable only through the station settings and protected by franchise permissions', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const routes = fs.readFileSync(path.resolve(__dirname, './radio.routes.js'), 'utf8');
+
+  assert.ok(html.includes('id="editStationFranchise"'), 'Station settings must offer an optional franchise selector');
+  assert.ok(client.includes("api('/api/radio/manageable-franchises')"), 'The selector must list franchises available to the current user');
+  assert.ok(client.includes('franchiseId: dom.editStationFranchise?.value || null'), 'Saving station settings must persist or clear the franchise binding');
+  assert.ok(routes.includes("router.get('/radio/manageable-franchises', auth.authenticateToken, auth.checkApproved"), 'The available franchise list must require an approved user');
+  assert.ok(routes.includes('Привязать станцию можно только к франшизе, которой вы управляете'), 'The API must reject binding to a franchise the user cannot manage');
+  assert.ok(routes.includes('WHERE is_published = 1 AND id IN'), 'Station cards must only resolve names of public franchises');
+  assert.ok(client.includes('radio-card-franchise-link'), 'Publicly linked stations must show a link to their franchise');
+});
+
 test('radio frequency cards show live station status and refresh without reloading the page', () => {
   const fs = require('fs');
   const path = require('path');

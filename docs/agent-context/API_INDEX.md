@@ -279,6 +279,7 @@
 - `DELETE /radio/playlists/:id`
 - `POST /radio/playlists/:id/tracks`
 - `DELETE /radio/playlists/:id/tracks/:trackId`
+- `GET /radio/manageable-franchises`
 - `GET /radio/stations`
 - `POST /radio/stations`
 - `GET /radio/stations/:id`

@@ -71,6 +71,10 @@ test('radio-store: stations, frequencies and timeline slots', async () => {
   assert.equal(station.frequency, 42.7);
   assert.equal(station.name, 'Radio Galaxy');
   assert.equal(station.fallback_mode, 'loop');
+  const linkedStation = await radioStore.updateStation(station.id, 888, false, { franchiseId: 456 });
+  assert.equal(linkedStation.franchise_id, 456);
+  const unlinkedStation = await radioStore.updateStation(station.id, 888, false, { franchiseId: null });
+  assert.equal(unlinkedStation.franchise_id, null);
 
   // Duplicate frequency should fail
   await assert.rejects(async () => {
@@ -723,7 +727,6 @@ test('radio-editor-ui: eternal broadcast button, badge, and modal elements exist
   assert.ok(radioCss.includes('.radio-eternal-badge'), 'radio.css must style .radio-eternal-badge');
   assert.ok(radioCss.includes('#btnToggleEternalBroadcast'), 'radio.css must style #btnToggleEternalBroadcast');
 });
-
 
 
 

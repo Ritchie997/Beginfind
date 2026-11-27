@@ -1038,6 +1038,7 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
         broadcast_status TEXT NOT NULL DEFAULT 'live',
         broadcast_started_at DATETIME,
         is_eternal INTEGER NOT NULL DEFAULT 0,
+        franchise_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -1047,6 +1048,11 @@ const radioDb = new sqlite3.Database(dbPath('radio.db'), (err) => {
       radioDb.run("ALTER TABLE radio_stations ADD COLUMN broadcast_started_at DATETIME", () => {});
       radioDb.run("ALTER TABLE radio_stations ADD COLUMN is_eternal INTEGER NOT NULL DEFAULT 0", () => {});
       radioDb.run('CREATE INDEX IF NOT EXISTS idx_radio_stations_eternal ON radio_stations(is_eternal)', () => {});
+      radioDb.run('ALTER TABLE radio_stations ADD COLUMN franchise_id INTEGER', (migrationError) => {
+        if (migrationError && !/duplicate column name/i.test(migrationError.message)) {
+          console.error('Could not add franchise_id to radio_stations:', migrationError);
+        }
+      });
 
       radioDb.run(`CREATE TABLE IF NOT EXISTS radio_timeline_slots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
