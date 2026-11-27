@@ -181,6 +181,25 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-eb-blocklist'), 'The arrangement lane must have mobile-specific sizing');
 });
 
+test('radio overview is read-only and its navigation stays synchronized with the block editor', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  assert.ok(html.includes('Обзор эфира'), 'The upper lane must be identified as the broadcast overview');
+  assert.ok(html.includes('Редактор сетки'), 'The lower lane must be clearly identified as the editor');
+  assert.ok(html.includes('aria-label="Обзор расписания эфира, только для навигации"'), 'The overview must expose its read-only role accessibly');
+  assert.ok(client.includes('draggable="false"'), 'Overview clips must not be draggable');
+  assert.ok(client.includes("syncTimelineScroll('overview')"), 'Overview scrolling must navigate the editor to the same block');
+  assert.ok(client.includes("syncTimelineScroll('editor')"), 'Editor scrolling must navigate the overview to the same time position');
+  assert.ok(client.includes("['dragstart', 'dragenter', 'dragover', 'drop']"), 'The overview must reject all drag-and-drop interactions');
+  assert.ok(!client.includes("dom.radioTimelineTrack?.addEventListener('drop'"), 'The overview must not retain a drop handler that can mutate the schedule');
+  assert.ok(css.includes('.radio-timeline-clip.is-selected'), 'Selected overview clips must have a visual state');
+  assert.ok(css.includes('.radio-eb-block.is-timeline-selected'), 'Overview selection must be reflected in the editor');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');

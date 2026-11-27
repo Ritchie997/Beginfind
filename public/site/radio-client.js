@@ -99,6 +99,8 @@
     editorInitialized: false,
     editorCachedDurationSec: 0,
     timelineZoom: 1.0,
+    timelineScrollRatio: 0,
+    isSyncingTimelineScroll: false,
     baseScaleSec: 1200,
     mediaDrawerOpen: false,
     mediaDrawerTab: 'tracks',
@@ -2630,25 +2632,31 @@
     // Растущая шкала: базовая 20 минут (1200 сек), чем больше треков, тем больше растет!
     const baseScale = state.baseScaleSec || 1200;
     const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
-    const effectiveScale = Math.max(60, Math.round(neededScale / state.timelineZoom));
+    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, neededScale));
+    const visibleScale = Math.max(60, Math.round(timelineScale / state.timelineZoom));
+
+    if (dom.radioTimelineTrackInner && dom.radioTimelineTrackScroll) {
+      const viewportWidth = Math.max(1, dom.radioTimelineTrackScroll.clientWidth - 32);
+      dom.radioTimelineTrackInner.style.width = `${Math.max(viewportWidth, Math.round(viewportWidth * state.timelineZoom))}px`;
+    }
 
     if (dom.timelineScaleBadge) {
-      const min = Math.round(effectiveScale / 60);
+      const min = Math.round(visibleScale / 60);
       dom.timelineScaleBadge.textContent = min >= 60 ? `Шкала: ${(min / 60).toFixed(1)} ч` : `Шкала: ${min} мин`;
     }
 
     // Отрисовка временной линейки (Ruler)
     if (dom.radioTimelineRuler) {
       let stepSec = 300; // 5 минут
-      if (effectiveScale > 3600 * 6) stepSec = 3600; // 1 час
-      else if (effectiveScale > 3600 * 2) stepSec = 1800; // 30 мин
-      else if (effectiveScale > 1800) stepSec = 600; // 10 мин
-      else if (effectiveScale < 600) stepSec = 60; // 1 мин
+      if (visibleScale > 3600 * 6) stepSec = 3600; // 1 час
+      else if (visibleScale > 3600 * 2) stepSec = 1800; // 30 мин
+      else if (visibleScale > 1800) stepSec = 600; // 10 мин
+      else if (visibleScale < 600) stepSec = 60; // 1 мин
 
       const baseStartMs = new Date(state.editorStartTime || Date.now()).getTime();
       let ticksHtml = '';
-      for (let sec = 0; sec <= effectiveScale; sec += stepSec) {
-        const pct = (sec / effectiveScale) * 100;
+      for (let sec = 0; sec <= timelineScale; sec += stepSec) {
+        const pct = (sec / timelineScale) * 100;
         const tickTime = formatClockTime(baseStartMs + sec * 1000);
         ticksHtml += `<div class="radio-timeline-tick" style="left: ${pct.toFixed(2)}%;">${tickTime.slice(0, 5)}</div>`;
       }
@@ -2661,7 +2669,7 @@
         dom.radioTimelineTrack.innerHTML = '<div class="radio-timeline-empty-hint"><i class="fas fa-hand-pointer"></i> Добавьте треки или плейлисты ниже, чтобы наполнить ленту вещания</div>';
       } else {
         dom.radioTimelineTrack.innerHTML = state.editorBlocks.map((block, idx) => {
-          const pct = Math.max(0.5, (block.duration / effectiveScale) * 100);
+          const pct = Math.max(0.15, (block.duration / timelineScale) * 100);
           const typeClass = `clip-${block.type}`;
           const isPlaylist = block.type === 'playlist';
           const icon = isPlaylist ? 'fa-list-check' : block.type === 'speech' ? 'fa-microphone' : block.type === 'jingle' ? 'fa-bell' : block.type === 'time_anchor' ? 'fa-anchor' : block.type === 'gap' ? 'fa-pause' : 'fa-music';
@@ -2670,249 +2678,39 @@
           const subInfo = isPlaylist ? ` (${(block.items || []).length} тр)` : '';
 
           return `
-            <div class="radio-timeline-clip ${typeClass}" data-block-id="${block.id}" data-index="${idx}" draggable="true" style="width: ${pct.toFixed(2)}%;" title="${titleText}${subInfo} — ${durText}">
+            <div class="radio-timeline-clip ${typeClass}" data-block-id="${block.id}" data-index="${idx}" draggable="false" style="width: ${pct.toFixed(3)}%;" title="${titleText}${subInfo} — ${durText}">
               ${isPlaylist ? '<div class="radio-clip-bracket bracket-left" title="Начало плейлиста ["></div>' : ''}
               <div class="clip-title"><i class="fas ${icon}"></i> ${titleText}${subInfo}</div>
               <div class="clip-dur">${durText}</div>
               ${isPlaylist ? '<div class="radio-clip-bracket bracket-right" title="] Конец плейлиста"></div>' : ''}
-              <div class="radio-timeline-edge-handle" data-index="${idx}" title="Потяните за край блока, чтобы изменить длительность и увеличить таймлайн"></div>
             </div>
           `;
         }).join('');
 
-        let isEdgeResizing = false;
-
-        // Перемещение блоков по таймлайну (Drag & Drop) и взаимодействие с клипами
+        // Верхняя дорожка работает как обзор; все изменения делаются в редакторе блоков ниже.
         dom.radioTimelineTrack.querySelectorAll('.radio-timeline-clip').forEach((el) => {
-          el.addEventListener('click', (e) => {
-            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) return;
+          el.addEventListener('click', () => {
             const blockId = el.dataset.blockId;
             const card = document.getElementById('block_' + blockId);
             if (card) {
-              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              card.style.outline = '2px solid var(--brand-accent, #6366f1)';
-              setTimeout(() => { card.style.outline = ''; }, 1200);
+              dom.editorBlocksList?.querySelectorAll('.radio-eb-block.is-timeline-selected').forEach((selected) => {
+                selected.classList.remove('is-timeline-selected');
+              });
+              card.classList.add('is-timeline-selected');
+              card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+              setTimeout(() => card.classList.remove('is-timeline-selected'), 1800);
             }
-          });
-
-          el.addEventListener('dblclick', (e) => {
-            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) return;
-            e.stopPropagation();
-            const bIdx = parseInt(el.dataset.index, 10);
-            playEditorBlock(bIdx);
-          });
-
-          el.addEventListener('contextmenu', (e) => {
-            if (isEdgeResizing) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const bIdx = parseInt(el.dataset.index, 10);
-            openBlockContextMenu(bIdx, el, e.clientX, e.clientY);
-          });
-
-          el.addEventListener('dragstart', (e) => {
-            if (isEdgeResizing || e.target.closest('.radio-timeline-edge-handle')) {
-              e.preventDefault();
-              return;
-            }
-            const bIdx = parseInt(el.dataset.index, 10);
-            state.draggedBlockIndex = bIdx;
-            el.classList.add('is-dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', JSON.stringify({
-              type: 'move_block',
-              index: bIdx,
-              blockId: el.dataset.blockId
-            }));
-          });
-
-          el.addEventListener('dragend', () => {
-            state.draggedBlockIndex = null;
-            el.classList.remove('is-dragging');
-            dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip').forEach((c) => {
-              c.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
+            dom.radioTimelineTrack.querySelectorAll('.radio-timeline-clip.is-selected').forEach((selected) => {
+              selected.classList.remove('is-selected');
             });
-            if (dom.radioTimelineTrack) dom.radioTimelineTrack.style.outline = '';
-          });
-
-          el.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.dataTransfer.dropEffect = 'move';
-            const rect = el.getBoundingClientRect();
-            const isRightHalf = (e.clientX - rect.left) > (rect.width / 2);
-            el.classList.toggle('is-drag-over-left', !isRightHalf);
-            el.classList.toggle('is-drag-over-right', isRightHalf);
-            el.classList.add('is-drag-over');
-          });
-
-          el.addEventListener('dragleave', (e) => {
-            if (!el.contains(e.relatedTarget)) {
-              el.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
-            }
-          });
-
-          el.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            el.classList.remove('is-drag-over', 'is-drag-over-left', 'is-drag-over-right');
-
-            const targetIdx = parseInt(el.dataset.index, 10);
-            const rect = el.getBoundingClientRect();
-            const isRightHalf = (e.clientX - rect.left) > (rect.width / 2);
-            const insertIdx = isRightHalf ? targetIdx + 1 : targetIdx;
-
-            let fromIdx = state.draggedBlockIndex;
-            if (fromIdx === null || fromIdx === undefined) {
-              try {
-                const raw = e.dataTransfer.getData('text/plain');
-                if (raw) {
-                  const data = JSON.parse(raw);
-                  if (data && data.type === 'move_block' && data.index !== undefined) fromIdx = data.index;
-                }
-              } catch (_) {}
-            }
-
-            if (fromIdx !== null && fromIdx !== undefined && !isNaN(fromIdx)) {
-              if (fromIdx === insertIdx || fromIdx === insertIdx - 1) return;
-              const item = state.editorBlocks.splice(fromIdx, 1)[0];
-              const actualTargetIdx = fromIdx < insertIdx ? insertIdx - 1 : insertIdx;
-              state.editorBlocks.splice(actualTargetIdx, 0, item);
-              markEditorDirty(true);
-              renderEditor();
-              showToast(`Блок «${item.title || 'Элемент'}» перемещен на ленте`, 'info');
-              return;
-            }
-
-            // Перетаскивание из боковой шторки
-            try {
-              const raw = e.dataTransfer.getData('text/plain');
-              if (raw) {
-                const item = JSON.parse(raw);
-                if (item && item.type) {
-                  if (item.type === 'playlist') {
-                    openPickPlaylistForTimeline(item.id, insertIdx);
-                  } else {
-                    addBlockToEditor({
-                      type: item.type === 'speech' ? 'speech' : 'track',
-                      track_id: item.id,
-                      title: item.title,
-                      audio_url: item.audio_url,
-                      duration: Number(item.duration) || 180
-                    }, insertIdx);
-                  }
-                }
-              }
-            } catch (_) {}
-          });
-        });
-
-        // Отодвигание за край блока (Edge Resize & Dynamic Timeline Expansion)
-        dom.radioTimelineTrack.querySelectorAll('.radio-timeline-edge-handle').forEach((handle) => {
-          handle.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            isEdgeResizing = true;
-            handle.classList.add('is-resizing');
-
-            const bIdx = parseInt(handle.dataset.index, 10);
-            const block = state.editorBlocks[bIdx];
-            if (!block) { isEdgeResizing = false; return; }
-
-            const clipEl = handle.closest('.radio-timeline-clip');
-            const initialDuration = Math.max(5, Number(block.duration) || 0);
-            const startX = e.clientX;
-            const trackRect = dom.radioTimelineTrack.getBoundingClientRect();
-            const initialTotalDur = totalDurationSec;
-            const initialBaseScale = state.baseScaleSec || 1200;
-            const currentZoom = state.timelineZoom || 1.0;
-            const secPerPx = effectiveScale / Math.max(10, trackRect.width);
-
-            const tooltip = document.createElement('div');
-            tooltip.className = 'radio-timeline-resize-tooltip';
-            tooltip.innerHTML = `<span>${escapeHtml(block.title)}</span>: <strong>${formatDuration(initialDuration)}</strong>`;
-            document.body.appendChild(tooltip);
-
-            const updateTooltipPos = (clientX, clientY) => {
-              tooltip.style.left = `${clientX}px`;
-              tooltip.style.top = `${clientY}px`;
-            };
-            updateTooltipPos(e.clientX, e.clientY);
-
-            let lastCalculatedDur = initialDuration;
-            let lastTotalSec = initialTotalDur;
-
-            const onMouseMove = (ev) => {
-              const deltaX = ev.clientX - startX;
-              const deltaSec = Math.round(deltaX * secPerPx);
-              lastCalculatedDur = Math.max(5, initialDuration + deltaSec);
-              const diffSec = lastCalculatedDur - initialDuration;
-              lastTotalSec = Math.max(5, initialTotalDur + diffSec);
-
-              // Отодвигание за край блока увеличивает временную линию в реальном времени!
-              if (lastTotalSec > initialBaseScale) {
-                state.baseScaleSec = Math.max(initialBaseScale, Math.ceil(lastTotalSec * 1.15));
-                const newEffScale = Math.max(60, Math.round(state.baseScaleSec / currentZoom));
-                if (dom.timelineScaleBadge) {
-                  const min = Math.round(newEffScale / 60);
-                  dom.timelineScaleBadge.textContent = min >= 60 ? `Шкала: ${(min / 60).toFixed(1)} ч` : `Шкала: ${min} мин`;
-                }
-              }
-
-              const activeScale = Math.max(60, Math.round(Math.max(state.baseScaleSec || 1200, Math.ceil(lastTotalSec * 1.12)) / currentZoom));
-              const newPct = Math.max(1.8, (lastCalculatedDur / activeScale) * 100);
-              if (clipEl) {
-                clipEl.style.width = `${newPct.toFixed(2)}%`;
-                const durEl = clipEl.querySelector('.clip-dur');
-                if (durEl) durEl.textContent = formatDuration(lastCalculatedDur);
-              }
-
-              if (dom.timelineTotalDuration) {
-                dom.timelineTotalDuration.textContent = formatDuration(lastTotalSec);
-              }
-              if (dom.timelineEndTime) {
-                const baseStartMs = new Date(state.editorStartTime || Date.now()).getTime();
-                dom.timelineEndTime.textContent = formatClockTime(new Date(baseStartMs + lastTotalSec * 1000).toISOString());
-              }
-
-              const sign = diffSec >= 0 ? '+' : '';
-              const pillClass = diffSec >= 0 ? 'positive' : 'negative';
-              tooltip.innerHTML = `
-                <span>${escapeHtml(block.title)}</span>: 
-                <strong>${formatDuration(lastCalculatedDur)}</strong> 
-                <span class="delta-pill ${pillClass}">(${sign}${formatDuration(diffSec)})</span>
-              `;
-              updateTooltipPos(ev.clientX, ev.clientY);
-            };
-
-            const onMouseUp = () => {
-              window.removeEventListener('mousemove', onMouseMove);
-              window.removeEventListener('mouseup', onMouseUp);
-              handle.classList.remove('is-resizing');
-              if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
-              setTimeout(() => { isEdgeResizing = false; }, 80);
-
-              block.duration = lastCalculatedDur;
-              if (block.type === 'playlist') {
-                block.customDuration = lastCalculatedDur;
-              }
-
-              if (lastTotalSec > initialBaseScale) {
-                state.baseScaleSec = Math.max(initialBaseScale, Math.ceil(lastTotalSec * 1.15));
-              }
-
-              renderEditor();
-              showToast(`Длительность блока увеличена: ${formatDuration(lastCalculatedDur)}. Временная линия увеличена!`, 'info');
-            };
-
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
+            el.classList.add('is-selected');
           });
         });
       }
     }
 
     // Плейхед прямого эфира (On-Air indicator)
+    restoreTimelineScrollPosition();
     updateTimelinePlayhead();
   }
 
@@ -2938,6 +2736,7 @@
       document.getElementById('btnEmptyAddTrack')?.addEventListener('click', () => dom.btnPickFromMyTracks?.click());
       document.getElementById('btnEmptyAddWords')?.addEventListener('click', () => openInsertWordsModalForIndex(-1));
       updateCapacityUI();
+      restoreTimelineScrollPosition();
       return;
     }
 
@@ -3126,6 +2925,7 @@
     listEl.innerHTML = html;
     bindBlockEditorEvents(listEl);
     updateCapacityUI();
+    restoreTimelineScrollPosition();
   }
 
   // Привязка обработчиков событий блочного редактора
@@ -3835,8 +3635,93 @@
   }
 
   function setTimelineZoom(zoomFactor) {
+    if (dom.radioTimelineTrackScroll && dom.radioTimelineTrackInner) {
+      const totalDurationSec = (state.editorBlocks || []).reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
+      const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
+      const elapsedSec = (dom.radioTimelineTrackScroll.scrollLeft / Math.max(1, dom.radioTimelineTrackInner.scrollWidth)) * timelineScale;
+      state.timelineScrollRatio = totalDurationSec ? Math.max(0, Math.min(1, elapsedSec / totalDurationSec)) : 0;
+    }
     state.timelineZoom = Math.max(0.5, Math.min(4.0, zoomFactor));
     renderTimelineRibbon();
+    requestAnimationFrame(restoreTimelineScrollPosition);
+  }
+
+  function syncTimelineScroll(source) {
+    if (state.isSyncingTimelineScroll) return;
+    const blocks = state.editorBlocks || [];
+    const totalDurationSec = blocks.reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
+    if (!totalDurationSec) return;
+
+    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
+    let activeIndex = 0;
+    let elapsedSec = 0;
+
+    if (source === 'overview') {
+      if (!dom.radioTimelineTrackInner || !dom.editorBlocksList || !dom.radioTimelineTrackScroll) return;
+      elapsedSec = (dom.radioTimelineTrackScroll.scrollLeft / Math.max(1, dom.radioTimelineTrackInner.scrollWidth)) * timelineScale;
+      const overviewTime = elapsedSec;
+      while (activeIndex < blocks.length - 1 && elapsedSec >= (Number(blocks[activeIndex].duration) || 0)) {
+        elapsedSec -= Number(blocks[activeIndex].duration) || 0;
+        activeIndex += 1;
+      }
+      state.timelineScrollRatio = Math.max(0, Math.min(1, overviewTime / totalDurationSec));
+    } else {
+      if (!dom.editorBlocksList || !dom.radioTimelineTrackScroll || !dom.radioTimelineTrackInner) return;
+      const listRect = dom.editorBlocksList.getBoundingClientRect();
+      const visibleCard = [...dom.editorBlocksList.querySelectorAll('.radio-eb-block')].find((card) => {
+        const rect = card.getBoundingClientRect();
+        return rect.right > listRect.left && rect.left < listRect.right;
+      });
+      if (visibleCard) activeIndex = Number(visibleCard.dataset.index) || 0;
+      elapsedSec = blocks.slice(0, activeIndex).reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
+      state.timelineScrollRatio = elapsedSec / totalDurationSec;
+    }
+
+    state.isSyncingTimelineScroll = true;
+    if (source === 'overview') {
+      dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
+      const card = dom.editorBlocksList.querySelector(`.radio-eb-block[data-index="${activeIndex}"]`);
+      dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
+      if (card) {
+        const offset = card.getBoundingClientRect().left - dom.editorBlocksList.getBoundingClientRect().left;
+        dom.editorBlocksList.scrollLeft += offset;
+      }
+    } else {
+      const startRatio = Math.max(0, Math.min(1, elapsedSec / timelineScale));
+      dom.radioTimelineTrackScroll.scrollLeft = startRatio * dom.radioTimelineTrackInner.scrollWidth;
+      dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
+      dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
+    }
+    requestAnimationFrame(() => { state.isSyncingTimelineScroll = false; });
+  }
+
+  function restoreTimelineScrollPosition() {
+    const blocks = state.editorBlocks || [];
+    const totalDurationSec = blocks.reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
+    if (!totalDurationSec) return;
+
+    const ratio = Math.max(0, Math.min(1, Number(state.timelineScrollRatio) || 0));
+    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
+    const targetTime = ratio * totalDurationSec;
+    let activeIndex = 0;
+    let elapsedSec = 0;
+    while (activeIndex < blocks.length - 1 && elapsedSec + (Number(blocks[activeIndex].duration) || 0) < targetTime) {
+      elapsedSec += Number(blocks[activeIndex].duration) || 0;
+      activeIndex += 1;
+    }
+
+    state.isSyncingTimelineScroll = true;
+    if (dom.radioTimelineTrackScroll && dom.radioTimelineTrackInner) {
+      dom.radioTimelineTrackScroll.scrollLeft = (targetTime / timelineScale) * dom.radioTimelineTrackInner.scrollWidth;
+    }
+    const card = dom.editorBlocksList?.querySelector(`.radio-eb-block[data-index="${activeIndex}"]`);
+    if (card && dom.editorBlocksList) {
+      const offset = card.getBoundingClientRect().left - dom.editorBlocksList.getBoundingClientRect().left;
+      dom.editorBlocksList.scrollLeft += offset;
+    }
+    dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
+    dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
+    requestAnimationFrame(() => { state.isSyncingTimelineScroll = false; });
   }
 
   function checkIsStationOwner(st) {
@@ -5198,7 +5083,7 @@
 
     const baseScale = state.baseScaleSec || 1200;
     const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
-    const effectiveScale = Math.max(60, Math.round(neededScale / state.timelineZoom));
+    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, neededScale));
 
     const nowMs = getEffectiveNowMs();
     const startMs = new Date(state.editorStartTime || Date.now()).getTime();
@@ -5333,8 +5218,8 @@
         }
       }
 
-      if (activeElapsed <= effectiveScale) {
-        const playheadPct = (activeElapsed / effectiveScale) * 100;
+      if (activeElapsed <= timelineScale) {
+        const playheadPct = (activeElapsed / timelineScale) * 100;
         dom.radioTimelinePlayhead.style.display = 'block';
         dom.radioTimelinePlayhead.style.left = `${playheadPct.toFixed(2)}%`;
 
@@ -6810,6 +6695,16 @@
     dom.btnTimelineZoomOut?.addEventListener('click', () => setTimelineZoom(state.timelineZoom / 1.25));
     dom.btnTimelineZoomReset?.addEventListener('click', () => setTimelineZoom(1.0));
 
+    dom.radioTimelineTrackScroll?.addEventListener('scroll', () => syncTimelineScroll('overview'), { passive: true });
+    dom.editorBlocksList?.addEventListener('scroll', () => syncTimelineScroll('editor'), { passive: true });
+
+    ['dragstart', 'dragenter', 'dragover', 'drop'].forEach((eventName) => {
+      dom.radioTimelineTrack?.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }, true);
+    });
+
     dom.radioTimelineTrackScroll?.addEventListener('wheel', (e) => {
       if (e.ctrlKey) {
         e.preventDefault();
@@ -6818,116 +6713,11 @@
       }
     }, { passive: false });
 
-    // Drag & drop медиафайлов из шторки прямо на дорожку таймлайна
-    dom.radioTimelineTrack?.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-      dom.radioTimelineTrack.style.outline = '2px dashed var(--brand-accent, #6366f1)';
-    });
-
-    dom.radioTimelineTrack?.addEventListener('dragleave', () => {
-      dom.radioTimelineTrack.style.outline = '';
-    });
-
     // Кнопка увеличения шкалы времени (+15м)
     dom.btnTimelineExtendScale?.addEventListener('click', () => {
       state.baseScaleSec = (state.baseScaleSec || 1200) + 900;
       renderTimelineRibbon();
       showToast(`Временная линия увеличена на 15 мин (Шкала: ${Math.round(state.baseScaleSec / 60)} мин)`, 'info');
-    });
-
-    dom.radioTimelineTrack?.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dom.radioTimelineTrack.style.outline = '';
-      if (e.target.closest('.radio-timeline-clip')) return;
-
-      const trackRect = dom.radioTimelineTrack.getBoundingClientRect();
-      const clickX = Math.max(0, e.clientX - trackRect.left);
-      const { totalDurationSec } = syncCompiledSlots();
-      const baseScale = state.baseScaleSec || 1200;
-      const currentZoom = state.timelineZoom || 1.0;
-      const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
-      const effectiveScale = Math.max(60, Math.round(neededScale / currentZoom));
-      const targetSec = Math.round((clickX / Math.max(10, trackRect.width)) * effectiveScale);
-
-      // 1. Проверяем, перемещается ли существующий блок по таймлайну
-      let fromIdx = state.draggedBlockIndex;
-      if (fromIdx === null || fromIdx === undefined) {
-        try {
-          const raw = e.dataTransfer.getData('text/plain');
-          if (raw) {
-            const data = JSON.parse(raw);
-            if (data && data.type === 'move_block' && data.index !== undefined) fromIdx = data.index;
-          }
-        } catch (_) {}
-      }
-
-      if (fromIdx !== null && fromIdx !== undefined && !isNaN(fromIdx)) {
-        const item = state.editorBlocks.splice(fromIdx, 1)[0];
-        if (!item) return;
-
-        // Если блок отодвинут далеко вправо за край существующих треков:
-        if (targetSec > totalDurationSec + 30) {
-          const gapSec = targetSec - totalDurationSec;
-          const gapBlock = {
-            id: genBlockId(),
-            type: 'gap',
-            title: 'Пауза в эфире (музыкальная пустота)',
-            duration: Math.max(30, gapSec)
-          };
-          state.editorBlocks.push(gapBlock);
-          state.editorBlocks.push(item);
-          if (targetSec + item.duration > baseScale) {
-            state.baseScaleSec = Math.max(state.baseScaleSec, Math.ceil((targetSec + item.duration) * 1.15));
-          }
-          markEditorDirty(true);
-          renderEditor();
-          showToast(`Блок отодвинут за край. Создана пауза ${formatDuration(gapSec)}, временная линия увеличена!`, 'info');
-        } else {
-          state.editorBlocks.push(item);
-          markEditorDirty(true);
-          renderEditor();
-          showToast(`Блок «${item.title}» перемещен в конец эфира`, 'info');
-        }
-        return;
-      }
-
-      // 2. Иначе это перетаскивание из боковой шторки
-      try {
-        const raw = e.dataTransfer.getData('text/plain');
-        if (raw) {
-          const item = JSON.parse(raw);
-          if (item && item.type) {
-            if (targetSec > totalDurationSec + 30) {
-              const gapSec = targetSec - totalDurationSec;
-              state.editorBlocks.push({
-                id: genBlockId(),
-                type: 'gap',
-                title: 'Пауза в эфире (музыкальная пустота)',
-                duration: Math.max(30, gapSec)
-              });
-              if (targetSec + (Number(item.duration) || 180) > baseScale) {
-                state.baseScaleSec = Math.max(state.baseScaleSec, Math.ceil((targetSec + (Number(item.duration) || 180)) * 1.15));
-              }
-            }
-            if (item.type === 'playlist') {
-              openPickPlaylistForTimeline(item.id);
-            } else {
-              addBlockToEditor({
-                id: genBlockId(),
-                type: item.type === 'speech' ? 'speech' : 'track',
-                track_id: item.id || null,
-                title: item.title || 'Новая запись',
-                audio_url: item.audio_url || null,
-                duration: Number(item.duration) || 180
-              });
-              showToast(`«${item.title}» добавлен в ленту эфира!`, 'success');
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Ошибка Drag & Drop:', err);
-      }
     });
 
     // Открытие добавления плейлиста в эфир

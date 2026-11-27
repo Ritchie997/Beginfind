@@ -1133,6 +1133,28 @@
     padding: 22px 9px 14px;
   }
 
+  body[data-page="radio"] .radio-timeline-overview-hint {
+    align-items: flex-start;
+    padding: 8px 10px 0;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  body[data-page="radio"] .radio-editor-lane-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 16px;
+  }
+
+  body[data-page="radio"] .radio-editor-lane-header > span {
+    line-height: 1.4;
+  }
+
+  body[data-page="radio"] .radio-timeline-track-scroll {
+    padding: 8px 10px 12px;
+  }
+
   body[data-page="radio"] .radio-eb-block {
     flex-basis: min(var(--radio-clip-width, 230px), 360px, calc(100vw - 52px));
     min-height: 132px;

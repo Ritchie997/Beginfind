@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/site/radio.css">
-<link rel="stylesheet" href="/site/radio-mobile.css?v=5" media="(max-width: 768px)">
+<link rel="stylesheet" href="/site/radio-mobile.css?v=6" media="(max-width: 768px)">
 <link rel="stylesheet" href="/image-lightbox.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -466,8 +466,8 @@
         <div class="radio-timeline-nle-wrapper" id="radioTimelineContainer">
           <div class="radio-timeline-nle-header">
             <div class="radio-timeline-nle-title">
-              <i class="fas fa-sliders"></i>
-              <span>Лента вещания</span>
+              <i class="fas fa-bars-staggered"></i>
+              <span>Обзор эфира</span>
               <span class="radio-timeline-badge" id="timelineScaleBadge">Шкала: 20 мин</span>
             </div>
             <div class="radio-timeline-nle-meta">
@@ -506,8 +506,9 @@
             </details>
           </div>
 
-          <!-- Область прокрутки таймлайна с линейкой времени и дорожкой клипов -->
-          <div class="radio-timeline-track-scroll" id="radioTimelineTrackScroll">
+          <div class="radio-timeline-overview-hint"><i class="fas fa-circle-info"></i> Только навигация: прокрутите или измените масштаб, затем выберите блок, чтобы перейти к нему в редакторе.</div>
+          <!-- Обзорная шкала только для навигации; редактирование доступно в дорожке ниже. -->
+          <div class="radio-timeline-track-scroll" id="radioTimelineTrackScroll" aria-label="Обзор расписания эфира, только для навигации">
             <div class="radio-timeline-track-inner" id="radioTimelineTrackInner">
               <!-- Линейка времени с минутами и секундами -->
               <div class="radio-timeline-ruler" id="radioTimelineRuler"></div>
@@ -592,7 +593,11 @@
           </div>
         </div>
 
-        <!-- БЛОЧНЫЙ КОНСТРУКТОР ЭФИРА В СТИЛЕ АНТРОПЕДИИ -->
+        <div class="radio-editor-lane-header">
+          <div><i class="fas fa-sliders"></i> Редактор сетки</div>
+          <span>Перетаскивайте блоки здесь, чтобы менять порядок. Прокрутка связана с обзором выше.</span>
+        </div>
+        <!-- БЛОЧНЫЙ КОНСТРУКТОР ЭФИРА -->
         <div class="radio-eb-blocklist eb-blocklist" id="editorBlocksList">
           <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, плейлисты или слова выше.</p>
         </div>
