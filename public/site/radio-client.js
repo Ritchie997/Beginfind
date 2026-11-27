@@ -2637,7 +2637,13 @@
     const visibleScale = Math.max(60, Math.round(timelineScale / state.timelineZoom));
     if (dom.radioTimelineTrackInner && dom.radioTimelineTrackScroll) {
       const overviewWidth = Math.max(1, dom.radioTimelineTrackScroll.clientWidth - 24);
-      dom.radioTimelineTrackInner.style.width = `${overviewWidth}px`;
+      const isScrollableOverview = state.editorBlocks.length > 12;
+      const minBlockWidth = window.innerWidth <= 768 ? 82 : 100;
+      const contentWidth = isScrollableOverview
+        ? Math.max(overviewWidth, state.editorBlocks.length * minBlockWidth)
+        : overviewWidth;
+      dom.radioTimelineTrackScroll.classList.toggle('is-scrollable', isScrollableOverview);
+      dom.radioTimelineTrackInner.style.width = `${contentWidth}px`;
     }
 
     updateTimelineZoomBadge(timelineScale);
@@ -2667,7 +2673,7 @@
       } else {
         dom.radioTimelineTrack.innerHTML = state.editorBlocks.map((block, idx) => {
           const pct = Math.max(0.15, (block.duration / timelineScale) * 100);
-          const renderedWidth = (dom.radioTimelineTrack.clientWidth * pct) / 100;
+          const renderedWidth = (dom.radioTimelineTrackInner.clientWidth * pct) / 100;
           const labelMinWidth = window.innerWidth <= 768 ? 70 : 86;
           const showTitle = renderedWidth >= labelMinWidth;
           const typeClass = `clip-${block.type}`;
@@ -3673,6 +3679,19 @@
     const editor = dom.editorBlocksList;
     if (!viewport || !editor) return;
 
+    if (dom.radioTimelineTrackScroll?.classList.contains('is-scrollable')) {
+      const overview = dom.radioTimelineTrackScroll;
+      const maxOverviewScroll = Math.max(0, overview.scrollWidth - overview.clientWidth);
+      const scrollRatio = maxOverviewScroll
+        ? Math.max(0, Math.min(1, overview.scrollLeft / maxOverviewScroll))
+        : 0;
+      viewport.style.left = `${overview.scrollLeft}px`;
+      viewport.style.width = `${overview.clientWidth}px`;
+      viewport.setAttribute('aria-valuenow', String(Math.round(scrollRatio * 100)));
+      viewport.setAttribute('aria-valuetext', `Позиция эфира: ${Math.round(scrollRatio * 100)}%`);
+      return;
+    }
+
     const scrollWidth = Math.max(editor.scrollWidth, editor.clientWidth);
     const maxScroll = Math.max(0, scrollWidth - editor.clientWidth);
     const widthRatio = maxScroll ? Math.min(1, editor.clientWidth / scrollWidth) : 1;
@@ -3711,6 +3730,12 @@
   function syncTimelineScroll() {
     if (!dom.editorBlocksList) return;
     state.timelineScrollRatio = getEditorScrollRatio();
+    if (dom.radioTimelineTrackScroll?.classList.contains('is-scrollable')) {
+      const overview = dom.radioTimelineTrackScroll;
+      const maxOverviewScroll = Math.max(0, overview.scrollWidth - overview.clientWidth);
+      const targetScroll = state.timelineScrollRatio * maxOverviewScroll;
+      if (Math.abs(overview.scrollLeft - targetScroll) > 1) overview.scrollLeft = targetScroll;
+    }
     const activeIndex = getVisibleEditorBlockIndex();
     dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
     if (activeIndex >= 0) {
@@ -3870,7 +3895,10 @@
     }
   });
 
-  window.addEventListener('resize', hideContextMenu);
+  window.addEventListener('resize', () => {
+    hideContextMenu();
+    if (dom.radioTimelineContainer) renderTimelineRibbon();
+  });
   window.addEventListener('scroll', (e) => {
     if (Date.now() - contextMenuOpenedAt < 150) return;
     if (activeContextMenuEl && activeContextMenuEl.contains(e.target)) return;
@@ -6706,6 +6734,18 @@
     dom.btnTimelineZoomReset?.addEventListener('click', () => setTimelineZoom(1.0));
 
     dom.editorBlocksList?.addEventListener('scroll', syncTimelineScroll, { passive: true });
+
+    dom.radioTimelineTrackScroll?.addEventListener('scroll', () => {
+      if (!dom.radioTimelineTrackScroll.classList.contains('is-scrollable') || !dom.editorBlocksList) return;
+      const maxOverviewScroll = Math.max(0, dom.radioTimelineTrackScroll.scrollWidth - dom.radioTimelineTrackScroll.clientWidth);
+      const maxEditorScroll = Math.max(0, dom.editorBlocksList.scrollWidth - dom.editorBlocksList.clientWidth);
+      const ratio = maxOverviewScroll
+        ? Math.max(0, Math.min(1, dom.radioTimelineTrackScroll.scrollLeft / maxOverviewScroll))
+        : 0;
+      state.timelineScrollRatio = ratio;
+      dom.editorBlocksList.scrollLeft = ratio * maxEditorScroll;
+      syncTimelineScroll();
+    }, { passive: true });
 
     dom.radioTimelineViewport?.addEventListener('pointerdown', (e) => {
       const viewport = dom.radioTimelineViewport;

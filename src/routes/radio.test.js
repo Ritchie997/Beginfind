@@ -178,6 +178,8 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   assert.ok(client.includes('style="width: ${pct.toFixed(3)}%;"'), 'Overview clips must expose their proportional duration width');
   assert.ok(client.includes("const showTitle = renderedWidth >= labelMinWidth;"), 'Overview clip names must only appear when the clip has room for a readable label');
   assert.ok(client.includes('class="clip-title"><i class="fas ${icon}"></i><span class="clip-name">${titleText}</span></div>'), 'Overview clip names must be truncated independently from their icons');
+  assert.ok(client.includes('const isScrollableOverview = state.editorBlocks.length > 12;'), 'Dense overview must switch to horizontal scrolling after twelve schedule blocks');
+  assert.ok(client.includes('Math.max(overviewWidth, state.editorBlocks.length * minBlockWidth)'), 'Dense overview must expand enough to keep average clips readable');
   assert.ok(client.includes('eb-block-${block.type}'), 'Rendered clips must expose their block type for restrained color coding');
   assert.ok(client.includes('class="radio-eb-empty-state"'), 'The empty schedule message must use the full-lane empty state');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist {\n  display: flex;\n  flex-direction: row;'), 'Schedule clips must flow horizontally in one scrollable lane');
@@ -200,11 +202,14 @@ test('radio overview is read-only and its navigation stays synchronized with the
   assert.ok(client.includes('draggable="false"'), 'Overview clips must not be draggable');
   assert.ok(client.includes('navigateEditorFromOverview(position - viewportWidthRatio / 2)'), 'Clicking the overview must navigate the editor to the same time');
   assert.ok(client.includes('updateTimelineViewport();'), 'Editor scrolling must update the visible-range overlay in the overview');
+  assert.ok(client.includes("dom.radioTimelineTrackScroll?.addEventListener('scroll'"), 'Scrolling a dense overview must navigate the editor in sync');
   assert.ok(client.includes("['dragstart', 'dragenter', 'dragover', 'drop']"), 'The overview must reject all drag-and-drop interactions');
   assert.ok(!client.includes("dom.radioTimelineTrack?.addEventListener('drop'"), 'The overview must not retain a drop handler that can mutate the schedule');
   assert.ok(css.includes('.radio-timeline-clip.is-selected'), 'Selected overview clips must have a visual state');
   assert.ok(css.includes('.radio-timeline-clip.is-title-visible .clip-title'), 'Overview labels must be shown on clips with enough room');
   assert.ok(css.includes('.radio-timeline-clip.is-title-visible .clip-name'), 'Long overview labels must truncate without overflowing their clip');
+  assert.ok(css.includes('.radio-timeline-track-scroll.is-scrollable {\n  overflow-x: auto;'), 'Dense overview must expose horizontal scrolling');
+  assert.ok(css.includes('.radio-timeline-track-scroll.is-scrollable .radio-timeline-viewport {\n  display: none;'), 'Dense scrolling must not show a viewport overlay detached from the scrolled content');
   assert.ok(css.includes('.radio-eb-block.is-timeline-selected'), 'Overview selection must be reflected in the editor');
 });
 

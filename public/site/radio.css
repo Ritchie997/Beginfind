@@ -4639,6 +4639,22 @@ body[data-page="radio"] .radio-timeline-workspace .radio-timeline-track-scroll {
   cursor: crosshair;
 }
 
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-track-scroll.is-scrollable {
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: grab;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
+}
+
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-track-scroll.is-scrollable:active {
+  cursor: grabbing;
+}
+
+body[data-page="radio"] .radio-timeline-workspace .radio-timeline-track-scroll.is-scrollable .radio-timeline-viewport {
+  display: none;
+}
+
 body[data-page="radio"] .radio-timeline-workspace .radio-clip-bracket,
 body[data-page="radio"] .radio-timeline-workspace .radio-timeline-edge-handle {
   display: none !important;
