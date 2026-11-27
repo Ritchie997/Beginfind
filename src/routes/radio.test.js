@@ -223,6 +223,16 @@ test('radio timeline insertions retain the clicked position and live playhead fo
   assert.ok(client.includes('const playheadPct = (activeElapsed / timelineScale) * 100;'), 'The playhead must use the same normalized time scale as overview clips');
 });
 
+test('editor track previews play only the selected audio file', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+
+  assert.ok(client.includes('gAudio.playTrack(trackToPlay, [trackToPlay], 0);'), 'A selected block preview must start a one-file queue');
+  assert.ok(client.includes('gAudio.playTrack(trackToPlay, [trackToPlay], 0);\n    showToast(`Воспроизведение «${it.title}»'), 'A selected playlist track preview must not continue through its playlist');
+  assert.ok(client.includes('gAudio.playTrack(queue[0], queue, 0);'), 'The explicit playlist action must continue to play the playlist');
+});
+
 test('radio editor blocks keep a fixed workspace and expand playlists inside their cards', () => {
   const fs = require('fs');
   const path = require('path');

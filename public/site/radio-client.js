@@ -3321,40 +3321,7 @@
       return;
     }
 
-    // Собираем сквозную очередь воспроизведения из всех доступных аудио блоков эфира
-    const fullQueue = [];
-    state.editorBlocks.forEach((b) => {
-      if (b.type === 'playlist' && Array.isArray(b.items)) {
-        b.items.forEach((it, sIdx) => {
-          if (it.audio_url) {
-            fullQueue.push({
-              id: it.track_id || `${b.id}_${sIdx}`,
-              blockId: b.id,
-              title: it.title,
-              author_name: `Плейлист: ${b.title}`,
-              duration: Number(it.duration) || 180,
-              audio_url: it.audio_url,
-              type: it.type || 'track'
-            });
-          }
-        });
-      } else if (b.audio_url) {
-        fullQueue.push({
-          id: b.id,
-          blockId: b.id,
-          title: b.title,
-          author_name: b.type === 'speech' ? 'Слова ведущего' : (b.type === 'jingle' ? 'Джингл' : 'Трек эфира'),
-          duration: Number(b.duration) || 60,
-          audio_url: b.audio_url,
-          type: b.type || 'track'
-        });
-      }
-    });
-
-    let startIdx = fullQueue.findIndex((q) => q.blockId === block.id || q.audio_url === block.audio_url);
-    if (startIdx === -1) startIdx = 0;
-
-    const trackToPlay = fullQueue[startIdx] || {
+    const trackToPlay = {
       id: block.id,
       blockId: block.id,
       title: block.title,
@@ -3364,7 +3331,7 @@
       type: block.type || 'track'
     };
 
-    gAudio.playTrack(trackToPlay, fullQueue.length ? fullQueue : [trackToPlay], startIdx);
+    gAudio.playTrack(trackToPlay, [trackToPlay], 0);
     showToast(`Воспроизведение «${trackToPlay.title}» в общем плеере`, 'info');
     updateEditorPlaybackUI();
   }
@@ -3392,20 +3359,17 @@
       return;
     }
 
-    const playlistQueue = block.items.filter((t) => t.audio_url).map((t, idx) => ({
-      id: t.track_id || `${block.id}_${idx}`,
+    const trackToPlay = {
+      id: it.track_id || `${block.id}_${trackIndex}`,
       blockId: block.id,
-      title: t.title,
+      title: it.title,
       author_name: `Плейлист: ${block.title}`,
-      duration: Number(t.duration) || 180,
-      audio_url: t.audio_url,
-      type: t.type || 'track'
-    }));
+      duration: Number(it.duration) || 180,
+      audio_url: it.audio_url,
+      type: it.type || 'track'
+    };
 
-    let startIdx = playlistQueue.findIndex((q) => q.id === targetId || q.audio_url === it.audio_url);
-    if (startIdx === -1) startIdx = 0;
-
-    gAudio.playTrack(playlistQueue[startIdx], playlistQueue, startIdx);
+    gAudio.playTrack(trackToPlay, [trackToPlay], 0);
     showToast(`Воспроизведение «${it.title}» в общем плеере`, 'info');
     updateEditorPlaybackUI();
   }
