@@ -66,6 +66,22 @@ test('GET /api/radio/stations returns stations list for unauthenticated guest', 
   assert.ok(Array.isArray(res.body), 'Response should be an array of stations');
 });
 
+test('radio frequency cards show live station status and refresh without reloading the page', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  assert.ok(client.includes('function getStationCardLiveState'), 'Station cards must derive a current broadcast status');
+  assert.ok(client.includes('radio-card-live-status'), 'Station cards must render the broadcast status');
+  assert.ok(client.includes('radio-card-track-title'), 'Station cards must render the current track title');
+  assert.ok(client.includes('setInterval(refreshVisibleStations, 10000)'), 'Station status must refresh every 10 seconds');
+  assert.ok(client.includes("document.addEventListener('visibilitychange', refreshVisibleStations)"), 'Station status must refresh when the page becomes visible');
+  assert.ok(client.includes('clearInterval(state.stationsPollTimer)'), 'Station polling must be stopped during page cleanup');
+  assert.ok(css.includes('body[data-page="radio"] .radio-card-live-status.is-live'), 'Live station status must have a distinct visual style');
+  assert.ok(css.includes('body[data-page="radio"] .radio-card-track-title'), 'Current track title must be styled within each frequency card');
+});
+
 test('GET /api/radio/tracks returns tracks list with pagination', async () => {
   const app = createApp();
   const res = await callApi(app, 'GET', '/api/radio/tracks');

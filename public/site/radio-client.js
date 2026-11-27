@@ -74,6 +74,10 @@
     isLiveMode: true,
     isTimeshift: false,
     pollTimer: null,
+    stationsPollTimer: null,
+    stationsRequestInFlight: false,
+    stations: [],
+    stationsVisibilityHandler: null,
     feedFilter: 'all',
     feedSearch: '',
     feedPage: 1,
@@ -1029,14 +1033,98 @@
   }
 
   // ===== 2. Каталог радиостанций =====
-  async function loadStations() {
-    if (!dom.stationsGrid) return;
-    dom.stationsGrid.innerHTML = '<p class="alltell-state">Загружаем список радиостанций…</p>';
-    try {
-      const stations = await api('/api/radio/stations');
-      if (!stations || stations.length === 0) {
+  function getStationCardLiveState(station) {
+    const status = String(station.broadcast_status || '').toLowerCase();
+    const isScheduled = status === 'scheduled';
+    const isLive = !isScheduled && (status === 'live' || Boolean(station.isLive || station.currentTrack));
+    const label = isLive ? 'В эфире' : (isScheduled ? 'Запланирован' : 'Офлайн');
+    let trackTitle = station.currentTrack && station.currentTrack.title;
+
+    if (!trackTitle) {
+      if (isLive) {
+        trackTitle = station.fallback_mode === 'loop' ? 'Эфир зациклен' : 'Сейчас нет активного трека';
+      } else if (isScheduled) {
+        trackTitle = 'Ожидает запланированного старта';
+      } else {
+        trackTitle = 'Нет активного трека';
+      }
+    }
+
+    return {
+      label,
+      className: isLive ? 'is-live' : (isScheduled ? 'is-scheduled' : 'is-offline'),
+      isLive,
+      trackTitle: String(trackTitle),
+      trackType: station.currentTrack && station.currentTrack.type
+    };
+  }
+
+  function getStationCardSignature(station) {
+    const liveState = getStationCardLiveState(station);
+    const track = station.currentTrack || {};
+    return JSON.stringify([
+      station.name,
+      station.frequency,
+      station.owner_name,
+      station.avatar_url,
+      station.description,
+      station.broadcast_status,
+      station.fallback_mode,
+      liveState.label,
+      liveState.trackTitle,
+      liveState.trackType,
+      track.startTime || track.start_time,
+      track.endTime || track.end_time
+    ]);
+  }
+
+  function renderStationCardContent(station) {
+    const liveState = getStationCardLiveState(station);
+    const trackTypeLabels = {
+      speech: 'Слова ведущего',
+      podcast: 'Подкаст',
+      jingle: 'Джингл',
+      playlist: 'Плейлист'
+    };
+    const trackTypeLabel = trackTypeLabels[liveState.trackType] || 'Трек';
+
+    return `
+      <div>
+        <div class="radio-card-top">
+          <div class="radio-card-avatar">
+            ${station.avatar_url ? `<img src="${escapeHtml(station.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
+          </div>
+          <div class="radio-card-meta" style="flex:1;">
+            <h3><span>${escapeHtml(station.name)}</span> <span class="radio-freq-pill">${escapeHtml(station.frequency)} FM</span></h3>
+            <div class="radio-card-owner">Ведущий: ${escapeHtml(station.owner_name)}</div>
+          </div>
+        </div>
+        ${station.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(station.description)}</p>` : ''}
+      </div>
+      <div class="radio-card-playing">
+        <div class="radio-card-live-status ${liveState.className}">
+          <i class="fas ${liveState.isLive ? 'fa-tower-broadcast' : (liveState.className === 'is-scheduled' ? 'fa-clock' : 'fa-circle')} ${liveState.isLive ? 'fa-fade' : ''}" aria-hidden="true"></i>
+          <span>${liveState.label}</span>
+        </div>
+        <div class="radio-card-track-title" title="${escapeHtml(liveState.trackTitle)}">
+          <i class="fas ${liveState.isLive ? 'fa-compact-disc' : (liveState.className === 'is-scheduled' ? 'fa-hourglass-half' : 'fa-music')} ${liveState.isLive && station.currentTrack ? 'fa-spin' : ''}" aria-hidden="true"></i>
+          <span>${escapeHtml(liveState.trackTitle)}</span>
+          ${station.currentTrack ? `<span class="radio-card-track-type">${escapeHtml(trackTypeLabel)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStationCards(stations) {
+    state.stations = stations;
+    const globalAudio = getGlobalAudio();
+    const gState = globalAudio ? globalAudio.getState() : {};
+    const activeStationId = (state.currentStation && state.currentStation.id) || (gState.station && gState.station.id);
+
+    if (stations.length === 0) {
+      if (!dom.stationsGrid.querySelector('#btnEmptyCreateStation')) {
         dom.stationsGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align:center; padding: 40px; color:#94a3b8;">
+          <div class="radio-stations-empty" style="grid-column: 1 / -1; text-align:center; padding: 40px; color:#94a3b8;">
             <i class="fas fa-radio" style="font-size:2.5rem; margin-bottom:12px; display:block; color:#64748b;"></i>
             Пока никто не занял радиочастоту. Станьте первым ведущим радиостанции!
             <div style="margin-top:16px;">
@@ -1045,60 +1133,88 @@
           </div>
         `;
         document.getElementById('btnEmptyCreateStation')?.addEventListener('click', openCreateStationModal);
-        return;
       }
+      return;
+    }
 
-      const globalAudio = getGlobalAudio();
-      const gState = globalAudio ? globalAudio.getState() : {};
-      const activeStationId = (state.currentStation && state.currentStation.id) || (gState.station && gState.station.id);
+    const existingCards = [...dom.stationsGrid.querySelectorAll('.radio-station-card')];
+    const existingIds = existingCards.map((card) => String(card.dataset.id));
+    const stationIds = stations.map((station) => String(station.id));
+    const sameStations = existingIds.length === stationIds.length
+      && existingIds.every((id, index) => id === stationIds[index]);
 
-      dom.stationsGrid.innerHTML = stations.map((st) => {
-        return `
-        <div class="radio-station-card ${activeStationId === st.id ? 'is-active-tune' : ''}" data-id="${st.id}">
-          <div>
-            <div class="radio-card-top">
-              <div class="radio-card-avatar">
-                ${st.avatar_url ? `<img src="${escapeHtml(st.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
-              </div>
-              <div class="radio-card-meta" style="flex:1;">
-                <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
-                <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
-              </div>
-            </div>
-            ${st.description ? `<p style="font-size:0.85rem; color:#94a3b8; margin:6px 0 10px;">${escapeHtml(st.description)}</p>` : ''}
-          </div>
-          <div>
-            <div class="radio-card-playing">
-              <i class="fas fa-compact-disc ${st.isLive ? 'fa-spin' : ''}" style="color:${st.isLive ? '#2ed573' : '#94a3b8'};"></i>
-              <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                ${st.currentTrack ? escapeHtml(st.currentTrack.title) : (st.fallback_mode === 'loop' ? 'Эфир зациклен' : 'Офлайн')}
-              </span>
-            </div>
-          </div>
-        </div>
-      `;
-      }).join('');
-
-      dom.stationsGrid.querySelectorAll('.radio-station-card').forEach((card) => {
+    if (!sameStations) {
+      dom.stationsGrid.innerHTML = '';
+      stations.forEach((station) => {
+        const card = document.createElement('div');
+        card.className = 'radio-station-card';
+        card.dataset.id = String(station.id);
         card.addEventListener('click', () => {
-          const id = card.dataset.id;
-          const found = stations.find((s) => s.id == id);
+          const found = state.stations.find((item) => String(item.id) === String(card.dataset.id));
           if (found) tuneStation(found, true);
         });
+        dom.stationsGrid.appendChild(card);
       });
+    }
 
-      if (!state.currentStation && stations.length > 0) {
-        if (gState.station) {
-          state.currentStation = gState.station;
-          updateDeckUI();
-          highlightActiveStation(gState.station.id);
-        }
+    const cards = [...dom.stationsGrid.querySelectorAll('.radio-station-card')];
+    stations.forEach((station, index) => {
+      const card = cards[index];
+      const signature = getStationCardSignature(station);
+      if (card.dataset.renderSignature !== signature) {
+        card.innerHTML = renderStationCardContent(station);
+        card.dataset.renderSignature = signature;
       }
+      card.classList.toggle('is-active-tune', String(activeStationId) === String(station.id));
+    });
+
+    const currentEmptyState = dom.stationsGrid.querySelector('.radio-stations-empty');
+    if (currentEmptyState) currentEmptyState.remove();
+
+    if (!state.currentStation && stations.length > 0 && gState.station) {
+      state.currentStation = gState.station;
+      updateDeckUI();
+      highlightActiveStation(gState.station.id);
+    }
+  }
+
+  async function loadStations({ silent = false } = {}) {
+    if (!dom.stationsGrid || state.stationsRequestInFlight) return;
+    state.stationsRequestInFlight = true;
+    if (!silent && state.stations.length === 0) {
+      dom.stationsGrid.innerHTML = '<p class="alltell-state">Загружаем список радиостанций…</p>';
+    }
+    try {
+      const stations = await api('/api/radio/stations');
+      if (!Array.isArray(stations)) {
+        throw new Error('Сервер вернул некорректный список радиостанций');
+      }
+      renderStationCards(stations);
     } catch (e) {
-      if (dom.stationsGrid) {
+      if (silent) {
+        console.error('[radio] Background station refresh error:', e);
+      } else if (dom.stationsGrid) {
         dom.stationsGrid.innerHTML = `<p class="alltell-error">Ошибка загрузки станций: ${escapeHtml(e.message)}</p>`;
       }
+    } finally {
+      state.stationsRequestInFlight = false;
     }
+  }
+
+  function startStationsLiveUpdates() {
+    clearInterval(state.stationsPollTimer);
+    if (state.stationsVisibilityHandler) {
+      document.removeEventListener('visibilitychange', state.stationsVisibilityHandler);
+    }
+
+    const refreshVisibleStations = () => {
+      if (document.visibilityState !== 'visible' || (dom.trackView && !dom.trackView.hidden)) return;
+      loadStations({ silent: true });
+    };
+
+    state.stationsVisibilityHandler = refreshVisibleStations;
+    document.addEventListener('visibilitychange', refreshVisibleStations);
+    state.stationsPollTimer = setInterval(refreshVisibleStations, 10000);
   }
 
   // ===== 3. Избранное («Моё») и Плейлисты =====
@@ -7991,6 +8107,7 @@
       openTrackPage(trackIdToOpen);
     } else {
       loadStations();
+      startStationsLiveUpdates();
       loadTracks(false);
       setupFeedInfiniteScroll();
     }
@@ -8036,6 +8153,12 @@
     const cleanupFn = function cleanup() {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
+      clearInterval(state.stationsPollTimer);
+      state.stationsPollTimer = null;
+      if (state.stationsVisibilityHandler) {
+        document.removeEventListener('visibilitychange', state.stationsVisibilityHandler);
+        state.stationsVisibilityHandler = null;
+      }
       if (state.visualizerFrameId !== null) {
         cancelAnimationFrame(state.visualizerFrameId);
         state.visualizerFrameId = null;

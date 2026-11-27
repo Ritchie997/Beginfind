@@ -305,6 +305,18 @@
     border-radius: 12px;
   }
 
+  body[data-page="radio"] .radio-card-playing {
+    min-width: 0;
+  }
+
+  body[data-page="radio"] .radio-card-track-title {
+    font-size: 12px;
+  }
+
+  body[data-page="radio"] .radio-card-track-type {
+    font-size: 9px;
+  }
+
   body[data-page="radio"] .radio-card-meta {
     min-width: 0;
   }
