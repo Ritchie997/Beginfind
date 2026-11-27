@@ -2588,16 +2588,16 @@
   // Сброс всех изменений черновика и возврат к актуальному эфиру
   async function discardDraftChanges() {
     if (!state.selectedStationForEdit) return false;
-    const ok = await showConfirm('Сбросить все несохранённые изменения черновика и вернуть актуальную сетку вещания из эфира?', {
-      title: 'Сбросить изменения черновика?',
-      confirmLabel: 'Сбросить изменения',
+    const ok = await showConfirm('Отменить несохранённые правки и загрузить последнюю сохранённую сетку? Чтобы удалить сохранённую сетку, используйте «Очистить сетку».', {
+      title: 'Отменить несохранённые правки?',
+      confirmLabel: 'Отменить правки',
       danger: true
     });
     if (!ok) return false;
 
     markEditorDirty(false);
     await loadStationTimeline(state.selectedStationForEdit.id);
-    showToast('Черновик успешно сброшен к актуальному состоянию эфира', 'info');
+    showToast('Несохранённые правки отменены. Загружена последняя сохранённая сетка.', 'info');
     return true;
   }
 
@@ -6682,14 +6682,18 @@
         });
         state.editorSlots = [];
         state.editorBlocks = [];
+        setEditorStartTime(getEffectiveNowMs());
+        markEditorDirty(false);
         if (state.selectedStationForEdit) {
           state.selectedStationForEdit.isLive = false;
+          state.selectedStationForEdit.broadcast_status = 'offline';
         }
         if (state.currentStation && String(state.currentStation.id) === String(state.selectedStationForEdit.id)) {
           state.currentSlot = null;
           state.nextSlots = [];
           state.prevSlots = [];
           state.currentStation.isLive = false;
+          state.currentStation.broadcast_status = 'offline';
           const gAudio = getGlobalAudio();
           if (gAudio && gAudio.getState().mode === 'radio' && gAudio.getState().station && String(gAudio.getState().station.id) === String(state.selectedStationForEdit.id)) {
             gAudio.stop();

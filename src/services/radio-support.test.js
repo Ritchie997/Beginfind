@@ -116,6 +116,9 @@ test('radio-store: stations, frequencies and timeline slots', async () => {
   await radioStore.clearTimelineSlots(station.id, 888, false);
   const clearedSlots = await radioStore.getTimelineSlots(station.id);
   assert.equal(clearedSlots.length, 0, 'Timeline slots should be empty after clearTimelineSlots');
+  const clearedStation = await radioStore.getStationById(station.id);
+  assert.equal(clearedStation.broadcast_status, 'offline', 'Clearing the timeline should stop the station');
+  assert.equal(clearedStation.broadcast_started_at, null, 'Clearing the timeline should clear the broadcast start time');
 
   // Cleanup station
   await radioStore.deleteStation(station.id, 888, false);
@@ -727,6 +730,5 @@ test('radio-editor-ui: eternal broadcast button, badge, and modal elements exist
   assert.ok(radioCss.includes('.radio-eternal-badge'), 'radio.css must style .radio-eternal-badge');
   assert.ok(radioCss.includes('#btnToggleEternalBroadcast'), 'radio.css must style #btnToggleEternalBroadcast');
 });
-
 
 

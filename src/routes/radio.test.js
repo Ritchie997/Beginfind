@@ -233,6 +233,19 @@ test('editor track previews play only the selected audio file', () => {
   assert.ok(client.includes('gAudio.playTrack(queue[0], queue, 0);'), 'The explicit playlist action must continue to play the playlist');
 });
 
+test('radio timeline reset distinguishes discarding drafts from clearing the saved schedule', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+
+  assert.ok(html.includes('<span>Отменить правки</span>'), 'The draft reset control must explain that it discards only unsaved edits');
+  assert.ok(client.includes('Чтобы удалить сохранённую сетку, используйте «Очистить сетку».'));
+  assert.ok(client.includes("await api(`/api/radio/stations/${state.selectedStationForEdit.id}/timeline`, {\n          method: 'DELETE'\n        });\n        state.editorSlots = [];\n        state.editorBlocks = [];"), 'Clearing must delete the saved timeline before clearing the editor state');
+  assert.ok(client.includes("state.selectedStationForEdit.broadcast_status = 'offline';"), 'Clearing must immediately update the selected station state');
+  assert.ok(client.includes("state.currentStation.broadcast_status = 'offline';"), 'Clearing the current station must immediately update its playback state');
+});
+
 test('radio editor blocks keep a fixed workspace and expand playlists inside their cards', () => {
   const fs = require('fs');
   const path = require('path');

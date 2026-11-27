@@ -416,6 +416,7 @@ async function clearTimelineSlots(stationId, actingUserId, isRootOrAdmin) {
   }
 
   await run('DELETE FROM radio_timeline_slots WHERE station_id = ?', [stationId]);
+  await run("UPDATE radio_stations SET broadcast_status = 'offline', broadcast_started_at = NULL WHERE id = ?", [stationId]);
   return true;
 }
 
