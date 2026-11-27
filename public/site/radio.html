@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/global-styles.css">
 <link rel="stylesheet" href="/site/site.css">
 <link rel="stylesheet" href="/site/radio.css">
-<link rel="stylesheet" href="/site/radio-mobile.css?v=6" media="(max-width: 768px)">
+<link rel="stylesheet" href="/site/radio-mobile.css?v=7" media="(max-width: 768px)">
 <link rel="stylesheet" href="/image-lightbox.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -462,71 +462,6 @@
           </details>
         </div>
 
-        <!-- 1. ИНТЕРАКТИВНЫЙ ТАЙМЛАЙН-ВИДЕОРЕДАКТОР (TIMELINE RIBBON) -->
-        <div class="radio-timeline-nle-wrapper" id="radioTimelineContainer">
-          <div class="radio-timeline-nle-header">
-            <div class="radio-timeline-nle-title">
-              <i class="fas fa-bars-staggered"></i>
-              <span>Обзор эфира</span>
-              <span class="radio-timeline-badge" id="timelineScaleBadge">Шкала: 20 мин</span>
-            </div>
-            <div class="radio-timeline-nle-meta">
-              <span class="radio-timeline-meta-item">
-                <i class="fas fa-hourglass-half"></i> Хронометраж: <strong id="timelineTotalDuration" title="Общая длительность сетки вещания">00:00:00</strong>
-              </span>
-              <span class="radio-timeline-meta-item">
-                <i class="far fa-flag"></i> Финал: <strong id="timelineEndTime">--:--:--</strong>
-              </span>
-              <button type="button" class="radio-timeline-btn-golive" id="timelineGoLiveBtn" style="display:none;" title="Вернуться в прямой эфир станции">
-                <i class="fas fa-tower-broadcast"></i> В эфир
-              </button>
-            </div>
-            <details class="radio-editor-disclosure radio-timeline-view-disclosure">
-              <summary>
-                <i class="fas fa-magnifying-glass"></i>
-                <span>Вид</span>
-                <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
-              </summary>
-              <div class="radio-editor-disclosure-body">
-                <div class="radio-timeline-nle-zoom">
-                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomOut" title="Уменьшить масштаб (Ctrl + Scroll down)">
-                    <i class="fas fa-magnifying-glass-minus"></i>
-                  </button>
-                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomReset" title="Сбросить масштаб">
-                    <i class="fas fa-arrows-left-right"></i>
-                  </button>
-                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomIn" title="Увеличить масштаб (Ctrl + Scroll up)">
-                    <i class="fas fa-magnifying-glass-plus"></i>
-                  </button>
-                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineExtendScale" title="Увеличить шкалу времени эфира (+15 мин)" style="width:auto; padding:0 8px; font-size:0.75rem; font-weight:700;">
-                    <i class="fas fa-plus"></i> 15м
-                  </button>
-                </div>
-              </div>
-            </details>
-          </div>
-
-          <div class="radio-timeline-overview-hint"><i class="fas fa-circle-info"></i> Только навигация: прокрутите или измените масштаб, затем выберите блок, чтобы перейти к нему в редакторе.</div>
-          <!-- Обзорная шкала только для навигации; редактирование доступно в дорожке ниже. -->
-          <div class="radio-timeline-track-scroll" id="radioTimelineTrackScroll" aria-label="Обзор расписания эфира, только для навигации">
-            <div class="radio-timeline-track-inner" id="radioTimelineTrackInner">
-              <!-- Линейка времени с минутами и секундами -->
-              <div class="radio-timeline-ruler" id="radioTimelineRuler"></div>
-              
-              <!-- Дорожка видеомонтажных клипов треков/плейлистов -->
-              <div class="radio-timeline-clips-track" id="radioTimelineTrack">
-                <div class="radio-timeline-empty-hint">Перетащите сюда треки или плейлисты из медиатеки</div>
-              </div>
-
-              <!-- Плейхед текущего реального времени вещания -->
-              <div class="radio-timeline-playhead" id="radioTimelinePlayhead" style="display:none;">
-                <div class="radio-timeline-playhead-badge">🔴 В ЭФИРЕ</div>
-                <div class="radio-timeline-playhead-line"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Виджет быстрой записи слов с микрофона -->
         <div class="radio-record-box">
           <div>
@@ -593,13 +528,82 @@
           </div>
         </div>
 
+        <div class="radio-timeline-workspace">
+        <!-- 1. ИНТЕРАКТИВНЫЙ ТАЙМЛАЙН-ВИДЕОРЕДАКТОР (TIMELINE RIBBON) -->
+        <div class="radio-timeline-nle-wrapper" id="radioTimelineContainer">
+          <div class="radio-timeline-nle-header">
+            <div class="radio-timeline-nle-title">
+              <i class="fas fa-bars-staggered"></i>
+              <span>Обзор эфира</span>
+              <span class="radio-timeline-badge" id="timelineScaleBadge">Шкала: 20 мин</span>
+            </div>
+            <div class="radio-timeline-nle-meta">
+              <span class="radio-timeline-meta-item">
+                <i class="fas fa-hourglass-half"></i> Хронометраж: <strong id="timelineTotalDuration" title="Общая длительность сетки вещания">00:00:00</strong>
+              </span>
+              <span class="radio-timeline-meta-item">
+                <i class="far fa-flag"></i> Финал: <strong id="timelineEndTime">--:--:--</strong>
+              </span>
+              <button type="button" class="radio-timeline-btn-golive" id="timelineGoLiveBtn" style="display:none;" title="Вернуться в прямой эфир станции">
+                <i class="fas fa-tower-broadcast"></i> В эфир
+              </button>
+            </div>
+            <details class="radio-editor-disclosure radio-timeline-view-disclosure">
+              <summary>
+                <i class="fas fa-magnifying-glass"></i>
+                <span>Вид</span>
+                <i class="fas fa-chevron-down radio-editor-disclosure-chevron"></i>
+              </summary>
+              <div class="radio-editor-disclosure-body">
+                <div class="radio-timeline-nle-zoom">
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomOut" title="Уменьшить масштаб (Ctrl + Scroll down)">
+                    <i class="fas fa-magnifying-glass-minus"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomReset" title="Сбросить масштаб">
+                    <i class="fas fa-arrows-left-right"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineZoomIn" title="Увеличить масштаб (Ctrl + Scroll up)">
+                    <i class="fas fa-magnifying-glass-plus"></i>
+                  </button>
+                  <button type="button" class="radio-timeline-zoom-btn" id="btnTimelineExtendScale" title="Увеличить шкалу времени эфира (+15 мин)" style="width:auto; padding:0 8px; font-size:0.75rem; font-weight:700;">
+                    <i class="fas fa-plus"></i> 15м
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="radio-timeline-overview-hint"><i class="fas fa-circle-info"></i> Только навигация: прокрутите или измените масштаб, затем выберите блок, чтобы перейти к нему в редакторе.</div>
+          <!-- Обзорная шкала только для навигации; редактирование доступно в дорожке ниже. -->
+          <div class="radio-timeline-track-scroll" id="radioTimelineTrackScroll" aria-label="Обзор расписания эфира, только для навигации">
+            <div class="radio-timeline-track-inner" id="radioTimelineTrackInner">
+              <!-- Линейка времени с минутами и секундами -->
+              <div class="radio-timeline-ruler" id="radioTimelineRuler"></div>
+
+              <!-- Дорожка видеомонтажных клипов треков/плейлистов -->
+              <div class="radio-timeline-clips-track" id="radioTimelineTrack">
+                <div class="radio-timeline-empty-hint">Перетащите сюда треки или плейлисты из медиатеки</div>
+              </div>
+
+              <!-- Плейхед текущего реального времени вещания -->
+              <div class="radio-timeline-playhead" id="radioTimelinePlayhead" style="display:none;">
+                <div class="radio-timeline-playhead-badge">🔴 В ЭФИРЕ</div>
+                <div class="radio-timeline-playhead-line"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section class="radio-timeline-editor-pane" aria-label="Редактирование блоков сетки вещания">
         <div class="radio-editor-lane-header">
           <div><i class="fas fa-sliders"></i> Редактор сетки</div>
-          <span>Перетаскивайте блоки здесь, чтобы менять порядок. Прокрутка связана с обзором выше.</span>
+          <span>Перетаскивайте блоки, чтобы менять порядок.</span>
         </div>
         <!-- БЛОЧНЫЙ КОНСТРУКТОР ЭФИРА -->
         <div class="radio-eb-blocklist eb-blocklist" id="editorBlocksList">
           <p style="color:#94a3b8; text-align:center; padding:30px;">Сетка пока пуста. Добавьте треки, плейлисты или слова выше.</p>
+        </div>
+        </section>
         </div>
         <!-- Невидимый псевдо-элемент для сохранения совместимости -->
         <div id="editorSlotsList" style="display:none;" hidden></div>

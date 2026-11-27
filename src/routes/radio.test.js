@@ -200,6 +200,25 @@ test('radio overview is read-only and its navigation stays synchronized with the
   assert.ok(css.includes('.radio-eb-block.is-timeline-selected'), 'Overview selection must be reflected in the editor');
 });
 
+test('radio overview and editor form one side-by-side workspace without overlapping edge controls', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+  const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
+
+  assert.match(
+    html,
+    /<div class="radio-timeline-workspace">[\s\S]*id="radioTimelineContainer"[\s\S]*class="radio-timeline-editor-pane"[\s\S]*id="editorBlocksList"/,
+    'Overview and editable blocks must live in the same workspace'
+  );
+  assert.ok(desktopCss.includes('grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr)'), 'Desktop workspace must place overview and editor side by side');
+  assert.match(desktopCss, /\.radio-timeline-workspace \.radio-timeline-edge-handle \{\s*display: none !important;/, 'Read-only overview must not show resize handles');
+  assert.ok(desktopCss.includes('flex-basis: 10px;\n  margin: 0;'), 'Insert controls must not consume overlapping negative margins');
+  assert.ok(desktopCss.includes('padding-left: 28px;'), 'Editor blocks must leave clear space for the reorder handle');
+  assert.match(mobileCss, /body\[data-page="radio"\] \.radio-timeline-workspace \{\s*grid-template-columns: minmax\(0, 1fr\);/, 'Mobile workspace must stack the overview and editor');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');

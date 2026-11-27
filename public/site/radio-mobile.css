@@ -1144,7 +1144,7 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;
-    margin-top: 16px;
+    margin-top: 0;
   }
 
   body[data-page="radio"] .radio-editor-lane-header > span {
@@ -1153,6 +1153,19 @@
 
   body[data-page="radio"] .radio-timeline-track-scroll {
     padding: 8px 10px 12px;
+  }
+
+  body[data-page="radio"] .radio-timeline-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="radio"] .radio-timeline-workspace > .radio-timeline-nle-wrapper {
+    border-right: 0;
+    border-bottom: 1px solid var(--background-accent, rgba(255, 255, 255, 0.1));
+  }
+
+  body[data-page="radio"] .radio-timeline-workspace .radio-timeline-nle-header {
+    padding: 10px;
   }
 
   body[data-page="radio"] .radio-eb-block {
