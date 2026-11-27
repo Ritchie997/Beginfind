@@ -100,7 +100,7 @@
     editorCachedDurationSec: 0,
     timelineZoom: 1.0,
     timelineScrollRatio: 0,
-    isSyncingTimelineScroll: false,
+    timelineOverviewDrag: null,
     baseScaleSec: 1200,
     mediaDrawerOpen: false,
     mediaDrawerTab: 'tracks',
@@ -329,6 +329,7 @@
       btnTimelineExtendScale: document.getElementById('btnTimelineExtendScale'),
       radioTimelineTrackScroll: document.getElementById('radioTimelineTrackScroll'),
       radioTimelineTrackInner: document.getElementById('radioTimelineTrackInner'),
+      radioTimelineViewport: document.getElementById('radioTimelineViewport'),
       radioTimelineRuler: document.getElementById('radioTimelineRuler'),
       radioTimelineTrack: document.getElementById('radioTimelineTrack'),
       radioTimelinePlayhead: document.getElementById('radioTimelinePlayhead'),
@@ -2634,16 +2635,12 @@
     const neededScale = Math.max(baseScale, Math.ceil(totalDurationSec * 1.12));
     const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, neededScale));
     const visibleScale = Math.max(60, Math.round(timelineScale / state.timelineZoom));
-
     if (dom.radioTimelineTrackInner && dom.radioTimelineTrackScroll) {
-      const viewportWidth = Math.max(1, dom.radioTimelineTrackScroll.clientWidth - 32);
-      dom.radioTimelineTrackInner.style.width = `${Math.max(viewportWidth, Math.round(viewportWidth * state.timelineZoom))}px`;
+      const overviewWidth = Math.max(1, dom.radioTimelineTrackScroll.clientWidth - 24);
+      dom.radioTimelineTrackInner.style.width = `${overviewWidth}px`;
     }
 
-    if (dom.timelineScaleBadge) {
-      const min = Math.round(visibleScale / 60);
-      dom.timelineScaleBadge.textContent = min >= 60 ? `Шкала: ${(min / 60).toFixed(1)} ч` : `Шкала: ${min} мин`;
-    }
+    updateTimelineZoomBadge(timelineScale);
 
     // Отрисовка временной линейки (Ruler)
     if (dom.radioTimelineRuler) {
@@ -2711,6 +2708,7 @@
 
     // Плейхед прямого эфира (On-Air indicator)
     restoreTimelineScrollPosition();
+    updateTimelineViewport();
     updateTimelinePlayhead();
   }
 
@@ -2749,7 +2747,8 @@
         block.duration = block.items.reduce((s, it) => s + Math.max(1, Number(it.duration) || 0), 0);
       }
       const durSec = Number(block.duration) || 0;
-      const clipWidth = Math.min(540, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)));
+      const maxClipWidth = window.innerWidth <= 768 ? 360 : 540;
+      const clipWidth = Math.min(maxClipWidth, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)));
       const startMs = cursor;
       const endMs = cursor + durSec * 1000;
       cursor = endMs;
@@ -2868,7 +2867,7 @@
       }
 
       html += `
-        <div class="radio-eb-block eb-block-${block.type} ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" style="--radio-clip-width:${clipWidth}px" draggable="true">
+        <div class="radio-eb-block eb-block-${block.type} ${block.type === 'gap' ? 'eb-block-gap' : ''} ${isPlaylist ? 'eb-block-playlist' : ''}" id="block_${block.id}" data-id="${block.id}" data-index="${index}" data-base-width="${clipWidth}" draggable="true">
           ${isPlaylist ? '<div class="radio-eb-bracket radio-eb-bracket-left" title="Начало плейлиста ["></div>' : ''}
           <div class="radio-eb-drag-handle" title="Потяните для изменения порядка в эфире">
             <i class="fas fa-grip-vertical"></i>
@@ -2923,6 +2922,7 @@
     `;
 
     listEl.innerHTML = html;
+    applyTimelineZoom();
     bindBlockEditorEvents(listEl);
     updateCapacityUI();
     restoreTimelineScrollPosition();
@@ -3634,94 +3634,101 @@
     }
   }
 
-  function setTimelineZoom(zoomFactor) {
-    if (dom.radioTimelineTrackScroll && dom.radioTimelineTrackInner) {
-      const totalDurationSec = (state.editorBlocks || []).reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
-      const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
-      const elapsedSec = (dom.radioTimelineTrackScroll.scrollLeft / Math.max(1, dom.radioTimelineTrackInner.scrollWidth)) * timelineScale;
-      state.timelineScrollRatio = totalDurationSec ? Math.max(0, Math.min(1, elapsedSec / totalDurationSec)) : 0;
-    }
+  function getEditorScrollRatio() {
+    if (!dom.editorBlocksList) return 0;
+    const maxScroll = Math.max(0, dom.editorBlocksList.scrollWidth - dom.editorBlocksList.clientWidth);
+    return maxScroll ? dom.editorBlocksList.scrollLeft / maxScroll : 0;
+  }
+
+  function updateTimelineZoomBadge() {
+    if (!dom.timelineScaleBadge) return;
+    const totalDurationSec = (state.editorBlocks || []).reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
+    const scale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
+    const visibleMinutes = Math.max(1, Math.round(scale / Math.max(0.5, state.timelineZoom) / 60));
+    dom.timelineScaleBadge.textContent = `Вид: ${visibleMinutes >= 60 ? `${(visibleMinutes / 60).toFixed(1)} ч` : `${visibleMinutes} мин`}`;
+  }
+
+  function applyTimelineZoom() {
+    dom.editorBlocksList?.querySelectorAll('.radio-eb-block[data-base-width]').forEach((card) => {
+      const baseWidth = Number(card.dataset.baseWidth) || 210;
+      card.style.flexBasis = `${Math.round(baseWidth * state.timelineZoom)}px`;
+    });
+  }
+
+  function getVisibleEditorBlockIndex() {
+    if (!dom.editorBlocksList) return -1;
+    const listRect = dom.editorBlocksList.getBoundingClientRect();
+    const visibleCard = [...dom.editorBlocksList.querySelectorAll('.radio-eb-block')].find((card) => {
+      const rect = card.getBoundingClientRect();
+      return rect.right > listRect.left && rect.left < listRect.right;
+    });
+    return visibleCard ? Number(visibleCard.dataset.index) || 0 : -1;
+  }
+
+  function updateTimelineViewport() {
+    const viewport = dom.radioTimelineViewport;
+    const editor = dom.editorBlocksList;
+    if (!viewport || !editor) return;
+
+    const scrollWidth = Math.max(editor.scrollWidth, editor.clientWidth);
+    const maxScroll = Math.max(0, scrollWidth - editor.clientWidth);
+    const widthRatio = maxScroll ? Math.min(1, editor.clientWidth / scrollWidth) : 1;
+    const thumbWidth = Math.max(0.06, widthRatio);
+    const scrollRatio = maxScroll ? Math.max(0, Math.min(1, editor.scrollLeft / maxScroll)) : 0;
+    const left = scrollRatio * (1 - thumbWidth);
+
+    viewport.style.left = `${left * 100}%`;
+    viewport.style.width = `${thumbWidth * 100}%`;
+    viewport.setAttribute('aria-valuenow', String(Math.round(scrollRatio * 100)));
+    viewport.setAttribute('aria-valuetext', `Позиция эфира: ${Math.round(scrollRatio * 100)}%`);
+  }
+
+  function setTimelineZoom(zoomFactor, scrollRatio = null, renderOverview = true) {
+    const currentRatio = getEditorScrollRatio();
+    state.timelineScrollRatio = Math.max(0, Math.min(1, scrollRatio === null ? currentRatio : scrollRatio));
     state.timelineZoom = Math.max(0.5, Math.min(4.0, zoomFactor));
-    renderTimelineRibbon();
+    applyTimelineZoom();
+    updateTimelineZoomBadge();
+    if (renderOverview) renderTimelineRibbon();
+    updateTimelineViewport();
     requestAnimationFrame(restoreTimelineScrollPosition);
   }
 
-  function syncTimelineScroll(source) {
-    if (state.isSyncingTimelineScroll) return;
-    const blocks = state.editorBlocks || [];
-    const totalDurationSec = blocks.reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
-    if (!totalDurationSec) return;
+  function navigateEditorFromOverview(leftRatio) {
+    const editor = dom.editorBlocksList;
+    if (!editor) return;
+    const viewportWidthRatio = Number.parseFloat(dom.radioTimelineViewport?.style.width) / 100 || 1;
+    const maxScroll = Math.max(0, editor.scrollWidth - editor.clientWidth);
+    const scrollRatio = maxScroll ? leftRatio / Math.max(0.001, 1 - viewportWidthRatio) : 0;
+    state.timelineScrollRatio = Math.max(0, Math.min(1, scrollRatio));
+    editor.scrollLeft = state.timelineScrollRatio * maxScroll;
+    syncTimelineScroll();
+  }
 
-    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
-    let activeIndex = 0;
-    let elapsedSec = 0;
-
-    if (source === 'overview') {
-      if (!dom.radioTimelineTrackInner || !dom.editorBlocksList || !dom.radioTimelineTrackScroll) return;
-      elapsedSec = (dom.radioTimelineTrackScroll.scrollLeft / Math.max(1, dom.radioTimelineTrackInner.scrollWidth)) * timelineScale;
-      const overviewTime = elapsedSec;
-      while (activeIndex < blocks.length - 1 && elapsedSec >= (Number(blocks[activeIndex].duration) || 0)) {
-        elapsedSec -= Number(blocks[activeIndex].duration) || 0;
-        activeIndex += 1;
-      }
-      state.timelineScrollRatio = Math.max(0, Math.min(1, overviewTime / totalDurationSec));
-    } else {
-      if (!dom.editorBlocksList || !dom.radioTimelineTrackScroll || !dom.radioTimelineTrackInner) return;
-      const listRect = dom.editorBlocksList.getBoundingClientRect();
-      const visibleCard = [...dom.editorBlocksList.querySelectorAll('.radio-eb-block')].find((card) => {
-        const rect = card.getBoundingClientRect();
-        return rect.right > listRect.left && rect.left < listRect.right;
-      });
-      if (visibleCard) activeIndex = Number(visibleCard.dataset.index) || 0;
-      elapsedSec = blocks.slice(0, activeIndex).reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
-      state.timelineScrollRatio = elapsedSec / totalDurationSec;
-    }
-
-    state.isSyncingTimelineScroll = true;
-    if (source === 'overview') {
-      dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
-      const card = dom.editorBlocksList.querySelector(`.radio-eb-block[data-index="${activeIndex}"]`);
-      dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
-      if (card) {
-        const offset = card.getBoundingClientRect().left - dom.editorBlocksList.getBoundingClientRect().left;
-        dom.editorBlocksList.scrollLeft += offset;
-      }
-    } else {
-      const startRatio = Math.max(0, Math.min(1, elapsedSec / timelineScale));
-      dom.radioTimelineTrackScroll.scrollLeft = startRatio * dom.radioTimelineTrackInner.scrollWidth;
-      dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
+  function syncTimelineScroll() {
+    if (!dom.editorBlocksList) return;
+    state.timelineScrollRatio = getEditorScrollRatio();
+    const activeIndex = getVisibleEditorBlockIndex();
+    dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
+    if (activeIndex >= 0) {
       dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
     }
-    requestAnimationFrame(() => { state.isSyncingTimelineScroll = false; });
+    updateTimelineViewport();
   }
 
   function restoreTimelineScrollPosition() {
-    const blocks = state.editorBlocks || [];
-    const totalDurationSec = blocks.reduce((sum, block) => sum + Math.max(0, Number(block.duration) || 0), 0);
-    if (!totalDurationSec) return;
-
+    const editor = dom.editorBlocksList;
+    if (!editor) return;
+    const maxScroll = Math.max(0, editor.scrollWidth - editor.clientWidth);
     const ratio = Math.max(0, Math.min(1, Number(state.timelineScrollRatio) || 0));
-    const timelineScale = Math.max(totalDurationSec, Math.min(24 * 3600, Math.max(state.baseScaleSec || 1200, Math.ceil(totalDurationSec * 1.12))));
-    const targetTime = ratio * totalDurationSec;
-    let activeIndex = 0;
-    let elapsedSec = 0;
-    while (activeIndex < blocks.length - 1 && elapsedSec + (Number(blocks[activeIndex].duration) || 0) < targetTime) {
-      elapsedSec += Number(blocks[activeIndex].duration) || 0;
-      activeIndex += 1;
-    }
+    editor.scrollLeft = ratio * maxScroll;
 
-    state.isSyncingTimelineScroll = true;
-    if (dom.radioTimelineTrackScroll && dom.radioTimelineTrackInner) {
-      dom.radioTimelineTrackScroll.scrollLeft = (targetTime / timelineScale) * dom.radioTimelineTrackInner.scrollWidth;
-    }
-    const card = dom.editorBlocksList?.querySelector(`.radio-eb-block[data-index="${activeIndex}"]`);
-    if (card && dom.editorBlocksList) {
-      const offset = card.getBoundingClientRect().left - dom.editorBlocksList.getBoundingClientRect().left;
-      dom.editorBlocksList.scrollLeft += offset;
-    }
+    const activeIndex = getVisibleEditorBlockIndex();
     dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip.is-selected').forEach((clip) => clip.classList.remove('is-selected'));
-    dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
-    requestAnimationFrame(() => { state.isSyncingTimelineScroll = false; });
+    if (activeIndex >= 0) {
+      dom.radioTimelineTrack?.querySelector(`.radio-timeline-clip[data-index="${activeIndex}"]`)?.classList.add('is-selected');
+    }
+    updateTimelineViewport();
   }
 
   function checkIsStationOwner(st) {
@@ -6695,8 +6702,84 @@
     dom.btnTimelineZoomOut?.addEventListener('click', () => setTimelineZoom(state.timelineZoom / 1.25));
     dom.btnTimelineZoomReset?.addEventListener('click', () => setTimelineZoom(1.0));
 
-    dom.radioTimelineTrackScroll?.addEventListener('scroll', () => syncTimelineScroll('overview'), { passive: true });
-    dom.editorBlocksList?.addEventListener('scroll', () => syncTimelineScroll('editor'), { passive: true });
+    dom.editorBlocksList?.addEventListener('scroll', syncTimelineScroll, { passive: true });
+
+    dom.radioTimelineViewport?.addEventListener('pointerdown', (e) => {
+      const viewport = dom.radioTimelineViewport;
+      const inner = dom.radioTimelineTrackInner;
+      if (!viewport || !inner) return;
+      const edge = e.target.closest('[data-edge]')?.dataset.edge || 'move';
+      state.timelineOverviewDrag = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startLeft: Number.parseFloat(viewport.style.left) / 100 || 0,
+        startWidth: Number.parseFloat(viewport.style.width) / 100 || 1,
+        startZoom: state.timelineZoom,
+        edge
+      };
+      viewport.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    dom.radioTimelineViewport?.addEventListener('pointermove', (e) => {
+      const drag = state.timelineOverviewDrag;
+      const viewport = dom.radioTimelineViewport;
+      const inner = dom.radioTimelineTrackInner;
+      if (!drag || drag.pointerId !== e.pointerId || !viewport || !inner) return;
+
+      const deltaRatio = (e.clientX - drag.startX) / Math.max(1, inner.clientWidth);
+      if (drag.edge === 'move') {
+        const widthRatio = Number.parseFloat(viewport.style.width) / 100 || drag.startWidth;
+        const left = Math.max(0, Math.min(1 - widthRatio, drag.startLeft + deltaRatio));
+        navigateEditorFromOverview(left);
+        return;
+      }
+
+      const widthDelta = drag.edge === 'start' ? -deltaRatio : deltaRatio;
+      const widthRatio = Math.max(0.06, Math.min(1, drag.startWidth + widthDelta));
+      const zoom = drag.startZoom * (drag.startWidth / widthRatio);
+      const left = drag.edge === 'start' ? drag.startLeft + drag.startWidth - widthRatio : drag.startLeft;
+      const scrollRatio = left / Math.max(0.001, 1 - widthRatio);
+      setTimelineZoom(zoom, scrollRatio, false);
+    });
+
+    const finishTimelineOverviewDrag = (e) => {
+      const drag = state.timelineOverviewDrag;
+      if (drag?.pointerId !== e.pointerId) return;
+      state.timelineOverviewDrag = null;
+      updateTimelineViewport();
+      if (drag.edge === 'move' && Math.abs(e.clientX - drag.startX) < 4) {
+        const clip = [...(dom.radioTimelineTrack?.querySelectorAll('.radio-timeline-clip') || [])]
+          .find((item) => {
+            const rect = item.getBoundingClientRect();
+            return e.clientX >= rect.left && e.clientX <= rect.right;
+          });
+        clip?.click();
+      }
+    };
+    dom.radioTimelineViewport?.addEventListener('pointerup', finishTimelineOverviewDrag);
+    dom.radioTimelineViewport?.addEventListener('pointercancel', finishTimelineOverviewDrag);
+
+    dom.radioTimelineViewport?.addEventListener('keydown', (e) => {
+      const ratio = getEditorScrollRatio();
+      const step = e.shiftKey ? 0.2 : 0.05;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        const nextRatio = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : ratio + (e.key === 'ArrowLeft' ? -step : step);
+        state.timelineScrollRatio = Math.max(0, Math.min(1, nextRatio));
+        restoreTimelineScrollPosition();
+      }
+    });
+
+    dom.radioTimelineTrackScroll?.addEventListener('click', (e) => {
+      if (e.target.closest('#radioTimelineViewport, .radio-timeline-clip')) return;
+      const inner = dom.radioTimelineTrackInner;
+      if (!inner) return;
+      const rect = inner.getBoundingClientRect();
+      const position = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+      const viewportWidthRatio = Number.parseFloat(dom.radioTimelineViewport?.style.width) / 100 || 1;
+      navigateEditorFromOverview(position - viewportWidthRatio / 2);
+    });
 
     ['dragstart', 'dragenter', 'dragover', 'drop'].forEach((eventName) => {
       dom.radioTimelineTrack?.addEventListener(eventName, (e) => {

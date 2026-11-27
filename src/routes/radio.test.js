@@ -140,7 +140,7 @@ test('radio visual system shares public-site styling and isolates mobile overrid
   assert.ok(mobileCss.includes('body[data-page="radio"] .radio-timeline-track-scroll'), 'Mobile layout must keep timeline scrolling inside its viewport');
   assert.ok(html.includes('<details class="radio-editor-disclosure radio-editor-schedule-disclosure">'), 'Editor scheduling controls must be collapsible');
   assert.ok(html.includes('<details class="radio-editor-disclosure radio-studio-add-disclosure">'), 'Studio add actions must be grouped in a collapsible section');
-  assert.ok(html.includes('<details class="radio-editor-disclosure radio-timeline-view-disclosure">'), 'Timeline view controls must be collapsible');
+  assert.ok(html.includes('aria-label="Масштаб редактора эфира"'), 'Timeline zoom controls must remain available beside the overview');
 
   for (const id of [
     'btnClearTimelineBtn',
@@ -173,8 +173,9 @@ test('radio schedule blocks render as a compact horizontal arrangement lane', ()
   const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
   const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
 
-  assert.ok(client.includes('const clipWidth = Math.min(540, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)))'), 'Clip width must respond to its duration');
-  assert.ok(client.includes('style="--radio-clip-width:${clipWidth}px"'), 'Rendered clips must expose their visual duration width');
+  assert.ok(client.includes('const clipWidth = Math.min(maxClipWidth, Math.max(210, Math.round(135 + Math.max(0, durSec) * 0.45)))'), 'Clip width must respond to its duration');
+  assert.ok(client.includes('data-base-width="${clipWidth}"'), 'Editor clips must expose their base duration width for zooming');
+  assert.ok(client.includes('style="width: ${pct.toFixed(3)}%;"'), 'Overview clips must expose their proportional duration width');
   assert.ok(client.includes('eb-block-${block.type}'), 'Rendered clips must expose their block type for restrained color coding');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-blocklist {\n  display: flex;\n  flex-direction: row;'), 'Schedule clips must flow horizontally in one scrollable lane');
   assert.ok(desktopCss.includes('body[data-page="radio"] .radio-eb-block.is-on-air-block'), 'On-air clips must use a distinct non-glowing highlight');
@@ -192,18 +193,19 @@ test('radio overview is read-only and its navigation stays synchronized with the
   assert.ok(html.includes('Редактор сетки'), 'The lower lane must be clearly identified as the editor');
   assert.ok(html.includes('aria-label="Обзор расписания эфира, только для навигации"'), 'The overview must expose its read-only role accessibly');
   assert.ok(client.includes('draggable="false"'), 'Overview clips must not be draggable');
-  assert.ok(client.includes("syncTimelineScroll('overview')"), 'Overview scrolling must navigate the editor to the same block');
-  assert.ok(client.includes("syncTimelineScroll('editor')"), 'Editor scrolling must navigate the overview to the same time position');
+  assert.ok(client.includes('navigateEditorFromOverview(position - viewportWidthRatio / 2)'), 'Clicking the overview must navigate the editor to the same time');
+  assert.ok(client.includes('updateTimelineViewport();'), 'Editor scrolling must update the visible-range overlay in the overview');
   assert.ok(client.includes("['dragstart', 'dragenter', 'dragover', 'drop']"), 'The overview must reject all drag-and-drop interactions');
   assert.ok(!client.includes("dom.radioTimelineTrack?.addEventListener('drop'"), 'The overview must not retain a drop handler that can mutate the schedule');
   assert.ok(css.includes('.radio-timeline-clip.is-selected'), 'Selected overview clips must have a visual state');
   assert.ok(css.includes('.radio-eb-block.is-timeline-selected'), 'Overview selection must be reflected in the editor');
 });
 
-test('radio overview and editor form one side-by-side workspace without overlapping edge controls', () => {
+test('radio overview is a full-width navigator above the editor with zoom and a draggable viewport', () => {
   const fs = require('fs');
   const path = require('path');
   const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
   const desktopCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
   const mobileCss = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-mobile.css'), 'utf8');
 
@@ -212,11 +214,16 @@ test('radio overview and editor form one side-by-side workspace without overlapp
     /<div class="radio-timeline-workspace">[\s\S]*id="radioTimelineContainer"[\s\S]*class="radio-timeline-editor-pane"[\s\S]*id="editorBlocksList"/,
     'Overview and editable blocks must live in the same workspace'
   );
-  assert.ok(desktopCss.includes('grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr)'), 'Desktop workspace must place overview and editor side by side');
+  assert.match(desktopCss, /\.radio-timeline-workspace \{\s*display: block;/, 'Overview must span the full width above the editor');
+  assert.ok(html.includes('id="radioTimelineViewport"'), 'Overview must show the visible editor range');
+  assert.ok(html.includes('data-edge="start"') && html.includes('data-edge="end"'), 'Overview range edges must allow zoom adjustment');
+  assert.ok(client.includes("addEventListener('pointerdown'"), 'Overview range must be draggable');
+  assert.ok(client.includes('setTimelineZoom(zoom, scrollRatio, false)'), 'Dragging an overview edge must adjust editor zoom');
+  assert.ok(client.includes('Math.round(baseWidth * state.timelineZoom)'), 'Zoom controls must scale editor blocks, not the overview strip');
   assert.match(desktopCss, /\.radio-timeline-workspace \.radio-timeline-edge-handle \{\s*display: none !important;/, 'Read-only overview must not show resize handles');
-  assert.ok(desktopCss.includes('flex-basis: 10px;\n  margin: 0;'), 'Insert controls must not consume overlapping negative margins');
-  assert.ok(desktopCss.includes('padding-left: 28px;'), 'Editor blocks must leave clear space for the reorder handle');
-  assert.match(mobileCss, /body\[data-page="radio"\] \.radio-timeline-workspace \{\s*grid-template-columns: minmax\(0, 1fr\);/, 'Mobile workspace must stack the overview and editor');
+  assert.ok(desktopCss.includes('height: 28px;\n  border: 1px solid rgba(255, 255, 255, 0.08);'), 'Overview must remain a compact navigator strip');
+  assert.ok(desktopCss.includes('padding-left: 30px;'), 'Editor blocks must leave clear space for the reorder handle');
+  assert.match(mobileCss, /radio-timeline-workspace \.radio-timeline-nle-header \{\s*flex-wrap: wrap;/, 'Mobile controls must wrap without moving the overview beside the editor');
 });
 
 test('maintenance mode: radio page and API gating', async () => {
