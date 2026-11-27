@@ -189,10 +189,7 @@
               <div class="radio-station-owner" id="deckStationOwner">Вещание не запущено</div>
             </div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnDeckEditStation" style="display:none;" title="Опции и настройки радиостанции"><i class="fas fa-ellipsis-vertical"></i> Опции</button>
-            <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
-          </div>
+          <div class="radio-status-tag is-offline" id="deckStatusTag">Офлайн</div>
         </div>
 
         <div class="radio-deck-body">
@@ -238,16 +235,16 @@
             <button type="button" class="radio-action-btn" id="deckLoopBtn" title="Зациклить" aria-label="Зациклить">
               <i class="fas fa-repeat"></i> <span class="deck-btn-label">Зациклить</span>
             </button>
-            <button type="button" class="radio-action-btn btn-unfreeze" id="deckUnfreezeBtn" title="Слушать текущий трек с самого начала, отменив фиксацию по времени">
+            <button type="button" class="radio-action-btn btn-unfreeze" id="deckUnfreezeBtn" title="Слушать текущий трек с самого начала, отменив фиксацию по времени" aria-label="Слушать текущий трек с начала">
               <i class="fas fa-rotate-left"></i> <span class="deck-btn-label">С начала</span>
             </button>
-            <button type="button" class="radio-action-btn btn-live" id="deckLiveSyncBtn" title="Восстановить прямой эфир станции">
+            <button type="button" class="radio-action-btn btn-live" id="deckLiveSyncBtn" title="Восстановить прямой эфир станции" aria-label="Восстановить прямой эфир станции">
               <i class="fas fa-tower-broadcast"></i> <span class="deck-btn-label" id="deckLiveSyncLabel">Восстановить эфир</span>
             </button>
           </div>
 
           <div class="radio-volume-control">
-            <button type="button" class="radio-action-btn" id="deckMuteBtn" title="Звук">
+            <button type="button" class="radio-action-btn" id="deckMuteBtn" title="Звук" aria-label="Звук">
               <i class="fas fa-volume-high"></i>
             </button>
             <input type="range" class="radio-volume-slider" id="deckVolumeSlider" min="0" max="1" step="0.05" value="1" title="Громкость">

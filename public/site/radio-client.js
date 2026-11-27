@@ -324,7 +324,6 @@
       createStationAvatarPreviewBox: document.getElementById('createStationAvatarPreviewBox'),
       createStationAvatarPreviewImg: document.getElementById('createStationAvatarPreviewImg'),
       createStationAvatarUrl: document.getElementById('createStationAvatarUrl'),
-      btnDeckEditStation: document.getElementById('btnDeckEditStation'),
       btnEditStationSettings: document.getElementById('btnEditStationSettings'),
       modalEditStation: document.getElementById('modalEditStation'),
       formEditStation: document.getElementById('formEditStation'),
@@ -655,14 +654,7 @@
       if (dom.deckTimeCurrent) dom.deckTimeCurrent.textContent = '00:00';
       if (dom.deckTimeRemaining) dom.deckTimeRemaining.textContent = '--:--';
       if (dom.deckLiveSyncBtn) dom.deckLiveSyncBtn.style.display = 'none';
-      if (dom.btnDeckEditStation) dom.btnDeckEditStation.style.display = 'none';
       return;
-    }
-
-    const curUser = getCurrentUser();
-    const isStationOwner = Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
-    if (dom.btnDeckEditStation) {
-      dom.btnDeckEditStation.style.display = isStationOwner ? 'inline-flex' : 'none';
     }
 
     dom.deckTitle.innerHTML = `<span>${escapeHtml(st.name)}</span><span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span>`;
@@ -746,6 +738,7 @@
       dom.deckLiveSyncBtn.title = needsSync 
         ? 'Отставание или пауза. Нажмите, чтобы мгновенно восстановить прямой эфир станции!' 
         : 'Синхронизировано с прямым эфиром станции';
+      dom.deckLiveSyncBtn.setAttribute('aria-label', needsSync ? 'Восстановить прямой эфир станции' : 'Синхронизировано с прямым эфиром станции');
     }
 
     if (dom.deckNextBtn) {
@@ -790,6 +783,7 @@
       dom.deckMuteBtn.classList.toggle('is-muted', isMuted);
       dom.deckMuteBtn.innerHTML = muteIcon;
       dom.deckMuteBtn.title = muteTitle;
+      dom.deckMuteBtn.setAttribute('aria-label', muteTitle);
     }
     if (dom.feedPlayerMuteBtn) {
       dom.feedPlayerMuteBtn.classList.toggle('is-active', isMuted);
@@ -995,10 +989,8 @@
       const globalAudio = getGlobalAudio();
       const gState = globalAudio ? globalAudio.getState() : {};
       const activeStationId = (state.currentStation && state.currentStation.id) || (gState.station && gState.station.id);
-      const curUser = getCurrentUser();
 
       dom.stationsGrid.innerHTML = stations.map((st) => {
-        const isOwner = Boolean(curUser && (String(st.owner_id) === String(curUser.id) || curUser.is_root || (curUser.admin_level && curUser.admin_level > 0)));
         return `
         <div class="radio-station-card ${activeStationId === st.id ? 'is-active-tune' : ''}" data-id="${st.id}">
           <div>
@@ -1007,10 +999,7 @@
                 ${st.avatar_url ? `<img src="${escapeHtml(st.avatar_url)}" alt="">` : '<i class="fas fa-broadcast-tower"></i>'}
               </div>
               <div class="radio-card-meta" style="flex:1;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                  <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
-                  ${isOwner ? `<button type="button" class="btn btn-outline-secondary btn-xs btn-card-station-menu" data-station-id="${st.id}" title="Опции и настройки радиостанции"><i class="fas fa-ellipsis-vertical"></i></button>` : ''}
-                </div>
+                <h3><span>${escapeHtml(st.name)}</span> <span class="radio-freq-pill">${escapeHtml(st.frequency)} FM</span></h3>
                 <div class="radio-card-owner">Ведущий: ${escapeHtml(st.owner_name)}</div>
               </div>
             </div>
@@ -1027,15 +1016,6 @@
         </div>
       `;
       }).join('');
-
-      dom.stationsGrid.querySelectorAll('.btn-card-station-menu, .btn-card-edit-station').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const sId = btn.dataset.stationId;
-          const found = stations.find((s) => String(s.id) === String(sId));
-          if (found) openStationContextMenu(found, btn);
-        });
-      });
 
       dom.stationsGrid.querySelectorAll('.radio-station-card').forEach((card) => {
         card.addEventListener('click', () => {
@@ -6310,6 +6290,9 @@
       if (gAudio) {
         gAudio.toggleMute();
         dom.deckMuteBtn.innerHTML = gAudio.getState().muted ? '<i class="fas fa-volume-xmark"></i>' : '<i class="fas fa-volume-high"></i>';
+        const muteTitle = gAudio.getState().muted ? 'Включить звук' : 'Выключить звук';
+        dom.deckMuteBtn.title = muteTitle;
+        dom.deckMuteBtn.setAttribute('aria-label', muteTitle);
       }
     });
 
@@ -7799,29 +7782,6 @@
       const btn = e.target.closest('#btnEditStationSettings');
       if (btn) {
         handleStationSettingsClick(e, btn);
-      }
-    });
-
-    const handleDeckEditClick = (e, btn) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      const triggerBtn = btn || dom.btnDeckEditStation || document.getElementById('btnDeckEditStation');
-      const target = state.currentStation || (state.myStations && state.myStations[0]) || state.selectedStationForEdit;
-      if (target) {
-        openStationContextMenu(target, triggerBtn);
-      } else {
-        showToast('Радиостанция не выбрана', 'info');
-      }
-    };
-
-    dom.btnDeckEditStation?.addEventListener('click', (e) => handleDeckEditClick(e, dom.btnDeckEditStation));
-
-    document.addEventListener('click', (e) => {
-      const btn = e.target.closest('#btnDeckEditStation');
-      if (btn) {
-        handleDeckEditClick(e, btn);
       }
     });
 

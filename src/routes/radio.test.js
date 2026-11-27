@@ -87,6 +87,19 @@ test('radio station modal keeps submit footer visible inside a constrained viewp
   assert.ok(css.includes('flex-shrink: 0'), 'Modal header and footer must remain visible');
 });
 
+test('radio live player and station cards use a clean compact interface', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  assert.ok(!html.includes('id="btnDeckEditStation"'), 'Live player must not show its ellipsis menu');
+  assert.ok(!radioClientJs.includes('btn-card-station-menu'), 'Station cards must not render their ellipsis menu');
+  assert.ok(css.includes('.radio-controls-main .deck-btn-label'), 'Live player button labels must be hidden');
+  assert.ok(css.includes('width: 38px;'), 'Live player action buttons must remain compact icon buttons');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');
