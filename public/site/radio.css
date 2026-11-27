@@ -824,6 +824,13 @@
   max-width: 680px;
 }
 
+.modal-box > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .modal-header {
   padding: 16px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -831,6 +838,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .modal-title, .modal-header h3 {
@@ -844,6 +852,8 @@
   padding: 20px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .modal-footer {
@@ -854,6 +864,7 @@
   justify-content: flex-end;
   gap: 10px;
   background: rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
 }
 
 .modal-close {
@@ -3421,4 +3432,3 @@
 .radio-sched-radio-label input {
   margin-top: 3px;
 }
-

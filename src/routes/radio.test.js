@@ -74,6 +74,19 @@ test('GET /api/radio/tracks returns tracks list with pagination', async () => {
   assert.equal(typeof res.body.total, 'number');
 });
 
+test('radio station modal keeps submit footer visible inside a constrained viewport', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.css'), 'utf8');
+
+  assert.ok(html.includes('id="formCreateStation"'), 'Station form must be present');
+  assert.ok(html.includes('id="btnSubmitCreateStation"'), 'Station submit button must be present');
+  assert.ok(css.includes('.modal-box > form'), 'Modal form must participate in constrained flex layout');
+  assert.ok(css.includes('flex: 1'), 'Modal body or form must consume available height');
+  assert.ok(css.includes('flex-shrink: 0'), 'Modal header and footer must remain visible');
+});
+
 test('maintenance mode: radio page and API gating', async () => {
   const { maintenanceGate, maintenancePageGate, maintenancePageForPath } = require('../middleware/maintenance');
   const { readSettings, writeSettings } = require('../services/system-settings');
@@ -187,4 +200,3 @@ test('POST /api/radio/stations/:id/start-broadcast and stop-broadcast routes req
   const resStop = await callApi(app, 'POST', '/api/radio/stations/1/stop-broadcast', {});
   assert.equal(resStop.status, 401, 'Unauthenticated stop-broadcast should return 401');
 });
-
