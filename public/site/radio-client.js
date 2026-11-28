@@ -1478,7 +1478,7 @@
   async function loadTracks(append = false) {
     if (!dom.tracksList) return;
     if (state.feedLoading) return;
-    if (append && !state.feedHasMore) return;
+    if (append && (state.feedFilter === 'playlists' || !state.feedHasMore)) return;
 
     state.feedLoading = true;
     if (!append) {
@@ -1492,6 +1492,7 @@
 
     try {
       if (state.feedFilter === 'playlists') {
+        state.feedHasMore = false;
         const query = new URLSearchParams();
         query.set('includeMine', '1');
         if (state.feedSearch) query.set('search', state.feedSearch);
@@ -1560,7 +1561,7 @@
       if (dom.radioFeedLoadingMore) dom.radioFeedLoadingMore.hidden = true;
 
       // Как в Антропедии: если после загрузки sentinel всё ещё на виду (мало треков / высокий экран) — подгружаем следующую порцию
-      if (state.feedHasMore && dom.radioFeedSentinel && dom.tabFeed && !dom.tabFeed.hidden && dom.radioFeedSentinel.getBoundingClientRect().top < window.innerHeight + 400) {
+      if (state.feedHasMore && state.feedFilter !== 'playlists' && dom.radioFeedSentinel && dom.tabFeed && !dom.tabFeed.hidden && dom.radioFeedSentinel.getBoundingClientRect().top < window.innerHeight + 400) {
         setTimeout(() => { loadTracks(true); }, 50);
       }
     }

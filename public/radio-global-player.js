@@ -681,8 +681,10 @@
   // ===== Синхронизация прямого эфира радиостанции =====
   let isSyncingLive = false;
   let syncLiveTimer = null;
+  let pendingLiveSync = null;
   let syncRetryCount = 0;
   let livePlayRetryCount = 0;
+  let playbackIntentVersion = 0;
   const MAX_SYNC_RETRIES = 5;
   const MAX_LIVE_PLAY_RETRIES = 3;
 
@@ -715,8 +717,17 @@
 
   async function syncRadioStationLive(station, autoPlay = true, finishedSlotId = null) {
     if (!station || !station.id) return;
-    if (isSyncingLive) return;
+    if (isSyncingLive) {
+      pendingLiveSync = {
+        station,
+        autoPlay,
+        finishedSlotId,
+        intentVersion: playbackIntentVersion
+      };
+      return;
+    }
     isSyncingLive = true;
+    const requestIntentVersion = playbackIntentVersion;
 
     try {
       let url = `/api/radio/stations/${station.id}/live`;
@@ -755,7 +766,9 @@
       state.nextScheduledEvent = live.nextScheduledEvent || null;
 
       // Если за время запроса пользователь переключил режим или станцию
-      if (state.mode !== 'radio' || (state.station && String(state.station.id) !== String(station.id))) {
+      if (state.mode !== 'radio' ||
+          (state.station && String(state.station.id) !== String(station.id)) ||
+          requestIntentVersion !== playbackIntentVersion) {
         return;
       }
 
@@ -941,6 +954,15 @@
       }
     } finally {
       isSyncingLive = false;
+      const pending = pendingLiveSync;
+      pendingLiveSync = null;
+      if (pending &&
+          pending.intentVersion === playbackIntentVersion &&
+          state.mode === 'radio' &&
+          state.station &&
+          String(state.station.id) === String(pending.station.id)) {
+        syncRadioStationLive(pending.station, pending.autoPlay, pending.finishedSlotId);
+      }
     }
   }
 
@@ -948,6 +970,7 @@
     cancelLiveSync();
     syncRetryCount = 0;
     livePlayRetryCount = 0;
+    playbackIntentVersion++;
     isAudioLeader = true;
     remoteLeaderTabId = null;
     state.mode = 'radio';
@@ -1134,7 +1157,9 @@
   }
 
   function pause() {
+    playbackIntentVersion++;
     cancelLiveSync();
+    pendingLiveSync = null;
     if (isAudioLeader) {
       audio.pause();
       state.isPlaying = false;
@@ -1151,6 +1176,7 @@
   }
 
   function resume() {
+    playbackIntentVersion++;
     isAudioLeader = true;
     remoteLeaderTabId = null;
     prepareAudioVisualizer();

@@ -152,6 +152,8 @@ test('radio UI: infinite scroll in feed matches Antropedia implementation with I
   assert.ok(radioClientJs.includes('rootMargin: \'400px\''), 'Must use 400px rootMargin identical to Antropedia');
   assert.ok(radioClientJs.includes('state.feedObserver.observe(dom.radioFeedSentinel)'), 'Must observe radioFeedSentinel element');
   assert.ok(radioClientJs.includes('state.feedObserver.disconnect()'), 'Must disconnect observer in cleanup');
+  assert.ok(radioClientJs.includes("if (append && (state.feedFilter === 'playlists' || !state.feedHasMore)) return;"), 'Playlist view must not load additional pages');
+  assert.ok(radioClientJs.includes("state.feedHasMore && state.feedFilter !== 'playlists' && dom.radioFeedSentinel"), 'Playlist view must not trigger automatic feed pagination');
 });
 
 test('radio UI & upload: file upload progress indicator and Range / empty audio safety', () => {
@@ -209,6 +211,8 @@ test('radio live sync: retry playback after a track transition fails to start', 
   assert.ok(globalPlayerJs.includes('const MAX_LIVE_PLAY_RETRIES = 3'), 'Live playback retries must be capped');
   assert.ok(globalPlayerJs.includes('function scheduleLiveSync(station, delayMs = 2000, autoPlay = null)'), 'Live sync must support an explicit autoplay retry');
   assert.ok(globalPlayerJs.includes('scheduleLiveSync(station, 1000 * livePlayRetryCount, true)'), 'A rejected live play must schedule an autoplay retry');
+  assert.ok(globalPlayerJs.includes('requestIntentVersion !== playbackIntentVersion'), 'A manual pause must invalidate an in-flight autoplay retry');
+  assert.ok(globalPlayerJs.includes('pendingLiveSync = {'), 'A newer sync request must wait for an in-flight request instead of being dropped');
 });
 
 test('radio duration: auto-detection on upload, database auto-healing, and dynamic client/player sync', () => {
