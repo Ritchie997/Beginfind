@@ -213,6 +213,7 @@ test('radio-calendar: HTML and CSS UI parity for calendar and scheduling', () =>
   assert.ok(radioJs.includes('function switchEditorSubmode('), 'radio-client.js должен содержать функцию переключения режимов');
   assert.ok(radioJs.includes('function renderCalendar('), 'radio-client.js должен содержать функцию рендеринга сетки месяца');
   assert.ok(radioJs.includes('function renderSelectedDayEvents('), 'radio-client.js должен содержать функцию рендеринга событий дня');
+  assert.ok(radioJs.includes('Array.isArray(res) ? res : Array.isArray(res.events)'), 'radio-client.js должен принимать массив эфиров в ответе API расписания');
   assert.ok(radioJs.includes('function loadEventToTimeline('), 'radio-client.js должен позволять загрузить эфир в ленту редактора');
   assert.ok(radioJs.includes('function syncClockWithServer('), 'radio-client.js должен выполнять NTP-калибровку часов с сервером');
   assert.ok(radioJs.includes('function populateScheduleStationsDropdown('), 'radio-client.js должен заполнять список сеток станций');

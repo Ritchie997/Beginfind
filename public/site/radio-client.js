@@ -4513,7 +4513,7 @@
     if (!stationId) return;
     try {
       const res = await api(`/api/radio/stations/${stationId}/schedule`);
-      state.scheduledEvents = Array.isArray(res.events) ? res.events : [];
+      state.scheduledEvents = Array.isArray(res) ? res : Array.isArray(res.events) ? res.events : [];
       if (dom.editorScheduleCountBadge) {
         const activeCount = state.scheduledEvents.filter(e => e.status !== 'cancelled').length;
         dom.editorScheduleCountBadge.textContent = activeCount;
