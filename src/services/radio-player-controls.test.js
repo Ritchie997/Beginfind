@@ -215,6 +215,15 @@ test('radio live sync: retry playback after a track transition fails to start', 
   assert.ok(globalPlayerJs.includes('pendingLiveSync = {'), 'A newer sync request must wait for an in-flight request instead of being dropped');
 });
 
+test('radio playlist details wait for session refresh and distinguish invalid sessions', () => {
+  const radioClientJs = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const radioRoutesJs = fs.readFileSync(path.resolve(__dirname, '../routes/radio.routes.js'), 'utf8');
+
+  assert.ok(radioClientJs.includes('await authManager.keepSessionAlive();'), 'Radio API requests must wait for an in-flight session refresh');
+  assert.ok(radioRoutesJs.includes('req.authTokenInvalid = Boolean(err)'), 'Optional radio auth must retain whether a supplied token was invalid');
+  assert.ok(radioRoutesJs.includes("res.status(401).json({ error: 'Сессия истекла или недействительна. Войдите снова.' })"), 'Private playlist access with an invalid token must return 401 instead of a misleading 404');
+});
+
 test('radio duration: auto-detection on upload, database auto-healing, and dynamic client/player sync', () => {
   const audioConverterJs = fs.readFileSync(path.resolve(__dirname, '../../src/services/audio-converter.js'), 'utf8');
   const uploadsRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/uploads.routes.js'), 'utf8');

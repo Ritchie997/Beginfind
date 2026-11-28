@@ -14,10 +14,12 @@ function optionalUser(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) {
     req.user = null;
+    req.authTokenInvalid = false;
     return next();
   }
   jwt.verify(token, JWT_SECRET, (err, user) => {
     req.user = err ? null : user;
+    req.authTokenInvalid = Boolean(err);
     next();
   });
 }
@@ -270,6 +272,9 @@ router.get('/radio/playlists/:id', optionalUser, async (req, res) => {
     const isAdmin = isRootOrAdmin(req.user);
     const playlist = await radioStore.getPlaylistById(req.params.id, reqUserId, isAdmin);
     if (!playlist) {
+      if (req.authTokenInvalid) {
+        return res.status(401).json({ error: 'Сессия истекла или недействительна. Войдите снова.' });
+      }
       return res.status(404).json({ error: 'Плейлист не найден или доступ ограничен' });
     }
     res.json(playlist);

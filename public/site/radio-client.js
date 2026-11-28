@@ -475,9 +475,14 @@
 
   // ===== Работа с API =====
   async function api(url, options = {}) {
+    const authManager = window.authManager;
+    if (authManager && authManager.getToken() && typeof authManager.keepSessionAlive === 'function') {
+      await authManager.keepSessionAlive();
+    }
+
     const headers = options.headers || {};
-    if (window.authManager && window.authManager.getToken()) {
-      headers['Authorization'] = 'Bearer ' + window.authManager.getToken();
+    if (authManager && authManager.getToken()) {
+      headers['Authorization'] = 'Bearer ' + authManager.getToken();
     }
     const res = await fetch(url, { ...options, headers });
     if (!res.ok) {
