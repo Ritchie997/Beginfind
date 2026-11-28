@@ -2,7 +2,6 @@
 
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../config/env');
 const { serversDb, serversSchemaReady } = require('../db/connections');
 const auth = require('../middleware/auth');
 const radioStore = require('../services/radio-store');
@@ -17,7 +16,7 @@ function optionalUser(req, res, next) {
     req.authTokenInvalid = false;
     return next();
   }
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, auth.JWT_SECRET, (err, user) => {
     req.user = err ? null : user;
     req.authTokenInvalid = Boolean(err);
     next();

@@ -4,7 +4,10 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { Socket } = require('node:net');
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const auth = require('../middleware/auth');
 const radioRoutes = require('./radio.routes');
+const radioStore = require('../services/radio-store');
 const { createPagesRouter } = require('./pages.routes');
 
 function createApp() {
@@ -70,6 +73,29 @@ test('manageable franchise list requires an approved signed-in user', async () =
   const app = createApp();
   const res = await callApi(app, 'GET', '/api/radio/manageable-franchises');
   assert.equal(res.status, 401);
+});
+
+test('GET /api/radio/playlists/:id accepts the authenticated owner of a private playlist', async () => {
+  const originalGetPlaylistById = radioStore.getPlaylistById;
+  const privatePlaylist = { id: 123, user_id: 42, is_public: 0 };
+  radioStore.getPlaylistById = async (id, requestingUserId) => {
+    assert.equal(id, '123');
+    assert.equal(requestingUserId, 42);
+    return privatePlaylist;
+  };
+
+  try {
+    const app = createApp();
+    const token = jwt.sign({ id: 42 }, auth.JWT_SECRET, { expiresIn: '1h' });
+    const res = await callApi(app, 'GET', '/api/radio/playlists/123', undefined, {
+      authorization: `Bearer ${token}`
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.id, privatePlaylist.id);
+  } finally {
+    radioStore.getPlaylistById = originalGetPlaylistById;
+  }
 });
 
 test('station franchise binding is editable only through the station settings and protected by franchise permissions', () => {
