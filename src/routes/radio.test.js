@@ -78,10 +78,14 @@ test('station franchise binding is editable only through the station settings an
   const html = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio.html'), 'utf8');
   const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
   const routes = fs.readFileSync(path.resolve(__dirname, './radio.routes.js'), 'utf8');
+  const editSubmitStart = client.indexOf("dom.formEditStation?.addEventListener('submit'");
+  const editSubmitEnd = client.indexOf('// Синхронизация и отображение времени эфира сервера', editSubmitStart);
+  const editSubmitHandler = client.slice(editSubmitStart, editSubmitEnd);
 
   assert.ok(html.includes('id="editStationFranchise"'), 'Station settings must offer an optional franchise selector');
   assert.ok(client.includes("api('/api/radio/manageable-franchises')"), 'The selector must list franchises available to the current user');
-  assert.ok(client.includes('franchiseId: dom.editStationFranchise?.value || null'), 'Saving station settings must persist or clear the franchise binding');
+  assert.ok(editSubmitStart >= 0 && editSubmitEnd > editSubmitStart, 'Station settings form submit handler must be present');
+  assert.ok(editSubmitHandler.includes('franchiseId: dom.editStationFranchise?.value || null'), 'Saving station settings must persist or clear the franchise binding');
   assert.ok(routes.includes("router.get('/radio/manageable-franchises', auth.authenticateToken, auth.checkApproved"), 'The available franchise list must require an approved user');
   assert.ok(routes.includes('Привязать станцию можно только к франшизе, которой вы управляете'), 'The API must reject binding to a franchise the user cannot manage');
   assert.ok(routes.includes('WHERE is_published = 1 AND id IN'), 'Station cards must only resolve names of public franchises');

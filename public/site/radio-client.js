@@ -8116,7 +8116,8 @@
             fallbackMode: isEternal ? 'loop' : fallbackMode,
             avatarUrl,
             ownerName: host,
-            isEternal: isEternal ? 1 : 0
+            isEternal: isEternal ? 1 : 0,
+            franchiseId: dom.editStationFranchise?.value || null
           })
         });
 
