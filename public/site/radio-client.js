@@ -4030,6 +4030,18 @@
     }
   }
 
+  function getExternalHttpUrl(value) {
+    const candidate = String(value || '').trim();
+    if (!candidate) return '';
+
+    try {
+      const url = new URL(candidate);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? candidate : '';
+    } catch {
+      return '';
+    }
+  }
+
   // Открытие модального окна настроек станции
   async function openEditStationModal(st) {
     if (!st) return;
@@ -4073,7 +4085,7 @@
         return;
       }
     }
-    if (dom.editStationAvatar) dom.editStationAvatar.value = st.avatar_url || '';
+    if (dom.editStationAvatar) dom.editStationAvatar.value = getExternalHttpUrl(st.avatar_url);
     if (dom.editStationHost) dom.editStationHost.value = st.owner_name || '';
     if (dom.editStationAvatarFile) dom.editStationAvatarFile.value = '';
     if (dom.editStationAvatarPreviewBox && dom.editStationAvatarPreviewImg) {

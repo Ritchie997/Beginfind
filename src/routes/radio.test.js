@@ -155,6 +155,21 @@ test('radio station modal keeps submit footer visible inside a constrained viewp
   assert.ok(css.includes('flex-shrink: 0'), 'Modal header and footer must remain visible');
 });
 
+test('station settings keep uploaded image paths out of the external URL field', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const client = fs.readFileSync(path.resolve(__dirname, '../../public/site/radio-client.js'), 'utf8');
+  const helperStart = client.indexOf('function getExternalHttpUrl(value)');
+  const helperEnd = client.indexOf('\n  }', helperStart);
+  const helper = client.slice(helperStart, helperEnd);
+
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'External URL validator must be present');
+  assert.ok(helper.includes('const url = new URL(candidate)'), 'Only absolute URLs should be considered');
+  assert.ok(helper.includes("url.protocol === 'http:' || url.protocol === 'https:'"), 'Only HTTP(S) image URLs should be retained');
+  assert.ok(client.includes('dom.editStationAvatar.value = getExternalHttpUrl(st.avatar_url)'), 'Station settings must not preload a server file path into the URL field');
+  assert.ok(client.includes('dom.editStationAvatarPreviewImg.src = st.avatar_url'), 'The currently stored image must still be shown in the preview');
+});
+
 test('radio live player and station cards use a clean compact interface', () => {
   const fs = require('fs');
   const path = require('path');
