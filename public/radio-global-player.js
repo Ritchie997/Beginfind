@@ -682,7 +682,9 @@
   let isSyncingLive = false;
   let syncLiveTimer = null;
   let syncRetryCount = 0;
+  let livePlayRetryCount = 0;
   const MAX_SYNC_RETRIES = 5;
+  const MAX_LIVE_PLAY_RETRIES = 3;
 
   function cancelLiveSync() {
     if (syncLiveTimer) {
@@ -691,14 +693,14 @@
     }
   }
 
-  function scheduleLiveSync(station, delayMs = 2000) {
+  function scheduleLiveSync(station, delayMs = 2000, autoPlay = null) {
     cancelLiveSync();
     if (!station || state.mode !== 'radio') return;
     const delay = Math.max(1000, delayMs);
     syncLiveTimer = setTimeout(() => {
       syncLiveTimer = null;
       if (state.mode === 'radio' && state.station && String(state.station.id) === String(station.id)) {
-        syncRadioStationLive(station, state.isPlaying);
+        syncRadioStationLive(station, autoPlay === null ? state.isPlaying : autoPlay);
       }
     }, delay);
   }
@@ -823,6 +825,9 @@
         targetOffset = 0;
       }
 
+      if (targetSlot && String(state.currentSlot && state.currentSlot.id) !== String(targetSlot.id)) {
+        livePlayRetryCount = 0;
+      }
       state.currentSlot = targetSlot;
       state.cachedNextSlot = (live.nextSlots && live.nextSlots.length > 0 && live.nextSlots[0].audioUrl) ? live.nextSlots[0] : null;
 
@@ -855,16 +860,23 @@
           isAudioLeader = true;
           remoteLeaderTabId = null;
           playAudio().then(() => {
+            livePlayRetryCount = 0;
             state.isPlaying = true;
             updateMediaSession();
             updateBarUI();
             notify();
             announcePlay();
-          }).catch(() => {
+          }).catch((error) => {
             state.isPlaying = false;
             updateMediaSession();
             updateBarUI();
             notify();
+            if (livePlayRetryCount < MAX_LIVE_PLAY_RETRIES) {
+              livePlayRetryCount++;
+              scheduleLiveSync(station, 1000 * livePlayRetryCount, true);
+            } else {
+              console.warn('[GlobalRadio] Live audio could not resume after track transition:', error);
+            }
             // Разблокировка автовоспроизведения при первом клике или нажатии клавиши
             const unlock = () => {
               document.removeEventListener('pointerdown', unlock);
@@ -935,6 +947,7 @@
   function playRadio(station, slot = null, offset = 0, isTimeshift = false) {
     cancelLiveSync();
     syncRetryCount = 0;
+    livePlayRetryCount = 0;
     isAudioLeader = true;
     remoteLeaderTabId = null;
     state.mode = 'radio';

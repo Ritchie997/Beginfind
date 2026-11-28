@@ -203,6 +203,14 @@ test('radio live sync: prevention of infinite fetch loop and net::ERR_INSUFFICIE
   assert.ok(radioRoutesJs.includes("error.message === 'Станция не найдена'") && radioRoutesJs.includes('status(404)'), 'radio.routes.js must return 404 when station is not found');
 });
 
+test('radio live sync: retry playback after a track transition fails to start', () => {
+  const globalPlayerJs = fs.readFileSync(path.resolve(__dirname, '../../public/radio-global-player.js'), 'utf8');
+
+  assert.ok(globalPlayerJs.includes('const MAX_LIVE_PLAY_RETRIES = 3'), 'Live playback retries must be capped');
+  assert.ok(globalPlayerJs.includes('function scheduleLiveSync(station, delayMs = 2000, autoPlay = null)'), 'Live sync must support an explicit autoplay retry');
+  assert.ok(globalPlayerJs.includes('scheduleLiveSync(station, 1000 * livePlayRetryCount, true)'), 'A rejected live play must schedule an autoplay retry');
+});
+
 test('radio duration: auto-detection on upload, database auto-healing, and dynamic client/player sync', () => {
   const audioConverterJs = fs.readFileSync(path.resolve(__dirname, '../../src/services/audio-converter.js'), 'utf8');
   const uploadsRoutesJs = fs.readFileSync(path.resolve(__dirname, '../../src/routes/uploads.routes.js'), 'utf8');
